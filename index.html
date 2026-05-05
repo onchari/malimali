@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1a6b3a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Malimali Shop">
+<link rel="manifest" href="manifest.json">
+<title>Malimali Shop</title>
+<style>
+  :root {
+    --green: #1a6b3a;
+    --green-light: #2d9155;
+    --green-pale: #e8f5ee;
+    --green-dark: #0f4424;
+    --amber: #d97706;
+    --amber-light: #fef3c7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --blue: #2563eb;
+    --blue-light: #dbeafe;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+    --white: #ffffff;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 2px 8px rgba(0,0,0,0.1);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  
+  body {
+    font-family: var(--font);
+    background: var(--gray-100);
+    color: var(--gray-900);
+    min-height: 100vh;
+    max-width: 480px;
+    margin: 0 auto;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  .app-header {
+    background: var(--green);
+    color: white;
+    padding: 16px 20px 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow);
+  }
+  .app-header h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+  .app-header .subtitle { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+
+  /* NAV TABS */
+  .nav-tabs {
+    display: flex;
+    background: var(--white);
+    border-bottom: 1px solid var(--gray-200);
+    position: sticky;
+    top: 68px;
+    z-index: 99;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab {
+    flex: 1;
+    min-width: 70px;
+    padding: 12px 8px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--gray-500);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+  .nav-tab.active { color: var(--green); border-bottom-color: var(--green); }
+  .nav-tab .tab-icon { font-size: 18px; display: block; margin-bottom: 2px; }
+
+  /* PAGES */
+  .page { display: none; padding: 16px; padding-bottom: 80px; }
+  .page.active { display: block; }
+
+  /* CARDS */
+  .card {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* STATS */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 14px;
+    box-shadow: var(--shadow);
+    text-align: center;
+  }
+  .stat-card.green { background: var(--green-pale); }
+  .stat-card.amber { background: var(--amber-light); }
+  .stat-card.blue { background: var(--blue-light); }
+  .stat-card.red { background: var(--red-light); }
+  .stat-value { font-size: 22px; font-weight: 700; color: var(--gray-900); }
+  .stat-label { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
+  .stat-card.green .stat-value { color: var(--green); }
+  .stat-card.amber .stat-value { color: var(--amber); }
+  .stat-card.blue .stat-value { color: var(--blue); }
+  .stat-card.red .stat-value { color: var(--red); }
+
+  /* FORMS */
+  .form-group { margin-bottom: 14px; }
+  .form-label { font-size: 13px; font-weight: 500; color: var(--gray-700); margin-bottom: 5px; display: block; }
+  .form-input, .form-select {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    font-size: 15px;
+    font-family: var(--font);
+    background: var(--white);
+    color: var(--gray-900);
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+  }
+  .form-input:focus, .form-select:focus {
+    outline: none;
+    border-color: var(--green);
+  }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* BUTTONS */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 20px;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    font-family: var(--font);
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+    width: 100%;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--green); color: white; }
+  .btn-primary:hover { background: var(--green-light); }
+  .btn-danger { background: var(--red); color: white; }
+  .btn-amber { background: var(--amber); color: white; }
+  .btn-outline {
+    background: transparent;
+    color: var(--green);
+    border: 1.5px solid var(--green);
+  }
+  .btn-sm {
+    padding: 7px 14px;
+    font-size: 12px;
+    width: auto;
+    border-radius: 6px;
+  }
+  .btn-icon { font-size: 16px; }
+
+  /* ITEM LIST */
+  .item-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 10px;
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .item-color-dot {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .item-info { flex: 1; min-width: 0; }
+  .item-name { font-size: 15px; font-weight: 600; color: var(--gray-900); }
+  .item-code { font-size: 11px; color: var(--gray-400); font-family: monospace; margin-top: 1px; }
+  .item-meta { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+  .badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+  .badge-green { background: var(--green-pale); color: var(--green); }
+  .badge-amber { background: var(--amber-light); color: #92400e; }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-blue { background: var(--blue-light); color: var(--blue); }
+  .badge-gray { background: var(--gray-100); color: var(--gray-500); }
+  .item-prices { text-align: right; flex-shrink: 0; }
+  .price-sell { font-size: 16px; font-weight: 700; color: var(--green); }
+  .price-buy { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+  .price-profit { font-size: 11px; color: var(--amber); font-weight: 600; }
+
+  /* ITEM ACTIONS */
+  .item-actions { display: flex; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--gray-100); }
+
+  /* SEARCH BAR */
+  .search-bar {
+    position: relative;
+    margin-bottom: 14px;
+  }
+  .search-bar .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400);
+    font-size: 16px;
+  }
+  .search-bar input {
+    width: 100%;
+    padding: 11px 14px 11px 38px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    background: var(--white);
+    font-family: var(--font);
+  }
+  .search-bar input:focus { outline: none; border-color: var(--green); }
+
+  /* SALE MODAL */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    display: none;
+    align-items: flex-end;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-sheet {
+    background: var(--white);
+    border-radius: 20px 20px 0 0;
+    padding: 20px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .modal-handle {
+    width: 36px; height: 4px;
+    background: var(--gray-200);
+    border-radius: 2px;
+    margin: 0 auto 16px;
+  }
+  .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+
+  /* SALES LIST */
+  .sale-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--gray-100);
+    gap: 10px;
+  }
+  .sale-icon { font-size: 20px; }
+  .sale-info { flex: 1; }
+  .sale-name { font-size: 14px; font-weight: 500; }
+  .sale-time { font-size: 11px; color: var(--gray-400); margin-top: 1px; }
+  .sale-amount { text-align: right; }
+  .sale-revenue { font-size: 15px; font-weight: 700; color: var(--green); }
+  .sale-profit { font-size: 11px; color: var(--amber); }
+
+  /* EMPTY STATE */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--gray-400);
+  }
+  .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--gray-900);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 24px;
+    font-size: 13px;
+    font-weight: 500;
+    z-index: 999;
+    opacity: 0;
+    transition: all 0.3s;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.green { background: var(--green); }
+  .toast.red { background: var(--red); }
+
+  /* FILTER ROW */
+  .filter-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 14px; padding-bottom: 4px; scrollbar-width: none; }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .filter-chip {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1.5px solid var(--gray-200);
+    background: var(--white);
+    color: var(--gray-500);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .filter-chip.active { border-color: var(--green); background: var(--green-pale); color: var(--green); }
+
+  /* LOW STOCK ALERT */
+  .alert-bar {
+    background: var(--amber-light);
+    border-left: 4px solid var(--amber);
+    padding: 10px 14px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 13px;
+    color: #92400e;
+    margin-bottom: 14px;
+  }
+
+  /* PROFIT CHART */
+  .chart-bar-container { padding: 4px 0; }
+  .chart-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .chart-label { font-size: 11px; color: var(--gray-500); width: 70px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chart-bar-wrap { flex: 1; background: var(--gray-100); border-radius: 4px; height: 20px; overflow: hidden; }
+  .chart-bar { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.5s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; }
+  .chart-bar .bar-val { font-size: 10px; color: white; font-weight: 600; }
+
+  /* EDIT INLINE */
+  .edit-inline { display: none; }
+  .edit-inline.open { display: block; padding-top: 12px; border-top: 1px solid var(--gray-100); margin-top: 10px; }
+
+  /* SECTION HEADER */
+  .section-header { font-size: 13px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; margin-top: 4px; }
+
+  /* NUMBER INPUT */
+  .qty-control { display: flex; align-items: center; gap: 0; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); overflow: hidden; }
+  .qty-btn { width: 40px; height: 40px; border: none; background: var(--gray-100); color: var(--gray-700); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 600; flex-shrink: 0; }
+  .qty-btn:active { background: var(--gray-200); }
+  .qty-input { flex: 1; border: none; text-align: center; font-size: 16px; font-weight: 600; font-family: var(--font); padding: 8px; background: var(--white); color: var(--gray-900); }
+  .qty-input:focus { outline: none; }
+
+  /* SCROLLABLE CONTENT */
+  #page-inventory, #page-sales { -webkit-overflow-scrolling: touch; }
+
+  /* SELL SEARCH RESULT CARDS */
+  .sell-result-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .sell-result-card:active { border-color: var(--green); box-shadow: 0 4px 16px rgba(26,107,58,0.15); }
+  .sell-result-icon {
+    width: 52px; height: 52px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; flex-shrink: 0;
+  }
+  .sell-result-body { flex: 1; min-width: 0; }
+  .sell-result-name { font-size: 18px; font-weight: 700; color: var(--gray-900); }
+  .sell-result-code { font-size: 13px; font-family: monospace; color: var(--gray-400); margin-top: 2px; }
+  .sell-result-meta { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; align-items: center; }
+  .sell-result-price { font-size: 22px; font-weight: 800; color: var(--green); flex-shrink: 0; text-align: right; }
+  .sell-result-stock { font-size: 13px; color: var(--gray-500); }
+  .sell-result-profit { font-size: 13px; color: var(--amber); font-weight: 600; }
+  .sell-highlight { background: #fff176; border-radius: 3px; padding: 0 2px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="app-header">
+  <h1>🛍️ Malimali Shop</h1>
+  <div class="subtitle" id="header-subtitle">Loading...</div>
+</div>
+
+<!-- NAV TABS -->
+<div class="nav-tabs">
+  <button class="nav-tab active" onclick="showPage('dashboard')" id="tab-dashboard">
+    <span class="tab-icon">📊</span>Dashboard
+  </button>
+  <button class="nav-tab" onclick="showPage('inventory')" id="tab-inventory">
+    <span class="tab-icon">📦</span>Stock
+  </button>
+  <button class="nav-tab" onclick="showPage('add')" id="tab-add">
+    <span class="tab-icon">➕</span>Add Item
+  </button>
+  <button class="nav-tab" onclick="showPage('sell')" id="tab-sell">
+    <span class="tab-icon">💸</span>Sell
+  </button>
+  <button class="nav-tab" onclick="showPage('sales')" id="tab-sales">
+    <span class="tab-icon">💰</span>Sales
+  </button>
+</div>
+
+<!-- ===== DASHBOARD PAGE ===== -->
+<div class="page active" id="page-dashboard">
+  <div class="stats-grid">
+    <div class="stat-card green">
+      <div class="stat-value" id="stat-items">0</div>
+      <div class="stat-label">Total Items</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-value" id="stat-qty">0</div>
+      <div class="stat-label">Total Pieces</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="stat-value" id="stat-revenue">TZS 0</div>
+      <div class="stat-label">Today's Sales</div>
+    </div>
+    <div class="stat-card" id="stat-profit-card">
+      <div class="stat-value" id="stat-profit">TZS 0</div>
+      <div class="stat-label">Today's Profit</div>
+    </div>
+  </div>
+
+  <div id="low-stock-alert" style="display:none"></div>
+
+  <div class="card">
+    <div class="card-title">📈 Top Selling Items</div>
+    <div id="top-items-chart">
+      <div class="empty-state" style="padding: 20px;">
+        <div class="empty-icon" style="font-size: 32px;">📭</div>
+        <p>No sales yet</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💼 Stock Value</div>
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--gray-100);">
+      <span style="font-size: 13px; color: var(--gray-500);">Cost Value (buying price)</span>
+      <span style="font-size: 15px; font-weight: 600;" id="stock-cost">TZS 0</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+      <span style="font-size: 13px; color: var(--gray-500);">Retail Value (selling price)</span>
+      <span style="font-size: 15px; font-weight: 600; color: var(--green);" id="stock-retail">TZS 0</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📅 All Time Summary</div>
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--gray-100);">
+      <span style="font-size: 13px; color: var(--gray-500);">Total Sales Made</span>
+      <span style="font-size: 15px; font-weight: 600;" id="all-sales-count">0</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--gray-100);">
+      <span style="font-size: 13px; color: var(--gray-500);">Total Revenue</span>
+      <span style="font-size: 15px; font-weight: 600;" id="all-revenue">TZS 0</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+      <span style="font-size: 13px; color: var(--gray-500);">Total Profit</span>
+      <span style="font-size: 15px; font-weight: 600; color: var(--amber);" id="all-profit">TZS 0</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== INVENTORY PAGE ===== -->
+<div class="page" id="page-inventory">
+  <div class="search-bar">
+    <span class="search-icon">🔍</span>
+    <input type="text" placeholder="Search by name or code..." id="search-input" oninput="renderInventory()">
+  </div>
+  <div class="filter-row" id="category-filters">
+    <span class="filter-chip active" onclick="setFilter('all', this)">All</span>
+  </div>
+  <div id="inventory-list"></div>
+</div>
+
+<!-- ===== ADD ITEM PAGE ===== -->
+<div class="page" id="page-add">
+  <div class="card">
+    <div class="card-title">➕ Add New Item</div>
+    
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Item Code *</label>
+        <input class="form-input" id="f-code" placeholder="e.g. SH001" style="font-family: monospace; text-transform: uppercase;">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category *</label>
+        <select class="form-select" id="f-category">
+          <option value="">Select...</option>
+          <option value="Shoes">Shoes</option>
+          <option value="Clothes">Clothes</option>
+          <option value="Plastics">Plastics</option>
+          <option value="Electronics">Electronics</option>
+          <option value="Food">Food</option>
+          <option value="Cosmetics">Cosmetics</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Item Name *</label>
+      <input class="form-input" id="f-name" placeholder="e.g. Blue Canvas Shoes">
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Size / Variant</label>
+        <input class="form-input" id="f-size" placeholder="e.g. 42, L, 500ml">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Quantity *</label>
+        <input class="form-input" id="f-qty" type="number" placeholder="0" min="0">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Buying Price (TZS) *</label>
+        <input class="form-input" id="f-buy" type="number" placeholder="0" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Selling Price (TZS) *</label>
+        <input class="form-input" id="f-sell" type="number" placeholder="0" min="0">
+      </div>
+    </div>
+
+    <div id="profit-preview" style="display:none; background: var(--green-pale); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px; font-size: 13px;">
+      <span style="color: var(--gray-500);">Profit per item: </span>
+      <span id="profit-preview-val" style="color: var(--green); font-weight: 700;"></span>
+      <span id="margin-preview-val" style="color: var(--gray-400); margin-left: 8px;"></span>
+    </div>
+
+    <button class="btn btn-primary" onclick="addItem()">
+      <span>✅</span> Save Item to Inventory
+    </button>
+  </div>
+
+  <div class="card" style="margin-top: 16px;">
+    <div class="card-title">⚙️ Settings</div>
+    <div class="form-group">
+      <label class="form-label">Currency Symbol</label>
+      <select class="form-select" id="currency-select" onchange="saveCurrency()">
+        <option value="TZS">TZS (Tanzanian Shilling)</option>
+        <option value="KES">KES (Kenyan Shilling)</option>
+        <option value="UGX">UGX (Ugandan Shilling)</option>
+        <option value="USD">USD (US Dollar)</option>
+        <option value="TSh">TSh</option>
+      </select>
+    </div>
+    <button class="btn btn-outline" onclick="exportData()" style="margin-top: 8px;">
+      📤 Export Data (CSV)
+    </button>
+  </div>
+</div>
+
+<!-- ===== MAKE A SALE PAGE ===== -->
+<div class="page" id="page-sell">
+  <div style="position: relative; margin-bottom: 10px;">
+    <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:22px;z-index:1;">🔍</span>
+    <input
+      type="text"
+      id="sell-search"
+      placeholder="Type name or code..."
+      oninput="searchToSell()"
+      autocomplete="off"
+      autocorrect="off"
+      spellcheck="false"
+      style="width:100%;padding:18px 16px 18px 52px;font-size:20px;font-weight:600;font-family:var(--font);border:2.5px solid var(--green);border-radius:var(--radius);background:var(--white);color:var(--gray-900);outline:none;box-shadow:0 2px 12px rgba(26,107,58,0.10);"
+    >
+  </div>
+  <div id="sell-search-hint" style="text-align:center;padding:10px 0 4px;font-size:15px;color:var(--gray-400);">Start typing to find an item</div>
+  <div id="sell-results"></div>
+</div>
+
+<!-- ===== SALES PAGE ===== -->
+<div class="page" id="page-sales">
+  <div class="stats-grid" style="margin-bottom: 16px;">
+    <div class="stat-card green">
+      <div class="stat-value" id="s-today-rev">TZS 0</div>
+      <div class="stat-label">Today Revenue</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="stat-value" id="s-today-profit">TZS 0</div>
+      <div class="stat-label">Today Profit</div>
+    </div>
+  </div>
+  <div class="section-header">Recent Sales</div>
+  <div id="sales-list"></div>
+</div>
+
+<!-- ===== SELL MODAL ===== -->
+<div class="modal-overlay" id="sell-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="sell-modal-title">Make a Sale</div>
+
+    <div style="background: var(--gray-50); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+        <span style="font-size: 13px; color: var(--gray-500);">Item Code</span>
+        <span style="font-size: 13px; font-family: monospace; font-weight: 600;" id="sell-code"></span>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+        <span style="font-size: 13px; color: var(--gray-500);">In Stock</span>
+        <span style="font-size: 13px; font-weight: 600;" id="sell-stock"></span>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+        <span style="font-size: 13px; color: var(--gray-500);">Selling Price</span>
+        <span style="font-size: 13px; font-weight: 600; color: var(--green);" id="sell-price"></span>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span style="font-size: 13px; color: var(--gray-500);">Profit/item</span>
+        <span style="font-size: 13px; font-weight: 600; color: var(--amber);" id="sell-profit-per"></span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Quantity to Sell</label>
+      <div class="qty-control">
+        <button class="qty-btn" onclick="adjustQty(-1)">−</button>
+        <input class="qty-input" type="number" id="sell-qty" value="1" min="1" oninput="updateSellTotal()">
+        <button class="qty-btn" onclick="adjustQty(1)">+</button>
+      </div>
+    </div>
+
+    <div style="background: var(--green-pale); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+        <span style="font-size: 13px; color: var(--gray-500);">Total Revenue</span>
+        <span style="font-size: 16px; font-weight: 700; color: var(--green);" id="sell-total"></span>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span style="font-size: 13px; color: var(--gray-500);">Total Profit</span>
+        <span style="font-size: 14px; font-weight: 700; color: var(--amber);" id="sell-profit-total"></span>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+      <button class="btn btn-outline" onclick="closeSellModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmSale()">✅ Confirm Sale</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== DATABASE (IndexedDB simulating SQLite behavior) =====
+let db;
+let currentSellItemId = null;
+let activeFilter = 'all';
+let currency = localStorage.getItem('malimali_currency') || 'KES';
+
+function initDB() {
+  const req = indexedDB.open('MalimaliShop', 2);
+  req.onupgradeneeded = (e) => {
+    const d = e.target.result;
+    if (!d.objectStoreNames.contains('items')) {
+      const itemStore = d.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
+      itemStore.createIndex('code', 'code', { unique: true });
+      itemStore.createIndex('category', 'category', { unique: false });
+    }
+    if (!d.objectStoreNames.contains('sales')) {
+      const saleStore = d.createObjectStore('sales', { keyPath: 'id', autoIncrement: true });
+      saleStore.createIndex('itemId', 'itemId', { unique: false });
+      saleStore.createIndex('date', 'date', { unique: false });
+    }
+  };
+  req.onsuccess = (e) => {
+    db = e.target.result;
+    updateCurrencyDisplay();
+    refreshDashboard();
+    renderInventory();
+    renderSales();
+    setupProfitPreview();
+  };
+  req.onerror = () => showToast('Database error!', 'red');
+}
+
+// ===== CRUD =====
+function dbAll(store) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readonly');
+    tx.objectStore(store).getAll().onsuccess = (e) => res(e.target.result);
+    tx.onerror = rej;
+  });
+}
+function dbGet(store, id) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readonly');
+    tx.objectStore(store).get(id).onsuccess = (e) => res(e.target.result);
+    tx.onerror = rej;
+  });
+}
+function dbAdd(store, data) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).add(data);
+    req.onsuccess = (e) => res(e.target.result);
+    tx.onerror = (e) => rej(e.target.error);
+  });
+}
+function dbPut(store, data) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(data).onsuccess = (e) => res(e.target.result);
+    tx.onerror = rej;
+  });
+}
+function dbDelete(store, id) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).delete(id).onsuccess = res;
+    tx.onerror = rej;
+  });
+}
+
+// ===== HELPERS =====
+function fmt(n) { return currency + ' ' + Number(n).toLocaleString(); }
+function today() { return new Date().toISOString().split('T')[0]; }
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' +
+         d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+const CATEGORY_ICONS = {
+  'Shoes': '👟', 'Clothes': '👕', 'Plastics': '🪣',
+  'Electronics': '📱', 'Food': '🍱', 'Cosmetics': '💄', 'Other': '📦'
+};
+const CATEGORY_COLORS = {
+  'Shoes': '#dbeafe', 'Clothes': '#f3e8ff', 'Plastics': '#fef3c7',
+  'Electronics': '#e0f2fe', 'Food': '#dcfce7', 'Cosmetics': '#fce7f3', 'Other': '#f3f4f6'
+};
+
+function categoryIcon(cat) { return CATEGORY_ICONS[cat] || '📦'; }
+function categoryColor(cat) { return CATEGORY_COLORS[cat] || '#f3f4f6'; }
+
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', 2500);
+}
+
+// ===== PAGES =====
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  document.getElementById('tab-' + id).classList.add('active');
+  if (id === 'dashboard') refreshDashboard();
+  if (id === 'inventory') renderInventory();
+  if (id === 'sales') renderSales();
+  if (id === 'sell') {
+    allItemsCache = [];
+    document.getElementById('sell-search').value = '';
+    document.getElementById('sell-results').innerHTML = '';
+    document.getElementById('sell-search-hint').style.display = 'block';
+    document.getElementById('sell-search-hint').textContent = 'Start typing to find an item';
+    setTimeout(() => document.getElementById('sell-search').focus(), 100);
+  }
+}
+
+// ===== MAKE A SALE SEARCH =====
+let allItemsCache = [];
+
+async function searchToSell() {
+  const q = document.getElementById('sell-search').value.trim().toLowerCase();
+  const hint = document.getElementById('sell-search-hint');
+  const results = document.getElementById('sell-results');
+
+  if (!q) {
+    hint.style.display = 'block';
+    hint.textContent = 'Start typing to find an item';
+    results.innerHTML = '';
+    return;
+  }
+
+  if (allItemsCache.length === 0) allItemsCache = await dbAll('items');
+  const items = allItemsCache;
+
+  const matched = items.filter(item =>
+    item.name.toLowerCase().includes(q) ||
+    item.code.toLowerCase().includes(q) ||
+    (item.size && item.size.toLowerCase().includes(q))
+  );
+
+  hint.style.display = matched.length === 0 ? 'block' : 'none';
+  hint.textContent = 'No items found for "' + q + '"';
+
+  if (matched.length === 0) { results.innerHTML = ''; return; }
+
+  function highlight(text, q) {
+    if (!q) return text;
+    const idx = text.toLowerCase().indexOf(q);
+    if (idx === -1) return text;
+    return text.substring(0, idx) +
+      '<span class="sell-highlight">' + text.substring(idx, idx + q.length) + '</span>' +
+      text.substring(idx + q.length);
+  }
+
+  results.innerHTML = matched.map(item => {
+    const profit = item.sellPrice - item.buyPrice;
+    const stockClass = item.qty === 0 ? 'badge-red' : item.qty <= 3 ? 'badge-amber' : 'badge-green';
+    const stockLabel = item.qty === 0 ? '❌ Out of stock' : item.qty + ' pcs in stock';
+    const disabled = item.qty === 0 ? 'pointer-events:none;opacity:0.5;' : '';
+    return `
+    <div class="sell-result-card" onclick="openSellModal(${item.id})" style="${disabled}">
+      <div class="sell-result-icon" style="background:${categoryColor(item.category)}">${categoryIcon(item.category)}</div>
+      <div class="sell-result-body">
+        <div class="sell-result-name">${highlight(item.name, q)}</div>
+        <div class="sell-result-code">${highlight(item.code, q)}${item.size ? ' · ' + item.size : ''}</div>
+        <div class="sell-result-meta">
+          <span class="badge ${stockClass}" style="font-size:12px;padding:4px 10px;">${stockLabel}</span>
+          <span class="sell-result-profit">+${fmt(profit)} profit</span>
+        </div>
+      </div>
+      <div class="sell-result-price">${fmt(item.sellPrice)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ===== ADD ITEM =====
+function setupProfitPreview() {
+  const buy = document.getElementById('f-buy');
+  const sell = document.getElementById('f-sell');
+  function update() {
+    const b = parseFloat(buy.value) || 0;
+    const s = parseFloat(sell.value) || 0;
+    const preview = document.getElementById('profit-preview');
+    if (b > 0 && s > 0) {
+      const profit = s - b;
+      const margin = ((profit / s) * 100).toFixed(1);
+      document.getElementById('profit-preview-val').textContent = fmt(profit);
+      document.getElementById('margin-preview-val').textContent = '(' + margin + '% margin)';
+      preview.style.display = 'block';
+      document.getElementById('profit-preview-val').style.color = profit >= 0 ? 'var(--green)' : 'var(--red)';
+    } else {
+      preview.style.display = 'none';
+    }
+  }
+  buy.addEventListener('input', update);
+  sell.addEventListener('input', update);
+}
+
+async function addItem() {
+  const code = document.getElementById('f-code').value.trim().toUpperCase();
+  const name = document.getElementById('f-name').value.trim();
+  const category = document.getElementById('f-category').value;
+  const size = document.getElementById('f-size').value.trim();
+  const qty = parseInt(document.getElementById('f-qty').value) || 0;
+  const buyPrice = parseFloat(document.getElementById('f-buy').value) || 0;
+  const sellPrice = parseFloat(document.getElementById('f-sell').value) || 0;
+
+  if (!code || !name || !category) { showToast('Fill all required fields!', 'red'); return; }
+  if (buyPrice <= 0 || sellPrice <= 0) { showToast('Prices must be greater than 0!', 'red'); return; }
+
+  const item = { code, name, category, size, qty, buyPrice, sellPrice, createdAt: new Date().toISOString() };
+  try {
+    await dbAdd('items', item);
+    showToast('✅ ' + name + ' added!', 'green');
+    document.getElementById('f-code').value = '';
+    document.getElementById('f-name').value = '';
+    document.getElementById('f-size').value = '';
+    document.getElementById('f-qty').value = '';
+    document.getElementById('f-buy').value = '';
+    document.getElementById('f-sell').value = '';
+    document.getElementById('f-category').value = '';
+    document.getElementById('profit-preview').style.display = 'none';
+    renderInventory();
+    refreshDashboard();
+  } catch (e) {
+    if (e.name === 'ConstraintError') showToast('Code "' + code + '" already exists!', 'red');
+    else showToast('Error saving item', 'red');
+  }
+}
+
+// ===== INVENTORY =====
+let currentFilter = 'all';
+function setFilter(cat, el) {
+  currentFilter = cat;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderInventory();
+}
+
+async function renderInventory() {
+  const items = await dbAll('items');
+  const search = (document.getElementById('search-input').value || '').toLowerCase();
+
+  // Build category filters
+  const cats = [...new Set(items.map(i => i.category))];
+  const frow = document.getElementById('category-filters');
+  frow.innerHTML = '<span class="filter-chip' + (currentFilter === 'all' ? ' active' : '') + '" onclick="setFilter(\'all\', this)">All</span>';
+  cats.forEach(c => {
+    frow.innerHTML += '<span class="filter-chip' + (currentFilter === c ? ' active' : '') + '" onclick="setFilter(\'' + c + '\', this)">' + categoryIcon(c) + ' ' + c + '</span>';
+  });
+
+  let filtered = items.filter(item => {
+    const matchSearch = !search || item.name.toLowerCase().includes(search) || item.code.toLowerCase().includes(search);
+    const matchCat = currentFilter === 'all' || item.category === currentFilter;
+    return matchSearch && matchCat;
+  });
+
+  const list = document.getElementById('inventory-list');
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><p>' + (items.length === 0 ? 'No items yet. Add your first item!' : 'No items match your search.') + '</p></div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(item => {
+    const profit = item.sellPrice - item.buyPrice;
+    const margin = item.sellPrice > 0 ? ((profit / item.sellPrice) * 100).toFixed(0) : 0;
+    const stockBadge = item.qty === 0 ? 'badge-red' : item.qty <= 3 ? 'badge-amber' : 'badge-green';
+    const stockLabel = item.qty === 0 ? '⚠️ Out of stock' : item.qty + ' pcs';
+    return `
+    <div class="item-card" id="item-${item.id}">
+      <div class="item-color-dot" style="background: ${categoryColor(item.category)}">${categoryIcon(item.category)}</div>
+      <div class="item-info">
+        <div class="item-name">${item.name}</div>
+        <div class="item-code">${item.code}${item.size ? ' · Size: ' + item.size : ''}</div>
+        <div class="item-meta">
+          <span class="badge ${stockBadge}">${stockLabel}</span>
+          <span class="badge badge-gray">${item.category}</span>
+        </div>
+        <div class="item-actions">
+          <button class="btn btn-primary btn-sm" onclick="openSellModal(${item.id})" ${item.qty === 0 ? 'disabled style="opacity:0.4"' : ''}>💸 Sell</button>
+          <button class="btn btn-outline btn-sm" onclick="toggleEdit(${item.id})">✏️ Edit</button>
+          <button class="btn btn-sm" style="background:var(--red-light);color:var(--red);border:none;" onclick="deleteItem(${item.id})">🗑️</button>
+        </div>
+        <div class="edit-inline" id="edit-${item.id}">
+          <div class="form-row" style="margin-bottom: 8px;">
+            <div>
+              <label class="form-label" style="font-size:11px">Buy Price</label>
+              <input class="form-input" style="padding:8px" id="edit-buy-${item.id}" type="number" value="${item.buyPrice}">
+            </div>
+            <div>
+              <label class="form-label" style="font-size:11px">Sell Price</label>
+              <input class="form-input" style="padding:8px" id="edit-sell-${item.id}" type="number" value="${item.sellPrice}">
+            </div>
+          </div>
+          <div class="form-row" style="margin-bottom: 8px;">
+            <div>
+              <label class="form-label" style="font-size:11px">Add Stock (+)</label>
+              <input class="form-input" style="padding:8px" id="edit-addqty-${item.id}" type="number" placeholder="0" min="0">
+            </div>
+            <div>
+              <label class="form-label" style="font-size:11px">Size</label>
+              <input class="form-input" style="padding:8px" id="edit-size-${item.id}" value="${item.size || ''}">
+            </div>
+          </div>
+          <button class="btn btn-primary" style="padding: 9px; font-size:13px" onclick="saveEdit(${item.id})">💾 Save Changes</button>
+        </div>
+      </div>
+      <div class="item-prices">
+        <div class="price-sell">${fmt(item.sellPrice)}</div>
+        <div class="price-buy">Buy: ${fmt(item.buyPrice)}</div>
+        <div class="price-profit">+${fmt(profit)} (${margin}%)</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleEdit(id) {
+  const el = document.getElementById('edit-' + id);
+  el.classList.toggle('open');
+}
+
+async function saveEdit(id) {
+  const item = await dbGet('items', id);
+  const addQty = parseInt(document.getElementById('edit-addqty-' + id).value) || 0;
+  item.buyPrice = parseFloat(document.getElementById('edit-buy-' + id).value) || item.buyPrice;
+  item.sellPrice = parseFloat(document.getElementById('edit-sell-' + id).value) || item.sellPrice;
+  item.size = document.getElementById('edit-size-' + id).value.trim();
+  item.qty += addQty;
+  await dbPut('items', item);
+  showToast('✅ Item updated!', 'green');
+  renderInventory();
+  refreshDashboard();
+}
+
+async function deleteItem(id) {
+  if (!confirm('Delete this item? This cannot be undone.')) return;
+  await dbDelete('items', id);
+  showToast('Item deleted');
+  renderInventory();
+  refreshDashboard();
+}
+
+// ===== SELL MODAL =====
+async function openSellModal(itemId) {
+  const item = await dbGet('items', itemId);
+  currentSellItemId = itemId;
+  document.getElementById('sell-modal-title').textContent = '💸 Sell: ' + item.name;
+  document.getElementById('sell-code').textContent = item.code;
+  document.getElementById('sell-stock').textContent = item.qty + ' pieces';
+  document.getElementById('sell-price').textContent = fmt(item.sellPrice);
+  const profit = item.sellPrice - item.buyPrice;
+  document.getElementById('sell-profit-per').textContent = fmt(profit);
+  document.getElementById('sell-qty').value = 1;
+  document.getElementById('sell-qty').max = item.qty;
+  updateSellTotal();
+  document.getElementById('sell-modal').classList.add('open');
+}
+
+function closeSellModal() {
+  document.getElementById('sell-modal').classList.remove('open');
+  currentSellItemId = null;
+}
+
+async function updateSellTotal() {
+  if (!currentSellItemId) return;
+  const item = await dbGet('items', currentSellItemId);
+  const qty = parseInt(document.getElementById('sell-qty').value) || 1;
+  const total = qty * item.sellPrice;
+  const profitTotal = qty * (item.sellPrice - item.buyPrice);
+  document.getElementById('sell-total').textContent = fmt(total);
+  document.getElementById('sell-profit-total').textContent = fmt(profitTotal);
+}
+
+function adjustQty(delta) {
+  const input = document.getElementById('sell-qty');
+  let val = parseInt(input.value) + delta;
+  const max = parseInt(input.max) || 999;
+  if (val < 1) val = 1;
+  if (val > max) val = max;
+  input.value = val;
+  updateSellTotal();
+}
+
+async function confirmSale() {
+  const item = await dbGet('items', currentSellItemId);
+  const qty = parseInt(document.getElementById('sell-qty').value) || 1;
+  if (qty > item.qty) { showToast('Not enough stock!', 'red'); return; }
+
+  const sale = {
+    itemId: item.id,
+    itemName: item.name,
+    itemCode: item.code,
+    category: item.category,
+    qty,
+    sellPrice: item.sellPrice,
+    buyPrice: item.buyPrice,
+    revenue: qty * item.sellPrice,
+    profit: qty * (item.sellPrice - item.buyPrice),
+    date: new Date().toISOString()
+  };
+
+  item.qty -= qty;
+  await dbPut('items', item);
+  await dbAdd('sales', sale);
+
+  closeSellModal();
+  allItemsCache = [];
+  showToast('✅ Sale recorded! ' + fmt(sale.revenue), 'green');
+  renderInventory();
+  renderSales();
+  refreshDashboard();
+}
+
+// ===== SALES =====
+async function renderSales() {
+  const sales = await dbAll('sales');
+  sales.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const todaySales = sales.filter(s => s.date.startsWith(today()));
+  const todayRev = todaySales.reduce((sum, s) => sum + s.revenue, 0);
+  const todayProfit = todaySales.reduce((sum, s) => sum + s.profit, 0);
+
+  document.getElementById('s-today-rev').textContent = fmt(todayRev);
+  document.getElementById('s-today-profit').textContent = fmt(todayProfit);
+
+  const list = document.getElementById('sales-list');
+  if (sales.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">💸</div><p>No sales recorded yet.</p></div>';
+    return;
+  }
+
+  list.innerHTML = sales.slice(0, 100).map(s => `
+    <div class="sale-row">
+      <div class="sale-icon">${categoryIcon(s.category)}</div>
+      <div class="sale-info">
+        <div class="sale-name">${s.itemName} × ${s.qty}</div>
+        <div class="sale-time">${fmtTime(s.date)}</div>
+      </div>
+      <div class="sale-amount">
+        <div class="sale-revenue">${fmt(s.revenue)}</div>
+        <div class="sale-profit">+${fmt(s.profit)} profit</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ===== DASHBOARD =====
+async function refreshDashboard() {
+  const items = await dbAll('items');
+  const sales = await dbAll('sales');
+
+  const totalItems = items.length;
+  const totalQty = items.reduce((s, i) => s + i.qty, 0);
+  const stockCost = items.reduce((s, i) => s + i.qty * i.buyPrice, 0);
+  const stockRetail = items.reduce((s, i) => s + i.qty * i.sellPrice, 0);
+
+  const todaySales = sales.filter(s => s.date.startsWith(today()));
+  const todayRev = todaySales.reduce((s, x) => s + x.revenue, 0);
+  const todayProfit = todaySales.reduce((s, x) => s + x.profit, 0);
+
+  const allRev = sales.reduce((s, x) => s + x.revenue, 0);
+  const allProfit = sales.reduce((s, x) => s + x.profit, 0);
+
+  document.getElementById('stat-items').textContent = totalItems;
+  document.getElementById('stat-qty').textContent = totalQty.toLocaleString();
+  document.getElementById('stat-revenue').textContent = fmt(todayRev);
+  document.getElementById('stat-profit').textContent = fmt(todayProfit);
+  document.getElementById('stat-profit-card').className = 'stat-card ' + (todayProfit >= 0 ? 'amber' : 'red');
+  document.getElementById('stock-cost').textContent = fmt(stockCost);
+  document.getElementById('stock-retail').textContent = fmt(stockRetail);
+  document.getElementById('all-sales-count').textContent = sales.length;
+  document.getElementById('all-revenue').textContent = fmt(allRev);
+  document.getElementById('all-profit').textContent = fmt(allProfit);
+
+  // Header subtitle
+  document.getElementById('header-subtitle').textContent = totalItems + ' items · ' + totalQty + ' pieces in stock';
+
+  // Low stock
+  const lowStock = items.filter(i => i.qty > 0 && i.qty <= 3);
+  const outStock = items.filter(i => i.qty === 0);
+  const alertEl = document.getElementById('low-stock-alert');
+  if (outStock.length > 0 || lowStock.length > 0) {
+    alertEl.style.display = 'block';
+    alertEl.innerHTML = '⚠️ ' + (outStock.length > 0 ? outStock.length + ' item(s) out of stock. ' : '') +
+                        (lowStock.length > 0 ? lowStock.length + ' item(s) low stock (≤3 pcs).' : '');
+  } else {
+    alertEl.style.display = 'none';
+  }
+
+  // Top items chart
+  const itemSales = {};
+  sales.forEach(s => {
+    itemSales[s.itemName] = (itemSales[s.itemName] || 0) + s.revenue;
+  });
+  const sorted = Object.entries(itemSales).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const maxVal = sorted[0] ? sorted[0][1] : 1;
+  const chartEl = document.getElementById('top-items-chart');
+  if (sorted.length === 0) {
+    chartEl.innerHTML = '<div class="empty-state" style="padding:20px"><div class="empty-icon" style="font-size:32px">📭</div><p>No sales yet</p></div>';
+  } else {
+    chartEl.innerHTML = '<div class="chart-bar-container">' +
+      sorted.map(([name, rev]) => {
+        const pct = Math.max(8, (rev / maxVal) * 100);
+        return `<div class="chart-row">
+          <div class="chart-label" title="${name}">${name}</div>
+          <div class="chart-bar-wrap">
+            <div class="chart-bar" style="width:${pct}%">
+              <span class="bar-val">${fmt(rev)}</span>
+            </div>
+          </div>
+        </div>`;
+      }).join('') + '</div>';
+  }
+}
+
+// ===== CURRENCY =====
+function saveCurrency() {
+  currency = document.getElementById('currency-select').value;
+  localStorage.setItem('malimali_currency', currency);
+  refreshDashboard();
+  renderInventory();
+  renderSales();
+  showToast('Currency updated to ' + currency);
+}
+
+function updateCurrencyDisplay() {
+  document.getElementById('currency-select').value = currency;
+}
+
+// ===== EXPORT CSV =====
+async function exportData() {
+  const items = await dbAll('items');
+  const sales = await dbAll('sales');
+  let csv = 'INVENTORY\nCode,Name,Category,Size,Qty,Buy Price,Sell Price,Profit/item\n';
+  items.forEach(i => {
+    csv += `"${i.code}","${i.name}","${i.category}","${i.size || ''}",${i.qty},${i.buyPrice},${i.sellPrice},${i.sellPrice - i.buyPrice}\n`;
+  });
+  csv += '\nSALES\nDate,Item,Code,Qty,Revenue,Profit\n';
+  sales.forEach(s => {
+    csv += `"${fmtTime(s.date)}","${s.itemName}","${s.itemCode}",${s.qty},${s.revenue},${s.profit}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'malimali-shop-' + today() + '.csv';
+  a.click();
+  showToast('📤 CSV exported!', 'green');
+}
+
+// ===== INIT =====
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+initDB();
+
+// Close modal on backdrop click
+document.getElementById('sell-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeSellModal();
+});
+</script>
+</body>
+</html>
