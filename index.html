@@ -1209,6 +1209,7 @@ async function addItem() {
     showSaveSplash(itemName, profit);
     renderInventory();
     refreshDashboard();
+    queueBackupSync();
   } catch (e) {
     if (e.name === 'ConstraintError') showToast('Code "' + code + '" already exists!', 'red');
     else showToast('Error saving item', 'red');
@@ -1368,6 +1369,7 @@ async function saveEdit(id) {
   showToast('✅ Item updated!', 'green');
   renderInventory();
   refreshDashboard();
+  queueBackupSync();
 }
 
 async function deleteItem(id) {
@@ -1376,6 +1378,7 @@ async function deleteItem(id) {
   showToast('Item deleted');
   renderInventory();
   refreshDashboard();
+  queueBackupSync();
 }
 
 // ===== SELL MODAL =====
@@ -1447,6 +1450,7 @@ async function confirmSale() {
   renderInventory();
   renderSales();
   refreshDashboard();
+  queueBackupSync();
 }
 
 // ===== SALES =====
@@ -1618,6 +1622,15 @@ function updateSyncIndicator() {
   } else {
     indicator.style.display = 'none';
   }
+}
+
+function queueBackupSync() {
+  const apiKey = getBackupKey();
+  const binId = getBackupBinId();
+  if (!apiKey || !binId) return;
+  setPendingBackup(true);
+  if (!navigator.onLine) return;
+  backupToCloud({ silent: true });
 }
 
 function setBackupStatus(msg, type) {
