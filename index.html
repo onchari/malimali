@@ -489,6 +489,33 @@ body {
   font-size: 16px;
   opacity: 1;
 }
+/* NOTIFICATION PANEL */
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.notif-item:last-child { border-bottom: none; }
+.notif-dot-sm {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0; margin-top: 5px;
+}
+.notif-body { flex: 1; min-width: 0; }
+.notif-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.notif-detail { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+.notif-time { font-size: 11px; color: var(--muted); font-family: var(--mono); flex-shrink: 0; margin-top: 3px; }
+
+/* Bell shake animation */
+@keyframes bellShake {
+  0%,100% { transform: rotate(0); }
+  20% { transform: rotate(15deg); }
+  40% { transform: rotate(-12deg); }
+  60% { transform: rotate(8deg); }
+  80% { transform: rotate(-5deg); }
+}
+.bell-shake { animation: bellShake 0.5s ease; }
 </style>
 
 <!-- Firebase SDK -->
@@ -510,8 +537,31 @@ body {
       <div class="header-sub" id="hdr-sub">0 items</div>
     </div>
   </div>
-  <div id="sync-dot" title="Sync status" style="width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,0.3);margin-right:4px;flex-shrink:0;cursor:pointer;" onclick="showPage('types')"></div><div class="header-count" id="hdr-count">0</div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <!-- Notification Bell -->
+    <div style="position:relative;cursor:pointer;" onclick="toggleNotifPanel()" id="bell-wrap">
+      <div style="font-size:22px;line-height:1;" id="bell-icon">🔔</div>
+      <div id="notif-badge" style="display:none;position:absolute;top:-3px;right:-3px;width:16px;height:16px;background:var(--red);border-radius:50%;border:2px solid white;display:flex;align-items:center;justify-content:center;">
+        <span id="notif-count" style="font-size:9px;font-weight:800;color:white;line-height:1;">0</span>
+      </div>
+    </div>
+    <div id="sync-dot" title="Sync status" style="width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,0.3);flex-shrink:0;"></div>
+    <div class="header-count" id="hdr-count">0</div>
+  </div>
 </div>
+
+<!-- NOTIFICATION PANEL -->
+<div id="notif-panel" style="display:none;position:fixed;top:63px;right:0;left:0;max-width:520px;margin:0 auto;z-index:300;background:var(--surface);border-bottom:2px solid var(--border);box-shadow:0 8px 24px rgba(0,0,0,0.12);max-height:70vh;overflow-y:auto;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;border-bottom:1px solid var(--border);">
+    <div style="font-size:15px;font-weight:800;color:var(--text);">🔔 Sync History</div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button onclick="clearNotifs()" style="font-size:12px;font-weight:600;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-family:var(--sans);">Clear all</button>
+      <button onclick="toggleNotifPanel()" style="font-size:18px;background:none;border:none;cursor:pointer;color:var(--muted);line-height:1;">✕</button>
+    </div>
+  </div>
+  <div id="notif-list" style="padding:0 18px 12px;">
+    <div style="text-align:center;padding:24px 0;color:var(--muted);font-size:13px;">No sync events yet</div>
+  </div>
 
 <!-- NAV -->
 <div class="nav">
@@ -527,17 +577,22 @@ body {
   <button class="nav-btn" onclick="showPage('sell')" id="tab-sell">
     <span class="icon">💸</span>Sell
   </button>
+  <button class="nav-btn" onclick="showPage('day')" id="tab-day">
+    <span class="icon">📅</span>Day
+  </button>
   <button class="nav-btn" onclick="showPage('types')" id="tab-types">
     <span class="icon">🏷️</span>Types
   </button>
-  <button class="nav-btn" onclick="showPage('summary')" id="tab-summary">
-    <span class="icon">📊</span>Summary
+
+  <button class="nav-btn" onclick="showPage('settings')" id="tab-settings">
+    <span class="icon">⚙️</span>Settings
   </button>
 </div>
 
 <!-- ===== DASHBOARD PAGE ===== -->
 <div class="page active" id="page-dash">
-  <div class="sec-label">Overview</div>
+
+  <!-- 4 key stats -->
   <div class="stats-row">
     <div class="stat-box cyan">
       <div class="stat-val" id="d-items">0</div>
@@ -548,51 +603,64 @@ body {
       <div class="stat-lbl">Total Pieces</div>
     </div>
     <div class="stat-box purple">
-      <div class="stat-val" id="d-cost">0</div>
-      <div class="stat-lbl">Stock Cost</div>
+      <div class="stat-val" id="d-stock-val">0</div>
+      <div class="stat-lbl">Stock Value</div>
     </div>
     <div class="stat-box green">
-      <div class="stat-val" id="d-profit">0</div>
-      <div class="stat-lbl">Expected Profit</div>
+      <div class="stat-val" id="d-total-sold">0</div>
+      <div class="stat-lbl">Total Sold</div>
     </div>
   </div>
 
-  <!-- Retail vs Cost -->
+  <!-- Stock Value card -->
+  <div class="sec-label">📦 Stock</div>
   <div class="card" style="margin-bottom:12px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <span style="font-size:13px;font-weight:700;">Stock Value</span>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:14px;font-weight:700;color:var(--text);">Stock Value (cost)</span>
+      <span style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--text2);" id="d-cost-total">KES 0</span>
     </div>
-    <div style="margin-bottom:8px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-        <span style="font-size:12px;color:var(--muted);">Cost (buying price total)</span>
-        <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--muted);" id="d-cost2">KES 0</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-        <span style="font-size:12px;color:var(--muted);">Retail (selling price total)</span>
-        <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--accent2);" id="d-retail">KES 0</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;">
-        <span style="font-size:12px;font-weight:700;color:var(--text);">Expected Profit (total)</span>
-        <span style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--green);" id="d-profit2">KES 0</span>
-      </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:14px;font-weight:700;color:var(--text);">Stock Value (retail)</span>
+      <span style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent2);" id="d-retail-total">KES 0</span>
     </div>
-    <!-- profit bar -->
-    <div style="background:var(--surface2);border-radius:6px;height:8px;overflow:hidden;margin-top:10px;">
-      <div id="d-profit-bar" style="height:100%;background:linear-gradient(90deg,var(--green),var(--accent));border-radius:6px;width:0%;transition:width 0.6s ease;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
+      <span style="font-size:14px;font-weight:700;color:var(--text);">Stock Value Remaining</span>
+      <span style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent);" id="d-remaining">KES 0</span>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-top:5px;font-family:var(--mono);" id="d-margin-pct">0% profit margin</div>
   </div>
 
-  <!-- Stock alerts -->
+  <!-- Sales card -->
+  <div class="sec-label">💸 Sales</div>
+  <div class="card" style="margin-bottom:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:14px;font-weight:700;color:var(--text);">Total Revenue</span>
+      <span style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--green);" id="d-revenue">KES 0</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:14px;font-weight:700;color:var(--text);">Total Profit Earned</span>
+      <span style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent2);" id="d-profit-earned">KES 0</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
+      <span style="font-size:14px;font-weight:700;color:var(--text);">Items Sold (pieces)</span>
+      <span style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent);" id="d-pieces-sold">0</span>
+    </div>
+  </div>
+
+  <!-- Insights card -->
+  <div class="sec-label">💡 Insights</div>
+  <div class="card" id="d-insights" style="margin-bottom:12px;"></div>
+
+  <!-- Alerts -->
   <div id="d-alerts"></div>
 
-  <!-- Top items by value -->
-  <div class="sec-label">Top Items by Stock Value</div>
+  <!-- Top items by stock value -->
+  <div class="sec-label">🏆 Top Items by Stock Value</div>
   <div id="d-top-items"></div>
 
-  <!-- By type breakdown -->
-  <div class="sec-label" style="margin-top:4px;">By Type</div>
+  <!-- By type -->
+  <div class="sec-label" style="margin-top:4px;">📂 By Type</div>
   <div id="d-by-type"></div>
+
 </div>
 
 <!-- ===== STOCK LIST PAGE ===== -->
@@ -730,77 +798,205 @@ body {
     <div id="types-list"></div>
   </div>
 
+</div>
 
-  <div class="sec-label" style="margin-top:16px;">☁️ Firebase Sync</div>
+
+<!-- ===== SETTINGS PAGE ===== -->
+<div class="page" id="page-settings">
+
+  <!-- ☁️ Firebase Sync -->
+  <div class="sec-label">☁️ Firebase Sync</div>
   <div class="card" id="firebase-setup-card">
-    <div style="margin-bottom:12px;">
-      <div style="font-size:14px;font-weight:700;color:var(--text2);margin-bottom:4px;">Sync Status</div>
-      <div id="fb-status-bar" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:var(--r);background:var(--surface2);border:1px solid var(--border);">
-        <span id="fb-status-dot" style="width:10px;height:10px;border-radius:50%;background:var(--muted);flex-shrink:0;"></span>
-        <span id="fb-status-text" style="font-size:13px;font-weight:600;color:var(--muted);">Not configured</span>
-      </div>
+
+    <!-- Status -->
+    <div id="fb-status-bar" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:var(--r);background:var(--surface2);border:1px solid var(--border);margin-bottom:14px;">
+      <span id="fb-status-dot" style="width:12px;height:12px;border-radius:50%;background:var(--muted);flex-shrink:0;"></span>
+      <span id="fb-status-text" style="font-size:14px;font-weight:700;color:var(--muted);">Not configured</span>
     </div>
-    <div style="margin-bottom:10px;">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600;">Firebase Config (paste from Firebase Console)</div>
-      <textarea id="fb-config-input" rows="5" placeholder='Paste your firebaseConfig object here:&#10;{&#10;  "apiKey": "...",&#10;  "projectId": "...",&#10;  ...&#10;}'
-        style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;outline:none;resize:none;line-height:1.5;"></textarea>
+
+    <!-- Config textarea -->
+    <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;letter-spacing:0.3px;">FIREBASE CONFIG</div>
+    <textarea id="fb-config-input" rows="6"
+      placeholder='Paste firebaseConfig { } here'
+      style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:11px;padding:12px;outline:none;resize:none;line-height:1.6;margin-bottom:12px;transition:border-color 0.15s;"
+      onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+
+    <!-- Action buttons -->
+    <button onclick="saveFirebaseConfig()" style="width:100%;padding:14px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
+      💾 Save & Connect
+    </button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <button onclick="forcePushToFirebase()" style="padding:12px;background:var(--green-light);color:var(--green);border:1.5px solid #a8d8b5;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);">⬆️ Push All</button>
+      <button onclick="pullFromFirebase()" style="padding:12px;background:var(--blue-light, #dbeafe);color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);">⬇️ Pull Latest</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-      <button onclick="saveFirebaseConfig()" style="padding:12px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans);">💾 Save & Connect</button>
-      <button onclick="forcePushToFirebase()" style="padding:12px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans);">⬆️ Push All Data</button>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
-      <button onclick="pullFromFirebase()" style="padding:12px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans);">⬇️ Pull Latest</button>
-      <button onclick="disconnectFirebase()" style="padding:12px;background:var(--red-light);color:var(--red);border:1px solid rgba(192,57,43,0.2);border-radius:var(--r);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans);">✕ Disconnect</button>
-    </div>
-    <div style="margin-top:10px;padding:10px 12px;background:#fdf3e3;border:1px solid #f5d9a0;border-radius:var(--r);font-size:12px;color:#92400e;line-height:1.6;">
-      <strong>Setup:</strong> Go to <strong>console.firebase.google.com</strong> → New Project → Firestore Database → Rules (set to test mode) → Project Settings → copy firebaseConfig → paste above.
+    <button onclick="disconnectFirebase()" style="width:100%;padding:12px;background:var(--red-light);color:var(--red);border:1.5px solid rgba(192,57,43,0.25);border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);">
+      ✕ Disconnect Firebase
+    </button>
+    <div style="margin-top:12px;padding:10px 12px;background:#fdf3e3;border:1px solid #f5d9a0;border-radius:var(--r);font-size:12px;color:#92400e;line-height:1.7;">
+      <strong>First time?</strong> Go to <strong>console.firebase.google.com</strong> → your project → Project Settings → Your Apps → Config tab → copy the <code>{ }</code> block → paste above.
     </div>
   </div>
-  <div class="sec-label" style="margin-top:16px;">Currency</div>
-  <div class="card">
-    <div class="form-field" style="margin-bottom:0;">
-      <label class="form-label">Currency Symbol</label>
-      <select class="form-select" id="currency-sel" onchange="saveCurrency()">
-        <option value="KES">KES — Kenyan Shilling</option>
-        <option value="TZS">TZS — Tanzanian Shilling</option>
-        <option value="UGX">UGX — Ugandan Shilling</option>
-        <option value="USD">USD — US Dollar</option>
-      </select>
+
+  <!-- 🔔 Sync History -->
+  <div class="sec-label" style="margin-top:4px;">🔔 Sync History</div>
+  <div class="card" style="padding:0 16px;">
+    <div style="display:flex;justify-content:flex-end;padding:10px 0 6px;">
+      <button onclick="clearNotifs()" style="font-size:12px;font-weight:600;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-family:var(--sans);">Clear history</button>
     </div>
+    <div id="settings-notif-list"></div>
+  </div>
+
+  <!-- 💱 Currency -->
+  <div class="sec-label" style="margin-top:16px;">💱 Currency</div>
+  <div class="card">
+    <select class="form-select form-select-bold" id="currency-sel" onchange="saveCurrency()">
+      <option value="KES">KES — Kenyan Shilling</option>
+      <option value="TZS">TZS — Tanzanian Shilling</option>
+      <option value="UGX">UGX — Ugandan Shilling</option>
+      <option value="USD">USD — US Dollar</option>
+    </select>
+  </div>
+
+  <!-- 📤 Data -->
+  <div class="sec-label" style="margin-top:4px;">📤 Data & Backup</div>
+  <div class="card">
+    <button class="export-btn primary" onclick="exportCSV()" style="margin-bottom:8px;">📤 Export as CSV (Excel)</button>
+    <button class="export-btn secondary" onclick="exportJSON()" style="margin-bottom:8px;">💾 Export as JSON Backup</button>
+    <div class="form-hint">Import JSON: <input type="file" id="import-file" accept=".json" onchange="importJSON(event)" style="font-size:12px;color:var(--muted);margin-top:4px;display:block;"></div>
+  </div>
+
+  <!-- ℹ️ About -->
+  <div class="sec-label" style="margin-top:4px;">ℹ️ About</div>
+  <div class="card" style="text-align:center;padding:20px;">
+    <div style="font-size:32px;margin-bottom:8px;">📦</div>
+    <div style="font-size:17px;font-weight:800;color:var(--text);">Mandela Generals</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px;font-family:var(--mono);">Inventory Management System</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;">Works offline · Syncs with Firebase · Free</div>
+  </div>
+
+</div>
+
+
+
+
+<!-- ===== DAY PAGE ===== -->
+<div class="page" id="page-day">
+
+  <!-- Day status banner -->
+  <div id="day-banner" style="border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;background:var(--surface2);border:2px solid var(--border);">
+    <div id="day-banner-icon" style="font-size:40px;margin-bottom:8px;">📅</div>
+    <div id="day-banner-title" style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:4px;">No Active Day</div>
+    <div id="day-banner-sub" style="font-size:13px;color:var(--muted);margin-bottom:16px;">Open a day to start recording sales and purchases</div>
+    <button id="day-open-btn" onclick="openDay()" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+      🌅 Open Day
+    </button>
+    <button id="day-close-btn" onclick="closeDay()" style="display:none;width:100%;padding:16px;background:var(--red);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+      🌙 Close Day & View Summary
+    </button>
+  </div>
+
+  <!-- Live day stats (shown when day is open) -->
+  <div id="day-live" style="display:none;">
+    <div class="stats-row">
+      <div class="stat-box green">
+        <div class="stat-val" id="day-sales-count">0</div>
+        <div class="stat-lbl">Sales Made</div>
+      </div>
+      <div class="stat-box amber">
+        <div class="stat-val" id="day-revenue">KES 0</div>
+        <div class="stat-lbl">Revenue</div>
+      </div>
+      <div class="stat-box cyan">
+        <div class="stat-val" id="day-profit">KES 0</div>
+        <div class="stat-lbl">Profit</div>
+      </div>
+      <div class="stat-box purple">
+        <div class="stat-val" id="day-purchases">0</div>
+        <div class="stat-lbl">Purchases</div>
+      </div>
+    </div>
+
+    <!-- Today's sales -->
+    <div class="sec-label">💸 Today's Sales</div>
+    <div id="day-sales-list"></div>
+
+    <!-- Today's purchases -->
+    <div class="sec-label" style="margin-top:4px;">📦 Today's Purchases (Stock Added)</div>
+    <div id="day-purchases-list"></div>
+  </div>
+
+  <!-- Past sessions -->
+  <div class="sec-label" style="margin-top:4px;">📜 Past Day Sessions</div>
+  <div id="day-sessions-list"></div>
+
+</div>
+
+<!-- DAY CLOSE SUMMARY SHEET -->
+<div class="sheet-overlay" id="day-summary-sheet">
+  <div class="sheet" style="max-height:92vh;">
+    <div class="sheet-handle"></div>
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:40px;margin-bottom:6px;">🌙</div>
+      <div style="font-size:20px;font-weight:800;color:var(--text);">Day Summary</div>
+      <div id="ds-date" style="font-size:13px;color:var(--muted);font-family:var(--mono);margin-top:4px;"></div>
+    </div>
+
+    <!-- Key numbers -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+      <div class="detail-box" style="padding:14px;text-align:center;">
+        <div class="detail-key">SALES MADE</div>
+        <div class="detail-val" id="ds-sales" style="font-size:24px;color:var(--green);"></div>
+      </div>
+      <div class="detail-box" style="padding:14px;text-align:center;">
+        <div class="detail-key">ITEMS SOLD</div>
+        <div class="detail-val" id="ds-items-sold" style="font-size:24px;color:var(--accent);"></div>
+      </div>
+      <div class="detail-box" style="padding:14px;text-align:center;">
+        <div class="detail-key">REVENUE</div>
+        <div class="detail-val" id="ds-revenue" style="font-size:18px;color:var(--accent2);"></div>
+      </div>
+      <div class="detail-box" style="padding:14px;text-align:center;">
+        <div class="detail-key">PROFIT</div>
+        <div class="detail-val" id="ds-profit" style="font-size:18px;color:var(--green);"></div>
+      </div>
+    </div>
+
+    <!-- Purchases -->
+    <div class="detail-box" style="padding:14px;margin-bottom:14px;">
+      <div class="detail-key">PURCHASES ADDED TO STOCK</div>
+      <div class="detail-val" id="ds-purchases" style="font-size:22px;color:var(--accent3);margin-top:4px;"></div>
+      <div id="ds-purchases-val" style="font-size:13px;color:var(--muted);font-family:var(--mono);margin-top:4px;"></div>
+    </div>
+
+    <!-- Performance verdict -->
+    <div id="ds-verdict" style="border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;"></div>
+
+    <!-- Top seller of the day -->
+    <div id="ds-top-seller" style="margin-bottom:14px;"></div>
+
+    <!-- Notes -->
+    <div style="margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;">DAY NOTES (optional)</div>
+      <textarea id="ds-notes" rows="3" placeholder="Any notes for the day…"
+        style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--sans);font-size:14px;padding:10px;outline:none;resize:none;"
+        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+    </div>
+
+    <button onclick="confirmCloseDay()" style="width:100%;padding:15px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
+      ✅ Confirm & Close Day
+    </button>
+    <button onclick="cancelCloseDay()" style="width:100%;padding:13px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:var(--sans);">
+      ← Go Back (Keep Day Open)
+    </button>
   </div>
 </div>
 
-<!-- ===== SUMMARY PAGE ===== -->
-<div class="page" id="page-summary">
-  <div class="sec-label">Overview</div>
-  <div class="stats-row">
-    <div class="stat-box cyan">
-      <div class="stat-val" id="s-items">0</div>
-      <div class="stat-lbl">Total Items</div>
-    </div>
-    <div class="stat-box amber">
-      <div class="stat-val" id="s-qty">0</div>
-      <div class="stat-lbl">Total Pieces</div>
-    </div>
-    <div class="stat-box purple">
-      <div class="stat-val" id="s-cost">KES 0</div>
-      <div class="stat-lbl">Stock Cost</div>
-    </div>
-    <div class="stat-box green">
-      <div class="stat-val" id="s-profit">KES 0</div>
-      <div class="stat-lbl">Expected Profit</div>
-    </div>
-  </div>
-
-  <div class="sec-label">By Type</div>
-  <div id="summary-by-type"></div>
-
-  <div class="sec-label" style="margin-top:16px;">Export</div>
-  <div class="card">
-    <button class="export-btn primary" onclick="exportCSV()">📤 Export as CSV (Excel)</button>
-    <button class="export-btn secondary" onclick="exportJSON()">💾 Export as JSON (Backup)</button>
-    <div class="form-hint" style="margin-top:4px;">Import JSON: <input type="file" id="import-file" accept=".json" onchange="importJSON(event)" style="font-size:12px;color:var(--muted);"></div>
+<!-- PAST SESSION VIEW SHEET -->
+<div class="sheet-overlay" id="past-session-sheet">
+  <div class="sheet" style="max-height:92vh;">
+    <div class="sheet-handle"></div>
+    <div id="past-session-content"></div>
+    <button onclick="closePastSessionSheet()" style="width:100%;margin-top:14px;padding:13px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:var(--sans);">Close</button>
   </div>
 </div>
 
@@ -999,7 +1195,7 @@ body {
 // ===== DB =====
 let db;
 const DB_NAME = 'InventoryApp';
-const DB_VER = 2;
+const DB_VER = 3;
 
 function initDB() {
   const req = indexedDB.open(DB_NAME, DB_VER);
@@ -1018,6 +1214,9 @@ function initDB() {
       ss.createIndex('itemId', 'itemId', { unique: false });
       ss.createIndex('date', 'date', { unique: false });
     }
+    if (!d.objectStoreNames.contains('day_sessions')) {
+      d.createObjectStore('day_sessions', { keyPath: 'id', autoIncrement: true });
+    }
   };
   req.onsuccess = e => {
     db = e.target.result;
@@ -1027,6 +1226,7 @@ function initDB() {
       renderSummary();
       renderSellPage();
       updateCurrencyUI();
+      loadActiveDay();
     });
   };
   req.onerror = () => toast('Database error!', 'err');
@@ -1097,8 +1297,10 @@ function showPage(id) {
   if (id === 'dash') renderDashboard();
   if (id === 'list') renderList();
   if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
-  if (id === 'summary') renderSummary();
+  // summary removed
   if (id === 'types') renderTypes();
+  if (id === 'settings') renderSettingsNotifList();
+  if (id === 'day') { loadActiveDay(); renderDaySessionsList(); }
 }
 
 // ===== TYPES =====
@@ -1254,6 +1456,7 @@ async function saveItem() {
       renderDashboard();
       updateHeader();
       showSplash(name, sell, profit);
+      if (activeDay) updateDayLiveStats();
     }
   } catch (e) {
     if (e.name === 'ConstraintError') toast('Code "' + code + '" already exists!', 'err');
@@ -1388,33 +1591,89 @@ async function editItem() {
 // ===== DASHBOARD =====
 async function renderDashboard() {
   const items = await dbAll('items');
+  const sales = await dbAll('sales');
+
   const totalItems = items.length;
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
-  const totalCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
-  const totalRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
-  const totalProfit = items.reduce((s, i) => s + i.profit * i.qty, 0);
-  const margin = totalRetail > 0 ? ((totalProfit / totalRetail) * 100).toFixed(1) : 0;
+  const stockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
+  const stockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
 
+  // Sales aggregates
+  const totalRevenue = sales.reduce((s, x) => s + x.revenue, 0);
+  const totalProfitEarned = sales.reduce((s, x) => s + x.profit, 0);
+  const totalPiecesSold = sales.reduce((s, x) => s + x.qty, 0);
+  const totalSalesCount = sales.length;
+
+  // Stock value remaining = current stock retail value
+  const stockRemaining = stockRetail;
+
+  // Top stat boxes
   document.getElementById('d-items').textContent = totalItems;
   document.getElementById('d-qty').textContent = fmtN(totalQty);
-  document.getElementById('d-cost').textContent = fmt(totalCost);
-  document.getElementById('d-profit').textContent = fmt(totalProfit);
-  document.getElementById('d-cost2').textContent = fmt(totalCost);
-  document.getElementById('d-retail').textContent = fmt(totalRetail);
-  document.getElementById('d-profit2').textContent = fmt(totalProfit);
-  document.getElementById('d-margin-pct').textContent = margin + '% profit margin';
-  document.getElementById('d-profit-bar').style.width = Math.min(parseFloat(margin), 100) + '%';
+  document.getElementById('d-stock-val').textContent = fmt(stockCost);
+  document.getElementById('d-total-sold').textContent = totalSalesCount;
 
-  // Alerts
-  const outStock = items.filter(i => i.qty === 0);
-  const lowStock = items.filter(i => i.qty > 0 && i.qty <= 3);
+  // Stock card
+  document.getElementById('d-cost-total').textContent = fmt(stockCost);
+  document.getElementById('d-retail-total').textContent = fmt(stockRetail);
+  document.getElementById('d-remaining').textContent = fmt(stockRemaining);
+
+  // Sales card
+  document.getElementById('d-revenue').textContent = fmt(totalRevenue);
+  document.getElementById('d-profit-earned').textContent = fmt(totalProfitEarned);
+  document.getElementById('d-pieces-sold').textContent = fmtN(totalPiecesSold);
+
+  // Insights
+  const insightsEl = document.getElementById('d-insights');
+  const insights = [];
+  if (totalItems === 0) {
+    insights.push({ icon: '📦', text: 'No items yet — tap ➕ Add to get started', color: 'var(--muted)' });
+  } else {
+    // Best selling type
+    const typeRevMap = {};
+    sales.forEach(s => { typeRevMap[s.type] = (typeRevMap[s.type] || 0) + s.revenue; });
+    const bestType = Object.entries(typeRevMap).sort((a,b) => b[1]-a[1])[0];
+    if (bestType) insights.push({ icon: '🏆', text: 'Best selling type: <strong>' + bestType[0] + '</strong> (' + fmt(bestType[1]) + ' revenue)', color: 'var(--accent2)' });
+
+    // Profit margin overall
+    if (totalRevenue > 0) {
+      const margin = ((totalProfitEarned / totalRevenue) * 100).toFixed(1);
+      insights.push({ icon: '📈', text: 'Overall profit margin: <strong>' + margin + '%</strong>', color: margin >= 20 ? 'var(--green)' : 'var(--amber)' });
+    }
+
+    // Out of stock
+    const outStock = items.filter(i => i.qty === 0);
+    if (outStock.length) insights.push({ icon: '⚠️', text: '<strong>' + outStock.length + '</strong> item' + (outStock.length>1?'s':'') + ' out of stock: ' + outStock.map(i=>i.code).join(', '), color: 'var(--red)' });
+
+    // Low stock
+    const lowStock = items.filter(i => i.qty > 0 && i.qty <= 3);
+    if (lowStock.length) insights.push({ icon: '📉', text: '<strong>' + lowStock.length + '</strong> item' + (lowStock.length>1?'s':'') + ' running low (≤3 pcs): ' + lowStock.map(i=>i.code).join(', '), color: 'var(--amber)' });
+
+    // Stock turnover hint
+    if (totalPiecesSold > 0 && totalQty > 0) {
+      const ratio = (totalPiecesSold / (totalPiecesSold + totalQty) * 100).toFixed(0);
+      insights.push({ icon: '🔄', text: '<strong>' + ratio + '%</strong> of your stock has been sold', color: 'var(--accent)' });
+    }
+
+    if (insights.length === 0) insights.push({ icon: '✅', text: 'All good — stock levels healthy', color: 'var(--green)' });
+  }
+
+  insightsEl.innerHTML = insights.map(ins => `
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:18px;flex-shrink:0;">${ins.icon}</span>
+      <span style="font-size:13px;font-weight:500;color:${ins.color};line-height:1.5;">${ins.text}</span>
+    </div>`).join('').replace(/border-bottom[^;]+;(?=[^<]*<\/div>\s*$)/, '');
+
+  // Alerts separately
+  const outStk = items.filter(i => i.qty === 0);
+  const lowStk = items.filter(i => i.qty > 0 && i.qty <= 3);
   const alertEl = document.getElementById('d-alerts');
   let alertHTML = '';
-  if (outStock.length) alertHTML += `<div style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:var(--r);padding:12px 14px;margin-bottom:10px;font-size:13px;color:var(--red);">⚠️ <strong>${outStock.length}</strong> item${outStock.length>1?'s':''} out of stock: ${outStock.map(i=>i.code).join(', ')}</div>`;
-  if (lowStock.length) alertHTML += `<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:var(--r);padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--accent2);">📉 <strong>${lowStock.length}</strong> item${lowStock.length>1?'s':''} low stock (≤3): ${lowStock.map(i=>i.code).join(', ')}</div>`;
+  if (outStk.length) alertHTML += `<div style="background:var(--red-light);border:1px solid rgba(192,57,43,0.25);border-radius:var(--r);padding:12px 14px;margin-bottom:8px;font-size:13px;color:var(--red);">⚠️ <strong>${outStk.length}</strong> out of stock: ${outStk.map(i=>i.code).join(', ')}</div>`;
+  if (lowStk.length) alertHTML += `<div style="background:var(--amber-light);border:1px solid #f5d9a0;border-radius:var(--r);padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--amber);">📉 <strong>${lowStk.length}</strong> low stock: ${lowStk.map(i=>i.code).join(', ')}</div>`;
   alertEl.innerHTML = alertHTML;
 
-  // Top 5 items by total stock value
+  // Top 5 items by stock value
   const sorted = [...items].sort((a, b) => (b.sell * b.qty) - (a.sell * a.qty)).slice(0, 5);
   const topEl = document.getElementById('d-top-items');
   if (!sorted.length) { topEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No items yet</div>'; }
@@ -1422,7 +1681,7 @@ async function renderDashboard() {
     const maxVal = sorted[0].sell * sorted[0].qty || 1;
     topEl.innerHTML = sorted.map(item => {
       const val = item.sell * item.qty;
-      const pct = Math.max(8, (val / maxVal) * 100);
+      const pct = Math.max(6, (val / maxVal) * 100);
       const t = getTypeObj(item.type);
       return `<div class="card" style="padding:12px;margin-bottom:8px;">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
@@ -1433,11 +1692,10 @@ async function renderDashboard() {
           </div>
           <div style="text-align:right;flex-shrink:0;">
             <div style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--accent2);">${fmt(val)}</div>
-            <div style="font-size:11px;color:var(--green);font-family:var(--mono);">+${fmt(item.profit * item.qty)}</div>
           </div>
         </div>
         <div style="background:var(--surface2);border-radius:4px;height:6px;overflow:hidden;">
-          <div style="height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:4px;width:${pct}%;"></div>
+          <div style="height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:4px;width:${pct}%;"></div>
         </div>
       </div>`;
     }).join('');
@@ -1446,19 +1704,16 @@ async function renderDashboard() {
   // By type
   const byType = {};
   items.forEach(item => {
-    if (!byType[item.type]) byType[item.type] = { qty: 0, cost: 0, retail: 0, profit: 0, count: 0 };
+    if (!byType[item.type]) byType[item.type] = { qty: 0, cost: 0, retail: 0, count: 0 };
     byType[item.type].qty += item.qty;
     byType[item.type].cost += item.buy * item.qty;
     byType[item.type].retail += item.sell * item.qty;
-    byType[item.type].profit += item.profit * item.qty;
     byType[item.type].count++;
   });
-
   const typeEl = document.getElementById('d-by-type');
   if (!Object.keys(byType).length) { typeEl.innerHTML = ''; return; }
   typeEl.innerHTML = Object.entries(byType).map(([type, data]) => {
     const t = getTypeObj(type);
-    const m = data.retail > 0 ? ((data.profit / data.retail) * 100).toFixed(0) : 0;
     return `<div class="card" style="margin-bottom:8px;padding:12px;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
         <span style="font-size:22px;">${t.emoji}</span>
@@ -1466,61 +1721,23 @@ async function renderDashboard() {
           <div style="font-weight:700;font-size:14px;">${type}</div>
           <div style="font-size:11px;font-family:var(--mono);color:var(--muted);">${data.count} item${data.count!==1?'s':''} · ${fmtN(data.qty)} pcs</div>
         </div>
-        <span style="font-size:12px;font-family:var(--mono);background:rgba(74,222,128,0.1);color:var(--green);padding:3px 9px;border-radius:20px;">${m}%</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
-        <div class="detail-box" style="padding:8px;"><div class="detail-key" style="font-size:10px;">COST</div><div class="detail-val" style="font-size:12px;color:var(--muted);">${fmt(data.cost)}</div></div>
-        <div class="detail-box" style="padding:8px;"><div class="detail-key" style="font-size:10px;">RETAIL</div><div class="detail-val" style="font-size:12px;color:var(--accent2);">${fmt(data.retail)}</div></div>
-        <div class="detail-box" style="padding:8px;"><div class="detail-key" style="font-size:10px;">PROFIT</div><div class="detail-val" style="font-size:12px;color:var(--green);">${fmt(data.profit)}</div></div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-// ===== SUMMARY =====
-async function renderSummary() {
-  const items = await dbAll('items');
-  const totalItems = items.length;
-  const totalQty = items.reduce((s, i) => s + i.qty, 0);
-  const totalCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
-  const totalProfit = items.reduce((s, i) => s + i.profit * i.qty, 0);
-
-  document.getElementById('s-items').textContent = totalItems;
-  document.getElementById('s-qty').textContent = fmtN(totalQty);
-  document.getElementById('s-cost').textContent = fmt(totalCost);
-  document.getElementById('s-profit').textContent = fmt(totalProfit);
-
-  // By type
-  const byType = {};
-  items.forEach(item => {
-    if (!byType[item.type]) byType[item.type] = { qty: 0, cost: 0, profit: 0, count: 0 };
-    byType[item.type].qty += item.qty;
-    byType[item.type].cost += item.buy * item.qty;
-    byType[item.type].profit += item.profit * item.qty;
-    byType[item.type].count++;
-  });
-
-  const typeDiv = document.getElementById('summary-by-type');
-  if (!Object.keys(byType).length) { typeDiv.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No items yet</div>'; return; }
-
-  typeDiv.innerHTML = Object.entries(byType).map(([type, data]) => {
-    const t = getTypeObj(type);
-    return `
-    <div class="card" style="margin-bottom:10px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <div style="font-size:24px;">${t.emoji}</div>
-        <div>
-          <div style="font-weight:700;font-size:15px;">${type}</div>
-          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);">${data.count} item${data.count !== 1 ? 's' : ''} · ${fmtN(data.qty)} pcs</div>
-        </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div class="detail-box"><div class="detail-key">STOCK COST</div><div class="detail-val" style="color:var(--muted);font-size:14px;">${fmt(data.cost)}</div></div>
-        <div class="detail-box"><div class="detail-key">EXP. PROFIT</div><div class="detail-val" style="color:var(--green);font-size:14px;">${fmt(data.profit)}</div></div>
+        <div class="detail-box" style="padding:10px;">
+          <div class="detail-key" style="font-size:10px;">STOCK COST</div>
+          <div class="detail-val" style="font-size:13px;color:var(--text2);">${fmt(data.cost)}</div>
+        </div>
+        <div class="detail-box" style="padding:10px;">
+          <div class="detail-key" style="font-size:10px;">STOCK VALUE</div>
+          <div class="detail-val" style="font-size:13px;color:var(--accent2);">${fmt(data.retail)}</div>
+        </div>
       </div>
     </div>`;
   }).join('');
 }
+
+// renderSummary removed — content merged into renderDashboard
+function renderSummary() { renderDashboard(); }
 
 // ===== HEADER =====
 function updateHeader() {
@@ -1536,7 +1753,6 @@ function saveCurrency() {
   localStorage.setItem('inv_currency', currency);
   updateCurrencyUI();
   renderList();
-  renderSummary();
   toast('Currency: ' + currency, 'ok');
 }
 function updateCurrencyUI() {
@@ -1778,6 +1994,7 @@ async function confirmSale() {
   renderDashboard();
   renderList();
   updateHeader();
+  if (activeDay) updateDayLiveStats();
 }
 
 async function renderSellPage() {
@@ -1821,6 +2038,109 @@ document.getElementById('sell-modal').addEventListener('click', function(e) {
 });
 
 
+// ===== NOTIFICATION BELL =====
+let notifLog = JSON.parse(localStorage.getItem('notif_log') || '[]');
+let notifPanelOpen = false;
+let unreadCount = 0;
+
+function addSyncLog(type, title, detail) {
+  // type: 'push' | 'pull' | 'live' | 'error' | 'offline' | 'online'
+  const entry = { type, title, detail, time: new Date().toISOString(), read: false };
+  notifLog.unshift(entry);
+  if (notifLog.length > 50) notifLog = notifLog.slice(0, 50);
+  localStorage.setItem('notif_log', JSON.stringify(notifLog));
+  unreadCount++;
+  updateBadge();
+  shakeBell();
+  if (notifPanelOpen) renderNotifPanel();
+}
+
+function updateBadge() {
+  const badge = document.getElementById('notif-badge');
+  const countEl = document.getElementById('notif-count');
+  if (!badge) return;
+  if (unreadCount > 0) {
+    badge.style.display = 'flex';
+    countEl.textContent = unreadCount > 9 ? '9+' : unreadCount;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function shakeBell() {
+  const bell = document.getElementById('bell-icon');
+  if (!bell) return;
+  bell.classList.remove('bell-shake');
+  void bell.offsetWidth; // reflow to restart animation
+  bell.classList.add('bell-shake');
+  setTimeout(() => bell.classList.remove('bell-shake'), 600);
+}
+
+function toggleNotifPanel() {
+  notifPanelOpen = !notifPanelOpen;
+  const panel = document.getElementById('notif-panel');
+  if (notifPanelOpen) {
+    panel.style.display = 'block';
+    unreadCount = 0;
+    updateBadge();
+    // mark all read
+    notifLog.forEach(n => n.read = true);
+    localStorage.setItem('notif_log', JSON.stringify(notifLog));
+    renderNotifPanel();
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+function renderNotifPanel() {
+  const list = document.getElementById('notif-list');
+  if (!notifLog.length) {
+    list.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--muted);font-size:13px;">No sync events yet</div>';
+    return;
+  }
+  const colors = { push:'var(--green)', pull:'#3b82f6', live:'var(--green)', error:'var(--red)', offline:'var(--muted)', online:'var(--accent)' };
+  const icons  = { push:'⬆️', pull:'⬇️', live:'🔄', error:'❌', offline:'📴', online:'📶' };
+  list.innerHTML = notifLog.map(n => {
+    const t = new Date(n.time);
+    const timeStr = t.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' +
+                    t.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    return `<div class="notif-item">
+      <div class="notif-dot-sm" style="background:${colors[n.type]||'var(--muted)'};"></div>
+      <div class="notif-body">
+        <div class="notif-title">${icons[n.type]||'🔔'} ${n.title}</div>
+        ${n.detail ? `<div class="notif-detail">${n.detail}</div>` : ''}
+      </div>
+      <div class="notif-time">${timeStr}</div>
+    </div>`;
+  }).join('');
+}
+
+function clearNotifs() {
+  notifLog = [];
+  unreadCount = 0;
+  localStorage.setItem('notif_log', '[]');
+  updateBadge();
+  renderNotifPanel();
+  renderSettingsNotifList();
+}
+
+// Close panel when clicking outside
+document.addEventListener('click', e => {
+  if (!notifPanelOpen) return;
+  const panel = document.getElementById('notif-panel');
+  const bell = document.getElementById('bell-wrap');
+  if (panel && !panel.contains(e.target) && bell && !bell.contains(e.target)) {
+    notifPanelOpen = false;
+    panel.style.display = 'none';
+  }
+});
+
+// On load — show unread count from saved log
+window.addEventListener('DOMContentLoaded', () => {
+  unreadCount = notifLog.filter(n => !n.read).length;
+  updateBadge();
+});
+
 // ===== FIREBASE SYNC =====
 let fbApp = null, fbDb = null, fbUnsub = null;
 let fbReady = false;
@@ -1828,12 +2148,18 @@ let syncQueue = [];
 let isSyncing = false;
 
 function setFbStatus(status) {
-  // status: 'off' | 'connecting' | 'on' | 'error' | 'syncing'
   const dot = document.getElementById('fb-status-dot');
   const txt = document.getElementById('fb-status-text');
   const hdot = document.getElementById('sync-dot');
   const colors = { off:'var(--muted)', connecting:'var(--amber)', on:'var(--green)', error:'var(--red)', syncing:'#3b82f6' };
-  const labels = { off:'Not configured', connecting:'Connecting…', on:'✅ Synced — Live', error:'❌ Sync error', syncing:'⏳ Syncing…' };
+  const now = new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  const labels = {
+    off:'Not configured',
+    connecting:'Connecting…',
+    on: '✅ Live · last sync ' + now,
+    error:'❌ Sync error — check connection',
+    syncing:'⏳ Syncing…'
+  };
   if (dot) { dot.style.background = colors[status]; dot.style.boxShadow = status==='on' ? '0 0 6px var(--green)' : 'none'; }
   if (txt) txt.textContent = labels[status];
   if (hdot) { hdot.style.background = colors[status]; hdot.title = 'Firebase: ' + labels[status]; }
@@ -1876,9 +2202,11 @@ async function initFirebase() {
       }
       allItems = await dbAll('items');
       renderList(); renderDashboard(); updateHeader();
+      addSyncLog('live', 'Live Update Received', changes.length + ' change(s) synced from another device');
     }, err => { setFbStatus('error'); console.error('Firestore listen error:', err); });
     setFbStatus('on');
     toast('☁️ Firebase connected!', 'ok');
+    addSyncLog('live', 'Firebase Connected', 'Live sync active — ' + config.projectId);
   } catch (e) {
     setFbStatus('error');
     toast('Firebase error: ' + e.message, 'err');
@@ -1953,9 +2281,9 @@ async function fbSyncSale(sale) {
   } catch (e) { console.error('fbSyncSale error', e); }
 }
 
-async function forcePushToFirebase() {
-  if (!fbReady || !fbDb) { toast('⚠️ Connect Firebase first', 'err'); return; }
-  setFbStatus('syncing');
+async function forcePushToFirebase(silent = false) {
+  if (!fbReady || !fbDb) { if (!silent) toast('⚠️ Connect Firebase first', 'err'); return; }
+  if (!silent) setFbStatus('syncing');
   const items = await dbAll('items');
   const sales = await dbAll('sales');
   const { doc, setDoc, writeBatch } = await waitForFbImports();
@@ -1976,14 +2304,15 @@ async function forcePushToFirebase() {
       batch.set(doc(fbDb, 'sales', fbId), { ...sale, fbId });
     }
     await batch.commit();
-    setFbStatus('on');
-    toast('⬆️ Pushed ' + items.length + ' items + ' + sales.length + ' sales', 'ok');
-  } catch (e) { setFbStatus('error'); toast('Push failed: ' + e.message, 'err'); }
+    if (!silent) { setFbStatus('on'); toast('⬆️ Pushed ' + items.length + ' items + ' + sales.length + ' sales', 'ok'); }
+    else setFbStatus('on');
+    addSyncLog('push', 'Data Pushed to Cloud', items.length + ' items · ' + sales.length + ' sales uploaded');
+  } catch (e) { setFbStatus('error'); addSyncLog('error', 'Push Failed', e.message); if (!silent) toast('Push failed: ' + e.message, 'err'); }
 }
 
-async function pullFromFirebase() {
-  if (!fbReady || !fbDb) { toast('⚠️ Connect Firebase first', 'err'); return; }
-  setFbStatus('syncing');
+async function pullFromFirebase(silent = false) {
+  if (!fbReady || !fbDb) { if (!silent) toast('⚠️ Connect Firebase first', 'err'); return; }
+  if (!silent) setFbStatus('syncing');
   try {
     const { collection, getDocs } = await waitForFbImports();
     const snap = await getDocs(collection(fbDb, 'items'));
@@ -1998,9 +2327,10 @@ async function pullFromFirebase() {
     }
     allItems = await dbAll('items');
     renderList(); renderDashboard(); updateHeader();
-    setFbStatus('on');
-    toast('⬇️ Pulled ' + merged + ' items from Firebase', 'ok');
-  } catch (e) { setFbStatus('error'); toast('Pull failed: ' + e.message, 'err'); }
+    if (!silent) { setFbStatus('on'); toast('⬇️ Pulled ' + merged + ' items from Firebase', 'ok'); }
+    else setFbStatus('on');
+    addSyncLog('pull', 'Data Pulled from Cloud', merged + ' items downloaded · ' + new Date().toLocaleTimeString());
+  } catch (e) { setFbStatus('error'); addSyncLog('error', 'Pull Failed', e.message); if (!silent) toast('Pull failed: ' + e.message, 'err'); }
 }
 
 function disconnectFirebase() {
@@ -2012,9 +2342,359 @@ function disconnectFirebase() {
   toast('Firebase disconnected', '');
 }
 
+
+function renderSettingsNotifList() {
+  const list = document.getElementById('settings-notif-list');
+  if (!list) return;
+  if (!notifLog.length) {
+    list.innerHTML = '<div style="text-align:center;padding:20px 0;color:var(--muted);font-size:13px;">No sync events recorded yet</div>';
+    return;
+  }
+  const colors = { push:'var(--green)', pull:'#3b82f6', live:'var(--green)', error:'var(--red)', offline:'var(--muted)', online:'var(--accent)' };
+  const icons  = { push:'⬆️', pull:'⬇️', live:'🔄', error:'❌', offline:'📴', online:'📶' };
+  list.innerHTML = notifLog.map(n => {
+    const t = new Date(n.time);
+    const timeStr = t.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) + ' · ' +
+                    t.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    return `<div class="notif-item">
+      <div class="notif-dot-sm" style="background:${colors[n.type]||'var(--muted)'};margin-top:6px;"></div>
+      <div class="notif-body">
+        <div class="notif-title">${icons[n.type]||'🔔'} ${n.title}</div>
+        ${n.detail ? `<div class="notif-detail">${n.detail}</div>` : ''}
+        <div class="notif-detail" style="margin-top:3px;">${timeStr}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+
+// ===== OPEN / CLOSE DAY =====
+let activeDay = null; // { id, openTime, date }
+
+async function loadActiveDay() {
+  const sessions = await dbAll('day_sessions');
+  activeDay = sessions.find(s => s.status === 'open') || null;
+  updateDayBanner();
+  if (activeDay) {
+    updateDayLiveStats();
+  }
+}
+
+function updateDayBanner() {
+  const banner = document.getElementById('day-banner');
+  const icon = document.getElementById('day-banner-icon');
+  const title = document.getElementById('day-banner-title');
+  const sub = document.getElementById('day-banner-sub');
+  const openBtn = document.getElementById('day-open-btn');
+  const closeBtn = document.getElementById('day-close-btn');
+  const liveSection = document.getElementById('day-live');
+
+  if (activeDay) {
+    const openTime = new Date(activeDay.openTime);
+    const timeStr = openTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    banner.style.background = 'var(--green-light)';
+    banner.style.borderColor = '#a8d8b5';
+    icon.textContent = '🌅';
+    title.textContent = 'Day is Open';
+    title.style.color = 'var(--green)';
+    sub.textContent = 'Opened at ' + timeStr + ' · ' + activeDay.date;
+    openBtn.style.display = 'none';
+    closeBtn.style.display = 'block';
+    liveSection.style.display = 'block';
+  } else {
+    banner.style.background = 'var(--surface2)';
+    banner.style.borderColor = 'var(--border)';
+    icon.textContent = '📅';
+    title.textContent = 'No Active Day';
+    title.style.color = 'var(--text)';
+    sub.textContent = 'Open a day to start recording sales and purchases';
+    openBtn.style.display = 'block';
+    closeBtn.style.display = 'none';
+    liveSection.style.display = 'none';
+  }
+}
+
+async function openDay() {
+  if (activeDay) { toast('A day is already open!', 'err'); return; }
+  const now = new Date();
+  const session = {
+    status: 'open',
+    date: now.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+    dateStr: now.toISOString().split('T')[0],
+    openTime: now.toISOString(),
+    closeTime: null,
+    notes: '',
+    // snapshot of opening stock value
+    openingStockCost: 0,
+    openingStockRetail: 0,
+  };
+  // Capture opening stock snapshot
+  const items = await dbAll('items');
+  session.openingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
+  session.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
+
+  const id = await dbAdd('day_sessions', session);
+  session.id = id;
+  activeDay = session;
+  updateDayBanner();
+  updateDayLiveStats();
+  renderDaySessionsList();
+  toast('🌅 Day opened! Start selling.', 'ok');
+  addSyncLog('live', 'Day Opened', session.date);
+}
+
+async function closeDay() {
+  if (!activeDay) { toast('No active day to close', 'err'); return; }
+  // Build summary data for the sheet
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(s => s.date >= activeDay.openTime);
+  const revenue = daySales.reduce((s, x) => s + x.revenue, 0);
+  const profit = daySales.reduce((s, x) => s + x.profit, 0);
+  const itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
+
+  // Purchases = items added today (createdAt >= openTime)
+  const items = await dbAll('items');
+  const purchases = items.filter(i => i.createdAt >= activeDay.openTime);
+  const purchaseCost = purchases.reduce((s, i) => s + i.buy * i.qty, 0);
+
+  // Populate sheet
+  document.getElementById('ds-date').textContent = activeDay.date;
+  document.getElementById('ds-sales').textContent = daySales.length;
+  document.getElementById('ds-items-sold').textContent = itemsSold;
+  document.getElementById('ds-revenue').textContent = fmt(revenue);
+  document.getElementById('ds-profit').textContent = fmt(profit);
+  document.getElementById('ds-purchases').textContent = purchases.length + ' item' + (purchases.length !== 1 ? 's' : '');
+  document.getElementById('ds-purchases-val').textContent = purchases.length ? 'Total cost: ' + fmt(purchaseCost) : 'No new stock added today';
+  document.getElementById('ds-notes').value = '';
+
+  // Verdict
+  const verdictEl = document.getElementById('ds-verdict');
+  let verdict, verdictBg, verdictColor;
+  if (daySales.length === 0) {
+    verdict = '😴 No sales today. Tomorrow is a new opportunity!';
+    verdictBg = 'var(--surface2)'; verdictColor = 'var(--muted)';
+  } else if (profit > 0 && revenue > 0) {
+    const margin = ((profit / revenue) * 100).toFixed(0);
+    verdict = margin >= 30 ? '🔥 Excellent day! ' + margin + '% profit margin.'
+            : margin >= 15 ? '✅ Good day! ' + margin + '% profit margin.'
+            : '👍 Decent day. ' + margin + '% profit margin.';
+    verdictBg = 'var(--green-light)'; verdictColor = 'var(--green)';
+  } else {
+    verdict = '⚠️ Sales made but low/no profit. Review your pricing.';
+    verdictBg = 'var(--amber-light)'; verdictColor = 'var(--amber)';
+  }
+  verdictEl.style.background = verdictBg;
+  verdictEl.style.color = verdictColor;
+  verdictEl.style.border = '1px solid ' + verdictColor.replace('var(', '').replace(')', '');
+  verdictEl.innerHTML = '<div style="font-size:16px;font-weight:800;">' + verdict + '</div>';
+
+  // Top seller
+  const topSellerEl = document.getElementById('ds-top-seller');
+  if (daySales.length > 0) {
+    const grouped = {};
+    daySales.forEach(s => { grouped[s.itemName] = (grouped[s.itemName] || 0) + s.revenue; });
+    const top = Object.entries(grouped).sort((a,b) => b[1]-a[1])[0];
+    topSellerEl.innerHTML = '<div class="detail-box" style="padding:12px;"><div class="detail-key">⭐ TOP SELLER TODAY</div><div style="font-size:15px;font-weight:700;color:var(--accent2);margin-top:6px;">' + top[0] + '</div><div style="font-size:12px;color:var(--muted);font-family:var(--mono);">' + fmt(top[1]) + ' revenue</div></div>';
+  } else {
+    topSellerEl.innerHTML = '';
+  }
+
+  document.getElementById('day-summary-sheet').classList.add('open');
+}
+
+async function confirmCloseDay() {
+  const notes = document.getElementById('ds-notes').value.trim();
+  const now = new Date();
+
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(s => s.date >= activeDay.openTime);
+  const items = await dbAll('items');
+  const purchases = items.filter(i => i.createdAt >= activeDay.openTime);
+
+  // Save closed session
+  const session = await dbGet('day_sessions', activeDay.id);
+  session.status = 'closed';
+  session.closeTime = now.toISOString();
+  session.notes = notes;
+  session.salesCount = daySales.length;
+  session.revenue = daySales.reduce((s, x) => s + x.revenue, 0);
+  session.profit = daySales.reduce((s, x) => s + x.profit, 0);
+  session.itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
+  session.purchasesCount = purchases.length;
+  session.purchaseCost = purchases.reduce((s, i) => s + i.buy * i.qty, 0);
+  session.closingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
+
+  await dbPut('day_sessions', session);
+  activeDay = null;
+
+  document.getElementById('day-summary-sheet').classList.remove('open');
+  updateDayBanner();
+  renderDaySessionsList();
+  renderDashboard();
+  toast('🌙 Day closed. Great work!', 'ok');
+  addSyncLog('live', 'Day Closed', session.date + ' · Revenue: ' + fmt(session.revenue));
+}
+
+function cancelCloseDay() {
+  document.getElementById('day-summary-sheet').classList.remove('open');
+}
+
+async function updateDayLiveStats() {
+  if (!activeDay) return;
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(s => s.date >= activeDay.openTime);
+  const items = await dbAll('items');
+  const purchases = items.filter(i => i.createdAt >= activeDay.openTime);
+
+  const revenue = daySales.reduce((s, x) => s + x.revenue, 0);
+  const profit = daySales.reduce((s, x) => s + x.profit, 0);
+
+  document.getElementById('day-sales-count').textContent = daySales.length;
+  document.getElementById('day-revenue').textContent = fmt(revenue);
+  document.getElementById('day-profit').textContent = fmt(profit);
+  document.getElementById('day-purchases').textContent = purchases.length;
+
+  // Sales list
+  const salesList = document.getElementById('day-sales-list');
+  if (!daySales.length) {
+    salesList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0 12px;">No sales yet today — tap 💸 Sell to record one</div>';
+  } else {
+    const sorted = [...daySales].sort((a, b) => new Date(b.date) - new Date(a.date));
+    salesList.innerHTML = sorted.map(s => {
+      const t = getTypeObj(s.type);
+      const time = new Date(s.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:20px;">${t.emoji}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;">${s.itemName} × ${s.qty}</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);">${time}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
+          <div style="font-size:11px;color:var(--green);font-family:var(--mono);">+${fmt(s.profit)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Purchases list
+  const purchList = document.getElementById('day-purchases-list');
+  if (!purchases.length) {
+    purchList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0 12px;">No new stock added today — tap ➕ Add to record purchases</div>';
+  } else {
+    purchList.innerHTML = purchases.map(item => {
+      const t = getTypeObj(item.type);
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:20px;">${t.emoji}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;">${item.name}</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);">${item.code} · ${item.qty} pcs</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--text2);">${fmt(item.buy * item.qty)}</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);">${fmt(item.buy)}/pc</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
+async function renderDaySessionsList() {
+  const sessions = await dbAll('day_sessions');
+  const closed = sessions.filter(s => s.status === 'closed').sort((a,b) => new Date(b.closeTime) - new Date(a.closeTime));
+  const list = document.getElementById('day-sessions-list');
+  if (!closed.length) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No closed sessions yet</div>';
+    return;
+  }
+  list.innerHTML = closed.map(s => {
+    const profitColor = s.profit > 0 ? 'var(--green)' : s.profit < 0 ? 'var(--red)' : 'var(--muted)';
+    return `<div class="card" style="margin-bottom:8px;padding:14px;cursor:pointer;" onclick="viewPastSession(${s.id})">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div>
+          <div style="font-size:14px;font-weight:800;color:var(--text);">${s.date}</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">
+            Opened ${new Date(s.openTime).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})} · Closed ${new Date(s.closeTime).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}
+          </div>
+        </div>
+        <span style="font-size:12px;background:var(--green-light);color:var(--green);padding:4px 10px;border-radius:20px;font-weight:700;">Closed</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+        <div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;">
+          <div style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
+          <div style="font-size:10px;color:var(--muted);">Revenue</div>
+        </div>
+        <div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;">
+          <div style="font-size:16px;font-weight:800;font-family:var(--mono);color:${profitColor};">${fmt(s.profit)}</div>
+          <div style="font-size:10px;color:var(--muted);">Profit</div>
+        </div>
+        <div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;">
+          <div style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent);">${s.salesCount}</div>
+          <div style="font-size:10px;color:var(--muted);">Sales</div>
+        </div>
+      </div>
+      ${s.notes ? '<div style="margin-top:8px;font-size:12px;color:var(--muted);font-style:italic;">"' + s.notes + '"</div>' : ''}
+    </div>`;
+  }).join('');
+}
+
+async function viewPastSession(sessionId) {
+  const s = await dbGet('day_sessions', sessionId);
+  const profitColor = s.profit > 0 ? 'var(--green)' : s.profit < 0 ? 'var(--red)' : 'var(--muted)';
+  const margin = s.revenue > 0 ? ((s.profit / s.revenue) * 100).toFixed(1) : 0;
+
+  document.getElementById('past-session-content').innerHTML = `
+    <div style="text-align:center;margin-bottom:18px;">
+      <div style="font-size:36px;margin-bottom:6px;">📅</div>
+      <div style="font-size:18px;font-weight:800;">${s.date}</div>
+      <div style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:4px;">
+        ${new Date(s.openTime).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})} → ${new Date(s.closeTime).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">SALES</div>
+        <div class="detail-val" style="font-size:22px;color:var(--green);">${s.salesCount}</div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">ITEMS SOLD</div>
+        <div class="detail-val" style="font-size:22px;color:var(--accent);">${s.itemsSold || 0}</div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">REVENUE</div>
+        <div class="detail-val" style="font-size:18px;color:var(--accent2);">${fmt(s.revenue)}</div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">PROFIT</div>
+        <div class="detail-val" style="font-size:18px;color:${profitColor};">${fmt(s.profit)}</div>
+      </div>
+    </div>
+    <div class="detail-box" style="padding:12px;margin-bottom:10px;">
+      <div class="detail-key">PROFIT MARGIN</div>
+      <div class="detail-val" style="font-size:20px;color:var(--accent3);">${margin}%</div>
+    </div>
+    <div class="detail-box" style="padding:12px;margin-bottom:10px;">
+      <div class="detail-key">PURCHASES (NEW STOCK ADDED)</div>
+      <div class="detail-val" style="font-size:18px;color:var(--accent3);">${s.purchasesCount || 0} items · ${fmt(s.purchaseCost || 0)}</div>
+    </div>
+    ${s.notes ? '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">NOTES</div><div style="font-size:14px;color:var(--text);margin-top:6px;font-style:italic;">"' + s.notes + '"</div></div>' : ''}
+  `;
+  document.getElementById('past-session-sheet').classList.add('open');
+}
+
+function closePastSessionSheet() {
+  document.getElementById('past-session-sheet').classList.remove('open');
+}
+
 // ===== CLOSE SHEET ON BACKDROP =====
 document.getElementById('detail-sheet').addEventListener('click', function(e) {
   if (e.target === this) closeSheet();
+});
+document.getElementById('day-summary-sheet').addEventListener('click', function(e) {
+  if (e.target === this) cancelCloseDay();
+});
+document.getElementById('past-session-sheet').addEventListener('click', function(e) {
+  if (e.target === this) closePastSessionSheet();
 });
 
 // ===== SERVICE WORKER =====
@@ -2023,6 +2703,51 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').ca
 // ===== INIT =====
 initDB();
 setTimeout(initFirebase, 800);
+
+// ===== AUTO SYNC =====
+let autoSyncTimer = null;
+
+function startAutoSync() {
+  if (autoSyncTimer) clearInterval(autoSyncTimer);
+  // Run every 5 minutes
+  autoSyncTimer = setInterval(async () => {
+    if (!fbReady || !fbDb || !navigator.onLine) return;
+    setFbStatus('syncing');
+    try {
+      await forcePushToFirebase();
+      await pullFromFirebase();
+      setFbStatus('on');
+    } catch(e) {
+      setFbStatus('error');
+    }
+  }, 5 * 60 * 1000);
+}
+
+// Auto sync when internet comes back online
+window.addEventListener('online', async () => {
+  if (!fbReady || !fbDb) return;
+  toast('📶 Back online — syncing…', '');
+  addSyncLog('online', 'Back Online', 'Internet restored — auto syncing now');
+  setFbStatus('syncing');
+  try {
+    await forcePushToFirebase(true);
+    await pullFromFirebase(true);
+    setFbStatus('on');
+  } catch(e) { setFbStatus('error'); }
+});
+
+window.addEventListener('offline', () => {
+  toast('📴 Offline — changes saved locally', '');
+  addSyncLog('offline', 'Gone Offline', 'Changes saved locally — will sync when reconnected');
+  setFbStatus('off');
+});
+
+// Start auto sync after Firebase connects
+const _origInitFirebase = initFirebase;
+initFirebase = async function() {
+  await _origInitFirebase();
+  if (fbReady) startAutoSync();
+};
 </script>
 </body>
 </html>
