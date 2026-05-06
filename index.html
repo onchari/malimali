@@ -1831,8 +1831,32 @@ async function manualSyncBackup() {
     
     const remoteData = data.record;
     if (!remoteData?.malimali) {
-      setBackupStatus('ℹ️ No records found in cloud yet.', 'blue');
-      showToast('ℹ️ No cloud records to download', 'green');
+      // No remote data - upload local data directly
+      const localItems = await dbAll('items');
+      const localSales = await dbAll('sales');
+      
+      if (localItems.length === 0 && localSales.length === 0) {
+        setBackupStatus('ℹ️ No local records to upload.', 'blue');
+        showToast('ℹ️ No records to sync', 'green');
+        btn.disabled = false;
+        btn.textContent = '🔄';
+        return;
+      }
+      
+      setBackupStatus('⏳ Uploading local data to cloud...', 'blue');
+      
+      const payload = { malimali: true, version: 1, exportedAt: new Date().toISOString(), items: localItems, sales: localSales };
+      const uploadResp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Master-Key': apiKey },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!uploadResp.ok) throw new Error('Upload failed');
+      
+      setBackupStatus('✅ Upload successful: ' + localItems.length + ' items, ' + localSales.length + ' sales.', 'green');
+      showToast('📤 Uploaded to cloud', 'green');
+      setPendingBackup(false);
       btn.disabled = false;
       btn.textContent = '🔄';
       return;
