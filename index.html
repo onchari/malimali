@@ -1818,7 +1818,7 @@ async function manualSyncBackup() {
   
   btn.disabled = true;
   btn.textContent = '⏳';
-  showToast('📶 Syncing & merging...', 'green');
+  setBackupStatus('⏳ Downloading from cloud...', 'blue');
   
   try {
     // Download remote backup
@@ -1830,7 +1830,16 @@ async function manualSyncBackup() {
     if (!response.ok) throw new Error(data.message || 'Download failed');
     
     const remoteData = data.record;
-    if (!remoteData?.malimali) throw new Error('Invalid backup data');
+    if (!remoteData?.malimali) {
+      setBackupStatus('ℹ️ No records found in cloud yet.', 'blue');
+      showToast('ℹ️ No cloud records to download', 'green');
+      btn.disabled = false;
+      btn.textContent = '🔄';
+      return;
+    }
+    
+    setBackupStatus('✅ Downloaded: ' + (remoteData.items?.length || 0) + ' items, ' + (remoteData.sales?.length || 0) + ' sales', 'green');
+    showToast('📥 Downloaded from cloud', 'green');
     
     // Merge databases
     const localItems = await dbAll('items');
@@ -1845,10 +1854,12 @@ async function manualSyncBackup() {
     });
     
     // Merge local items (override if newer or not in remote)
+    let newItemsCount = 0;
     localItems.forEach(item => {
       const remote = mergedItems.get(item.code);
       if (!remote || new Date(item.createdAt || 0) > new Date(remote.createdAt || 0)) {
         mergedItems.set(item.code, item);
+        newItemsCount++;
       }
     });
     
@@ -1860,9 +1871,24 @@ async function manualSyncBackup() {
       salesMap.set(key(sale), sale);
     });
     
+    let newSalesCount = 0;
     localSales.forEach(sale => {
+      if (!salesMap.has(key(sale))) {
+        newSalesCount++;
+      }
       salesMap.set(key(sale), sale);
     });
+    
+    // Check if there are updates
+    if (newItemsCount === 0 && newSalesCount === 0) {
+      setBackupStatus('ℹ️ No new records to update.', 'blue');
+      showToast('ℹ️ Already up to date', 'green');
+      btn.disabled = false;
+      btn.textContent = '🔄';
+      return;
+    }
+    
+    setBackupStatus('🔄 Merging: ' + newItemsCount + ' new items, ' + newSalesCount + ' new sales', 'blue');
     
     // Update local database with merged data
     const clearTx = db.transaction(['items'], 'readwrite');
@@ -1885,6 +1911,8 @@ async function manualSyncBackup() {
       await dbAdd('sales', sale);
     }
     
+    setBackupStatus('⏳ Uploading merged data to cloud...', 'blue');
+    
     // Upload merged data back to cloud
     const merged = { malimali: true, version: 1, exportedAt: new Date().toISOString(), items: Array.from(mergedItems.values()), sales: Array.from(salesMap.values()) };
     
@@ -1897,11 +1925,14 @@ async function manualSyncBackup() {
     if (!uploadResp.ok) throw new Error('Upload failed after merge');
     
     setPendingBackup(false);
+    setBackupStatus('✅ Upload successful: ' + mergedItems.size + ' items, ' + salesMap.size + ' sales synced.', 'green');
+    showToast('📤 Uploaded to cloud', 'green');
+    
     refreshDashboard();
     renderInventory();
     renderSales();
-    showToast('✅ Merged & synced!', 'green');
   } catch (e) {
+    setBackupStatus('❌ Sync failed: ' + e.message, 'red');
     showToast('❌ Sync failed: ' + e.message, 'red');
   } finally {
     btn.disabled = false;
