@@ -2697,8 +2697,88 @@ document.getElementById('past-session-sheet').addEventListener('click', function
   if (e.target === this) closePastSessionSheet();
 });
 
-// ===== SERVICE WORKER =====
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+// ===== SERVICE WORKER + OFFLINE + INSTALL =====
+let swRegistration = null;
+let deferredInstallPrompt = null;
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').then(reg => {
+    swRegistration = reg;
+    // Listen for messages from SW (background sync trigger)
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data && e.data.type === 'BACKGROUND_SYNC') {
+        if (fbReady && fbDb && navigator.onLine) {
+          forcePushToFirebase(true).then(() => pullFromFirebase(true));
+        }
+      }
+    });
+    // Check for SW updates
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          toast('🔄 App updated — reload to get latest version', '');
+        }
+      });
+    });
+  }).catch(() => {});
+}
+
+// Register background sync when going offline
+window.addEventListener('offline', () => {
+  if (swRegistration && swRegistration.sync) {
+    swRegistration.sync.register('firebase-sync').catch(() => {});
+  }
+});
+
+// ── INSTALL PROMPT (Add to Home Screen) ─────────────────────────────────
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  // Show install banner after 2 seconds if not already installed
+  if (!window.matchMedia('(display-mode: standalone)').matches) {
+    setTimeout(showInstallBanner, 2000);
+  }
+});
+
+window.addEventListener('appinstalled', () => {
+  hideInstallBanner();
+  toast('✅ App installed on home screen!', 'ok');
+  deferredInstallPrompt = null;
+});
+
+function showInstallBanner() {
+  const banner = document.getElementById('install-banner');
+  if (banner && !localStorage.getItem('install_dismissed')) {
+    banner.style.display = 'flex';
+  }
+}
+
+function hideInstallBanner() {
+  const banner = document.getElementById('install-banner');
+  if (banner) banner.style.display = 'none';
+}
+
+async function triggerInstall() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    const result = await deferredInstallPrompt.userChoice;
+    if (result.outcome === 'accepted') {
+      hideInstallBanner();
+      localStorage.setItem('install_dismissed', '1');
+    }
+    deferredInstallPrompt = null;
+  } else {
+    // Fallback: show manual instructions
+    document.getElementById('install-manual').style.display = 'block';
+  }
+}
+
+function dismissInstall(permanent) {
+  hideInstallBanner();
+  if (permanent) localStorage.setItem('install_dismissed', '1');
+}
 
 // ===== INIT =====
 initDB();
@@ -2749,5 +2829,26 @@ initFirebase = async function() {
   if (fbReady) startAutoSync();
 };
 </script>
+<!-- INSTALL BANNER -->
+<div id="install-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:0 auto;z-index:997;background:var(--surface);border-top:3px solid var(--accent);box-shadow:0 -4px 24px rgba(0,0,0,0.15);padding:14px 18px;">
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;">
+    <div style="width:48px;height:48px;border-radius:12px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">📦</div>
+    <div style="flex:1;">
+      <div style="font-size:15px;font-weight:800;color:var(--text);">Install Mandela Generals</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px;">Add to home screen for quick access · Works offline</div>
+    </div>
+    <button onclick="dismissInstall(true)" style="background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;flex-shrink:0;padding:4px;">✕</button>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+    <button onclick="dismissInstall(false)" style="padding:12px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans);">Later</button>
+    <button onclick="triggerInstall()" style="padding:12px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:14px;font-weight:800;cursor:pointer;font-family:var(--sans);">📲 Install Now</button>
+  </div>
+  <!-- Manual instructions (shown if no native prompt) -->
+  <div id="install-manual" style="display:none;margin-top:12px;padding:12px;background:var(--surface2);border-radius:var(--r);font-size:12px;color:var(--muted);line-height:1.8;">
+    <strong style="color:var(--text2);">On Android Chrome:</strong> tap ⋮ menu → <em>Add to Home screen</em> → Add<br>
+    <strong style="color:var(--text2);">On iPhone Safari:</strong> tap Share ↑ → <em>Add to Home Screen</em> → Add
+  </div>
+</div>
+
 </body>
 </html>
