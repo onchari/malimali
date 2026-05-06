@@ -57,14 +57,22 @@
   .app-header {
     background: var(--green);
     color: white;
-    padding: 16px 20px 12px;
+    padding: 12px 20px;
     position: sticky;
     top: 0;
     z-index: 100;
     box-shadow: var(--shadow);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
   }
-  .app-header h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
-  .app-header .subtitle { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+  .app-header-title { flex: 1; }
+  .app-header h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; margin: 0; }
+  .app-header .subtitle { font-size: 12px; opacity: 0.8; margin-top: 2px; margin-bottom: 0; }
+  .app-header-sync { background: rgba(255,255,255,0.2); border: none; color: white; padding: 10px 14px; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0; }
+  .app-header-sync:active { background: rgba(255,255,255,0.3); }
+  .app-header-sync:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* NAV TABS */
   .nav-tabs {
@@ -553,8 +561,11 @@
 
 <!-- HEADER -->
 <div class="app-header">
-  <h1>🛍️ Malimali Shop</h1>
-  <div class="subtitle" id="header-subtitle">Loading...</div>
+  <div class="app-header-title">
+    <h1>🛍️ Malimali Shop</h1>
+    <div class="subtitle" id="header-subtitle">Loading...</div>
+  </div>
+  <button id="header-sync-btn" class="app-header-sync" onclick="manualSyncBackup()" title="Sync backup now">🔄</button>
 </div>
 
 <!-- NAV TABS -->
@@ -1792,6 +1803,33 @@ async function tryAutoBackupSync() {
   if (success) {
     showToast('🔄 Backup synced automatically', 'green');
     setBackupStatus('✅ Backup is up to date.', 'green');
+  }
+}
+
+async function manualSyncBackup() {
+  const btn = document.getElementById('header-sync-btn');
+  const apiKey = getBackupKey();
+  const binId = getBackupBinId();
+  
+  if (!apiKey || !binId) {
+    showToast('⚠️ Set API key and backup ID first', 'red');
+    return;
+  }
+  
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  showToast('📶 Syncing backup...', 'green');
+  
+  try {
+    const success = await backupToCloud({ silent: true });
+    if (success) {
+      showToast('✅ Backup synced!', 'green');
+    } else {
+      showToast('❌ Sync failed', 'red');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄';
   }
 }
 
