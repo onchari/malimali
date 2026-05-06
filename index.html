@@ -1822,8 +1822,9 @@ async function manualSyncBackup() {
   
   try {
     // Download remote backup
-    const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
-      headers: { 'X-Master-Key': apiKey }
+    const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest?t=${Date.now()}`, {
+      headers: { 'X-Master-Key': apiKey },
+      cache: 'no-cache'
     });
     const data = await response.json();
     
