@@ -1818,15 +1818,91 @@ async function manualSyncBackup() {
   
   btn.disabled = true;
   btn.textContent = '⏳';
-  showToast('📶 Syncing backup...', 'green');
+  showToast('📶 Syncing & merging...', 'green');
   
   try {
-    const success = await backupToCloud({ silent: true });
-    if (success) {
-      showToast('✅ Backup synced!', 'green');
-    } else {
-      showToast('❌ Sync failed', 'red');
+    // Download remote backup
+    const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
+      headers: { 'X-Master-Key': apiKey }
+    });
+    const data = await response.json();
+    
+    if (!response.ok) throw new Error(data.message || 'Download failed');
+    
+    const remoteData = data.record;
+    if (!remoteData?.malimali) throw new Error('Invalid backup data');
+    
+    // Merge databases
+    const localItems = await dbAll('items');
+    const localSales = await dbAll('sales');
+    
+    // Merge items (keep newer by createdAt timestamp)
+    const mergedItems = new Map();
+    
+    // Add all remote items
+    (remoteData.items || []).forEach(item => {
+      mergedItems.set(item.code, item);
+    });
+    
+    // Merge local items (override if newer or not in remote)
+    localItems.forEach(item => {
+      const remote = mergedItems.get(item.code);
+      if (!remote || new Date(item.createdAt || 0) > new Date(remote.createdAt || 0)) {
+        mergedItems.set(item.code, item);
+      }
+    });
+    
+    // Merge sales (combine all, no duplicates)
+    const salesMap = new Map();
+    const key = (s) => `${s.date}|${s.itemId}|${s.qty}`;
+    
+    (remoteData.sales || []).forEach(sale => {
+      salesMap.set(key(sale), sale);
+    });
+    
+    localSales.forEach(sale => {
+      salesMap.set(key(sale), sale);
+    });
+    
+    // Update local database with merged data
+    const clearTx = db.transaction(['items'], 'readwrite');
+    await new Promise((res, rej) => {
+      clearTx.objectStore('items').clear().onsuccess = res;
+      clearTx.onerror = rej;
+    });
+    
+    for (const item of mergedItems.values()) {
+      await dbAdd('items', item);
     }
+    
+    const clearTx2 = db.transaction(['sales'], 'readwrite');
+    await new Promise((res, rej) => {
+      clearTx2.objectStore('sales').clear().onsuccess = res;
+      clearTx2.onerror = rej;
+    });
+    
+    for (const sale of salesMap.values()) {
+      await dbAdd('sales', sale);
+    }
+    
+    // Upload merged data back to cloud
+    const merged = { malimali: true, version: 1, exportedAt: new Date().toISOString(), items: Array.from(mergedItems.values()), sales: Array.from(salesMap.values()) };
+    
+    const uploadResp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Master-Key': apiKey },
+      body: JSON.stringify(merged)
+    });
+    
+    if (!uploadResp.ok) throw new Error('Upload failed after merge');
+    
+    setPendingBackup(false);
+    refreshDashboard();
+    renderInventory();
+    renderSales();
+    showToast('✅ Merged & synced!', 'green');
+  } catch (e) {
+    showToast('❌ Sync failed: ' + e.message, 'red');
   } finally {
     btn.disabled = false;
     btn.textContent = '🔄';
