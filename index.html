@@ -816,6 +816,7 @@
 
     <!-- Status message -->
     <div id="backup-status" style="display:none; margin-top:12px; padding:12px 14px; border-radius:var(--radius-sm); font-size:14px; font-weight:500;"></div>
+    <div id="sync-indicator" style="display:none; margin-top:10px; padding:12px 14px; border-radius:var(--radius-sm); background:#fef3c7; color:#92400e; font-size:13px; font-weight:600; border:1px solid #fde68a;">🔄 Pending sync: upload will resume when online.</div>
   </div>
 
 </div>
@@ -1578,10 +1579,34 @@ async function exportData() {
 }
 
 // ===== BACKUP & RESTORE (JSONBin.io) =====
-function getBackupKey() { return document.getElementById('jsonbin-key').value.trim(); }
+function getBackupKey() {
+  return document.getElementById('jsonbin-key').value.trim() || localStorage.getItem('malimali_jsonbin_key') || '';
+}
+function saveBackupKey(apiKey) {
+  if (apiKey) localStorage.setItem('malimali_jsonbin_key', apiKey);
+  else localStorage.removeItem('malimali_jsonbin_key');
+}
 function getBackupBinId() {
   return document.getElementById('jsonbin-binid').value.trim() ||
          localStorage.getItem('malimali_bin_id') || '';
+}
+function setPendingBackup(flag) {
+  if (flag) localStorage.setItem('malimali_pending_sync', '1');
+  else localStorage.removeItem('malimali_pending_sync');
+  updateSyncIndicator();
+}
+function hasPendingBackup() {
+  return localStorage.getItem('malimali_pending_sync') === '1';
+}
+
+function updateSyncIndicator() {
+  const indicator = document.getElementById('sync-indicator');
+  if (!indicator) return;
+  if (hasPendingBackup()) {
+    indicator.style.display = 'block';
+  } else {
+    indicator.style.display = 'none';
+  }
 }
 
 function setBackupStatus(msg, type) {
@@ -1599,18 +1624,29 @@ function setBtnLoading(id, loading, label) {
   btn.style.opacity = loading ? '0.7' : '1';
 }
 
-async function backupToCloud() {
+async function backupToCloud(options = {}) {
+  const { silent = false } = options;
   const apiKey = getBackupKey();
-  if (!apiKey) { setBackupStatus('⚠️ Please enter your JSONBin API Key first.', 'red'); return; }
+  if (!apiKey) {
+    if (!silent) setBackupStatus('⚠️ Please enter your JSONBin API Key first.', 'red');
+    return false;
+  }
+  saveBackupKey(apiKey);
 
-  setBtnLoading('btn-backup', true, '☁️ Upload Backup');
-  setBackupStatus('⏳ Uploading backup...', 'blue');
+  if (!silent) {
+    setBtnLoading('btn-backup', true, '☁️ Upload Backup');
+    setBackupStatus('⏳ Uploading backup...', 'blue');
+  }
 
   try {
+    if (!navigator.onLine) {
+      throw new Error('offline');
+    }
+
     const items = await dbAll('items');
     const sales = await dbAll('sales');
     const payload = { malimali: true, version: 1, exportedAt: new Date().toISOString(), items, sales };
-    const existingBinId = localStorage.getItem('malimali_bin_id');
+    const existingBinId = getBackupBinId();
 
     let response, data;
 
@@ -1649,12 +1685,22 @@ async function backupToCloud() {
       document.getElementById('bin-id-row').style.display = 'block';
     }
 
-    setBackupStatus('✅ Backup uploaded! ' + items.length + ' items, ' + sales.length + ' sales saved.', 'green');
-    showToast('☁️ Backup uploaded!', 'green');
+    setPendingBackup(false);
+    if (!silent) {
+      setBackupStatus('✅ Backup uploaded! ' + items.length + ' items, ' + sales.length + ' sales saved.', 'green');
+      showToast('☁️ Backup uploaded!', 'green');
+    }
+    return true;
   } catch (e) {
-    setBackupStatus('❌ Failed: ' + e.message, 'red');
+    setPendingBackup(true);
+    if (!silent) {
+      const message = e.message === 'offline' ? 'You are offline. Backup will sync when you reconnect.' : '❌ Failed: ' + e.message;
+      setBackupStatus(message, 'red');
+      showToast('⚠️ Backup queued for sync when online', 'red');
+    }
+    return false;
   } finally {
-    setBtnLoading('btn-backup', false, '☁️ Upload Backup');
+    if (!silent) setBtnLoading('btn-backup', false, '☁️ Upload Backup');
   }
 }
 
@@ -1724,10 +1770,28 @@ function copyBinId() {
 
 function loadBackupSettings() {
   const savedBinId = localStorage.getItem('malimali_bin_id');
+  const savedKey = localStorage.getItem('malimali_jsonbin_key');
   if (savedBinId) {
     document.getElementById('jsonbin-binid').value = savedBinId;
     document.getElementById('bin-id-display').textContent = savedBinId;
     document.getElementById('bin-id-row').style.display = 'block';
+  }
+  if (savedKey) {
+    document.getElementById('jsonbin-key').value = savedKey;
+  }
+  updateSyncIndicator();
+}
+
+async function tryAutoBackupSync() {
+  if (!navigator.onLine || !hasPendingBackup()) return;
+  const apiKey = getBackupKey();
+  const binId = getBackupBinId();
+  if (!apiKey || !binId) return;
+  setBackupStatus('📶 Online — syncing backup now...', 'blue');
+  const success = await backupToCloud({ silent: true });
+  if (success) {
+    showToast('🔄 Backup synced automatically', 'green');
+    setBackupStatus('✅ Backup is up to date.', 'green');
   }
 }
 
@@ -1836,10 +1900,23 @@ window.addEventListener('DOMContentLoaded', () => {
     if (e.target === document.getElementById('install-guide')) closeInstallGuide();
   });
 
+  document.getElementById('jsonbin-key').addEventListener('input', () => saveBackupKey(document.getElementById('jsonbin-key').value.trim()));
+
+  window.addEventListener('online', () => {
+    showToast('📶 Back online — syncing backup', 'green');
+    tryAutoBackupSync();
+  });
+  window.addEventListener('offline', () => {
+    showToast('⚠️ Offline — backup will sync when online', 'red');
+  });
+
   // On iOS, show install banner after short delay (no beforeinstallprompt on iOS)
   if (isIOS() && !isRunningStandalone() && !localStorage.getItem('install_dismissed')) {
     setTimeout(showInstallBanner, 1500);
   }
+
+  // Try sync immediately if there is pending backup and we are online
+  tryAutoBackupSync();
 });
 
 // ===== INIT =====
