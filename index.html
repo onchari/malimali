@@ -551,15 +551,21 @@ body {
 </div>
 
 <!-- NOTIFICATION PANEL -->
-<div id="notif-panel" style="display:none;position:fixed;top:63px;right:0;left:0;max-width:520px;margin:0 auto;z-index:300;background:var(--surface);border-bottom:2px solid var(--border);box-shadow:0 8px 24px rgba(0,0,0,0.12);max-height:70vh;overflow-y:auto;">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;border-bottom:1px solid var(--border);">
+<!-- NOTIFICATION OVERLAY BACKDROP -->
+<div id="notif-backdrop" onclick="toggleNotifPanel()" style="display:none;position:fixed;inset:0;z-index:498;background:rgba(0,0,0,0.3);"></div>
+
+<!-- NOTIFICATION PANEL -->
+<div id="notif-panel" style="display:none;position:fixed;top:0;right:0;left:0;max-width:520px;margin:0 auto;z-index:499;background:var(--surface);border-bottom:3px solid var(--accent);box-shadow:0 8px 32px rgba(0,0,0,0.18);max-height:80vh;overflow-y:auto;border-radius:0 0 var(--r-lg) var(--r-lg);">
+  <!-- Spacer for header + nav -->
+  <div style="height:115px;"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:115px;z-index:1;">
     <div style="font-size:15px;font-weight:800;color:var(--text);">🔔 Sync History</div>
     <div style="display:flex;gap:10px;align-items:center;">
       <button onclick="clearNotifs()" style="font-size:12px;font-weight:600;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-family:var(--sans);">Clear all</button>
       <button onclick="toggleNotifPanel()" style="font-size:18px;background:none;border:none;cursor:pointer;color:var(--muted);line-height:1;">✕</button>
     </div>
   </div>
-  <div id="notif-list" style="padding:0 18px 12px;">
+  <div id="notif-list" style="padding:0 18px 16px;">
     <div style="text-align:center;padding:24px 0;color:var(--muted);font-size:13px;">No sync events yet</div>
   </div>
 
@@ -2079,16 +2085,18 @@ function shakeBell() {
 function toggleNotifPanel() {
   notifPanelOpen = !notifPanelOpen;
   const panel = document.getElementById('notif-panel');
+  const backdrop = document.getElementById('notif-backdrop');
   if (notifPanelOpen) {
     panel.style.display = 'block';
+    backdrop.style.display = 'block';
     unreadCount = 0;
     updateBadge();
-    // mark all read
     notifLog.forEach(n => n.read = true);
     localStorage.setItem('notif_log', JSON.stringify(notifLog));
     renderNotifPanel();
   } else {
     panel.style.display = 'none';
+    backdrop.style.display = 'none';
   }
 }
 
@@ -2129,9 +2137,11 @@ document.addEventListener('click', e => {
   if (!notifPanelOpen) return;
   const panel = document.getElementById('notif-panel');
   const bell = document.getElementById('bell-wrap');
+  const backdrop = document.getElementById('notif-backdrop');
   if (panel && !panel.contains(e.target) && bell && !bell.contains(e.target)) {
     notifPanelOpen = false;
     panel.style.display = 'none';
+    if (backdrop) backdrop.style.display = 'none';
   }
 });
 
