@@ -822,27 +822,27 @@ body {
       <span id="fb-status-text" style="font-size:14px;font-weight:700;color:var(--muted);">Not configured</span>
     </div>
 
-    <!-- Config textarea -->
-    <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;letter-spacing:0.3px;">FIREBASE CONFIG</div>
-    <textarea id="fb-config-input" rows="6"
-      placeholder='Paste firebaseConfig { } here'
-      style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:11px;padding:12px;outline:none;resize:none;line-height:1.6;margin-bottom:12px;transition:border-color 0.15s;"
-      onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+    <!-- Project info -->
+    <div style="background:var(--surface2);border-radius:var(--r);padding:12px 14px;margin-bottom:14px;font-size:12px;font-family:var(--mono);color:var(--muted);line-height:1.8;">
+      <div><strong style="color:var(--text2);">Project:</strong> mandela-generals</div>
+      <div><strong style="color:var(--text2);">Database:</strong> Firestore</div>
+      <div><strong style="color:var(--text2);">Sync:</strong> Auto every 5 mins + on every change</div>
+    </div>
+
+    <!-- Hidden config input (kept for backward compatibility) -->
+    <input type="hidden" id="fb-config-input">
 
     <!-- Action buttons -->
     <button onclick="saveFirebaseConfig()" style="width:100%;padding:14px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
-      💾 Save & Connect
+      🔄 Reconnect Firebase
     </button>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
       <button onclick="forcePushToFirebase()" style="padding:12px;background:var(--green-light);color:var(--green);border:1.5px solid #a8d8b5;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);">⬆️ Push All</button>
-      <button onclick="pullFromFirebase()" style="padding:12px;background:var(--blue-light, #dbeafe);color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);">⬇️ Pull Latest</button>
+      <button onclick="pullFromFirebase()" style="padding:12px;background:#dbeafe;color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);">⬇️ Pull Latest</button>
     </div>
     <button onclick="disconnectFirebase()" style="width:100%;padding:12px;background:var(--red-light);color:var(--red);border:1.5px solid rgba(192,57,43,0.25);border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);">
-      ✕ Disconnect Firebase
+      ✕ Disconnect
     </button>
-    <div style="margin-top:12px;padding:10px 12px;background:#fdf3e3;border:1px solid #f5d9a0;border-radius:var(--r);font-size:12px;color:#92400e;line-height:1.7;">
-      <strong>First time?</strong> Go to <strong>console.firebase.google.com</strong> → your project → Project Settings → Your Apps → Config tab → copy the <code>{ }</code> block → paste above.
-    </div>
   </div>
 
   <!-- 🔔 Sync History -->
@@ -2177,12 +2177,24 @@ function setFbStatus(status) {
   if (hdot) { hdot.style.background = colors[status]; hdot.title = 'Firebase: ' + labels[status]; }
 }
 
+// ===== HARDCODED FIREBASE CONFIG =====
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCCHwRweqKLQeXFOOiqNLbZ2vJAzdZAD2U",
+  authDomain: "mandela-generals.firebaseapp.com",
+  projectId: "mandela-generals",
+  storageBucket: "mandela-generals.firebasestorage.app",
+  messagingSenderId: "467998749242",
+  appId: "1:467998749242:web:222226a3a0e767eb067b03",
+  measurementId: "G-W184ZWRGJH"
+};
+
 async function initFirebase() {
-  const cfg = localStorage.getItem('fb_config');
-  if (!cfg) { setFbStatus('off'); return; }
+  const config = FIREBASE_CONFIG;
+  // Also save to localStorage so Settings UI shows it
+  localStorage.setItem('fb_config', JSON.stringify(config));
+  const cfgInput = document.getElementById('fb-config-input');
+  if (cfgInput) cfgInput.value = JSON.stringify(config, null, 2);
   try {
-    const config = JSON.parse(cfg);
-    document.getElementById('fb-config-input').value = JSON.stringify(config, null, 2);
     setFbStatus('connecting');
     const { initializeApp, getFirestore, onSnapshot, collection } = await waitForFbImports();
     fbApp = initializeApp(config, 'mandela-' + (fbApp ? Date.now() : 'main'));
@@ -2234,34 +2246,10 @@ function waitForFbImports() {
 }
 
 async function saveFirebaseConfig() {
-  let raw = document.getElementById('fb-config-input').value.trim();
-
-  // Extract the { } block (handles const firebaseConfig = { ... }; wrapper)
-  const braceMatch = raw.match(/\{[\s\S]*\}/);
-  if (!braceMatch) { toast('⚠️ Paste the full { } config block', 'err'); return; }
-  raw = braceMatch[0];
-
-  // Convert JS object literal to valid JSON:
-  // 1. Add quotes around unquoted keys (word chars before colon, not inside strings/URLs)
-  // 2. Remove trailing commas before } or ]
-  let json = raw
-    .replace(/\/\/.*$/gm, '')                        // remove // comments
-    .replace(/,\s*([}\]])/g, '$1')                   // trailing commas
-    .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":')  // quote keys
-    .replace(/:\s*'([^']*)'/g, ': "$1"');             // single → double quotes
-
-  try {
-    const config = JSON.parse(json);
-    if (!config.apiKey)     { toast('⚠️ apiKey missing', 'err'); return; }
-    if (!config.projectId)  { toast('⚠️ projectId missing', 'err'); return; }
-    localStorage.setItem('fb_config', JSON.stringify(config));
-    if (fbUnsub) { fbUnsub(); fbUnsub = null; }
-    fbApp = null; fbDb = null; fbReady = false;
-    await initFirebase();
-  } catch (e) {
-    toast('Could not parse config: ' + e.message, 'err');
-    console.error('Firebase config parse error:', e, '\nProcessed JSON:', json);
-  }
+  // Config is hardcoded — just reconnect
+  if (fbUnsub) { fbUnsub(); fbUnsub = null; }
+  fbApp = null; fbDb = null; fbReady = false;
+  await initFirebase();
 }
 
 async function fbSyncItem(item) {
