@@ -1038,10 +1038,10 @@ body {
     <label class="form-label">Item Photo (optional)</label>
     <div id="add-photo-preview" style="width:100%;height:180px;border-radius:var(--r);background:var(--surface2);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;margin-bottom:10px;cursor:pointer;" onclick="triggerAddPhotoUpload()">
       <img id="add-photo-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:var(--r);">
-      <div id="add-photo-placeholder" style="text-align:center;color:var(--muted);">
-        <div style="font-size:36px;margin-bottom:6px;">📷</div>
-        <div style="font-size:13px;font-weight:600;">Tap to add photo</div>
-        <div style="font-size:11px;margin-top:3px;">Camera or Gallery</div>
+      <div id="add-photo-placeholder" style="text-align:center;color:#94a3b8;">
+        <div style="font-size:36px;margin-bottom:8px;">📷</div>
+        <div style="font-size:14px;font-weight:600;color:#64748b;">Tap to add photo</div>
+        <div style="font-size:11px;margin-top:4px;color:#94a3b8;letter-spacing:0.3px;">Camera · Gallery</div>
       </div>
       <button id="add-photo-remove" onclick="removeAddPhoto(event)" style="display:none;position:absolute;top:8px;right:8px;background:rgba(192,57,43,0.85);color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;padding:4px 9px;cursor:pointer;font-family:var(--sans);">✕ Remove</button>
     </div>
@@ -1471,7 +1471,10 @@ body {
 
     <!-- Photo area -->
     <div id="sh-photo-area" style="width:100%;height:400px;display:flex;align-items:center;justify-content:center;position:relative;background:var(--surface2);border-radius:16px 16px 0 0;overflow:hidden;">
-      <img id="sh-photo-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;">
+      <!-- Pannable photo wrapper -->
+      <div id="sh-photo-pan" style="display:none;width:100%;height:100%;overflow:hidden;touch-action:none;position:absolute;inset:0;cursor:grab;">
+        <img id="sh-photo-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;transform-origin:center center;user-select:none;-webkit-user-drag:none;">
+      </div>
       <div id="sh-photo-fallback" style="width:110px;height:110px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:52px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
         <span id="sh-icon"></span>
       </div>
@@ -2149,8 +2152,11 @@ function _capturePhoto(itemId, source) {
         // Update sheet photo live
         const photoImg = document.getElementById('sh-photo-img');
         const fallback = document.getElementById('sh-photo-fallback');
-        if (photoImg) { photoImg.src = compressed; photoImg.style.display = 'block'; }
+        const panWrap = document.getElementById('sh-photo-pan');
+        if (photoImg) { photoImg.src = compressed; }
+        if (panWrap) panWrap.style.display = 'block';
         if (fallback) fallback.style.display = 'none';
+        if (typeof window._resetPhotoPan === 'function') window._resetPhotoPan();
         const btn = document.getElementById('sh-photo-btn');
         if (btn) btn.textContent = '📷 Photo';
         renderList();
@@ -2178,15 +2184,18 @@ async function openSheet(id) {
   const photo = getItemPhoto(id);
   const photoImg = document.getElementById('sh-photo-img');
   const photoFallback = document.getElementById('sh-photo-fallback');
+  const photoPan = document.getElementById('sh-photo-pan');
   if (photo) {
     photoImg.src = photo;
-    photoImg.style.display = 'block';
+    if (photoPan) photoPan.style.display = 'block';
     photoFallback.style.display = 'none';
   } else {
-    photoImg.style.display = 'none';
+    if (photoPan) photoPan.style.display = 'none';
     photoFallback.style.display = 'flex';
     photoFallback.style.background = t.color || 'var(--surface2)';
   }
+  // Reset pan/zoom every time sheet opens
+  if (typeof window._resetPhotoPan === 'function') window._resetPhotoPan();
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   set('sh-photo-btn', photo ? '📷 Change' : '📷 Add Photo');
