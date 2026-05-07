@@ -300,7 +300,7 @@ body {
   box-shadow: var(--shadow-sm);
 }
 .item-card:active { border-color: var(--accent); }
-.item-card { pointer-events: auto; cursor: pointer; }
+
 .item-top { display: flex; align-items: center; gap: 10px; }
 .item-icon {
   width: 32px; height: 32px;
@@ -1968,12 +1968,8 @@ async function renderList() {
     const t = getTypeObj(item.type);
     const stockColor = item.qty === 0 ? 'tag-red' : item.qty <= 3 ? 'tag-amber' : 'tag-green';
     const stockLabel = item.qty === 0 ? '✕ Out' : item.qty + ' pcs';
-    const totalCost = item.buy * item.qty;
     const itemSales = salesByItem[item.id] || { profit: 0, qty: 0 };
-    const profitMade = itemSales.profit;
     const soldQty = itemSales.qty;
-    const profitColor = profitMade > 0 ? 'var(--green)' : profitMade < 0 ? 'var(--red)' : 'var(--muted)';
-
     return `<div class="item-card" onclick="openSheet(${item.id})">
       <div class="item-top">
         <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
@@ -1982,7 +1978,7 @@ async function renderList() {
           <div class="item-name">${item.name || ''}</div>
           <div class="item-tags">
             <span class="tag tag-cyan">${item.type}</span>
-            <span class="tag tag-gray" title="Units sold">${soldQty} sold</span>
+            <span class="tag tag-gray">${soldQty} sold</span>
             <span class="tag ${stockColor}">${stockLabel}</span>
           </div>
         </div>
