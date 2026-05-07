@@ -1453,58 +1453,74 @@ body {
 <!-- ITEM DETAIL SHEET -->
 <div class="sheet-overlay" id="detail-sheet">
   <div class="sheet" style="padding:0;overflow:hidden;border-radius:16px;">
-    <div class="sheet-handle" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:2;"></div>
+    <div class="sheet-handle" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:3;"></div>
 
-    <!-- Top half: photo or emoji circle -->
+    <!-- Photo area -->
     <div id="sh-photo-area" style="width:100%;height:400px;display:flex;align-items:center;justify-content:center;position:relative;background:var(--surface2);border-radius:16px 16px 0 0;overflow:hidden;">
       <img id="sh-photo-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;">
-      <!-- Fallback: big round circle with emoji -->
       <div id="sh-photo-fallback" style="width:110px;height:110px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:52px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
         <span id="sh-icon"></span>
       </div>
-      <!-- Overlay info + SELL button at bottom of photo -->
-      <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);padding:16px 16px 16px;">
-        <div style="font-size:18px;font-weight:800;color:white;font-family:var(--mono);" id="sh-code"></div>
-        <div style="font-size:13px;color:rgba(255,255,255,0.8);margin-top:2px;margin-bottom:14px;" id="sh-name"></div>
-        <button id="sh-sell-btn" onclick="openSellFromSheet()" style="width:100%;padding:16px;background:#1e7a3e;color:white;border:none;border-radius:14px;font-size:18px;font-weight:900;cursor:pointer;font-family:var(--sans);letter-spacing:0.5px;box-shadow:0 4px 16px rgba(30,122,62,0.5);">
+
+      <!-- Out of stock diagonal banner -->
+      <div id="sh-out-badge" style="display:none;position:absolute;inset:0;pointer-events:none;overflow:hidden;">
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);white-space:nowrap;font-size:36px;font-weight:900;color:rgba(255,255,255,0.92);letter-spacing:2px;text-shadow:0 2px 12px rgba(0,0,0,0.7);text-transform:uppercase;background:rgba(192,57,43,0.7);padding:10px 40px;border-radius:8px;">
+          OUT OF STOCK
+        </div>
+      </div>
+
+      <!-- Type badge TOP LEFT -->
+      <div id="sh-type-badge" style="position:absolute;top:14px;left:14px;background:rgba(0,0,0,0.45);color:white;font-size:11px;font-weight:700;padding:5px 11px;border-radius:20px;font-family:var(--sans);backdrop-filter:blur(4px);letter-spacing:0.3px;z-index:2;"></div>
+
+      <!-- Photo button TOP RIGHT -->
+      <button onclick="triggerSheetPhotoUpload(event)" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.4);color:white;border:1px solid rgba(255,255,255,0.3);border-radius:6px;font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer;font-family:var(--sans);backdrop-filter:blur(4px);z-index:2;" id="sh-photo-btn">📷 Photo</button>
+
+      <!-- Bottom overlay: code + name + SELL -->
+      <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.82),transparent);padding:16px 16px 14px;z-index:2;">
+        <!-- Item Code large -->
+        <div style="font-size:22px;font-weight:900;color:white;font-family:var(--mono);letter-spacing:0.5px;" id="sh-code"></div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.75);margin-top:2px;margin-bottom:12px;" id="sh-name"></div>
+        <button id="sh-sell-btn" onclick="openSellFromSheet()" style="width:100%;padding:16px;background:#1e7a3e;color:white;border:none;border-radius:14px;font-size:20px;font-weight:900;cursor:pointer;font-family:var(--sans);letter-spacing:1px;box-shadow:0 4px 16px rgba(30,122,62,0.5);">
           SELL
         </button>
       </div>
-      <!-- Item type badge TOP LEFT -->
-      <div id="sh-type-badge" style="position:absolute;top:14px;left:14px;background:rgba(0,0,0,0.45);color:white;font-size:11px;font-weight:700;padding:5px 11px;border-radius:20px;font-family:var(--sans);backdrop-filter:blur(4px);letter-spacing:0.3px;"></div>
-      <!-- Photo upload button TOP RIGHT -->
-      <button onclick="triggerSheetPhotoUpload(event)" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.4);color:white;border:1px solid rgba(255,255,255,0.3);border-radius:6px;font-size:11px;font-weight:700;padding:4px 9px;cursor:pointer;font-family:var(--sans);backdrop-filter:blur(4px);" id="sh-photo-btn">📷 Add Photo</button>
     </div>
 
-    <!-- Bottom half: compact info -->
+    <!-- Bottom info -->
     <div style="padding:14px 16px 20px;overflow-y:auto;max-height:55vh;">
 
-      <!-- 3-stat strip: Buying Price, Selling Price, Stock -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;margin-bottom:12px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;">
-        <div style="padding:10px 6px;text-align:center;border-right:1px solid var(--border);">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;">Buying Price</div>
-          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--muted);" id="sh-buy"></div>
+      <!-- Item type tag + Item Code label side by side -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span class="tag tag-cyan" id="sh-type" style="font-size:11px;padding:3px 9px;flex-shrink:0;"></span>
+        <div style="flex:1;">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;">Item Code</div>
+          <div style="font-size:20px;font-weight:900;font-family:var(--mono);color:var(--text);" id="sh-code-large"></div>
         </div>
-        <div style="padding:10px 6px;text-align:center;border-right:1px solid var(--border);">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;">Selling Price</div>
-          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);" id="sh-sell"></div>
+        <span class="tag tag-purple" id="sh-size" style="font-size:11px;padding:3px 9px;flex-shrink:0;"></span>
+      </div>
+
+      <!-- Buying / Selling price full (no abbreviation) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+        <div style="padding:12px;border:1px solid var(--border);border-radius:var(--r);text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">Buying Price</div>
+          <div style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--muted);" id="sh-buy"></div>
         </div>
-        <div style="padding:10px 6px;text-align:center;">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;">In Store</div>
-          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent);" id="sh-qty"></div>
+        <div style="padding:12px;border:1px solid var(--border);border-radius:var(--r);text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">Selling Price</div>
+          <div style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent2);" id="sh-sell"></div>
         </div>
       </div>
 
-      <!-- Type / Size row -->
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
-        <span class="tag tag-cyan" id="sh-type" style="font-size:11px;padding:3px 9px;"></span>
-        <span class="tag tag-purple" id="sh-size" style="font-size:11px;padding:3px 9px;"></span>
-      </div>
-
-      <!-- Sales stats: units sold only -->
-      <div style="background:var(--surface2);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
-        <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;flex-shrink:0;">Units Sold</div>
-        <div style="font-size:20px;font-weight:900;color:var(--accent);font-family:var(--mono);" id="sh-sold">0</div>
+      <!-- In store + Units sold -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+        <div style="padding:12px;background:var(--surface2);border-radius:var(--r);text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">In Store</div>
+          <div style="font-size:22px;font-weight:900;font-family:var(--mono);color:var(--accent);" id="sh-qty"></div>
+        </div>
+        <div style="padding:12px;background:var(--surface2);border-radius:var(--r);text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">Units Sold</div>
+          <div style="font-size:22px;font-weight:900;font-family:var(--mono);color:var(--green);" id="sh-sold">0</div>
+        </div>
       </div>
 
       <!-- Restock panel -->
@@ -1518,12 +1534,16 @@ body {
       </div>
 
       <!-- Action buttons -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:10px;">
         <button class="btn-del" onclick="deleteItem()" style="padding:10px;font-size:12px;">🗑 Delete</button>
         <button onclick="toggleRestock()" style="padding:10px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:var(--r);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);">📦 Restock</button>
         <button class="btn-edit" onclick="editItem()" style="padding:10px;font-size:12px;">✏️ Edit</button>
       </div>
-      <button onclick="closeSheet()" style="width:100%;padding:11px;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);">Close</button>
+
+      <!-- Close button: BIG and blue -->
+      <button onclick="closeSheet()" style="width:100%;padding:16px;background:#1d4ed8;color:white;border:none;border-radius:var(--r);font-size:18px;font-weight:800;cursor:pointer;font-family:var(--sans);letter-spacing:0.3px;">
+        CLOSE
+      </button>
     </div>
   </div>
 </div>
@@ -2011,7 +2031,53 @@ function openSellFromSheet() {
 
 function triggerSheetPhotoUpload(event) {
   event.stopPropagation();
-  triggerPhotoUpload(currentDetailId, event);
+  // Show choice: camera or gallery
+  const menu = document.createElement('div');
+  menu.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center;';
+  menu.innerHTML = `<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:20px 18px 32px;">
+    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px;text-align:center;">Add Photo</div>
+    <button onclick="this.closest('[style*=fixed]').remove();_capturePhoto(${currentDetailId},'camera')" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:700;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">📸 Take Photo</button>
+    <button onclick="this.closest('[style*=fixed]').remove();_capturePhoto(${currentDetailId},'gallery')" style="width:100%;padding:16px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--r);font-size:16px;font-weight:700;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">🖼️ Choose from Gallery</button>
+    <button onclick="this.closest('[style*=fixed]').remove()" style="width:100%;padding:13px;background:transparent;color:var(--muted);border:none;font-size:15px;cursor:pointer;font-family:var(--sans);">Cancel</button>
+  </div>`;
+  document.body.appendChild(menu);
+}
+
+function _capturePhoto(itemId, source) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  if (source === 'camera') input.capture = 'environment';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxW = 800;
+        const scale = Math.min(1, maxW / img.width);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const compressed = canvas.toDataURL('image/jpeg', 0.75);
+        setItemPhoto(itemId, compressed);
+        // Update sheet photo live
+        const photoImg = document.getElementById('sh-photo-img');
+        const fallback = document.getElementById('sh-photo-fallback');
+        if (photoImg) { photoImg.src = compressed; photoImg.style.display = 'block'; }
+        if (fallback) fallback.style.display = 'none';
+        const btn = document.getElementById('sh-photo-btn');
+        if (btn) btn.textContent = '📷 Photo';
+        renderList();
+        toast('📸 Photo saved!', 'ok');
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
 }
 
 async function openSheet(id) {
@@ -2051,6 +2117,18 @@ async function openSheet(id) {
   set('sh-sell', fmt(item.sell));
   set('sh-profit', fmt(item.profit));
   set('sh-qty', item.qty + ' pcs');
+  set('sh-code-large', item.code + (item.size ? ' · ' + item.size : ''));
+
+  // Out of stock
+  const outBadge = document.getElementById('sh-out-badge');
+  const sellBtn = document.getElementById('sh-sell-btn');
+  if (item.qty <= 0) {
+    if (outBadge) outBadge.style.display = 'block';
+    if (sellBtn) { sellBtn.disabled = true; sellBtn.style.opacity = '0.4'; sellBtn.style.cursor = 'not-allowed'; sellBtn.textContent = 'OUT OF STOCK'; }
+  } else {
+    if (outBadge) outBadge.style.display = 'none';
+    if (sellBtn) { sellBtn.disabled = false; sellBtn.style.opacity = '1'; sellBtn.style.cursor = 'pointer'; sellBtn.textContent = 'SELL'; }
+  }
   set('sh-total', fmt(item.buy * item.qty));
   set('sh-sold', soldQty);
   set('sh-revenue', fmt(revenue));
