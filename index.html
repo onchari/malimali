@@ -1740,7 +1740,7 @@ function showPage(id) {
   // summary removed
 
 
-  if (id === 'day') { loadActiveDay(); renderDaySessionsList(); }
+  if (id === 'day') { refreshDayTab(); }
 }
 
 // ===== TYPES =====
@@ -3129,51 +3129,40 @@ async function getBusinessDay(dateStr) {
 // ── LOAD & INITIALIZE DAY ────────────────────────────────────────────
 async function loadActiveDay() {
   const today = todayDateStr();
+
+  // Get today's day record — create PENDING if doesn't exist yet
   let bday = await getBusinessDay(today);
-
   if (!bday) {
-    // Create today's business day as PENDING
     const id = await dbAdd('business_days', {
-      business_date: today,
-      status: 'PENDING',
-      opened_at: null,
-      closed_at: null,
-      auto_opened: false,
-      auto_closed: false,
-      reopened_count: 0,
-      final_locked_at: null,
-      notes: ''
-    });
-    bday = await dbGet('business_days', id);
-  }
-
-  // Check if this day is from a previous date and should be locked
-  if (bday.business_date !== today) {
-    // This is a stale day from yesterday or earlier
-    if (bday.status !== 'LOCKED') await lockBusinessDay(bday);
-    // Create fresh PENDING day for today
-    const newId = await dbAdd('business_days', {
       business_date: today,
       status: 'PENDING',
       opened_at: null, closed_at: null,
       auto_opened: false, auto_closed: false,
       reopened_count: 0, final_locked_at: null, notes: ''
     });
-    bday = await dbGet('business_days', newId);
-  } else if (bday.status === 'OPEN' || bday.status === 'CLOSED') {
-    const now = new Date();
-    const dayDate = new Date(bday.business_date + 'T23:59:59');
-    if (now > dayDate) {
-      await lockBusinessDay(bday);
-      bday = await getBusinessDay(today);
+    bday = await dbGet('business_days', id);
+  }
+
+  // Only lock today's day if it's past midnight (past its date)
+  // Never lock a day that is still "today"
+  if ((bday.status === 'OPEN' || bday.status === 'CLOSED') && bday.business_date !== today) {
+    await lockBusinessDay(bday);
+    // This shouldn't happen (bday IS for today) but safety net
+    bday = await getBusinessDay(today);
+    if (!bday) {
+      const id = await dbAdd('business_days', {
+        business_date: today, status: 'PENDING',
+        opened_at: null, closed_at: null,
+        auto_opened: false, auto_closed: false,
+        reopened_count: 0, final_locked_at: null, notes: ''
+      });
+      bday = await dbGet('business_days', id);
     }
   }
 
   activeDay = bday;
   updateDayBanner();
-  if (activeDay && activeDay.status === 'OPEN') {
-    updateDayLiveStats();
-  }
+  if (activeDay && activeDay.status === 'OPEN') updateDayLiveStats();
   startDayTimer();
 }
 
@@ -3184,24 +3173,41 @@ function startDayTimer() {
     const now = new Date();
     const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
     const today = todayDateStr();
-    let bday = await getBusinessDay(today);
+    const bday = await getBusinessDay(today);
     if (!bday) return;
 
-    // Auto-open at 9:00 AM if still PENDING
+    // Auto-open at exactly 9:00 AM if still PENDING
     if (bday.status === 'PENDING' && h === 9 && m === 0 && s < 30) {
       await autoOpenDay(bday);
     }
-    // Auto-close at 11:59:59 PM if still OPEN
+
+    // Auto-close at 11:59:55 PM if still OPEN
     if (bday.status === 'OPEN' && h === 23 && m === 59 && s >= 55) {
       await autoCloseDay(bday);
     }
-    // Lock at midnight (00:00) if CLOSED and date has passed
-    const yesterday = new Date(now - 24*60*60*1000).toISOString().split('T')[0];
-    const yBday = await getBusinessDay(yesterday);
-    if (yBday && yBday.status === 'CLOSED') {
-      await lockBusinessDay(yBday);
+
+    // At midnight (00:00): lock YESTERDAY's closed day and create today's PENDING
+    if (h === 0 && m === 0 && s < 30) {
+      const yesterday = new Date(now.getTime() - 24*60*60*1000).toISOString().split('T')[0];
+      const yBday = await getBusinessDay(yesterday);
+      if (yBday && (yBday.status === 'CLOSED' || yBday.status === 'OPEN')) {
+        await lockBusinessDay(yBday);
+      }
+      // Ensure today has a PENDING day record
+      const todayExists = await getBusinessDay(today);
+      if (!todayExists) {
+        await dbAdd('business_days', {
+          business_date: today, status: 'PENDING',
+          opened_at: null, closed_at: null,
+          auto_opened: false, auto_closed: false,
+          reopened_count: 0, final_locked_at: null, notes: ''
+        });
+      }
+      // Refresh banner to show new day
+      const newBday = await getBusinessDay(today);
+      if (newBday) { activeDay = newBday; updateDayBanner(); }
     }
-  }, 30000); // check every 30 seconds
+  }, 30000);
 }
 
 // ── STATUS TRANSITIONS ───────────────────────────────────────────────
@@ -3287,26 +3293,34 @@ async function openNewDay() {
 async function openDay() {
   const today = todayDateStr();
   let bday = await getBusinessDay(today);
-  if (!bday) return;
+
+  if (!bday) {
+    // Create today if missing
+    const id = await dbAdd('business_days', {
+      business_date: today, status: 'PENDING',
+      opened_at: null, closed_at: null,
+      auto_opened: false, auto_closed: false,
+      reopened_count: 0, final_locked_at: null, notes: ''
+    });
+    bday = await dbGet('business_days', id);
+  }
 
   if (bday.status === 'OPEN') { toast('Day is already open!', 'err'); return; }
-  if (bday.status === 'LOCKED') { toast('This day is locked. Cannot reopen.', 'err'); return; }
 
-  // Check: can only reopen CLOSED day before 11:59 PM same date
+  // LOCKED here means this specific today record is locked — shouldn't happen normally
+  if (bday.status === 'LOCKED') {
+    toast('This day is permanently locked.', 'err');
+    return;
+  }
+
+  // Reopen closed day
   if (bday.status === 'CLOSED') {
-    const now = new Date();
-    const cutoff = new Date(today + 'T23:59:00');
-    if (now >= cutoff) {
-      toast('Cannot reopen — past 11:59 PM cutoff', 'err');
-      return;
-    }
     bday.reopened_count = (bday.reopened_count || 0) + 1;
-    toast('📂 Day reopened (' + bday.reopened_count + 'x)', 'ok');
+    toast('Day reopened (' + bday.reopened_count + 'x)', 'ok');
   } else {
     toast('🌅 Business day opened!', 'ok');
   }
 
-  // Capture opening stock snapshot on first open only
   if (!bday.opened_at) {
     const items = await dbAll('items');
     bday.openingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
@@ -3322,6 +3336,20 @@ async function openDay() {
   activeDay = bday;
   updateDayBanner();
   updateDayLiveStats();
+  renderDaySessionsList();
+}
+
+
+// Refresh Day tab display without re-initializing
+async function refreshDayTab() {
+  // Reload from DB in case something changed
+  const today = todayDateStr();
+  const bday = await getBusinessDay(today);
+  if (bday) {
+    activeDay = bday;
+    updateDayBanner();
+    if (activeDay.status === 'OPEN') updateDayLiveStats();
+  }
   renderDaySessionsList();
 }
 
