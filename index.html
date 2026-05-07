@@ -302,8 +302,9 @@ body {
   flex-shrink: 0;
 }
 .item-body { flex: 1; min-width: 0; }
-.item-name { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.item-code { font-size: 11px; font-family: var(--mono); color: var(--muted); margin-top: 2px; }
+.item-name { font-size: 13px; font-weight: 500; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-code { font-size: 16px; font-weight: 800; font-family: var(--mono); color: var(--text); }
+.item-header-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .item-tags { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
 .tag {
   font-size: 11px;
@@ -1522,8 +1523,8 @@ async function renderList() {
       <div class="item-top">
         <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
         <div class="item-body">
-          <div class="item-name">${item.name}</div>
           <div class="item-code">${item.code}${item.size ? ' · ' + item.size : ''}</div>
+          <div class="item-name">${item.name || ''}</div>
           <div class="item-tags">
             <span class="tag tag-cyan">${item.type}</span>
             <span class="tag ${stockColor}">${stockLabel}</span>
@@ -1900,8 +1901,8 @@ async function searchSell() {
       <div class="item-top">
         <div class="item-icon" style="background:${t.color||'var(--surface2)'};">${t.emoji}</div>
         <div class="item-body">
-          <div class="item-name">${item.name}</div>
           <div class="item-code">${item.code}${item.size ? ' · ' + item.size : ''}</div>
+          <div class="item-name">${item.name || ''}</div>
           <div class="item-tags">
             <span class="tag tag-cyan">${item.type}</span>
             <span class="tag" style="background:${outOfStock?'var(--red-light)':item.qty<=3?'var(--amber-light)':'var(--green-light)'};color:${stockColor};">
@@ -2733,10 +2734,57 @@ window.addEventListener('offline', () => {
 });
 
 // ── INSTALL PROMPT (Add to Home Screen) ─────────────────────────────────
+
+function detectBrowser() {
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes('samsungbrowser')) return 'samsung';
+  if (ua.includes('firefox') || ua.includes('fxios')) return 'firefox';
+  if (ua.includes('edg/')) return 'edge';
+  if (ua.includes('chrome') || ua.includes('crios')) return 'chrome';
+  if (ua.includes('safari') && !ua.includes('chrome')) return 'safari';
+  return 'chrome'; // default to chrome steps
+}
+
+function getInstallSteps() {
+  const browser = detectBrowser();
+  const steps = {
+    samsung: [
+      '1️⃣  Tap the <strong>⋮ menu</strong> at the top right',
+      '2️⃣  Tap <strong>"Add page to"</strong> → <strong>"Home screen"</strong>',
+      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+    ],
+    firefox: [
+      '1️⃣  Tap the <strong>⋮ menu</strong> at the top right',
+      '2️⃣  Tap <strong>"Install"</strong> or <strong>"Add to Home Screen"</strong>',
+      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+    ],
+    safari: [
+      '1️⃣  Tap the <strong>Share button ↑</strong> at the bottom',
+      '2️⃣  Scroll down → tap <strong>"Add to Home Screen"</strong>',
+      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+    ],
+    chrome: [
+      '1️⃣  Tap the <strong>⋮ menu</strong> at the top right',
+      '2️⃣  Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong>',
+      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+    ],
+    edge: [
+      '1️⃣  Tap the <strong>... menu</strong> at the bottom',
+      '2️⃣  Tap <strong>"Add to phone"</strong>',
+      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+    ],
+    other: [
+      '1️⃣  Open your <strong>browser menu</strong>',
+      '2️⃣  Look for <strong>"Add to Home Screen"</strong>',
+      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+    ]
+  };
+  return steps[browser] || steps.other;
+}
+
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredInstallPrompt = e;
-  // Show install banner after 2 seconds if not already installed
   if (!window.matchMedia('(display-mode: standalone)').matches) {
     setTimeout(showInstallBanner, 2000);
   }
@@ -2749,10 +2797,22 @@ window.addEventListener('appinstalled', () => {
 });
 
 function showInstallBanner() {
+  if (localStorage.getItem('install_dismissed')) return;
+  if (window.matchMedia('(display-mode: standalone)').matches) return;
   const banner = document.getElementById('install-banner');
-  if (banner && !localStorage.getItem('install_dismissed')) {
-    banner.style.display = 'flex';
+  if (!banner) return;
+
+  // Show native button if Chrome prompt available
+  if (deferredInstallPrompt) {
+    document.getElementById('install-native').style.display = 'block';
   }
+
+  // Always show manual steps for the detected browser
+  const steps = getInstallSteps();
+  document.getElementById('install-steps-content').innerHTML =
+    steps.map(s => '<div>' + s + '</div>').join('');
+
+  banner.style.display = 'block';
 }
 
 function hideInstallBanner() {
@@ -2769,9 +2829,6 @@ async function triggerInstall() {
       localStorage.setItem('install_dismissed', '1');
     }
     deferredInstallPrompt = null;
-  } else {
-    // Fallback: show manual instructions
-    document.getElementById('install-manual').style.display = 'block';
   }
 }
 
@@ -2779,6 +2836,14 @@ function dismissInstall(permanent) {
   hideInstallBanner();
   if (permanent) localStorage.setItem('install_dismissed', '1');
 }
+
+// Show install banner on load if not already installed and not dismissed
+setTimeout(() => {
+  if (!window.matchMedia('(display-mode: standalone)').matches &&
+      !localStorage.getItem('install_dismissed')) {
+    showInstallBanner();
+  }
+}, 3000);
 
 // ===== INIT =====
 initDB();
@@ -2830,23 +2895,26 @@ initFirebase = async function() {
 };
 </script>
 <!-- INSTALL BANNER -->
-<div id="install-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:0 auto;z-index:997;background:var(--surface);border-top:3px solid var(--accent);box-shadow:0 -4px 24px rgba(0,0,0,0.15);padding:14px 18px;">
-  <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;">
-    <div style="width:48px;height:48px;border-radius:12px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">📦</div>
+<div id="install-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:0 auto;z-index:997;background:var(--surface);border-top:3px solid var(--accent);box-shadow:0 -4px 24px rgba(0,0,0,0.15);padding:16px 18px 20px;">
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+    <div style="width:50px;height:50px;border-radius:12px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;">📦</div>
     <div style="flex:1;">
-      <div style="font-size:15px;font-weight:800;color:var(--text);">Install Mandela Generals</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:2px;">Add to home screen for quick access · Works offline</div>
+      <div style="font-size:16px;font-weight:800;color:var(--text);">Install Mandela Generals</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px;">Add to home screen · Works offline</div>
     </div>
-    <button onclick="dismissInstall(true)" style="background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;flex-shrink:0;padding:4px;">✕</button>
+    <button onclick="dismissInstall(true)" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;padding:4px;flex-shrink:0;">✕</button>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-    <button onclick="dismissInstall(false)" style="padding:12px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans);">Later</button>
-    <button onclick="triggerInstall()" style="padding:12px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:14px;font-weight:800;cursor:pointer;font-family:var(--sans);">📲 Install Now</button>
+  <!-- Native install button (Chrome only) -->
+  <div id="install-native" style="display:none;margin-bottom:12px;">
+    <button onclick="triggerInstall()" style="width:100%;padding:14px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);">📲 Tap to Install (1 tap)</button>
   </div>
-  <!-- Manual instructions (shown if no native prompt) -->
-  <div id="install-manual" style="display:none;margin-top:12px;padding:12px;background:var(--surface2);border-radius:var(--r);font-size:12px;color:var(--muted);line-height:1.8;">
-    <strong style="color:var(--text2);">On Android Chrome:</strong> tap ⋮ menu → <em>Add to Home screen</em> → Add<br>
-    <strong style="color:var(--text2);">On iPhone Safari:</strong> tap Share ↑ → <em>Add to Home Screen</em> → Add
+  <!-- Manual steps shown for Opera Mini, Samsung, Firefox etc -->
+  <div id="install-steps" style="background:var(--surface2);border-radius:var(--r);padding:14px;font-size:13px;line-height:2.2;">
+    <div id="install-steps-content" style="color:var(--text2);"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
+    <button onclick="dismissInstall(false)" style="padding:13px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans);">Later</button>
+    <button onclick="dismissInstall(true)" style="padding:13px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans);">Don't show again</button>
   </div>
 </div>
 
