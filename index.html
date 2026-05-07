@@ -300,6 +300,8 @@ body {
   box-shadow: var(--shadow-sm);
 }
 .item-card:active { border-color: var(--accent); }
+.item-card * { pointer-events: none; }
+.item-card { pointer-events: auto !important; }
 .item-top { display: flex; align-items: center; gap: 10px; }
 .item-icon {
   width: 32px; height: 32px;
@@ -718,14 +720,7 @@ body {
   to   { background-position: -200% 0; }
 }
 
-/* Scroll reveal for cards */
-.card-reveal {
-  animation: cardReveal 0.35s ease both;
-}
-@keyframes cardReveal {
-  from { opacity: 0; transform: translateY(16px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
+/* card-reveal removed */
 
 /* Number ticker animation */
 @keyframes ticker {
