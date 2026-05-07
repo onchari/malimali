@@ -2147,12 +2147,6 @@ async function renderSellPage() {
   const period = filterEl ? filterEl.value : 'today';
   const filtered = filterSalesByPeriod([...sales].sort((a,b) => new Date(b.date)-new Date(a.date)), period).slice(0,100);
 
-  // Update today stats always from today
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todaySales = sales.filter(s => s.date.startsWith(todayStr));
-  document.getElementById('sell-today-rev').textContent = fmt(todaySales.reduce((a,s)=>a+s.revenue,0));
-  document.getElementById('sell-today-profit').textContent = fmt(todaySales.reduce((a,s)=>a+s.profit,0));
-
   const hist = document.getElementById('sell-history');
   if (!filtered.length) {
     hist.innerHTML = '<div class="empty" style="padding:24px 0;"><div class="e-icon" style="font-size:36px;">💸</div><p>No sales for this period</p></div>';
@@ -2900,12 +2894,10 @@ async function exportSalesCSV() {
   const allSales = await dbAll('sales');
   const filtered = filterSalesByPeriod(allSales, filter);
   if (!filtered.length) { toast('No sales to export', 'err'); return; }
-  let csv = 'Date,Time,Item,Code,Type,Size,Qty,Buy Price,Sell Price,Revenue,Profit,Custom Price
-';
+  let csv = 'Date,Time,Item,Code,Type,Size,Qty,Buy Price,Sell Price,Revenue,Profit,Custom Price\n';
   filtered.forEach(s => {
     const d = new Date(s.date);
-    csv += `"${d.toLocaleDateString('en-GB')}","${d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}","${s.itemName}","${s.itemCode}","${s.type}","${s.size||''}",${s.qty},${s.buyPrice},${s.actualPrice},${s.revenue},${s.profit},${s.overridden?'Yes':'No'}
-`;
+    csv += '"' + d.toLocaleDateString('en-GB') + '","' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) + '","' + s.itemName + '","' + s.itemCode + '","' + s.type + '","' + (s.size||'') + '",' + s.qty + ',' + s.buyPrice + ',' + s.actualPrice + ',' + s.revenue + ',' + s.profit + ',' + (s.overridden?'Yes':'No') + '\n';
   });
   download('sales-' + filter + '-' + new Date().toISOString().split('T')[0] + '.csv', csv, 'text/csv');
   toast('📤 Sales exported!', 'ok');
@@ -2935,25 +2927,15 @@ async function exportDayReport(sessionId) {
   if (!s) { toast('No session to export', 'err'); return; }
   const sales = await dbAll('sales');
   const daySales = sales.filter(x => x.date >= s.openTime && x.date <= (s.closeTime || new Date().toISOString()));
-  let csv = 'DAY REPORT: ' + s.date + '
-
-';
-  csv += 'Opened,' + new Date(s.openTime).toLocaleTimeString() + '
-';
-  csv += 'Closed,' + (s.closeTime ? new Date(s.closeTime).toLocaleTimeString() : 'Still open') + '
-';
-  csv += 'Total Revenue,' + s.revenue + '
-';
-  csv += 'Total Profit,' + s.profit + '
-';
-  csv += 'Sales Count,' + s.salesCount + '
-
-';
-  csv += 'Time,Item,Code,Qty,Revenue,Profit
-';
+  let csv = 'DAY REPORT: ' + s.date + '\n\n';
+  csv += 'Opened,' + new Date(s.openTime).toLocaleTimeString() + '\n';
+  csv += 'Closed,' + (s.closeTime ? new Date(s.closeTime).toLocaleTimeString() : 'Still open') + '\n';
+  csv += 'Total Revenue,' + s.revenue + '\n';
+  csv += 'Total Profit,' + s.profit + '\n';
+  csv += 'Sales Count,' + s.salesCount + '\n\n';
+  csv += 'Time,Item,Code,Qty,Revenue,Profit\n';
   daySales.forEach(x => {
-    csv += `"${new Date(x.date).toLocaleTimeString()}","${x.itemName}","${x.itemCode}",${x.qty},${x.revenue},${x.profit}
-`;
+    csv += '"' + new Date(x.date).toLocaleTimeString() + '","' + x.itemName + '","' + x.itemCode + '",' + x.qty + ',' + x.revenue + ',' + x.profit + '\n';
   });
   download('day-report-' + s.dateStr + '.csv', csv, 'text/csv');
   toast('📤 Day report exported!', 'ok');
