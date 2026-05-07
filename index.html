@@ -784,6 +784,15 @@ body {
   </div>
 </div>
 
+<!-- SYNC STATUS BAR -->
+<div id="sync-bar" style="display:none;background:#1a6b36;padding:4px 18px;display:flex;align-items:center;justify-content:space-between;">
+  <div style="display:flex;align-items:center;gap:7px;">
+    <div id="sync-bar-dot" style="width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;"></div>
+    <span id="sync-bar-text" style="font-size:11px;color:rgba(255,255,255,0.85);font-family:var(--mono);"></span>
+  </div>
+  <span id="sync-bar-time" style="font-size:10px;color:rgba(255,255,255,0.55);font-family:var(--mono);"></span>
+</div>
+
 <!-- NOTIFICATION PANEL -->
 
 <!-- ===== LOGIN SCREEN ===== -->
@@ -2495,16 +2504,37 @@ function setFbStatus(status) {
   const dot = document.getElementById('fb-status-dot');
   const txt = document.getElementById('fb-status-text');
   const colors = { off:'var(--muted)', connecting:'var(--amber)', on:'var(--green)', error:'var(--red)', syncing:'#3b82f6' };
-  const now = new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  const now = new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const labels = {
-    off:'Not configured',
-    connecting:'Connecting…',
-    on: '✅ Live · last sync ' + now,
-    error:'❌ Sync error — check connection',
-    syncing:'⏳ Syncing…'
+    off: 'Not connected',
+    connecting: 'Connecting to Firebase…',
+    on:  '✅ Connected · Last sync ' + now,
+    error: '❌ Sync error — tap Reconnect in Settings',
+    syncing: '⏳ Syncing…'
   };
   if (dot) { dot.style.background = colors[status]; dot.style.boxShadow = status==='on' ? '0 0 6px var(--green)' : 'none'; }
   if (txt) txt.textContent = labels[status];
+
+  // Update sync bar under header
+  const bar = document.getElementById('sync-bar');
+  const barDot = document.getElementById('sync-bar-dot');
+  const barTxt = document.getElementById('sync-bar-text');
+  const barTime = document.getElementById('sync-bar-time');
+  if (!bar) return;
+  const barColors = { off:'#888', connecting:'#f59e0b', on:'#4ade80', error:'#f87171', syncing:'#60a5fa' };
+  const barLabels = { off:'Offline', connecting:'Connecting…', on:'Live', error:'Sync Error', syncing:'Syncing…' };
+  bar.style.display = 'flex';
+  if (barDot) barDot.style.background = barColors[status] || '#888';
+  if (barTxt) barTxt.textContent = barLabels[status] || status;
+  if (barTime && (status === 'on' || status === 'syncing')) barTime.textContent = now;
+  if (status === 'on') {
+    // Auto hide after 5s
+    clearTimeout(window._syncBarTimer);
+    window._syncBarTimer = setTimeout(() => { if (bar) bar.style.display = 'none'; }, 5000);
+  } else {
+    clearTimeout(window._syncBarTimer);
+    bar.style.display = 'flex';
+  }
 }
 
 // ===== HARDCODED FIREBASE CONFIG =====
@@ -2537,25 +2567,31 @@ async function initFirebase() {
     if (fbUnsub) { fbUnsub(); fbUnsub = null; }
     if (window._fbUnsubSales) { window._fbUnsubSales(); window._fbUnsubSales = null; }
 
-    // Live listener: items
+    // Live listener: items — processes all changes including initial load
     const unsubItems = onSnapshot(collection(fbDb, 'items'), async snap => {
       const changes = snap.docChanges();
       if (!changes.length) return;
+      let needsRender = false;
       for (const change of changes) {
         const data = { ...change.doc.data(), fbId: change.doc.id };
         if (change.type === 'removed') {
           const all = await dbAll('items');
           const local = all.find(i => i.fbId === change.doc.id);
-          if (local) await dbDelete('items', local.id);
+          if (local) { await dbDelete('items', local.id); needsRender = true; }
         } else {
           const all = await dbAll('items');
           const existing = all.find(i => i.fbId === change.doc.id || i.code === data.code);
           if (existing) { data.id = existing.id; await dbPut('items', data); }
           else { try { delete data.id; await dbAdd('items', data); } catch(_) {} }
+          needsRender = true;
         }
       }
-      allItems = await dbAll('items');
-      renderList(); renderDashboard(); updateHeader();
+      if (needsRender) {
+        allItems = await dbAll('items');
+        renderList(); renderDashboard(); updateHeader();
+        setFbStatus('on');
+        toast('🔄 ' + changes.length + ' item(s) synced from cloud', 'ok');
+      }
     }, err => { setFbStatus('error'); console.error('Items listener error:', err); });
 
     // Live listener: sales
@@ -2575,7 +2611,8 @@ async function initFirebase() {
           else { try { delete data.id; await dbAdd('sales', data); } catch(_) {} }
         }
       }
-      renderSellPage(); renderDashboard();
+      try { renderSellPage(); } catch(_) {}
+      try { renderDashboard(); } catch(_) {}
     }, err => { console.error('Sales listener error:', err); });
 
     fbUnsub = unsubItems;
