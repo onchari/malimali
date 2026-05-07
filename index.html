@@ -2001,6 +2001,7 @@ function triggerSheetPhotoUpload(event) {
 async function openSheet(id) {
   currentDetailId = id;
   const item = await dbGet('items', id);
+  if (!item) return;
   const t = getTypeObj(item.type);
   const sales = await dbAll('sales');
   const itemSales = sales.filter(s => s.itemId === id);
@@ -2012,7 +2013,6 @@ async function openSheet(id) {
   const photo = getItemPhoto(id);
   const photoImg = document.getElementById('sh-photo-img');
   const photoFallback = document.getElementById('sh-photo-fallback');
-  const photoArea = document.getElementById('sh-photo-area');
   if (photo) {
     photoImg.src = photo;
     photoImg.style.display = 'block';
@@ -2022,30 +2022,27 @@ async function openSheet(id) {
     photoFallback.style.display = 'flex';
     photoFallback.style.background = t.color || 'var(--surface2)';
   }
-  document.getElementById('sh-photo-btn').textContent = photo ? '📷 Change' : '📷 Add Photo';
 
-  document.getElementById('sh-icon').textContent = t.emoji;
-  document.getElementById('sh-name').textContent = item.name;
-  document.getElementById('sh-code').textContent = item.code + (item.size ? ' · ' + item.size : '');
-  document.getElementById('sh-type').textContent = item.type;
-  document.getElementById('sh-size').textContent = item.size || '—';
-  document.getElementById('sh-buy').textContent = fmtShort(item.buy);
-  document.getElementById('sh-profit').textContent = (item.profit >= 0 ? '+' : '') + fmt(item.profit);
-  document.getElementById('sh-sell').textContent = fmtShort(item.sell);
-  document.getElementById('sh-qty').textContent = item.qty + ' pcs';
-  document.getElementById('sh-profit').textContent = fmtShort(item.profit);
-  document.getElementById('sh-total').textContent = fmtShort(item.buy * item.qty);
-  document.getElementById('sh-sold').textContent = soldQty;
-  document.getElementById('sh-revenue').textContent = fmtShort(revenue);
-  document.getElementById('sh-profit-made').textContent = fmtShort(profitMade);
-  document.getElementById('sh-total').textContent = fmt(item.buy * item.qty);
-  document.getElementById('sh-total-profit').textContent = (item.profit >= 0 ? '+' : '') + fmt(item.profit * item.qty);
-  const margin = item.sell > 0 ? ((item.profit / item.sell) * 100).toFixed(1) : 0;
-  document.getElementById('sh-margin').textContent = margin + '%';
-  const $ds = $('#detail-sheet'); $ds.addClass('open'); $ds.find('.sheet').addClass('animate__animated animate__fadeInUp').css('--animate-duration','0.25s');
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('sh-photo-btn', photo ? '📷 Change' : '📷 Add Photo');
+  set('sh-icon', t.emoji);
+  set('sh-name', item.name);
+  set('sh-code', item.code + (item.size ? ' · ' + item.size : ''));
+  set('sh-type', item.type);
+  set('sh-size', item.size || '—');
+  set('sh-buy', fmtShort(item.buy));
+  set('sh-sell', fmtShort(item.sell));
+  set('sh-profit', fmtShort(item.profit));
+  set('sh-qty', item.qty + ' pcs');
+  set('sh-total', fmtShort(item.buy * item.qty));
+  set('sh-sold', soldQty);
+  set('sh-revenue', fmtShort(revenue));
+  set('sh-profit-made', fmtShort(profitMade));
+
+  document.getElementById('detail-sheet').classList.add('open');
 }
 
-function closeSheet() { $('#detail-sheet').removeClass('open'); }
+function closeSheet() { document.getElementById('detail-sheet').classList.remove('open'); }
 
 async function deleteItem() {
   if (!confirm('Delete this item?')) return;
