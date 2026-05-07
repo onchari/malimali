@@ -118,6 +118,7 @@ body {
   backdrop-filter: blur(4px);
   align-items: center; justify-content: center;
   flex-direction: column; text-align: center; padding: 32px;
+  pointer-events: all;
 }
 #day-closed-overlay.show { display: flex; }
 
@@ -1979,7 +1980,7 @@ async function renderList() {
     const soldQty = itemSales.qty;
     const profitColor = profitMade > 0 ? 'var(--green)' : profitMade < 0 ? 'var(--red)' : 'var(--muted)';
 
-    return `<div class="item-card" onclick="openSheet(${item.id})">
+    return `<div class="item-card" onclick="openSheet(${item.id})" style="cursor:pointer;">
       <div class="item-top">
         <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
         <div class="item-body">
@@ -1987,7 +1988,7 @@ async function renderList() {
           <div class="item-name">${item.name || ''}</div>
           <div class="item-tags">
             <span class="tag tag-cyan">${item.type}</span>
-            <span class="tag tag-gray">${soldQty > 0 ? soldQty + ' sold' : '0 sold'}</span>
+            <span class="tag tag-gray" title="Units sold">${soldQty} sold</span>
             <span class="tag ${stockColor}">${stockLabel}</span>
           </div>
         </div>
@@ -2695,8 +2696,8 @@ function disconnectFirebase() {
 // DAY MODE CONTROL - enable/disable tabs based on day status
 // ===================================================================
 
-// Tabs that require an open day (all except 'day' and 'settings')
-const DAY_RESTRICTED_TABS = ['dash', 'list', 'add', 'sell'];
+// Tabs that require an open day
+const DAY_RESTRICTED_TABS = ['dash', 'add', 'sell'];
 
 function setDayMode(isOpen) {
   DAY_RESTRICTED_TABS.forEach(tab => {
@@ -3631,10 +3632,9 @@ showPage = function(id) {
     toast('⛔ Access denied', 'err');
     return;
   }
-  // Block restricted tabs when day is not open
+  // Block restricted tabs when day is not open (but NOT sheet popups)
   const dayOpen = activeDay && activeDay.status === 'OPEN';
   if (DAY_RESTRICTED_TABS.includes(id) && !dayOpen) {
-    // Show day page with overlay
     _origShowPage('day');
     setTimeout(() => showDayClosedOverlay(id), 100);
     return;
