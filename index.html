@@ -3086,7 +3086,7 @@ function showDayClosedOverlay(pageId) {
   if (!overlay) return;
   const status = activeDay ? activeDay.status : 'PENDING';
   if (status === 'LOCKED') {
-    msg.textContent = 'Today is locked after midnight. A new business day will open tomorrow at 9:00 AM.';
+    msg.textContent = 'Open today\'s business day from the Day tab to continue.';
   } else if (status === 'CLOSED') {
     msg.textContent = 'The business day is closed. You can reopen it from the Day tab before 11:59 PM.';
   } else {
@@ -3147,12 +3147,23 @@ async function loadActiveDay() {
     bday = await dbGet('business_days', id);
   }
 
-  // Handle locked previous days
-  if (bday.status === 'OPEN' || bday.status === 'CLOSED') {
-    // Check if it's past midnight and needs locking
+  // Check if this day is from a previous date and should be locked
+  if (bday.business_date !== today) {
+    // This is a stale day from yesterday or earlier
+    if (bday.status !== 'LOCKED') await lockBusinessDay(bday);
+    // Create fresh PENDING day for today
+    const newId = await dbAdd('business_days', {
+      business_date: today,
+      status: 'PENDING',
+      opened_at: null, closed_at: null,
+      auto_opened: false, auto_closed: false,
+      reopened_count: 0, final_locked_at: null, notes: ''
+    });
+    bday = await dbGet('business_days', newId);
+  } else if (bday.status === 'OPEN' || bday.status === 'CLOSED') {
     const now = new Date();
     const dayDate = new Date(bday.business_date + 'T23:59:59');
-    if (now > dayDate && bday.status !== 'LOCKED') {
+    if (now > dayDate) {
       await lockBusinessDay(bday);
       bday = await getBusinessDay(today);
     }
@@ -3228,6 +3239,50 @@ async function lockBusinessDay(bday) {
   await dbPut('business_days', bday);
 }
 
+
+// Open a brand new business day (used when previous day is LOCKED)
+async function openNewDay() {
+  const today = todayDateStr();
+  let bday = await getBusinessDay(today);
+
+  if (bday && bday.status === 'OPEN') {
+    toast('Today is already open!', 'err');
+    return;
+  }
+
+  if (!bday) {
+    // Create fresh day for today
+    const id = await dbAdd('business_days', {
+      business_date: today,
+      status: 'PENDING',
+      opened_at: null,
+      closed_at: null,
+      auto_opened: false,
+      auto_closed: false,
+      reopened_count: 0,
+      final_locked_at: null,
+      notes: ''
+    });
+    bday = await dbGet('business_days', id);
+  }
+
+  // Now open it
+  const items = await dbAll('items');
+  bday.openingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
+  bday.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
+  bday.status = 'OPEN';
+  bday.opened_at = new Date().toISOString();
+  bday.last_opened_at = new Date().toISOString();
+  bday.date = fmtFullDate(today);
+  bday.dateStr = today;
+  await dbPut('business_days', bday);
+  activeDay = bday;
+  updateDayBanner();
+  updateDayLiveStats();
+  renderDaySessionsList();
+  toast('🌅 New business day opened!', 'ok');
+}
+
 // ── MANUAL OPEN ──────────────────────────────────────────────────────
 async function openDay() {
   const today = todayDateStr();
@@ -3279,7 +3334,7 @@ function requireOpenDay() {
   if (!isDayOpen()) {
     const status = activeDay ? activeDay.status : 'PENDING';
     if (status === 'LOCKED') {
-      toast('🔒 Today is locked. Cannot record transactions.', 'err');
+      toast('🔒 Open today\'s business day first.', 'err');
     } else if (status === 'CLOSED') {
       toast('🌙 Day is closed. Reopen to continue.', 'err');
     } else {
@@ -3473,9 +3528,9 @@ function updateDayBanner() {
     LOCKED: {
       bg: 'var(--red-light)', border: 'rgba(192,57,43,0.25)', icon: '🔒',
       badgeBg: 'var(--red-light)', badgeColor: 'var(--red)',
-      title: 'Business Day is Locked', titleColor: 'var(--red)',
-      sub: 'Locked after 11:59 PM · A new day will open tomorrow at 9:00 AM',
-      action: '<div style="padding:14px;background:var(--surface2);border-radius:var(--r);font-size:13px;color:var(--muted);text-align:center;">🔒 No changes allowed for this day</div>'
+      title: 'Previous Day is Locked', titleColor: 'var(--red)',
+      sub: 'Yesterday is permanently closed. Open today now',
+      action: '<button onclick="openNewDay()" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">🌅 Open Today</button>'
     }
   };
 
