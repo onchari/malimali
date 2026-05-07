@@ -3791,12 +3791,10 @@ $(document).ready(function() {
   // ── Card reveal animation on list render ─────────────────────────
   window.animateCards = function(selector) {
     $(selector).children().each(function(i) {
-      $(this).css({ opacity: 0, transform: 'translateY(16px)' })
-        .delay(i * 40)
-        .queue(function(next) {
-          $(this).addClass('card-reveal');
-          next();
-        });
+      const $el = $(this);
+      setTimeout(function() {
+        $el.addClass('card-reveal');
+      }, i * 35);
     });
   };
 
