@@ -1310,15 +1310,36 @@ function initDB() {
   };
   req.onsuccess = e => {
     db = e.target.result;
-    loadTypes().then(() => {
+    loadTypes().then(async () => {
+      updateCurrencyUI();
+      // 1. Restore session FIRST (before any page rendering)
+      const sessionRestored = checkSession();
+      if (!sessionRestored) return; // login screen showing, stop here
+
+      // 2. Load all data
+      await loadActiveDay();
       renderDashboard();
       renderList();
       renderSummary();
       renderSellPage();
-      updateCurrencyUI();
-      loadActiveDay();
       updateLowStockBadge();
-      checkSession();
+
+      // 3. Restore last visited page (or go to day if day not open)
+      const lastPage = localStorage.getItem('mg_last_page') || 'dash';
+      const today = todayDateStr();
+
+      // Check if day needs opening
+      const bday = await getBusinessDay(today);
+      const dayOpen = bday && bday.status === 'OPEN';
+
+      if (!dayOpen && lastPage !== 'day' && lastPage !== 'settings') {
+        // Show a gentle reminder but stay on last page
+        setTimeout(() => toast('⚠️ Business day not open yet', ''), 1000);
+      }
+
+      // Restore last page if user has access to it
+      const allowedPage = currentUser && currentUser.tabs.includes(lastPage) ? lastPage : currentUser.tabs[0];
+      _origShowPage(allowedPage);
     });
   };
   req.onerror = () => toast('Database error!', 'err');
@@ -3048,6 +3069,7 @@ function confirmLogout() {
 function logout() {
   currentUser = null;
   localStorage.removeItem('mg_session');
+  localStorage.removeItem('mg_last_page');
   // Reset nav tabs visibility
   ['dash','list','add','sell','day','types','settings'].forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
@@ -3075,6 +3097,8 @@ showPage = function(id) {
     toast('⛔ Access denied', 'err');
     return;
   }
+  // Save last visited page for refresh restore
+  if (currentUser) localStorage.setItem('mg_last_page', id);
   _origShowPage(id);
 };
 
@@ -3113,19 +3137,35 @@ function attemptLogin() {
     pill.innerHTML = '👤 ' + user.name + ' <span class="role-badge role-' + user.role + '">' + user.roleLabel + '</span>';
   }
 
-  // Go to first allowed tab
-  _origShowPage(user.tabs[0]); // use original to bypass guard
+  // Go to day page if day not open, otherwise last visited page
+  const lastPage = localStorage.getItem('mg_last_page') || 'dash';
+  const allowedPage = user.tabs.includes(lastPage) ? lastPage : user.tabs[0];
+
+  // Check day status
+  getBusinessDay(todayDateStr()).then(bday => {
+    const dayOpen = bday && bday.status === 'OPEN';
+    if (!dayOpen && user.tabs.includes('day')) {
+      _origShowPage('day');
+      setTimeout(() => toast('⚠️ Please open the business day first.', ''), 500);
+    } else {
+      _origShowPage(allowedPage);
+    }
+  });
   toast('Welcome, ' + user.name + '! 👋', 'ok');
 }
 
 function checkSession() {
   const saved = localStorage.getItem('mg_session');
-  if (!saved) return;
+  if (!saved) {
+    // No session — show login screen
+    document.getElementById('login-screen').style.display = 'flex';
+    return false;
+  }
   try {
     const { username, pin } = JSON.parse(saved);
     const user = USERS.find(u => u.username === username && u.pin === pin);
     if (user) {
-      currentUser = user; // SET BEFORE showPage
+      currentUser = user;
       document.getElementById('login-screen').style.display = 'none';
       applyRoleRestrictions(user);
       const pill = document.getElementById('user-pill');
@@ -3133,10 +3173,16 @@ function checkSession() {
         pill.style.display = 'inline-flex';
         pill.innerHTML = '👤 ' + user.name + ' <span class="role-badge role-' + user.role + '">' + user.roleLabel + '</span>';
       }
-      _origShowPage(user.tabs[0]); // use original to bypass guard
+      return true; // session valid, let caller handle navigation
+    } else {
+      localStorage.removeItem('mg_session');
+      document.getElementById('login-screen').style.display = 'flex';
+      return false;
     }
   } catch(e) {
     localStorage.removeItem('mg_session');
+    document.getElementById('login-screen').style.display = 'flex';
+    return false;
   }
 }
 
