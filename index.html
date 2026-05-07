@@ -1033,6 +1033,20 @@ body {
     </div>
   </div>
 
+  <!-- Item Photo -->
+  <div class="form-field">
+    <label class="form-label">Item Photo (optional)</label>
+    <div id="add-photo-preview" style="width:100%;height:180px;border-radius:var(--r);background:var(--surface2);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;margin-bottom:10px;cursor:pointer;" onclick="triggerAddPhotoUpload()">
+      <img id="add-photo-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:var(--r);">
+      <div id="add-photo-placeholder" style="text-align:center;color:var(--muted);">
+        <div style="font-size:36px;margin-bottom:6px;">📷</div>
+        <div style="font-size:13px;font-weight:600;">Tap to add photo</div>
+        <div style="font-size:11px;margin-top:3px;">Camera or Gallery</div>
+      </div>
+      <button id="add-photo-remove" onclick="removeAddPhoto(event)" style="display:none;position:absolute;top:8px;right:8px;background:rgba(192,57,43,0.85);color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;padding:4px 9px;cursor:pointer;font-family:var(--sans);">✕ Remove</button>
+    </div>
+  </div>
+
   <!-- Save Button -->
   <button class="save-btn" id="save-btn" onclick="saveItem()">+ Add to Inventory</button>
   <button id="cancel-edit-btn" style="display:none;width:100%;margin-top:10px;padding:14px;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--sans);" onclick="cancelEdit()">Cancel Edit</button>
@@ -1696,13 +1710,9 @@ let currency = localStorage.getItem('inv_currency') || 'KES';
 let currentDetailId = null;
 
 // ===== HELPERS =====
-function fmt(n) { return currency + ' ' + Number(n || 0).toLocaleString(); }
 function fmt(n) {
-  const v = Math.abs(Number(n || 0));
-  const sign = n < 0 ? '-' : (n > 0 && arguments.length > 0 ? '' : '');
-  if (v >= 1000000) return sign + currency + (v/1000000).toFixed(1) + 'M';
-  if (v >= 1000) return sign + currency + (v/1000).toFixed(v >= 10000 ? 0 : 1) + 'K';
-  return sign + currency + Number(n||0).toLocaleString();
+  const v = Number(n || 0);
+  return currency + ' ' + v.toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 function fmtN(n) { return Number(n || 0).toLocaleString(); }
 function toast(msg, type = '') {
@@ -1889,6 +1899,76 @@ function triggerPhotoUpload(itemId, event) {
   input.click();
 }
 
+// ===== ADD FORM PHOTO =====
+let _addFormPhotoData = null;
+
+function triggerAddPhotoUpload() {
+  const menu = document.createElement('div');
+  menu.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center;';
+  menu.innerHTML = '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:20px 18px 32px;">'
+    + '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px;text-align:center;">Add Item Photo</div>'
+    + '<button onclick="this.closest(\'[style*=fixed]\').remove();_doAddPhoto(\'camera\')" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:700;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">📸 Take Photo</button>'
+    + '<button onclick="this.closest(\'[style*=fixed]\').remove();_doAddPhoto(\'gallery\')" style="width:100%;padding:16px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--r);font-size:16px;font-weight:700;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">🖼️ Choose from Gallery</button>'
+    + '<button onclick="this.closest(\'[style*=fixed]\').remove()" style="width:100%;padding:13px;background:transparent;color:var(--muted);border:none;font-size:15px;cursor:pointer;font-family:var(--sans);">Cancel</button>'
+    + '</div>';
+  document.body.appendChild(menu);
+}
+
+function _doAddPhoto(source) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  if (source === 'camera') input.capture = 'environment';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxW = 800;
+        const scale = Math.min(1, maxW / img.width);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        _addFormPhotoData = canvas.toDataURL('image/jpeg', 0.75);
+        const photoImg = document.getElementById('add-photo-img');
+        const placeholder = document.getElementById('add-photo-placeholder');
+        const removeBtn = document.getElementById('add-photo-remove');
+        if (photoImg) { photoImg.src = _addFormPhotoData; photoImg.style.display = 'block'; }
+        if (placeholder) placeholder.style.display = 'none';
+        if (removeBtn) removeBtn.style.display = 'block';
+        toast('📸 Photo ready!', 'ok');
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+function removeAddPhoto(event) {
+  event.stopPropagation();
+  _addFormPhotoData = null;
+  const photoImg = document.getElementById('add-photo-img');
+  const placeholder = document.getElementById('add-photo-placeholder');
+  const removeBtn = document.getElementById('add-photo-remove');
+  if (photoImg) { photoImg.src = ''; photoImg.style.display = 'none'; }
+  if (placeholder) placeholder.style.display = 'flex';
+  if (removeBtn) removeBtn.style.display = 'none';
+}
+
+function clearAddFormPhoto() {
+  _addFormPhotoData = null;
+  const el = document.getElementById('add-photo-img');
+  const ph = document.getElementById('add-photo-placeholder');
+  const rb = document.getElementById('add-photo-remove');
+  if (el) { el.src = ''; el.style.display = 'none'; }
+  if (ph) ph.style.display = 'flex';
+  if (rb) rb.style.display = 'none';
+}
+
 // ===== SAVE ITEM =====
 async function saveItem() {
   const editId = document.getElementById('edit-id').value;
@@ -1927,8 +2007,11 @@ async function saveItem() {
     } else {
       const newId = await dbAdd('items', item);
       item.id = newId;
+      // Save photo if one was selected
+      if (_addFormPhotoData) { setItemPhoto(newId, _addFormPhotoData); }
       fbSyncItem(item);
       clearForm();
+      clearAddFormPhoto();
       allItems = await dbAll('items');
       renderList();
       renderDashboard();
@@ -1957,7 +2040,7 @@ function clearForm() {
   document.getElementById('cancel-edit-btn').style.display = 'none';
 }
 
-function cancelEdit() { clearForm(); showPage('list'); }
+function cancelEdit() { clearForm(); clearAddFormPhoto(); showPage('list'); }
 
 // ===== RENDER LIST =====
 async function renderList() {
@@ -2169,6 +2252,17 @@ async function editItem() {
   document.getElementById('form-mode-label').textContent = 'Edit Item';
   document.getElementById('cancel-edit-btn').style.display = 'block';
   updateProfitPreview();
+  // Load existing photo if any
+  const existingPhoto = getItemPhoto(item.id);
+  if (existingPhoto) {
+    _addFormPhotoData = existingPhoto;
+    const photoImg = document.getElementById('add-photo-img');
+    const placeholder = document.getElementById('add-photo-placeholder');
+    const removeBtn = document.getElementById('add-photo-remove');
+    if (photoImg) { photoImg.src = existingPhoto; photoImg.style.display = 'block'; }
+    if (placeholder) placeholder.style.display = 'none';
+    if (removeBtn) removeBtn.style.display = 'block';
+  }
 }
 
 // ===== DASHBOARD =====
