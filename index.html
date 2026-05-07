@@ -114,6 +114,21 @@ body {
 }
 .nav-btn .icon { font-size: 17px; display: block; margin-bottom: 2px; }
 .nav-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--accent-light); }
+.nav-btn.disabled {
+  opacity: 0.35;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+/* Day closed overlay */
+#day-closed-overlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 400;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(4px);
+  align-items: center; justify-content: center;
+  flex-direction: column; text-align: center; padding: 32px;
+}
+#day-closed-overlay.show { display: flex; }
 
 /* PAGES */
 .page { display: none; padding: 16px; padding-bottom: 32px; }
@@ -994,60 +1009,109 @@ body {
 
 <!-- DAY CLOSE SUMMARY SHEET -->
 <div class="sheet-overlay" id="day-summary-sheet">
-  <div class="sheet" style="max-height:92vh;">
+  <div class="sheet" style="max-height:96vh;padding-bottom:24px;">
     <div class="sheet-handle"></div>
-    <div style="text-align:center;margin-bottom:20px;">
-      <div style="font-size:40px;margin-bottom:6px;">🌙</div>
-      <div style="font-size:20px;font-weight:800;color:var(--text);">Day Summary</div>
-      <div id="ds-date" style="font-size:13px;color:var(--muted);font-family:var(--mono);margin-top:4px;"></div>
+
+    <!-- Header -->
+    <div style="text-align:center;margin-bottom:18px;padding:16px;background:linear-gradient(135deg,#0d4a22,#1e7a3e);border-radius:var(--r-lg);color:white;">
+      <div style="font-size:44px;margin-bottom:8px;">🌙</div>
+      <div style="font-size:22px;font-weight:800;">End of Day Report</div>
+      <div id="ds-date" style="font-size:13px;opacity:0.75;font-family:var(--mono);margin-top:4px;"></div>
+      <div id="ds-time-range" style="font-size:12px;opacity:0.6;font-family:var(--mono);margin-top:2px;"></div>
     </div>
 
-    <!-- Key numbers -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-      <div class="detail-box" style="padding:14px;text-align:center;">
-        <div class="detail-key">SALES MADE</div>
-        <div class="detail-val" id="ds-sales" style="font-size:24px;color:var(--green);"></div>
-      </div>
-      <div class="detail-box" style="padding:14px;text-align:center;">
-        <div class="detail-key">ITEMS SOLD</div>
-        <div class="detail-val" id="ds-items-sold" style="font-size:24px;color:var(--accent);"></div>
-      </div>
+    <!-- Verdict banner -->
+    <div id="ds-verdict" style="border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;"></div>
+
+    <!-- Key financials -->
+    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">💰 Financials</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
       <div class="detail-box" style="padding:14px;text-align:center;">
         <div class="detail-key">REVENUE</div>
-        <div class="detail-val" id="ds-revenue" style="font-size:18px;color:var(--accent2);"></div>
+        <div class="detail-val" id="ds-revenue" style="font-size:22px;color:var(--accent2);"></div>
       </div>
       <div class="detail-box" style="padding:14px;text-align:center;">
         <div class="detail-key">PROFIT</div>
-        <div class="detail-val" id="ds-profit" style="font-size:18px;color:var(--green);"></div>
+        <div class="detail-val" id="ds-profit" style="font-size:22px;color:var(--green);"></div>
+      </div>
+      <div class="detail-box" style="padding:14px;text-align:center;">
+        <div class="detail-key">PROFIT MARGIN</div>
+        <div class="detail-val" id="ds-margin" style="font-size:22px;color:var(--accent3);"></div>
+      </div>
+      <div class="detail-box" style="padding:14px;text-align:center;">
+        <div class="detail-key">AVG SALE VALUE</div>
+        <div class="detail-val" id="ds-avg-sale" style="font-size:22px;color:var(--accent);"></div>
       </div>
     </div>
 
-    <!-- Purchases -->
-    <div class="detail-box" style="padding:14px;margin-bottom:14px;">
-      <div class="detail-key">PURCHASES ADDED TO STOCK</div>
-      <div class="detail-val" id="ds-purchases" style="font-size:22px;color:var(--accent3);margin-top:4px;"></div>
-      <div id="ds-purchases-val" style="font-size:13px;color:var(--muted);font-family:var(--mono);margin-top:4px;"></div>
+    <!-- Sales activity -->
+    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">📊 Sales Activity</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">SALES</div>
+        <div class="detail-val" id="ds-sales" style="font-size:26px;color:var(--green);"></div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">ITEMS SOLD</div>
+        <div class="detail-val" id="ds-items-sold" style="font-size:26px;color:var(--accent);"></div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">CUSTOM PRICE</div>
+        <div class="detail-val" id="ds-custom-price" style="font-size:26px;color:var(--accent3);"></div>
+      </div>
     </div>
 
-    <!-- Performance verdict -->
-    <div id="ds-verdict" style="border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;"></div>
+    <!-- Stock summary -->
+    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">📦 Stock Summary</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">OPENING STOCK</div>
+        <div class="detail-val" id="ds-opening-stock" style="font-size:16px;color:var(--text2);"></div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">CLOSING STOCK</div>
+        <div class="detail-val" id="ds-closing-stock" style="font-size:16px;color:var(--accent);"></div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">PURCHASES ADDED</div>
+        <div class="detail-val" id="ds-purchases" style="font-size:18px;color:var(--accent3);"></div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">PURCHASE COST</div>
+        <div class="detail-val" id="ds-purchases-val" style="font-size:16px;color:var(--muted);"></div>
+      </div>
+    </div>
 
-    <!-- Top seller of the day -->
+    <!-- Stock progress bar -->
+    <div class="detail-box" style="padding:14px;margin-bottom:14px;">
+      <div class="detail-key" style="margin-bottom:8px;">STOCK MOVEMENT TODAY</div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:6px;">
+        <span>Sold</span><span id="ds-stock-pct-label">0%</span>
+      </div>
+      <div style="background:var(--surface2);border-radius:6px;height:12px;overflow:hidden;">
+        <div id="ds-stock-bar" style="height:100%;background:linear-gradient(90deg,var(--green),var(--accent));border-radius:6px;width:0%;transition:width 0.8s ease;"></div>
+      </div>
+    </div>
+
+    <!-- Top seller -->
     <div id="ds-top-seller" style="margin-bottom:14px;"></div>
 
+    <!-- Sales breakdown by type -->
+    <div id="ds-type-breakdown" style="margin-bottom:14px;"></div>
+
     <!-- Notes -->
-    <div style="margin-bottom:14px;">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;">DAY NOTES (optional)</div>
-      <textarea id="ds-notes" rows="3" placeholder="Any notes for the day…"
+    <div style="margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Day Notes (optional)</div>
+      <textarea id="ds-notes" rows="2" placeholder="Any notes for the day…"
         style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--sans);font-size:14px;padding:10px;outline:none;resize:none;"
         onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
     </div>
 
-    <button onclick="confirmCloseDay()" style="width:100%;padding:15px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
+    <button onclick="confirmCloseDay()" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
       ✅ Confirm & Close Day
     </button>
     <button onclick="cancelCloseDay()" style="width:100%;padding:13px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:var(--sans);">
-      ← Go Back (Keep Day Open)
+      ← Keep Day Open
     </button>
   </div>
 </div>
@@ -1271,6 +1335,14 @@ body {
     </div>
     <div id="splash-profit-insight" style="font-size:14px;font-family:var(--mono);margin-top:6px;font-weight:600;"></div>
   </div>
+</div>
+
+<!-- DAY CLOSED OVERLAY (shown on restricted pages when day not open) -->
+<div id="day-closed-overlay">
+  <div style="font-size:64px;margin-bottom:16px;">🔒</div>
+  <div style="font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px;">Day Not Open</div>
+  <div style="font-size:15px;color:var(--muted);margin-bottom:28px;line-height:1.6;" id="day-closed-msg">Please open the business day to access this section.</div>
+  <button onclick="showPage('day')" style="padding:16px 32px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">📅 Go to Day</button>
 </div>
 
 <!-- TOAST -->
@@ -2309,6 +2381,60 @@ function disconnectFirebase() {
 
 // ===== OPEN / CLOSE DAY =====
 
+
+// ===================================================================
+// DAY MODE CONTROL - enable/disable tabs based on day status
+// ===================================================================
+
+// Tabs that require an open day (all except 'day' and 'settings')
+const DAY_RESTRICTED_TABS = ['dash', 'list', 'add', 'sell'];
+
+function setDayMode(isOpen) {
+  DAY_RESTRICTED_TABS.forEach(tab => {
+    const btn = document.getElementById('tab-' + tab);
+    if (!btn) return;
+    // Only affect visible tabs (respect role restrictions)
+    if (btn.style.display === 'none') return;
+    if (isOpen) {
+      btn.classList.remove('disabled');
+    } else {
+      btn.classList.add('disabled');
+      btn.classList.remove('active');
+    }
+  });
+
+  // If day just closed and we're on a restricted page, show day page
+  if (!isOpen) {
+    const activePage = document.querySelector('.page.active');
+    if (activePage) {
+      const pageId = activePage.id.replace('page-', '');
+      if (DAY_RESTRICTED_TABS.includes(pageId)) {
+        _origShowPage('day');
+      }
+    }
+  }
+}
+
+function showDayClosedOverlay(pageId) {
+  const overlay = document.getElementById('day-closed-overlay');
+  const msg = document.getElementById('day-closed-msg');
+  if (!overlay) return;
+  const status = activeDay ? activeDay.status : 'PENDING';
+  if (status === 'LOCKED') {
+    msg.textContent = 'Today is locked after midnight. A new business day will open tomorrow at 9:00 AM.';
+  } else if (status === 'CLOSED') {
+    msg.textContent = 'The business day is closed. You can reopen it from the Day tab before 11:59 PM.';
+  } else {
+    msg.textContent = 'Please open the business day first to access this section.';
+  }
+  overlay.classList.add('show');
+}
+
+function hideDayClosedOverlay() {
+  const overlay = document.getElementById('day-closed-overlay');
+  if (overlay) overlay.classList.remove('show');
+}
+
 // ===================================================================
 // BUSINESS DAY MANAGEMENT
 // Statuses: PENDING → OPEN → CLOSED → LOCKED
@@ -2513,14 +2639,40 @@ async function closeDay() {
   const purchases = items.filter(i => activeDay.opened_at && i.createdAt >= activeDay.opened_at);
   const purchaseCost = purchases.reduce((s, i) => s + i.buy * i.qty, 0);
 
-  // Populate close sheet
+  // ── Populate rich summary sheet ─────────────────────────────
   document.getElementById('ds-date').textContent = fmtFullDate(activeDay.business_date);
-  document.getElementById('ds-sales').textContent = daySales.length;
-  document.getElementById('ds-items-sold').textContent = itemsSold;
+  const openT = activeDay.opened_at ? fmtTime(activeDay.opened_at) : '?';
+  const nowT = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('ds-time-range').textContent = openT + ' → ' + nowT;
+
+  // Financials
+  const margin2 = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : 0;
+  const avgSale = daySales.length > 0 ? (revenue / daySales.length) : 0;
+  const customPriceCount = daySales.filter(s => s.overridden).length;
   document.getElementById('ds-revenue').textContent = fmt(revenue);
   document.getElementById('ds-profit').textContent = fmt(profit);
+  document.getElementById('ds-margin').textContent = margin2 + '%';
+  document.getElementById('ds-avg-sale').textContent = fmt(Math.round(avgSale));
+
+  // Sales
+  document.getElementById('ds-sales').textContent = daySales.length;
+  document.getElementById('ds-items-sold').textContent = itemsSold;
+  document.getElementById('ds-custom-price').textContent = customPriceCount;
+
+  // Stock
+  const allItems = await dbAll('items');
+  const closingStockCost = allItems.reduce((s, i) => s + i.buy * i.qty, 0);
+  document.getElementById('ds-opening-stock').textContent = fmt(activeDay.openingStockCost || 0);
+  document.getElementById('ds-closing-stock').textContent = fmt(closingStockCost);
   document.getElementById('ds-purchases').textContent = purchases.length + ' item' + (purchases.length !== 1 ? 's' : '');
-  document.getElementById('ds-purchases-val').textContent = purchases.length ? 'Total cost: ' + fmt(purchaseCost) : 'No new stock added today';
+  document.getElementById('ds-purchases-val').textContent = purchases.length ? fmt(purchaseCost) : 'KES 0';
+
+  // Stock progress bar
+  const totalPossibleSold = itemsSold + (allItems.reduce((s, i) => s + i.qty, 0));
+  const soldPct = totalPossibleSold > 0 ? Math.min(100, (itemsSold / totalPossibleSold * 100)).toFixed(0) : 0;
+  document.getElementById('ds-stock-bar').style.width = soldPct + '%';
+  document.getElementById('ds-stock-pct-label').textContent = soldPct + '% of stock moved today';
+
   document.getElementById('ds-notes').value = activeDay.notes || '';
 
   // Verdict
@@ -2548,10 +2700,40 @@ async function closeDay() {
   if (daySales.length > 0) {
     const grouped = {};
     daySales.forEach(s => { grouped[s.itemName] = (grouped[s.itemName] || 0) + s.revenue; });
-    const top = Object.entries(grouped).sort((a, b) => b[1] - a[1])[0];
-    topSellerEl.innerHTML = '<div class="detail-box" style="padding:12px;"><div class="detail-key">⭐ TOP SELLER TODAY</div><div style="font-size:15px;font-weight:700;color:var(--accent2);margin-top:6px;">' + top[0] + '</div><div style="font-size:12px;color:var(--muted);font-family:var(--mono);">' + fmt(top[1]) + ' revenue</div></div>';
+    const topItems = Object.entries(grouped).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    topSellerEl.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">🏆 Top Sellers</div>' +
+      topItems.map(([ name, rev ], i) =>
+        '<div class="detail-box" style="padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;">' +
+        '<span style="font-size:18px;">' + ['🥇','🥈','🥉'][i] + '</span>' +
+        '<div style="flex:1;"><div style="font-size:13px;font-weight:700;">' + name + '</div></div>' +
+        '<div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(rev) + '</div></div>'
+      ).join('');
   } else {
     topSellerEl.innerHTML = '';
+  }
+
+  // Sales by type breakdown
+  const typeBreakEl = document.getElementById('ds-type-breakdown');
+  if (daySales.length > 0) {
+    const byType = {};
+    daySales.forEach(s => {
+      if (!byType[s.type]) byType[s.type] = { rev: 0, profit: 0, qty: 0 };
+      byType[s.type].rev += s.revenue;
+      byType[s.type].profit += s.profit;
+      byType[s.type].qty += s.qty;
+    });
+    typeBreakEl.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">📂 Sales by Category</div>' +
+      Object.entries(byType).sort((a,b) => b[1].rev - a[1].rev).map(([type, data]) => {
+        const t = getTypeObj(type);
+        return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">' +
+          '<span style="font-size:20px;">' + t.emoji + '</span>' +
+          '<div style="flex:1;"><div style="font-size:13px;font-weight:700;">' + type + '</div>' +
+          '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + data.qty + ' pcs sold</div></div>' +
+          '<div style="text-align:right;"><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(data.rev) + '</div>' +
+          '<div style="font-size:11px;color:var(--green);font-family:var(--mono);">+' + fmt(data.profit) + '</div></div></div>';
+      }).join('');
+  } else {
+    typeBreakEl.innerHTML = '';
   }
 
   document.getElementById('day-summary-sheet').classList.add('open');
@@ -2578,10 +2760,11 @@ async function confirmCloseDay() {
 
   await dbPut('business_days', activeDay);
   document.getElementById('day-summary-sheet').classList.remove('open');
-  updateDayBanner();
+  updateDayBanner(); // this calls setDayMode(false) which disables tabs
   renderDaySessionsList();
   renderDashboard();
-  toast('🌙 Day closed. Great work!', 'ok');
+  _origShowPage('day'); // force back to day page
+  toast('🌙 Day closed! All modules locked.', 'ok');
 }
 
 function cancelCloseDay() {
@@ -2643,6 +2826,8 @@ function updateDayBanner() {
   sub.textContent = cfg.sub;
   actionArea.innerHTML = cfg.action;
   if (liveSection) liveSection.style.display = status === 'OPEN' ? 'block' : 'none';
+  setDayMode(status === 'OPEN');
+  if (status === 'OPEN') hideDayClosedOverlay();
 }
 
 // ── LIVE STATS ────────────────────────────────────────────────────────
@@ -3092,12 +3277,19 @@ function logout() {
 // Guard showPage - block access to restricted tabs
 const _origShowPage = showPage;
 showPage = function(id) {
-  // If no user logged in yet, don't block (login is handling it)
   if (currentUser && !currentUser.tabs.includes(id)) {
     toast('⛔ Access denied', 'err');
     return;
   }
-  // Save last visited page for refresh restore
+  // Block restricted tabs when day is not open
+  const dayOpen = activeDay && activeDay.status === 'OPEN';
+  if (DAY_RESTRICTED_TABS.includes(id) && !dayOpen) {
+    // Show day page with overlay
+    _origShowPage('day');
+    setTimeout(() => showDayClosedOverlay(id), 100);
+    return;
+  }
+  hideDayClosedOverlay();
   if (currentUser) localStorage.setItem('mg_last_page', id);
   _origShowPage(id);
 };
