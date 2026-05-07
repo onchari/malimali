@@ -10,8 +10,14 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAEdklEQVR4nO3dP24bRxjG4aVgIKULFwZ8BJ/BVeBDBTmAkUMZqXwGHSGAChcqUzlFQIOmRHKX+2e+2fd5eouD3e83syvJ0GHY0Nv3H39s+Xn06fnp8bDVZ636QQaeJawZxOJf2NCzpqVjWOyLGXy2tFQIs7+IwaeluSE8zPnHhp/W5s7gXfUYfCq65zSYfAIYfqq6ZzYnBWD4qW7qjI4OwPDTiymzOioAw09vxs7szQAMP70aM7tXAzD89O7WDF8MwPCzF9dmedYPwqB3rwZg92dvLs30iwAMP3v12mx7BCLaLwHY/dm78xl3AhDtZwB2f1KczroTgGgCINrDMHj8Ic9x5p0ARBMA0QRAtIPnf5I5AYgmAKIJgGgCIJoAiCYAogmAaAIgmgCIJgCiCYBoAiDam9YL6NW7r99aL+GF758/tV5Cd/w26EQVB/+cEMYTwEg9DP45IdzmHWCEHod/GPpd95YEQDQB3ND7Ltr7+tcmAKJ5Cb7i1u5Z6SWzp7VW4gS4U7WBqraeXgiAaAIgmgDuVO27K9XW0wsvwTfsYbC8H1zmBCCaAG7offfsff1rEwDRungH+PfPv1ovYfjwe3876T9/t39/+e3LH62XcFXpACoM/rkeQqgw+OeqhlA2gIrDf6piCBUH/1TFCEoGUH34uV+1CMq9BBv+fat2f0sFUO3isI5K97lUALC1MgFU2hVYX5X7XSYAaEEARBMA0QRANAEQTQBEKxNAxd+tYT1V7neZAKCFUgFU2RVYV6X7XCqAYah1cVhetftbLoBhqHeRWEbF+1oygGGoebG4X9X7WfpvhB0vWvX/6cRlVQf/qHQAR9UvIv0q+wgEWxAA0QRANAEQTQBEEwDRBEA0ARBNAEQTANEEQDQBEE0ARBMA0QRANAEQTQBEEwDRBEA0ARBNAEQTANEEQDQBEE0ARBMA0QRANAEQTQBEEwDRBEA0ARBNAEQTANEEQDQBEE0ARBMA0QRANAEQTQBEEwDRBEA0ARBNAEQTANEEQDQBEE0ARBMA0QRANAEQTQBEEwDRBEA0ARBNAEQTANEEQDQBEE0ARBMA0QRANAEQrUwA3z9/ar0ENlTlfpcJAFooFUCVXYF1VbrPpQIYhloXh+VVu7/lAoAtHd6+//ij9SIueff1W+slsJBqO/9R6ROg6kVjmsr3sfQJcMpp0J/Kg3/UTQCwhtKPQLA2ARBNAEQTANEEQDQBEE0ARBMA0QRANAEQTQBEEwDRBEA0ARDt4fnp8dB6EdDC89PjwQlANAEQTQBEexiG/5+FWi8EtnSceScA0QRAtJ8BeAwixemsOwGI9ksATgH27nzGnQBEexGAU4C9em22Xz0BRMDeXJppj0BEuxiAU4C9uDbLV08AEdC7WzN88xFIBPRqzOyOegcQAb0ZO7OjX4JFQC+mzOqk7wKJgOqmzujkb4OKgKrumc1Zw+zvi1HBnE151g/CnAa0NncGFxtgpwFbWmrzXXwHFwJrWvqpY9VHGDGwhDUftTd9hhcEY2z5bvkfrp8IJepU4EIAAAAASUVORK5CYII=">
 <title>Mandela Generals</title>
+<!-- jQuery -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<!-- Animate.css -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+<!-- Font Awesome icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
   --bg: #f0f4f0;
@@ -34,7 +40,7 @@
   --text2: #3d5a3e;
   --muted: #7a957b;
   --mono: 'JetBrains Mono', monospace;
-  --sans: 'Plus Jakarta Sans', sans-serif;
+  --sans: 'Inter', sans-serif;
   --r: 10px;
   --r-lg: 14px;
   --shadow: 0 1px 4px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.05);
@@ -582,6 +588,188 @@ body {
 .role-user  { background: #dbeafe; color: #1d4ed8; }
 .role-clerk { background: var(--green-light); color: var(--green); }
 
+
+/* ===== ENHANCED CSS EFFECTS ===== */
+
+/* Smooth page transitions */
+.page { animation: none; }
+.page.active { animation: fadeInUp 0.25s ease both; }
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Card hover lift */
+.card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.card:active { transform: scale(0.985); }
+
+/* Header shimmer on load */
+.header {
+  background: linear-gradient(135deg, #1e7a3e 0%, #2d9e54 60%, #1e7a3e 100%);
+  background-size: 200% 100%;
+  animation: shimmer 4s ease infinite;
+}
+@keyframes shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50%       { background-position: 100% 50%; }
+}
+
+/* Ripple effect on buttons */
+.save-btn, .login-btn, .type-add-btn {
+  position: relative; overflow: hidden;
+}
+.ripple {
+  position: absolute; border-radius: 50%;
+  background: rgba(255,255,255,0.35);
+  transform: scale(0);
+  animation: ripple-anim 0.55s linear;
+  pointer-events: none;
+}
+@keyframes ripple-anim {
+  to { transform: scale(4); opacity: 0; }
+}
+
+/* Stat box count-up pulse */
+.stat-val.updated {
+  animation: countPulse 0.4s ease;
+}
+@keyframes countPulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+/* Item card photo zoom on hover */
+.item-photo-img {
+  transition: transform 0.4s ease;
+}
+.item-card:hover .item-photo-img { transform: scale(1.04); }
+
+/* Nav tab indicator slide */
+.nav-btn {
+  position: relative;
+}
+.nav-btn::after {
+  content: '';
+  position: absolute; bottom: 0; left: 50%; right: 50%;
+  height: 2.5px; background: var(--accent);
+  transition: left 0.2s ease, right 0.2s ease;
+  border-radius: 2px;
+}
+.nav-btn.active::after { left: 8%; right: 8%; }
+
+/* Toast slide-up with bounce */
+.toast {
+  transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+}
+
+/* Form input focus glow */
+.form-input:focus, .form-select:focus, .price-input:focus {
+  box-shadow: 0 0 0 3px rgba(30,122,62,0.15), 0 2px 8px rgba(30,122,62,0.1) !important;
+}
+
+/* Login card entrance */
+.login-card {
+  animation: slideUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+  animation-delay: 0.15s;
+}
+.login-logo {
+  animation: bounceIn 0.6s ease both;
+}
+.login-title {
+  animation: fadeIn 0.5s ease both;
+  animation-delay: 0.05s;
+}
+
+/* Sheet slide-up animation */
+.sheet-overlay.open .sheet {
+  animation: sheetUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes sheetUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+/* Badge pulse on low stock */
+#low-stock-badge {
+  animation: badgePulse 2s ease infinite;
+}
+@keyframes badgePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.4); }
+  50%       { box-shadow: 0 0 0 5px rgba(220,38,38,0); }
+}
+
+/* Sync dot pulse when syncing */
+#sync-dot[style*="#3b82f6"] {
+  animation: syncPulse 1s ease infinite;
+}
+@keyframes syncPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* Status badge glow when open */
+#day-status-badge[style*="#dcfce7"] {
+  box-shadow: 0 0 0 3px rgba(22,163,74,0.2);
+  animation: openGlow 2s ease infinite;
+}
+@keyframes openGlow {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(22,163,74,0.2); }
+  50%       { box-shadow: 0 0 0 6px rgba(22,163,74,0.05); }
+}
+
+/* Skeleton loader */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
+  background-size: 200% 100%;
+  animation: skeleton 1.4s ease infinite;
+  border-radius: var(--r);
+}
+@keyframes skeleton {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+/* Scroll reveal for cards */
+.card-reveal {
+  animation: cardReveal 0.35s ease both;
+}
+@keyframes cardReveal {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Number ticker animation */
+@keyframes ticker {
+  from { transform: translateY(6px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+/* Profit preview entrance */
+.profit-preview[style*="block"] {
+  animation: expandIn 0.25s ease both;
+}
+@keyframes expandIn {
+  from { opacity: 0; max-height: 0; transform: scaleY(0.8); }
+  to   { opacity: 1; max-height: 200px; transform: scaleY(1); }
+}
+
+/* Day banner state transitions */
+#day-banner {
+  transition: background 0.5s ease, border-color 0.5s ease;
+}
+#day-status-badge {
+  transition: background 0.4s ease, color 0.4s ease;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
 </style>
 
 <!-- Firebase SDK -->
@@ -662,24 +850,24 @@ body {
 <!-- NAV -->
 <div class="nav">
   <button class="nav-btn active" onclick="showPage('dash')" id="tab-dash">
-    <span class="icon">🏠</span>Dashboard
+    <span class="icon"><i class="fa-solid fa-house"></i></span>Dashboard
   </button>
   <button class="nav-btn" onclick="showPage('list')" id="tab-list">
-    <span class="icon">📋</span>Stock
+    <span class="icon"><i class="fa-solid fa-boxes-stacked"></i></span>Stock
   </button>
   <button class="nav-btn" onclick="showPage('add')" id="tab-add">
-    <span class="icon">➕</span>Add
+    <span class="icon"><i class="fa-solid fa-plus"></i></span>Add
   </button>
   <button class="nav-btn" onclick="showPage('sell')" id="tab-sell">
-    <span class="icon">💸</span>Sell
+    <span class="icon"><i class="fa-solid fa-cash-register"></i></span>Sell
   </button>
   <button class="nav-btn" onclick="showPage('day')" id="tab-day">
-    <span class="icon">📅</span>Day
+    <span class="icon"><i class="fa-solid fa-calendar-day"></i></span>Day
   </button>
 
 
   <button class="nav-btn" onclick="showPage('settings')" id="tab-settings">
-    <span class="icon">⚙️</span>Settings
+    <span class="icon"><i class="fa-solid fa-gear"></i></span>Settings
   </button>
 </div>
 
@@ -1108,7 +1296,7 @@ body {
     </div>
 
     <button onclick="confirmCloseDay()" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
-      ✅ Confirm & Close Day
+      <i class="fa-solid fa-circle-check"></i> Confirm & Close Day
     </button>
     <button onclick="cancelCloseDay()" style="width:100%;padding:13px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:var(--sans);">
       ← Keep Day Open
@@ -1473,10 +1661,22 @@ function fmtShort(n) {
 }
 function fmtN(n) { return Number(n || 0).toLocaleString(); }
 function toast(msg, type = '') {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast show ' + type;
-  setTimeout(() => t.className = 'toast', 2500);
+  if (typeof $ !== 'undefined') {
+    const $t = $('#toast');
+    $t.text(msg).attr('class', 'toast ' + (type || ''));
+    $t.stop(true).css({ opacity: 0, transform: 'translateX(-50%) translateY(12px)' })
+      .animate({ opacity: 1 }, { duration: 220, step: function(now) {
+        const y = 12 - (12 * now);
+        $(this).css('transform', 'translateX(-50%) translateY(' + y + 'px)');
+      }});
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => $t.animate({ opacity: 0 }, 300), 2500);
+  } else {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show ' + type;
+    setTimeout(() => t.className = 'toast', 2500);
+  }
 }
 function getTypeObj(name) { return types.find(t => t.name === name) || { name, emoji: '📦', color: '#334155' }; }
 
@@ -1760,9 +1960,8 @@ async function renderList() {
 
   list.innerHTML = filtered.map(item => {
     const t = getTypeObj(item.type);
-    const photo = getItemPhoto(item.id);
-    const stockBadgeClass = item.qty === 0 ? 'out' : item.qty <= 3 ? 'low' : 'ok';
-    const stockLabel = item.qty === 0 ? '✕ OUT' : item.qty + ' pcs';
+    const stockColor = item.qty === 0 ? 'tag-red' : item.qty <= 3 ? 'tag-amber' : 'tag-green';
+    const stockLabel = item.qty === 0 ? '✕ Out' : item.qty + ' pcs';
     const totalCost = item.buy * item.qty;
     const itemSales = salesByItem[item.id] || { profit: 0, qty: 0 };
     const profitMade = itemSales.profit;
@@ -1770,23 +1969,22 @@ async function renderList() {
     const profitColor = profitMade > 0 ? 'var(--green)' : profitMade < 0 ? 'var(--red)' : 'var(--muted)';
 
     return `<div class="item-card" onclick="openSheet(${item.id})">
-      <!-- Photo area (top 3/4) -->
-      <div class="item-photo">
-        ${photo
-          ? `<img class="item-photo-img" src="${photo}" alt="${item.code}">`
-          : `<div class="item-photo-placeholder"><span>${t.emoji}</span></div>`
-        }
-        <div class="item-photo-overlay">
-          <div>
-            <div class="item-photo-code">${item.code}${item.size ? ' · ' + item.size : ''}</div>
-            <div class="item-photo-name">${item.name || ''}</div>
+      <div class="item-top">
+        <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
+        <div class="item-body">
+          <div class="item-code">${item.code}${item.size ? ' · ' + item.size : ''}</div>
+          <div class="item-name">${item.name || ''}</div>
+          <div class="item-tags">
+            <span class="tag tag-cyan">${item.type}</span>
+            <span class="tag ${stockColor}">${stockLabel}</span>
           </div>
-          <span class="item-stock-badge ${stockBadgeClass}">${stockLabel}</span>
         </div>
-        <button class="item-add-photo" onclick="triggerPhotoUpload(${item.id}, event)">📷 ${photo ? 'Change' : 'Add Photo'}</button>
+        <div class="item-right">
+          <div class="item-price">${fmt(item.sell)}</div>
+          <div class="item-qty">Buy: ${fmt(item.buy)}</div>
+        </div>
       </div>
-      <!-- Info strip (bottom) -->
-      <div class="item-info-strip">
+      <div class="item-stats-row">
         <div class="item-stat">
           <span class="item-stat-lbl">Buy/pc</span>
           <span class="item-stat-val" style="color:var(--muted);">${fmtShort(item.buy)}</span>
@@ -1827,10 +2025,10 @@ async function openSheet(id) {
   document.getElementById('sh-total-profit').textContent = (item.profit >= 0 ? '+' : '') + fmt(item.profit * item.qty);
   const margin = item.sell > 0 ? ((item.profit / item.sell) * 100).toFixed(1) : 0;
   document.getElementById('sh-margin').textContent = margin + '%';
-  document.getElementById('detail-sheet').classList.add('open');
+  const $ds = $('#detail-sheet'); $ds.addClass('open'); $ds.find('.sheet').addClass('animate__animated animate__fadeInUp').css('--animate-duration','0.25s');
 }
 
-function closeSheet() { document.getElementById('detail-sheet').classList.remove('open'); }
+function closeSheet() { $('#detail-sheet').removeClass('open'); }
 
 async function deleteItem() {
   if (!confirm('Delete this item?')) return;
@@ -2152,11 +2350,11 @@ async function openSellModal(itemId) {
   document.getElementById('sm-qty').max = item.qty;
   document.getElementById('sm-actual').value = '';
   updateSellModal();
-  document.getElementById('sell-modal').classList.add('open');
+  const $sm = $('#sell-modal'); $sm.addClass('open'); $sm.find('.sheet').addClass('animate__animated animate__slideInUp').css('--animate-duration','0.22s');
 }
 
 function closeSellModal() {
-  document.getElementById('sell-modal').classList.remove('open');
+  $('#sell-modal').removeClass('open');
   currentSellItemId = null;
 }
 
@@ -2879,21 +3077,21 @@ function updateDayBanner() {
       badgeBg: '#e5e7eb', badgeColor: '#6b7280',
       title: 'Business Day Not Started', titleColor: 'var(--text)',
       sub: 'Auto-opens at 9:00 AM · Or tap to open now',
-      action: '<button onclick="openDay()" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">🌅 Open Day Now</button>'
+      action: '<button onclick="openDay()" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);"><i class="fa-solid fa-sun"></i> Open Day Now</button>'
     },
     OPEN: {
       bg: 'var(--green-light)', border: '#a8d8b5', icon: '🌅',
       badgeBg: '#dcfce7', badgeColor: '#16a34a',
       title: 'Business Day is Open', titleColor: 'var(--green)',
       sub: 'Opened at ' + (activeDay.last_opened_at ? fmtTime(activeDay.last_opened_at) : fmtTime(activeDay.opened_at)) + (activeDay.reopened_count > 0 ? ' · Reopened ' + activeDay.reopened_count + 'x' : ''),
-      action: '<button onclick="closeDay()" style="width:100%;padding:16px;background:var(--red);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">🌙 Close Day & Summary</button>'
+      action: '<button onclick="closeDay()" style="width:100%;padding:16px;background:var(--red);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);"><i class="fa-solid fa-moon"></i> Close Day</button>'
     },
     CLOSED: {
       bg: '#fef3c7', border: '#f5d9a0', icon: '🌙',
       badgeBg: '#fef3c7', badgeColor: '#92400e',
       title: 'Business Day is Closed', titleColor: 'var(--amber)',
       sub: 'Closed at ' + (activeDay.closed_at ? fmtTime(activeDay.closed_at) : '—') + ' · Can reopen before 11:59 PM',
-      action: '<button onclick="openDay()" style="width:100%;padding:16px;background:var(--amber);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">📂 Reopen Day</button>'
+      action: '<button onclick="openDay()" style="width:100%;padding:16px;background:var(--amber);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);"><i class="fa-solid fa-rotate-left"></i> Reopen Day</button>'
     },
     LOCKED: {
       bg: 'var(--red-light)', border: 'rgba(192,57,43,0.25)', icon: '🔒',
@@ -3394,11 +3592,13 @@ function attemptLogin() {
     err.style.display = 'block';
     document.getElementById('login-pin').value = '';
     document.getElementById('login-pin').focus();
-    const card = document.querySelector('.login-card');
-    card.style.transition = 'transform 0.08s';
-    card.style.transform = 'translateX(8px)';
-    setTimeout(() => card.style.transform = 'translateX(-8px)', 80);
-    setTimeout(() => card.style.transform = 'translateX(0)', 160);
+    if (typeof shakeLogin !== 'undefined') shakeLogin();
+    else {
+      const card = document.querySelector('.login-card');
+      card.style.transform = 'translateX(8px)';
+      setTimeout(() => card.style.transform = 'translateX(-8px)', 80);
+      setTimeout(() => card.style.transform = 'translateX(0)', 160);
+    }
     return;
   }
 
@@ -3467,6 +3667,152 @@ function checkSession() {
     return false;
   }
 }
+
+
+// ===== JQUERY ENHANCEMENTS =====
+$(document).ready(function() {
+
+  // ── Ripple effect on all buttons ─────────────────────────────────
+  $(document).on('click', '.save-btn, .login-btn, .type-add-btn, .add-save-btn', function(e) {
+    const $btn = $(this);
+    const offset = $btn.offset();
+    const x = e.pageX - offset.left;
+    const y = e.pageY - offset.top;
+    const size = Math.max($btn.outerWidth(), $btn.outerHeight());
+    const $ripple = $('<span class="ripple">').css({
+      width: size, height: size,
+      left: x - size/2, top: y - size/2
+    });
+    $btn.append($ripple);
+    setTimeout(() => $ripple.remove(), 600);
+  });
+
+  // ── Search input — live highlight with delay ──────────────────────
+  let searchTimer;
+  $(document).on('input', '#search', function() {
+    clearTimeout(searchTimer);
+    const $icon = $(this).siblings('.s-icon');
+    $icon.text('⏳');
+    searchTimer = setTimeout(() => {
+      $icon.text('🔍');
+    }, 300);
+  });
+
+  // ── Sell search — real-time with jQuery ──────────────────────────
+  let sellTimer;
+  $(document).on('input', '#sell-search', function() {
+    clearTimeout(sellTimer);
+    sellTimer = setTimeout(() => {}, 80);
+  });
+
+  // ── Animate stat values when they change ─────────────────────────
+  function animateStat(selector, newVal) {
+    const $el = $(selector);
+    if ($el.text() !== newVal) {
+      $el.text(newVal).addClass('updated');
+      setTimeout(() => $el.removeClass('updated'), 450);
+    }
+  }
+  window.animateStat = animateStat;
+
+  // ── Smooth scroll to top when switching pages ────────────────────
+  $(document).on('click', '.nav-btn', function() {
+    setTimeout(() => $('html, body').animate({ scrollTop: 0 }, 200), 50);
+  });
+
+  // ── Pull-to-refresh indicator (visual only) ───────────────────────
+  let pullStart = 0;
+  $(document).on('touchstart', function(e) {
+    pullStart = e.originalEvent.touches[0].clientY;
+  });
+
+  // ── Card reveal animation on list render ─────────────────────────
+  window.animateCards = function(selector) {
+    $(selector).children().each(function(i) {
+      $(this).css({ opacity: 0, transform: 'translateY(16px)' })
+        .delay(i * 40)
+        .queue(function(next) {
+          $(this).addClass('card-reveal');
+          next();
+        });
+    });
+  };
+
+  // ── Form field focus effects ──────────────────────────────────────
+  $(document).on('focus', '.form-input, .price-input, .form-select', function() {
+    $(this).closest('.form-field, .form-group').find('.form-label').css('color', 'var(--accent)');
+  }).on('blur', '.form-input, .price-input, .form-select', function() {
+    $(this).closest('.form-field, .form-group').find('.form-label').css('color', '');
+  });
+
+  // ── Login form — shake on error with jQuery ───────────────────────
+  window.shakeLogin = function() {
+    $('.login-card').addClass('animate__animated animate__shakeX');
+    setTimeout(() => $('.login-card').removeClass('animate__animated animate__shakeX'), 800);
+  };
+
+  // ── Day banner entrance animation ────────────────────────────────
+  window.animateDayBanner = function() {
+    $('#day-banner').addClass('animate__animated animate__pulse');
+    setTimeout(() => $('#day-banner').removeClass('animate__animated animate__pulse'), 1000);
+  };
+
+  // ── Toast with jQuery ─────────────────────────────────────────────
+  window.toastJQ = function(msg, type) {
+    const $t = $('#toast');
+    $t.text(msg).removeClass('ok err').addClass(type || '');
+    $t.stop(true).css('opacity', 0).animate({ opacity: 1 }, 200);
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => $t.animate({ opacity: 0 }, 300), 2500);
+  };
+
+  // ── Smooth number count-up for dashboard stats ────────────────────
+  window.countUp = function(selector, end, prefix, suffix) {
+    const $el = $(selector);
+    const start = 0;
+    const duration = 600;
+    const startTime = performance.now();
+    prefix = prefix || '';
+    suffix = suffix || '';
+    function update(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      const current = Math.round(start + (end - start) * ease);
+      $el.text(prefix + current.toLocaleString() + suffix);
+      if (progress < 1) requestAnimationFrame(update);
+    }
+    requestAnimationFrame(update);
+  };
+
+  // ── Skeleton loader helper ────────────────────────────────────────
+  window.showSkeleton = function(selector, rows) {
+    const $el = $(selector);
+    let html = '';
+    for (let i = 0; i < (rows || 3); i++) {
+      html += '<div class="skeleton" style="height:80px;margin-bottom:10px;"></div>';
+    }
+    $el.html(html);
+  };
+
+  // ── Enhanced tooltip on long press ───────────────────────────────
+  let longPressTimer;
+  $(document).on('touchstart', '.item-card', function() {
+    const $card = $(this);
+    longPressTimer = setTimeout(() => {
+      $card.addClass('animate__animated animate__pulse');
+      setTimeout(() => $card.removeClass('animate__animated animate__pulse'), 500);
+    }, 500);
+  }).on('touchend touchmove', '.item-card', function() {
+    clearTimeout(longPressTimer);
+  });
+
+  // ── Fade in nav on load ───────────────────────────────────────────
+  $('.nav').hide().fadeIn(400);
+  $('.app-header, .header').css({ opacity: 0 }).animate({ opacity: 1 }, 500);
+
+  console.log('🛍️ Mandela Generals loaded with jQuery', $.fn.jquery);
+});
 
 // ===== INIT =====
 initDB();
