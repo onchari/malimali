@@ -3157,43 +3157,7 @@ const USERS = [
 
 let currentUser = null;
 
-function attemptLogin() {
-  const username = document.getElementById('login-user').value.trim().toLowerCase();
-  const pin = document.getElementById('login-pin').value.trim();
-  const err = document.getElementById('login-error');
 
-  const user = USERS.find(u => u.username === username && u.pin === pin);
-  if (!user) {
-    err.style.display = 'block';
-    document.getElementById('login-pin').value = '';
-    document.getElementById('login-pin').focus();
-    // Shake the card
-    const card = document.querySelector('.login-card');
-    card.style.transform = 'translateX(8px)';
-    setTimeout(() => card.style.transform = 'translateX(-8px)', 80);
-    setTimeout(() => card.style.transform = 'translateX(0)', 160);
-    return;
-  }
-
-  err.style.display = 'none';
-  currentUser = user;
-  localStorage.setItem('mg_session', JSON.stringify({ username: user.username, pin: user.pin }));
-
-  // Hide login screen
-  document.getElementById('login-screen').style.display = 'none';
-
-  // Apply role restrictions
-  applyRoleRestrictions(user);
-
-  // Update user pill in header
-  const pill = document.getElementById('user-pill');
-  pill.style.display = 'inline-flex';
-  pill.innerHTML = '👤 ' + user.name + ' <span class="role-badge role-' + user.role + '">' + user.roleLabel + '</span>';
-
-  // Go to first allowed tab
-  showPage(user.tabs[0]);
-  toast('Welcome, ' + user.name + '! 👋', 'ok');
-}
 
 function applyRoleRestrictions(user) {
   // Show/hide nav tabs based on role
@@ -3239,7 +3203,59 @@ function logout() {
   document.getElementById('login-screen').style.display = 'flex';
 }
 
-// Auto-login if valid session exists
+
+
+// Guard showPage - block access to restricted tabs
+const _origShowPage = showPage;
+showPage = function(id) {
+  // If no user logged in yet, don't block (login is handling it)
+  if (currentUser && !currentUser.tabs.includes(id)) {
+    toast('⛔ Access denied', 'err');
+    return;
+  }
+  _origShowPage(id);
+};
+
+function attemptLogin() {
+  const username = document.getElementById('login-user').value.trim().toLowerCase();
+  const pin = document.getElementById('login-pin').value.trim();
+  const err = document.getElementById('login-error');
+
+  const user = USERS.find(u => u.username === username && u.pin === pin);
+  if (!user) {
+    err.style.display = 'block';
+    document.getElementById('login-pin').value = '';
+    document.getElementById('login-pin').focus();
+    const card = document.querySelector('.login-card');
+    card.style.transition = 'transform 0.08s';
+    card.style.transform = 'translateX(8px)';
+    setTimeout(() => card.style.transform = 'translateX(-8px)', 80);
+    setTimeout(() => card.style.transform = 'translateX(0)', 160);
+    return;
+  }
+
+  err.style.display = 'none';
+  currentUser = user; // SET BEFORE showPage is called
+  localStorage.setItem('mg_session', JSON.stringify({ username: user.username, pin: user.pin }));
+
+  // Hide login screen
+  document.getElementById('login-screen').style.display = 'none';
+
+  // Apply role restrictions
+  applyRoleRestrictions(user);
+
+  // Update user pill
+  const pill = document.getElementById('user-pill');
+  if (pill) {
+    pill.style.display = 'inline-flex';
+    pill.innerHTML = '👤 ' + user.name + ' <span class="role-badge role-' + user.role + '">' + user.roleLabel + '</span>';
+  }
+
+  // Go to first allowed tab
+  _origShowPage(user.tabs[0]); // use original to bypass guard
+  toast('Welcome, ' + user.name + '! 👋', 'ok');
+}
+
 function checkSession() {
   const saved = localStorage.getItem('mg_session');
   if (!saved) return;
@@ -3247,28 +3263,20 @@ function checkSession() {
     const { username, pin } = JSON.parse(saved);
     const user = USERS.find(u => u.username === username && u.pin === pin);
     if (user) {
-      currentUser = user;
+      currentUser = user; // SET BEFORE showPage
       document.getElementById('login-screen').style.display = 'none';
       applyRoleRestrictions(user);
       const pill = document.getElementById('user-pill');
-      pill.style.display = 'inline-flex';
-      pill.innerHTML = '👤 ' + user.name + ' <span class="role-badge role-' + user.role + '">' + user.roleLabel + '</span>';
-      showPage(user.tabs[0]);
+      if (pill) {
+        pill.style.display = 'inline-flex';
+        pill.innerHTML = '👤 ' + user.name + ' <span class="role-badge role-' + user.role + '">' + user.roleLabel + '</span>';
+      }
+      _origShowPage(user.tabs[0]); // use original to bypass guard
     }
   } catch(e) {
     localStorage.removeItem('mg_session');
   }
 }
-
-// Guard showPage - block access to restricted tabs
-const _origShowPage = showPage;
-showPage = function(id) {
-  if (currentUser && !currentUser.tabs.includes(id)) {
-    toast('⛔ Access denied', 'err');
-    return;
-  }
-  _origShowPage(id);
-};
 
 // ===== INIT =====
 initDB();
