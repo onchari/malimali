@@ -3132,8 +3132,8 @@ const USERS = [
     name: 'Trevor',
     role: 'clerk',
     roleLabel: 'Clerk',
-    // Clerk: only add stock (inventory entry)
-    tabs: ['add']
+    // Clerk: view stock + add stock
+    tabs: ['list', 'add']
   }
 ];
 
@@ -3155,7 +3155,7 @@ function applyRoleRestrictions(user) {
   if (user.role === 'clerk') {
     const header = document.querySelector('.header-title');
     if (header) header.textContent = 'Add Stock — Mandela';
-    document.getElementById('hdr-sub').textContent = 'Clerk · Stock Entry Only';
+    document.getElementById('hdr-sub').textContent = 'Clerk · Stock View & Entry';
   }
 }
 
