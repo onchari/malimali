@@ -755,10 +755,10 @@ body {
 
 <!-- Firebase SDK -->
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getFirestore, collection, doc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-  window._fbImports = { initializeApp, getFirestore, collection, doc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch, serverTimestamp };
+  window._fbImports = { initializeApp, getApps, getFirestore, collection, doc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch, serverTimestamp };
 </script>
 </head>
 <body>
@@ -843,9 +843,7 @@ body {
   <button class="nav-btn" onclick="showPage('add')" id="tab-add">
     <span class="icon"><i class="fa-solid fa-plus"></i></span>Add
   </button>
-  <button class="nav-btn" onclick="showPage('sell')" id="tab-sell">
-    <span class="icon"><i class="fa-solid fa-cash-register"></i></span>Sell
-  </button>
+
   <button class="nav-btn" onclick="showPage('day')" id="tab-day">
     <span class="icon"><i class="fa-solid fa-calendar-day"></i></span>Day
   </button>
@@ -1433,60 +1431,49 @@ body {
       <div id="sh-photo-fallback" style="width:110px;height:110px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:52px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
         <span id="sh-icon"></span>
       </div>
-      <!-- Overlay info on photo -->
-      <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.6),transparent);padding:14px 16px 10px;">
+      <!-- Overlay info + SELL button at bottom of photo -->
+      <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);padding:16px 16px 16px;">
         <div style="font-size:18px;font-weight:800;color:white;font-family:var(--mono);" id="sh-code"></div>
-        <div style="font-size:13px;color:rgba(255,255,255,0.8);margin-top:2px;" id="sh-name"></div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.8);margin-top:2px;margin-bottom:14px;" id="sh-name"></div>
+        <button id="sh-sell-btn" onclick="openSellFromSheet()" style="width:100%;padding:16px;background:#1e7a3e;color:white;border:none;border-radius:14px;font-size:18px;font-weight:900;cursor:pointer;font-family:var(--sans);letter-spacing:0.5px;box-shadow:0 4px 16px rgba(30,122,62,0.5);">
+          SELL
+        </button>
       </div>
-      <!-- Photo upload button -->
+      <!-- Item type badge TOP LEFT -->
+      <div id="sh-type-badge" style="position:absolute;top:14px;left:14px;background:rgba(0,0,0,0.45);color:white;font-size:11px;font-weight:700;padding:5px 11px;border-radius:20px;font-family:var(--sans);backdrop-filter:blur(4px);letter-spacing:0.3px;"></div>
+      <!-- Photo upload button TOP RIGHT -->
       <button onclick="triggerSheetPhotoUpload(event)" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.4);color:white;border:1px solid rgba(255,255,255,0.3);border-radius:6px;font-size:11px;font-weight:700;padding:4px 9px;cursor:pointer;font-family:var(--sans);backdrop-filter:blur(4px);" id="sh-photo-btn">📷 Add Photo</button>
     </div>
 
     <!-- Bottom half: compact info -->
     <div style="padding:14px 16px 20px;overflow-y:auto;max-height:55vh;">
 
-      <!-- 4-stat strip -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;margin-bottom:12px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;">
-        <div style="padding:8px 4px;text-align:center;border-right:1px solid var(--border);">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;">Buy</div>
-          <div style="font-size:12px;font-weight:800;font-family:var(--mono);color:var(--muted);" id="sh-buy"></div>
+      <!-- 3-stat strip: Buying Price, Selling Price, Stock -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;margin-bottom:12px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;">
+        <div style="padding:10px 6px;text-align:center;border-right:1px solid var(--border);">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;">Buying Price</div>
+          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--muted);" id="sh-buy"></div>
         </div>
-        <div style="padding:8px 4px;text-align:center;border-right:1px solid var(--border);">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;">Sell</div>
-          <div style="font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent2);" id="sh-sell"></div>
+        <div style="padding:10px 6px;text-align:center;border-right:1px solid var(--border);">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;">Selling Price</div>
+          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);" id="sh-sell"></div>
         </div>
-        <div style="padding:8px 4px;text-align:center;border-right:1px solid var(--border);">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;">Stock</div>
-          <div style="font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent);" id="sh-qty"></div>
-        </div>
-        <div style="padding:8px 4px;text-align:center;">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;">Profit</div>
-          <div style="font-size:12px;font-weight:800;font-family:var(--mono);color:var(--green);" id="sh-profit"></div>
+        <div style="padding:10px 6px;text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;">In Store</div>
+          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent);" id="sh-qty"></div>
         </div>
       </div>
 
-      <!-- Type / Size / Total row -->
+      <!-- Type / Size row -->
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
         <span class="tag tag-cyan" id="sh-type" style="font-size:11px;padding:3px 9px;"></span>
         <span class="tag tag-purple" id="sh-size" style="font-size:11px;padding:3px 9px;"></span>
-        <span style="flex:1;"></span>
-        <span style="font-size:12px;color:var(--muted);font-family:var(--mono);">Total: <strong id="sh-total" style="color:var(--text2);"></strong></span>
       </div>
 
-      <!-- Sales stats -->
-      <div style="background:var(--surface2);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
-        <div style="text-align:center;">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;">Sold</div>
-          <div style="font-size:18px;font-weight:800;color:var(--accent);font-family:var(--mono);" id="sh-sold">0</div>
-        </div>
-        <div style="text-align:center;">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;">Revenue</div>
-          <div style="font-size:14px;font-weight:800;color:var(--accent2);font-family:var(--mono);" id="sh-revenue">0</div>
-        </div>
-        <div style="text-align:center;">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;">Profit Made</div>
-          <div style="font-size:14px;font-weight:800;color:var(--green);font-family:var(--mono);" id="sh-profit-made">0</div>
-        </div>
+      <!-- Sales stats: units sold only -->
+      <div style="background:var(--surface2);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+        <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;flex-shrink:0;">Units Sold</div>
+        <div style="font-size:20px;font-weight:900;color:var(--accent);font-family:var(--mono);" id="sh-sold">0</div>
       </div>
 
       <!-- Restock panel -->
@@ -1659,7 +1646,7 @@ let currentDetailId = null;
 
 // ===== HELPERS =====
 function fmt(n) { return currency + ' ' + Number(n || 0).toLocaleString(); }
-function fmtShort(n) {
+function fmt(n) {
   const v = Math.abs(Number(n || 0));
   const sign = n < 0 ? '-' : (n > 0 && arguments.length > 0 ? '' : '');
   if (v >= 1000000) return sign + currency + (v/1000000).toFixed(1) + 'M';
@@ -1985,7 +1972,7 @@ async function renderList() {
         </div>
         <div class="item-right">
           <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">Sell: ${fmt(item.sell)}</div>
-          <div style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:2px;">Buy: ${fmt(item.buy)}</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">Buy: ${fmt(item.buy)}</div>
           <div style="font-size:11px;color:var(--accent);font-family:var(--mono);margin-top:2px;">${item.qty} in store</div>
         </div>
       </div>
@@ -1994,6 +1981,13 @@ async function renderList() {
 }
 
 // ===== DETAIL SHEET =====
+
+function openSellFromSheet() {
+  const id = currentDetailId;
+  closeSheet();
+  setTimeout(() => openSellModal(id), 150);
+}
+
 function triggerSheetPhotoUpload(event) {
   event.stopPropagation();
   triggerPhotoUpload(currentDetailId, event);
@@ -2030,15 +2024,16 @@ async function openSheet(id) {
   set('sh-name', item.name);
   set('sh-code', item.code + (item.size ? ' · ' + item.size : ''));
   set('sh-type', item.type);
+  const tbadge = document.getElementById('sh-type-badge'); if (tbadge) tbadge.textContent = t.emoji + ' ' + item.type;
   set('sh-size', item.size || '—');
-  set('sh-buy', fmtShort(item.buy));
-  set('sh-sell', fmtShort(item.sell));
-  set('sh-profit', fmtShort(item.profit));
+  set('sh-buy', fmt(item.buy));
+  set('sh-sell', fmt(item.sell));
+  set('sh-profit', fmt(item.profit));
   set('sh-qty', item.qty + ' pcs');
-  set('sh-total', fmtShort(item.buy * item.qty));
+  set('sh-total', fmt(item.buy * item.qty));
   set('sh-sold', soldQty);
-  set('sh-revenue', fmtShort(revenue));
-  set('sh-profit-made', fmtShort(profitMade));
+  set('sh-revenue', fmt(revenue));
+  set('sh-profit-made', fmt(profitMade));
 
   document.getElementById('detail-sheet').classList.add('open');
 }
@@ -2525,50 +2520,77 @@ const FIREBASE_CONFIG = {
 
 async function initFirebase() {
   const config = FIREBASE_CONFIG;
-  // Also save to localStorage so Settings UI shows it
   localStorage.setItem('fb_config', JSON.stringify(config));
   const cfgInput = document.getElementById('fb-config-input');
   if (cfgInput) cfgInput.value = JSON.stringify(config, null, 2);
   try {
     setFbStatus('connecting');
-    const { initializeApp, getFirestore, onSnapshot, collection } = await waitForFbImports();
-    fbApp = initializeApp(config, 'mandela-' + (fbApp ? Date.now() : 'main'));
+    const { initializeApp, getFirestore, onSnapshot, collection, getApps, getApp } = await waitForFbImports();
+
+    // Reuse existing app to avoid duplicate app errors
+    const existingApps = getApps();
+    fbApp = existingApps.find(a => a.name === 'mandela') || initializeApp(config, 'mandela');
     fbDb = getFirestore(fbApp);
     fbReady = true;
-    // Live listener for items
-    if (fbUnsub) fbUnsub();
-    fbUnsub = onSnapshot(collection(fbDb, 'items'), async snap => {
+
+    // Unsub previous listeners
+    if (fbUnsub) { fbUnsub(); fbUnsub = null; }
+    if (window._fbUnsubSales) { window._fbUnsubSales(); window._fbUnsubSales = null; }
+
+    // Live listener: items
+    const unsubItems = onSnapshot(collection(fbDb, 'items'), async snap => {
       const changes = snap.docChanges();
       if (!changes.length) return;
       for (const change of changes) {
         const data = { ...change.doc.data(), fbId: change.doc.id };
         if (change.type === 'removed') {
-          // find local item with this fbId and remove
           const all = await dbAll('items');
           const local = all.find(i => i.fbId === change.doc.id);
           if (local) await dbDelete('items', local.id);
         } else {
-          // upsert: find by fbId or code
           const all = await dbAll('items');
           const existing = all.find(i => i.fbId === change.doc.id || i.code === data.code);
-          if (existing) {
-            data.id = existing.id;
-            await dbPut('items', data);
-          } else {
-            try { delete data.id; await dbAdd('items', data); } catch(_) {}
-          }
+          if (existing) { data.id = existing.id; await dbPut('items', data); }
+          else { try { delete data.id; await dbAdd('items', data); } catch(_) {} }
         }
       }
       allItems = await dbAll('items');
       renderList(); renderDashboard(); updateHeader();
-      addSyncLog('live', 'Live Update Received', changes.length + ' change(s) synced from another device');
-    }, err => { setFbStatus('error'); console.error('Firestore listen error:', err); });
+    }, err => { setFbStatus('error'); console.error('Items listener error:', err); });
+
+    // Live listener: sales
+    const unsubSales = onSnapshot(collection(fbDb, 'sales'), async snap => {
+      const changes = snap.docChanges();
+      if (!changes.length) return;
+      for (const change of changes) {
+        const data = { ...change.doc.data(), fbId: change.doc.id };
+        if (change.type === 'removed') {
+          const all = await dbAll('sales');
+          const local = all.find(s => s.fbId === change.doc.id);
+          if (local) await dbDelete('sales', local.id);
+        } else {
+          const all = await dbAll('sales');
+          const existing = all.find(s => s.fbId === change.doc.id);
+          if (existing) { data.id = existing.id; await dbPut('sales', data); }
+          else { try { delete data.id; await dbAdd('sales', data); } catch(_) {} }
+        }
+      }
+      renderSellPage(); renderDashboard();
+    }, err => { console.error('Sales listener error:', err); });
+
+    fbUnsub = unsubItems;
+    window._fbUnsubSales = unsubSales;
+
     setFbStatus('on');
     toast('☁️ Firebase connected!', 'ok');
+
+    // Do an initial pull to get any data added while offline
+    await pullFromFirebase(true);
+
   } catch (e) {
     setFbStatus('error');
     toast('Firebase error: ' + e.message, 'err');
-    console.error(e);
+    console.error('Firebase init error:', e);
   }
 }
 
@@ -2622,25 +2644,38 @@ async function forcePushToFirebase(silent = false) {
   const sales = await dbAll('sales');
   const { doc, setDoc, writeBatch } = await waitForFbImports();
   try {
-    // batch write items
     let batch = writeBatch(fbDb);
     let count = 0;
+
     for (const item of items) {
-      const fbId = item.fbId || item.code;
-      item.fbId = fbId;
-      batch.set(doc(fbDb, 'items', fbId), { ...item, updatedAt: new Date().toISOString() });
-      await dbPut('items', item);
+      // Use stable fbId: prefer existing fbId, else generate from code + createdAt
+      if (!item.fbId) {
+        item.fbId = 'item_' + (item.code || 'x').replace(/[^a-zA-Z0-9]/g,'_') + '_' + (item.createdAt || Date.now()).toString().replace(/[:.]/g,'');
+        await dbPut('items', item);
+      }
+      batch.set(doc(fbDb, 'items', item.fbId), { ...item, updatedAt: new Date().toISOString() });
       count++;
-      if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); }
+      if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
+
     for (const sale of sales) {
-      const fbId = sale.fbId || ('sale_' + sale.date.replace(/[:.]/g,'') + '_' + (sale.itemCode||''));
-      batch.set(doc(fbDb, 'sales', fbId), { ...sale, fbId });
+      if (!sale.fbId) {
+        sale.fbId = 'sale_' + (sale.date || '').replace(/[:.TZ-]/g,'').slice(0,17) + '_' + Math.random().toString(36).slice(2,6);
+        await dbPut('sales', sale);
+      }
+      batch.set(doc(fbDb, 'sales', sale.fbId), { ...sale });
+      count++;
+      if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
+
     await batch.commit();
-    if (!silent) { setFbStatus('on'); toast('⬆️ Pushed ' + items.length + ' items + ' + sales.length + ' sales', 'ok'); }
-    else setFbStatus('on');
-  } catch (e) { setFbStatus('error'); addSyncLog('error', 'Push Failed', e.message); if (!silent) toast('Push failed: ' + e.message, 'err'); }
+    setFbStatus('on');
+    if (!silent) toast('⬆️ Pushed ' + items.length + ' items + ' + sales.length + ' sales', 'ok');
+  } catch (e) {
+    setFbStatus('error');
+    if (!silent) toast('Push failed: ' + e.message, 'err');
+    console.error('Push error:', e);
+  }
 }
 
 async function pullFromFirebase(silent = false) {
@@ -2648,22 +2683,36 @@ async function pullFromFirebase(silent = false) {
   if (!silent) setFbStatus('syncing');
   try {
     const { collection, getDocs } = await waitForFbImports();
-    const snap = await getDocs(collection(fbDb, 'items'));
-    let merged = 0;
-    for (const d of snap.docs) {
+
+    // Pull items
+    const itemSnap = await getDocs(collection(fbDb, 'items'));
+    for (const d of itemSnap.docs) {
       const data = { ...d.data(), fbId: d.id };
       const all = await dbAll('items');
       const existing = all.find(i => i.fbId === d.id || i.code === data.code);
       if (existing) { data.id = existing.id; await dbPut('items', data); }
       else { try { delete data.id; await dbAdd('items', data); } catch(_) {} }
-      merged++;
     }
+
+    // Pull sales
+    const saleSnap = await getDocs(collection(fbDb, 'sales'));
+    for (const d of saleSnap.docs) {
+      const data = { ...d.data(), fbId: d.id };
+      const all = await dbAll('sales');
+      const existing = all.find(s => s.fbId === d.id);
+      if (existing) { data.id = existing.id; await dbPut('sales', data); }
+      else { try { delete data.id; await dbAdd('sales', data); } catch(_) {} }
+    }
+
     allItems = await dbAll('items');
-    renderList(); renderDashboard(); updateHeader();
-    if (!silent) { setFbStatus('on'); toast('⬇️ Pulled ' + merged + ' items from Firebase', 'ok'); }
-    else setFbStatus('on');
-    addSyncLog('pull', 'Data Pulled from Cloud', merged + ' items downloaded · ' + new Date().toLocaleTimeString());
-  } catch (e) { setFbStatus('error'); addSyncLog('error', 'Pull Failed', e.message); if (!silent) toast('Pull failed: ' + e.message, 'err'); }
+    renderList(); renderDashboard(); updateHeader(); renderSellPage();
+    setFbStatus('on');
+    if (!silent) toast('⬇️ Pulled ' + itemSnap.size + ' items + ' + saleSnap.size + ' sales', 'ok');
+  } catch (e) {
+    setFbStatus('error');
+    if (!silent) toast('Pull failed: ' + e.message, 'err');
+    console.error('Pull error:', e);
+  }
 }
 
 function disconnectFirebase() {
@@ -2686,7 +2735,7 @@ function disconnectFirebase() {
 // ===================================================================
 
 // Tabs that require an open day
-const DAY_RESTRICTED_TABS = ['dash', 'add', 'sell'];
+const DAY_RESTRICTED_TABS = ['dash', 'add'];
 
 function setDayMode(isOpen) {
   DAY_RESTRICTED_TABS.forEach(tab => {
@@ -3543,7 +3592,7 @@ const USERS = [
     role: 'super',
     roleLabel: 'Super User',
     // Super: access to everything
-    tabs: ['dash','list','add','sell','day','settings']
+    tabs: ['dash','list','add','day','settings']
   },
   {
     username: 'vanice',
@@ -3552,7 +3601,7 @@ const USERS = [
     role: 'user',
     roleLabel: 'User',
     // User: everything except Settings
-    tabs: ['dash','list','add','sell','day']
+    tabs: ['dash','list','add','day']
   },
   {
     username: 'trevor',
@@ -3571,7 +3620,7 @@ let currentUser = null;
 
 function applyRoleRestrictions(user) {
   // Show/hide nav tabs based on role
-  const allTabs = ['dash','list','add','sell','day','settings'];
+  const allTabs = ['dash','list','add','day','settings'];
   allTabs.forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) {
