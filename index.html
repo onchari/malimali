@@ -300,8 +300,7 @@ body {
   box-shadow: var(--shadow-sm);
 }
 .item-card:active { border-color: var(--accent); }
-.item-card * { pointer-events: none; }
-.item-card { pointer-events: auto !important; }
+.item-card { pointer-events: auto; cursor: pointer; }
 .item-top { display: flex; align-items: center; gap: 10px; }
 .item-icon {
   width: 32px; height: 32px;
@@ -1975,7 +1974,7 @@ async function renderList() {
     const soldQty = itemSales.qty;
     const profitColor = profitMade > 0 ? 'var(--green)' : profitMade < 0 ? 'var(--red)' : 'var(--muted)';
 
-    return `<div class="item-card" onclick="openSheet(${item.id})" style="cursor:pointer;">
+    return `<div class="item-card" onclick="openSheet(${item.id})">
       <div class="item-top">
         <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
         <div class="item-body">
@@ -3850,17 +3849,7 @@ $(document).ready(function() {
     $el.html(html);
   };
 
-  // ── Enhanced tooltip on long press ───────────────────────────────
-  let longPressTimer;
-  $(document).on('touchstart', '.item-card', function() {
-    const $card = $(this);
-    longPressTimer = setTimeout(() => {
-      $card.addClass('animate__animated animate__pulse');
-      setTimeout(() => $card.removeClass('animate__animated animate__pulse'), 500);
-    }, 500);
-  }).on('touchend touchmove', '.item-card', function() {
-    clearTimeout(longPressTimer);
-  });
+  // Long press removed — was blocking onclick
 
   // ── Fade in nav on load ───────────────────────────────────────────
   $('.nav').hide().fadeIn(400);
