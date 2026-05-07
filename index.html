@@ -517,6 +517,76 @@ body {
   80% { transform: rotate(-5deg); }
 }
 .bell-shake { animation: bellShake 0.5s ease; }
+
+/* ===== LOGIN SCREEN ===== */
+#login-screen {
+  position: fixed; inset: 0; z-index: 1000;
+  background: linear-gradient(160deg, #0d4a22 0%, #1e7a3e 50%, #2d9e54 100%);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 32px 24px;
+  font-family: var(--sans);
+}
+.login-logo {
+  width: 80px; height: 80px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 44px; margin-bottom: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.login-title { font-size: 26px; font-weight: 800; color: white; letter-spacing: -0.5px; }
+.login-sub { font-size: 13px; color: rgba(255,255,255,0.65); margin-top: 4px; margin-bottom: 36px; font-family: var(--mono); }
+.login-card {
+  width: 100%; max-width: 400px;
+  background: white; border-radius: 20px;
+  padding: 28px 24px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+}
+.login-card-title { font-size: 17px; font-weight: 800; color: var(--text); margin-bottom: 20px; text-align: center; }
+.login-field { margin-bottom: 16px; }
+.login-label { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 6px; display: block; }
+.login-input {
+  width: 100%; padding: 14px 16px;
+  border: 2px solid var(--border); border-radius: var(--r);
+  font-size: 16px; font-weight: 600; font-family: var(--sans);
+  color: var(--text); background: var(--surface2);
+  outline: none; transition: border-color 0.15s;
+  -webkit-appearance: none;
+}
+.login-input:focus { border-color: var(--accent); background: white; }
+.login-btn {
+  width: 100%; padding: 15px;
+  background: var(--accent); color: white; border: none;
+  border-radius: var(--r); font-size: 16px; font-weight: 800;
+  cursor: pointer; font-family: var(--sans); margin-top: 6px;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.login-btn:active { opacity: 0.9; transform: scale(0.98); }
+.login-error {
+  background: var(--red-light); color: var(--red);
+  border: 1px solid rgba(192,57,43,0.25);
+  border-radius: var(--r); padding: 10px 14px;
+  font-size: 13px; font-weight: 600;
+  margin-bottom: 14px; display: none; text-align: center;
+}
+.user-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.15); color: white;
+  padding: 5px 12px; border-radius: 20px;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+  border: none; font-family: var(--sans);
+  transition: background 0.15s;
+}
+.user-pill:hover { background: rgba(255,255,255,0.25); }
+.role-badge {
+  font-size: 10px; font-weight: 700; font-family: var(--mono);
+  padding: 2px 7px; border-radius: 10px; margin-left: 4px;
+}
+.role-super { background: #fef3c7; color: #92400e; }
+.role-user  { background: #dbeafe; color: #1d4ed8; }
+.role-clerk { background: var(--green-light); color: var(--green); }
+
 </style>
 
 <!-- Firebase SDK -->
@@ -539,6 +609,7 @@ body {
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:10px;">
+    <button class="user-pill" id="user-pill" onclick="confirmLogout()" style="display:none;"></button>
     <!-- Notification Bell -->
     <div style="position:relative;cursor:pointer;" onclick="toggleNotifPanel()" id="bell-wrap">
       <div style="font-size:22px;line-height:1;" id="bell-icon">🔔</div>
@@ -546,12 +617,41 @@ body {
         <span id="notif-count" style="font-size:9px;font-weight:800;color:white;line-height:1;">0</span>
       </div>
     </div>
+    <div id="low-stock-badge" title="Low/out of stock items" onclick="showPage('list')" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;cursor:pointer;font-family:var(--mono);"></div>
     <div id="sync-dot" title="Sync status" style="width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,0.3);flex-shrink:0;"></div>
     <div class="header-count" id="hdr-count">0</div>
   </div>
 </div>
 
 <!-- NOTIFICATION PANEL -->
+
+<!-- ===== LOGIN SCREEN ===== -->
+<div id="login-screen">
+  <div class="login-logo">📦</div>
+  <div class="login-title">Mandela Generals</div>
+  <div class="login-sub">Inventory Management System</div>
+  <div class="login-card">
+    <div class="login-card-title">🔐 Sign In</div>
+    <div class="login-error" id="login-error">Incorrect username or PIN</div>
+    <div class="login-field">
+      <label class="login-label">Username</label>
+      <input class="login-input" id="login-user" type="text"
+        placeholder="Enter username" autocomplete="off" spellcheck="false"
+        autocapitalize="none">
+    </div>
+    <div class="login-field">
+      <label class="login-label">PIN</label>
+      <input class="login-input" id="login-pin" type="password"
+        placeholder="Enter PIN" inputmode="numeric" maxlength="6"
+        onkeydown="if(event.key==='Enter') attemptLogin()">
+    </div>
+    <button class="login-btn" onclick="attemptLogin()">Sign In →</button>
+  </div>
+  <div style="margin-top:20px;font-size:11px;color:rgba(255,255,255,0.4);text-align:center;font-family:var(--mono);">
+    Mandela Generals · Secure Access
+  </div>
+</div>
+
 <!-- NOTIFICATION OVERLAY BACKDROP -->
 <div id="notif-backdrop" onclick="toggleNotifPanel()" style="display:none;position:fixed;inset:0;z-index:998;background:rgba(0,0,0,0.4);"></div>
 
@@ -1005,7 +1105,10 @@ body {
   <div class="sheet" style="max-height:92vh;">
     <div class="sheet-handle"></div>
     <div id="past-session-content"></div>
-    <button onclick="closePastSessionSheet()" style="width:100%;margin-top:14px;padding:13px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:var(--sans);">Close</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;">
+      <button id="export-day-btn" onclick="" style="padding:13px;background:var(--green-light);color:var(--green);border:1.5px solid #a8d8b5;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);">📤 Export CSV</button>
+      <button onclick="closePastSessionSheet()" style="padding:13px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:var(--sans);">Close</button>
+    </div>
   </div>
 </div>
 
@@ -1023,6 +1126,17 @@ body {
 
   <!-- Search results -->
   <div id="sell-results"></div>
+
+  <!-- Date filter for sales -->
+  <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+    <select id="sales-filter" onchange="renderSellPage()" style="flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:600;font-family:var(--sans);background:var(--surface);color:var(--text);outline:none;-webkit-appearance:none;">
+      <option value="today">Today</option>
+      <option value="week">This Week</option>
+      <option value="month">This Month</option>
+      <option value="all">All Time</option>
+    </select>
+    <button onclick="exportSalesCSV()" style="padding:10px 14px;background:var(--green-light);color:var(--green);border:1.5px solid #a8d8b5;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);white-space:nowrap;">📤 Export</button>
+  </div>
 
   <!-- Today summary strip -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;">
@@ -1167,11 +1281,21 @@ body {
       <div class="detail-key">PROFIT MARGIN</div>
       <div class="detail-val" id="sh-margin" style="font-size:18px;color:var(--accent3);"></div>
     </div>
-    <div class="sheet-btns">
-      <button class="btn-del" onclick="deleteItem()">🗑 Delete</button>
-      <button class="btn-edit" onclick="editItem()">✏️ Edit</button>
+    <!-- Restock panel -->
+    <div id="restock-panel" style="display:none;margin-bottom:12px;background:var(--accent-light);border:1.5px solid #a8d8b5;border-radius:var(--r);padding:14px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;">📦 Add Stock</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="restock-qty" type="number" min="1" placeholder="Qty to add" inputmode="numeric"
+          style="flex:1;padding:11px 14px;border:1.5px solid var(--border);border-radius:var(--r);font-size:16px;font-weight:700;font-family:var(--mono);background:white;outline:none;">
+        <button onclick="confirmRestock()" style="padding:11px 18px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:14px;font-weight:800;cursor:pointer;font-family:var(--sans);white-space:nowrap;">Add ✓</button>
+      </div>
     </div>
-    <button onclick="closeSheet()" style="width:100%;margin-top:10px;padding:12px;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--sans);">Close</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+      <button class="btn-del" onclick="deleteItem()" style="padding:12px;font-size:13px;">🗑 Delete</button>
+      <button onclick="toggleRestock()" style="padding:12px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);">📦 Restock</button>
+      <button class="btn-edit" onclick="editItem()" style="padding:12px;font-size:13px;">✏️ Edit</button>
+    </div>
+    <button onclick="closeSheet()" style="width:100%;margin-top:4px;padding:12px;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--sans);">Close</button>
   </div>
 </div>
 
@@ -1236,6 +1360,8 @@ function initDB() {
       renderSellPage();
       updateCurrencyUI();
       loadActiveDay();
+      updateLowStockBadge();
+      checkSession();
     });
   };
   req.onerror = () => toast('Database error!', 'err');
@@ -1993,6 +2119,7 @@ async function confirmSale() {
   await dbAdd('sales', sale);
   fbSyncItem(item);
   fbSyncSale(sale);
+  updateLowStockBadge();
 
   closeSellModal();
   document.getElementById('sell-search').value = '';
@@ -2015,30 +2142,47 @@ async function renderSellPage() {
   document.getElementById('sell-today-rev').textContent = fmt(todayRev);
   document.getElementById('sell-today-profit').textContent = fmt(todayProfit);
 
-  // recent 50 sales, newest first
-  const recent = [...sales].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 50);
+  // Apply date filter
+  const filterEl = document.getElementById('sales-filter');
+  const period = filterEl ? filterEl.value : 'today';
+  const filtered = filterSalesByPeriod([...sales].sort((a,b) => new Date(b.date)-new Date(a.date)), period).slice(0,100);
+
+  // Update today stats always from today
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todaySales = sales.filter(s => s.date.startsWith(todayStr));
+  document.getElementById('sell-today-rev').textContent = fmt(todaySales.reduce((a,s)=>a+s.revenue,0));
+  document.getElementById('sell-today-profit').textContent = fmt(todaySales.reduce((a,s)=>a+s.profit,0));
+
   const hist = document.getElementById('sell-history');
-  if (!recent.length) {
-    hist.innerHTML = '<div class="empty" style="padding:24px 0;"><div class="e-icon" style="font-size:36px;">💸</div><p>No sales yet</p></div>';
+  if (!filtered.length) {
+    hist.innerHTML = '<div class="empty" style="padding:24px 0;"><div class="e-icon" style="font-size:36px;">💸</div><p>No sales for this period</p></div>';
     return;
   }
-  hist.innerHTML = recent.map(s => {
-    const t = getTypeObj(s.type);
-    const d = new Date(s.date);
-    const timeStr = d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' +
-                    d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
-      <div style="font-size:22px;">${t.emoji}</div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.itemName} × ${s.qty}</div>
-        <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">${timeStr}${s.overridden ? ' · <span style="color:var(--amber);">custom price</span>' : ''}</div>
-      </div>
-      <div style="text-align:right;flex-shrink:0;">
-        <div style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
-        <div style="font-size:11px;font-family:var(--mono);color:${s.profit>=0?'var(--green)':'var(--red)'};">${s.profit>=0?'+':''}${fmt(s.profit)}</div>
-      </div>
-    </div>`;
-  }).join('');
+  const periodRevenue = filtered.reduce((a,s)=>a+s.revenue,0);
+  const periodProfit = filtered.reduce((a,s)=>a+s.profit,0);
+  hist.innerHTML =
+    '<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:2px solid var(--border);margin-bottom:4px;">' +
+    '<span style="font-size:12px;color:var(--muted);">' + filtered.length + ' sales</span>' +
+    '<span style="font-size:12px;font-family:var(--mono);color:var(--accent2);">' + fmt(periodRevenue) + ' · <span style="color:var(--green);">+' + fmt(periodProfit) + '</span></span>' +
+    '</div>' +
+    filtered.map(s => {
+      const t = getTypeObj(s.type);
+      const d = new Date(s.date);
+      const timeStr = d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' +
+                      d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+      return `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);">
+        <div style="font-size:20px;">${t.emoji}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.itemName} × ${s.qty}</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">${timeStr}${s.overridden ? ' · <span style="color:var(--amber);">custom price</span>' : ''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
+          <div style="font-size:11px;font-family:var(--mono);color:${s.profit>=0?'var(--green)':'var(--red)'};">${s.profit>=0?'+':''}${fmt(s.profit)}</div>
+        </div>
+        <button onclick="deleteSale(${s.id})" style="background:var(--red-light);border:none;color:var(--red);border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px;flex-shrink:0;">🗑</button>
+      </div>`;
+    }).join('');
 }
 
 // close sell modal on backdrop click
@@ -2680,11 +2824,145 @@ async function viewPastSession(sessionId) {
     </div>
     ${s.notes ? '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">NOTES</div><div style="font-size:14px;color:var(--text);margin-top:6px;font-style:italic;">"' + s.notes + '"</div></div>' : ''}
   `;
+  document.getElementById('export-day-btn').onclick = () => exportDayReport(sessionId);
   document.getElementById('past-session-sheet').classList.add('open');
 }
 
 function closePastSessionSheet() {
   document.getElementById('past-session-sheet').classList.remove('open');
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// RESTOCK
+// ═══════════════════════════════════════════════════════════
+function toggleRestock() {
+  const panel = document.getElementById('restock-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  if (panel.style.display === 'block') {
+    document.getElementById('restock-qty').value = '';
+    document.getElementById('restock-qty').focus();
+  }
+}
+
+async function confirmRestock() {
+  const qty = parseInt(document.getElementById('restock-qty').value) || 0;
+  if (qty <= 0) { toast('⚠️ Enter quantity to add', 'err'); return; }
+  const item = await dbGet('items', currentDetailId);
+  item.qty += qty;
+  await dbPut('items', item);
+  fbSyncItem(item);
+  document.getElementById('sh-qty').textContent = item.qty + ' pcs';
+  document.getElementById('restock-panel').style.display = 'none';
+  allItems = await dbAll('items');
+  renderList();
+  renderDashboard();
+  updateHeader();
+  updateLowStockBadge();
+  toast('✅ Added ' + qty + ' pcs to ' + item.name, 'ok');
+  addSyncLog('push', 'Restocked: ' + item.code, '+' + qty + ' pcs · New total: ' + item.qty);
+}
+
+// ═══════════════════════════════════════════════════════════
+// LOW STOCK BADGE IN HEADER
+// ═══════════════════════════════════════════════════════════
+async function updateLowStockBadge() {
+  const items = await dbAll('items');
+  const badge = document.getElementById('low-stock-badge');
+  if (!badge) return;
+  const lowCount = items.filter(i => i.qty <= 3).length;
+  if (lowCount > 0) {
+    badge.style.display = 'block';
+    badge.textContent = lowCount + ' low';
+    badge.style.background = items.some(i => i.qty === 0) ? 'var(--red)' : 'var(--amber)';
+    badge.title = lowCount + ' item(s) low/out of stock — tap to view';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// DELETE SALE
+// ═══════════════════════════════════════════════════════════
+async function deleteSale(saleId) {
+  if (!confirm('Delete this sale record? Stock will NOT be restored.')) return;
+  await dbDelete('sales', saleId);
+  renderSellPage();
+  renderDashboard();
+  toast('Sale record deleted', '');
+}
+
+// ═══════════════════════════════════════════════════════════
+// SALES EXPORT BY DATE FILTER
+// ═══════════════════════════════════════════════════════════
+async function exportSalesCSV() {
+  const filter = document.getElementById('sales-filter').value;
+  const allSales = await dbAll('sales');
+  const filtered = filterSalesByPeriod(allSales, filter);
+  if (!filtered.length) { toast('No sales to export', 'err'); return; }
+  let csv = 'Date,Time,Item,Code,Type,Size,Qty,Buy Price,Sell Price,Revenue,Profit,Custom Price
+';
+  filtered.forEach(s => {
+    const d = new Date(s.date);
+    csv += `"${d.toLocaleDateString('en-GB')}","${d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}","${s.itemName}","${s.itemCode}","${s.type}","${s.size||''}",${s.qty},${s.buyPrice},${s.actualPrice},${s.revenue},${s.profit},${s.overridden?'Yes':'No'}
+`;
+  });
+  download('sales-' + filter + '-' + new Date().toISOString().split('T')[0] + '.csv', csv, 'text/csv');
+  toast('📤 Sales exported!', 'ok');
+}
+
+function filterSalesByPeriod(sales, period) {
+  const now = new Date();
+  return sales.filter(s => {
+    const d = new Date(s.date);
+    if (period === 'today') {
+      return d.toDateString() === now.toDateString();
+    } else if (period === 'week') {
+      const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+      return d >= weekAgo;
+    } else if (period === 'month') {
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }
+    return true; // all
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// DAY REPORT EXPORT
+// ═══════════════════════════════════════════════════════════
+async function exportDayReport(sessionId) {
+  const s = await dbGet('day_sessions', sessionId || (await getLastSession()));
+  if (!s) { toast('No session to export', 'err'); return; }
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(x => x.date >= s.openTime && x.date <= (s.closeTime || new Date().toISOString()));
+  let csv = 'DAY REPORT: ' + s.date + '
+
+';
+  csv += 'Opened,' + new Date(s.openTime).toLocaleTimeString() + '
+';
+  csv += 'Closed,' + (s.closeTime ? new Date(s.closeTime).toLocaleTimeString() : 'Still open') + '
+';
+  csv += 'Total Revenue,' + s.revenue + '
+';
+  csv += 'Total Profit,' + s.profit + '
+';
+  csv += 'Sales Count,' + s.salesCount + '
+
+';
+  csv += 'Time,Item,Code,Qty,Revenue,Profit
+';
+  daySales.forEach(x => {
+    csv += `"${new Date(x.date).toLocaleTimeString()}","${x.itemName}","${x.itemCode}",${x.qty},${x.revenue},${x.profit}
+`;
+  });
+  download('day-report-' + s.dateStr + '.csv', csv, 'text/csv');
+  toast('📤 Day report exported!', 'ok');
+}
+
+async function getLastSession() {
+  const sessions = await dbAll('day_sessions');
+  const last = sessions.sort((a, b) => new Date(b.openTime) - new Date(a.openTime))[0];
+  return last ? last.id : null;
 }
 
 // ===== CLOSE SHEET ON BACKDROP =====
@@ -2844,6 +3122,153 @@ setTimeout(() => {
     showInstallBanner();
   }
 }, 3000);
+
+
+// ===== AUTH / LOGIN =====
+const USERS = [
+  {
+    username: 'onchari',
+    pin: '1234',
+    name: 'Onchari',
+    role: 'super',
+    roleLabel: 'Super User',
+    // Super: access to everything
+    tabs: ['dash','list','add','sell','day','types','settings']
+  },
+  {
+    username: 'vanice',
+    pin: '2345',
+    name: 'Vanice',
+    role: 'user',
+    roleLabel: 'User',
+    // User: everything except Settings
+    tabs: ['dash','list','add','sell','day','types']
+  },
+  {
+    username: 'trevor',
+    pin: '3456',
+    name: 'Trevor',
+    role: 'clerk',
+    roleLabel: 'Clerk',
+    // Clerk: only add stock (inventory entry)
+    tabs: ['add']
+  }
+];
+
+let currentUser = null;
+
+function attemptLogin() {
+  const username = document.getElementById('login-user').value.trim().toLowerCase();
+  const pin = document.getElementById('login-pin').value.trim();
+  const err = document.getElementById('login-error');
+
+  const user = USERS.find(u => u.username === username && u.pin === pin);
+  if (!user) {
+    err.style.display = 'block';
+    document.getElementById('login-pin').value = '';
+    document.getElementById('login-pin').focus();
+    // Shake the card
+    const card = document.querySelector('.login-card');
+    card.style.transform = 'translateX(8px)';
+    setTimeout(() => card.style.transform = 'translateX(-8px)', 80);
+    setTimeout(() => card.style.transform = 'translateX(0)', 160);
+    return;
+  }
+
+  err.style.display = 'none';
+  currentUser = user;
+  localStorage.setItem('mg_session', JSON.stringify({ username: user.username, pin: user.pin }));
+
+  // Hide login screen
+  document.getElementById('login-screen').style.display = 'none';
+
+  // Apply role restrictions
+  applyRoleRestrictions(user);
+
+  // Update user pill in header
+  const pill = document.getElementById('user-pill');
+  pill.style.display = 'inline-flex';
+  pill.innerHTML = '👤 ' + user.name + ' <span class="role-badge role-' + user.role + '">' + user.roleLabel + '</span>';
+
+  // Go to first allowed tab
+  showPage(user.tabs[0]);
+  toast('Welcome, ' + user.name + '! 👋', 'ok');
+}
+
+function applyRoleRestrictions(user) {
+  // Show/hide nav tabs based on role
+  const allTabs = ['dash','list','add','sell','day','types','settings'];
+  allTabs.forEach(tab => {
+    const btn = document.getElementById('tab-' + tab);
+    if (btn) {
+      btn.style.display = user.tabs.includes(tab) ? '' : 'none';
+    }
+  });
+
+  // Clerk specific: only show Add page with a simplified header
+  if (user.role === 'clerk') {
+    const header = document.querySelector('.header-title');
+    if (header) header.textContent = 'Add Stock — Mandela';
+    document.getElementById('hdr-sub').textContent = 'Clerk · Stock Entry Only';
+  }
+}
+
+function confirmLogout() {
+  if (confirm('Sign out of Mandela Generals?')) {
+    logout();
+  }
+}
+
+function logout() {
+  currentUser = null;
+  localStorage.removeItem('mg_session');
+  // Reset nav tabs visibility
+  ['dash','list','add','sell','day','types','settings'].forEach(tab => {
+    const btn = document.getElementById('tab-' + tab);
+    if (btn) btn.style.display = '';
+  });
+  // Reset header
+  const header = document.querySelector('.header-title');
+  if (header) header.textContent = 'Mandela Generals';
+  document.getElementById('hdr-sub').textContent = '';
+  document.getElementById('user-pill').style.display = 'none';
+  // Clear inputs and show login
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pin').value = '';
+  document.getElementById('login-error').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+// Auto-login if valid session exists
+function checkSession() {
+  const saved = localStorage.getItem('mg_session');
+  if (!saved) return;
+  try {
+    const { username, pin } = JSON.parse(saved);
+    const user = USERS.find(u => u.username === username && u.pin === pin);
+    if (user) {
+      currentUser = user;
+      document.getElementById('login-screen').style.display = 'none';
+      applyRoleRestrictions(user);
+      const pill = document.getElementById('user-pill');
+      pill.style.display = 'inline-flex';
+      pill.innerHTML = '👤 ' + user.name + ' <span class="role-badge role-' + user.role + '">' + user.roleLabel + '</span>';
+      showPage(user.tabs[0]);
+    }
+  } catch(e) {
+    localStorage.removeItem('mg_session');
+  }
+}
+
+// Guard showPage - block access to restricted tabs
+const _origShowPage = showPage;
+showPage = function(id) {
+  if (currentUser && !currentUser.tabs.includes(id)) {
+    toast('⛔ Access denied', 'err');
+    return;
+  }
+  _origShowPage(id);
+};
 
 // ===== INIT =====
 initDB();
