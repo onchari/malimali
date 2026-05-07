@@ -1,7 +1,7 @@
 {
-  "name": "Mandela Generals",
+  "name": "Mandela General Stores",
   "short_name": "Mandela",
-  "description": "Inventory management for Mandela Generals shop",
+  "description": "Mandela General Stores - Rastanty Cortez",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",
