@@ -1464,6 +1464,13 @@ let currentDetailId = null;
 
 // ===== HELPERS =====
 function fmt(n) { return currency + ' ' + Number(n || 0).toLocaleString(); }
+function fmtShort(n) {
+  const v = Math.abs(Number(n || 0));
+  const sign = n < 0 ? '-' : (n > 0 && arguments.length > 0 ? '' : '');
+  if (v >= 1000000) return sign + currency + (v/1000000).toFixed(1) + 'M';
+  if (v >= 1000) return sign + currency + (v/1000).toFixed(v >= 10000 ? 0 : 1) + 'K';
+  return sign + currency + Number(n||0).toLocaleString();
+}
 function fmtN(n) { return Number(n || 0).toLocaleString(); }
 function toast(msg, type = '') {
   const t = document.getElementById('toast');
@@ -1597,6 +1604,56 @@ function updateProfitPreview() {
   }
 }
 
+
+// ===== ITEM PHOTO MANAGEMENT =====
+function getItemPhoto(itemId) {
+  return localStorage.getItem('item_photo_' + itemId) || null;
+}
+function setItemPhoto(itemId, dataUrl) {
+  try {
+    localStorage.setItem('item_photo_' + itemId, dataUrl);
+  } catch(e) {
+    // localStorage full — remove and retry
+    toast('⚠️ Storage full, photo not saved', 'err');
+  }
+}
+function removeItemPhoto(itemId) {
+  localStorage.removeItem('item_photo_' + itemId);
+}
+
+function triggerPhotoUpload(itemId, event) {
+  event.stopPropagation();
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.capture = 'environment'; // opens camera on mobile
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    // Compress to max 400px wide
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxW = 600;
+        const scale = Math.min(1, maxW / img.width);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const compressed = canvas.toDataURL('image/jpeg', 0.72);
+        setItemPhoto(itemId, compressed);
+        renderList();
+        toast('📸 Photo saved!', 'ok');
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
 // ===== SAVE ITEM =====
 async function saveItem() {
   const editId = document.getElementById('edit-id').value;
@@ -1691,27 +1748,60 @@ async function renderList() {
     return;
   }
 
+  // Get sales data for profit calculations
+  const allSales = await dbAll('sales');
+  const salesByItem = {};
+  allSales.forEach(s => {
+    if (!salesByItem[s.itemId]) salesByItem[s.itemId] = { revenue: 0, profit: 0, qty: 0 };
+    salesByItem[s.itemId].revenue += s.revenue;
+    salesByItem[s.itemId].profit += s.profit;
+    salesByItem[s.itemId].qty += s.qty;
+  });
+
   list.innerHTML = filtered.map(item => {
     const t = getTypeObj(item.type);
-    const stockColor = item.qty === 0 ? 'tag-red' : item.qty <= 3 ? 'tag-amber' : 'tag-green';
-    const stockLabel = item.qty === 0 ? '✕ Out of stock' : item.qty + ' pcs';
-    return `
-    <div class="item-card" onclick="openSheet(${item.id})">
-      <div class="item-top">
-        <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
-        <div class="item-body">
-          <div class="item-code">${item.code}${item.size ? ' · ' + item.size : ''}</div>
-          <div class="item-name">${item.name || ''}</div>
-          <div class="item-tags">
-            <span class="tag tag-cyan">${item.type}</span>
-            <span class="tag ${stockColor}">${stockLabel}</span>
-            ${item.size ? `<span class="tag tag-purple">Size: ${item.size}</span>` : ''}
+    const photo = getItemPhoto(item.id);
+    const stockBadgeClass = item.qty === 0 ? 'out' : item.qty <= 3 ? 'low' : 'ok';
+    const stockLabel = item.qty === 0 ? '✕ OUT' : item.qty + ' pcs';
+    const totalCost = item.buy * item.qty;
+    const itemSales = salesByItem[item.id] || { profit: 0, qty: 0 };
+    const profitMade = itemSales.profit;
+    const soldQty = itemSales.qty;
+    const profitColor = profitMade > 0 ? 'var(--green)' : profitMade < 0 ? 'var(--red)' : 'var(--muted)';
+
+    return `<div class="item-card" onclick="openSheet(${item.id})">
+      <!-- Photo area (top 3/4) -->
+      <div class="item-photo">
+        ${photo
+          ? `<img class="item-photo-img" src="${photo}" alt="${item.code}">`
+          : `<div class="item-photo-placeholder"><span>${t.emoji}</span></div>`
+        }
+        <div class="item-photo-overlay">
+          <div>
+            <div class="item-photo-code">${item.code}${item.size ? ' · ' + item.size : ''}</div>
+            <div class="item-photo-name">${item.name || ''}</div>
           </div>
+          <span class="item-stock-badge ${stockBadgeClass}">${stockLabel}</span>
         </div>
-        <div class="item-right">
-          <div class="item-price">${fmt(item.sell)}</div>
-          <div class="item-qty">Buy: ${fmt(item.buy)}</div>
-          <div style="font-size:11px;color:var(--green);font-family:var(--mono);margin-top:2px;">+${fmt(item.profit)}</div>
+        <button class="item-add-photo" onclick="triggerPhotoUpload(${item.id}, event)">📷 ${photo ? 'Change' : 'Add Photo'}</button>
+      </div>
+      <!-- Info strip (bottom) -->
+      <div class="item-info-strip">
+        <div class="item-stat">
+          <span class="item-stat-lbl">Buy/pc</span>
+          <span class="item-stat-val" style="color:var(--muted);">${fmtShort(item.buy)}</span>
+        </div>
+        <div class="item-stat">
+          <span class="item-stat-lbl">Stock Cost</span>
+          <span class="item-stat-val" style="color:var(--text2);">${fmtShort(totalCost)}</span>
+        </div>
+        <div class="item-stat">
+          <span class="item-stat-lbl">Sold</span>
+          <span class="item-stat-val" style="color:var(--accent);">${soldQty}</span>
+        </div>
+        <div class="item-stat">
+          <span class="item-stat-lbl">Profit</span>
+          <span class="item-stat-val" style="color:${profitColor};">${fmtShort(profitMade)}</span>
         </div>
       </div>
     </div>`;
