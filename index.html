@@ -490,27 +490,7 @@ body {
   font-size: 16px;
   opacity: 1;
 }
-/* NOTIFICATION PANEL */
-.notif-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border);
-}
-.notif-item:last-child { border-bottom: none; }
-.notif-dot-sm {
-  width: 8px; height: 8px; border-radius: 50%;
-  flex-shrink: 0; margin-top: 5px;
-}
-.notif-body { flex: 1; min-width: 0; }
-.notif-title { font-size: 13px; font-weight: 700; color: var(--text); }
-.notif-detail { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
-.notif-time { font-size: 11px; color: var(--muted); font-family: var(--mono); flex-shrink: 0; margin-top: 3px; }
 
-/* Bell shake animation */
-@keyframes bellShake {
-  0%,100% { transform: rotate(0); }
   20% { transform: rotate(15deg); }
   40% { transform: rotate(-12deg); }
   60% { transform: rotate(8deg); }
@@ -610,14 +590,6 @@ body {
   </div>
   <div style="display:flex;align-items:center;gap:10px;">
     <button class="user-pill" id="user-pill" onclick="confirmLogout()" style="display:none;"></button>
-    <!-- Notification Bell -->
-    <div style="position:relative;cursor:pointer;" onclick="toggleNotifPanel()" id="bell-wrap">
-      <div style="font-size:22px;line-height:1;" id="bell-icon">🔔</div>
-      <div id="notif-badge" style="display:none;position:absolute;top:-3px;right:-3px;width:16px;height:16px;background:var(--red);border-radius:50%;border:2px solid white;display:flex;align-items:center;justify-content:center;">
-        <span id="notif-count" style="font-size:9px;font-weight:800;color:white;line-height:1;">0</span>
-      </div>
-    </div>
-    <div id="low-stock-badge" title="Low/out of stock items" onclick="showPage('list')" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;cursor:pointer;font-family:var(--mono);"></div>
     <div id="sync-dot" title="Sync status" style="width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,0.3);flex-shrink:0;"></div>
     <div class="header-count" id="hdr-count">0</div>
   </div>
@@ -689,9 +661,7 @@ body {
   <button class="nav-btn" onclick="showPage('day')" id="tab-day">
     <span class="icon">📅</span>Day
   </button>
-  <button class="nav-btn" onclick="showPage('types')" id="tab-types">
-    <span class="icon">🏷️</span>Types
-  </button>
+
 
   <button class="nav-btn" onclick="showPage('settings')" id="tab-settings">
     <span class="icon">⚙️</span>Settings
@@ -876,38 +846,7 @@ body {
 </div>
 
 <!-- ===== ITEM TYPES PAGE ===== -->
-<div class="page" id="page-types">
-  <div class="sec-label">Manage Item Types</div>
-  <div class="card">
-    <div class="emoji-pick" id="emoji-pick">
-      <div class="ep sel" data-e="📦" onclick="pickEmoji(this)">📦</div>
-      <div class="ep" data-e="👟" onclick="pickEmoji(this)">👟</div>
-      <div class="ep" data-e="👕" onclick="pickEmoji(this)">👕</div>
-      <div class="ep" data-e="🪣" onclick="pickEmoji(this)">🪣</div>
-      <div class="ep" data-e="📱" onclick="pickEmoji(this)">📱</div>
-      <div class="ep" data-e="🍱" onclick="pickEmoji(this)">🍱</div>
-      <div class="ep" data-e="💄" onclick="pickEmoji(this)">💄</div>
-      <div class="ep" data-e="🧴" onclick="pickEmoji(this)">🧴</div>
-      <div class="ep" data-e="🧦" onclick="pickEmoji(this)">🧦</div>
-      <div class="ep" data-e="👜" onclick="pickEmoji(this)">👜</div>
-      <div class="ep" data-e="⌚" onclick="pickEmoji(this)">⌚</div>
-      <div class="ep" data-e="🏠" onclick="pickEmoji(this)">🏠</div>
-      <div class="ep" data-e="🔧" onclick="pickEmoji(this)">🔧</div>
-      <div class="ep" data-e="📚" onclick="pickEmoji(this)">📚</div>
-      <div class="ep" data-e="🎮" onclick="pickEmoji(this)">🎮</div>
-      <div class="ep" data-e="🧺" onclick="pickEmoji(this)">🧺</div>
-    </div>
-    <div class="type-add-row">
-      <input class="type-input" id="new-type-name" placeholder="Type name e.g. Shoes">
-      <button class="type-add-btn" onclick="addType()">Add Type</button>
-    </div>
-  </div>
-  <div class="sec-label">Your Types</div>
-  <div class="card">
-    <div id="types-list"></div>
-  </div>
 
-</div>
 
 
 <!-- ===== SETTINGS PAGE ===== -->
@@ -946,13 +885,34 @@ body {
     </button>
   </div>
 
-  <!-- 🔔 Sync History -->
-  <div class="sec-label" style="margin-top:4px;">🔔 Sync History</div>
-  <div class="card" style="padding:0 16px;">
-    <div style="display:flex;justify-content:flex-end;padding:10px 0 6px;">
-      <button onclick="clearNotifs()" style="font-size:12px;font-weight:600;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-family:var(--sans);">Clear history</button>
+  <!-- 🏷️ Item Types -->
+  <div class="sec-label">🏷️ Item Types</div>
+  <div class="card">
+    <div class="emoji-pick" id="emoji-pick" style="margin-bottom:12px;">
+      <div class="ep sel" data-e="📦" onclick="pickEmoji(this)">📦</div>
+      <div class="ep" data-e="👟" onclick="pickEmoji(this)">👟</div>
+      <div class="ep" data-e="👕" onclick="pickEmoji(this)">👕</div>
+      <div class="ep" data-e="🪣" onclick="pickEmoji(this)">🪣</div>
+      <div class="ep" data-e="📱" onclick="pickEmoji(this)">📱</div>
+      <div class="ep" data-e="🍱" onclick="pickEmoji(this)">🍱</div>
+      <div class="ep" data-e="💄" onclick="pickEmoji(this)">💄</div>
+      <div class="ep" data-e="🧴" onclick="pickEmoji(this)">🧴</div>
+      <div class="ep" data-e="🧦" onclick="pickEmoji(this)">🧦</div>
+      <div class="ep" data-e="👜" onclick="pickEmoji(this)">👜</div>
+      <div class="ep" data-e="⌚" onclick="pickEmoji(this)">⌚</div>
+      <div class="ep" data-e="🏠" onclick="pickEmoji(this)">🏠</div>
+      <div class="ep" data-e="🔧" onclick="pickEmoji(this)">🔧</div>
+      <div class="ep" data-e="📚" onclick="pickEmoji(this)">📚</div>
+      <div class="ep" data-e="🎮" onclick="pickEmoji(this)">🎮</div>
+      <div class="ep" data-e="🧺" onclick="pickEmoji(this)">🧺</div>
     </div>
-    <div id="settings-notif-list"></div>
+    <div class="type-add-row">
+      <input class="type-input" id="new-type-name" placeholder="Type name e.g. Shoes">
+      <button class="type-add-btn" onclick="addType()">Add Type</button>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:4px;">
+    <div id="types-list"></div>
   </div>
 
   <!-- 💱 Currency -->
@@ -964,14 +924,6 @@ body {
       <option value="UGX">UGX — Ugandan Shilling</option>
       <option value="USD">USD — US Dollar</option>
     </select>
-  </div>
-
-  <!-- 📤 Data -->
-  <div class="sec-label" style="margin-top:4px;">📤 Data & Backup</div>
-  <div class="card">
-    <button class="export-btn primary" onclick="exportCSV()" style="margin-bottom:8px;">📤 Export as CSV (Excel)</button>
-    <button class="export-btn secondary" onclick="exportJSON()" style="margin-bottom:8px;">💾 Export as JSON Backup</button>
-    <div class="form-hint">Import JSON: <input type="file" id="import-file" accept=".json" onchange="importJSON(event)" style="font-size:12px;color:var(--muted);margin-top:4px;display:block;"></div>
   </div>
 
   <!-- ℹ️ About -->
@@ -994,14 +946,14 @@ body {
   <!-- Day status banner -->
   <div id="day-banner" style="border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;background:var(--surface2);border:2px solid var(--border);">
     <div id="day-banner-icon" style="font-size:40px;margin-bottom:8px;">📅</div>
+    <div id="day-status-badge" style="display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:var(--surface2);color:var(--muted);">PENDING</div>
     <div id="day-banner-title" style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:4px;">No Active Day</div>
     <div id="day-banner-sub" style="font-size:13px;color:var(--muted);margin-bottom:16px;">Open a day to start recording sales and purchases</div>
-    <button id="day-open-btn" onclick="openDay()" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">
-      🌅 Open Day
-    </button>
-    <button id="day-close-btn" onclick="closeDay()" style="display:none;width:100%;padding:16px;background:var(--red);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">
-      🌙 Close Day & View Summary
-    </button>
+    <div id="day-action-area">
+      <button id="day-open-btn" onclick="openDay()" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+        🌅 Open Day
+      </button>
+    </div>
   </div>
 
   <!-- Live day stats (shown when day is open) -->
@@ -1135,7 +1087,7 @@ body {
       <option value="month">This Month</option>
       <option value="all">All Time</option>
     </select>
-    <button onclick="exportSalesCSV()" style="padding:10px 14px;background:var(--green-light);color:var(--green);border:1.5px solid #a8d8b5;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);white-space:nowrap;">📤 Export</button>
+    
   </div>
 
   <!-- Today summary strip -->
@@ -1328,7 +1280,7 @@ body {
 // ===== DB =====
 let db;
 const DB_NAME = 'InventoryApp';
-const DB_VER = 3;
+const DB_VER = 4;
 
 function initDB() {
   const req = indexedDB.open(DB_NAME, DB_VER);
@@ -1349,6 +1301,11 @@ function initDB() {
     }
     if (!d.objectStoreNames.contains('day_sessions')) {
       d.createObjectStore('day_sessions', { keyPath: 'id', autoIncrement: true });
+    }
+    if (!d.objectStoreNames.contains('business_days')) {
+      const bds = d.createObjectStore('business_days', { keyPath: 'id', autoIncrement: true });
+      bds.createIndex('business_date', 'business_date', { unique: true });
+      bds.createIndex('status', 'status', { unique: false });
     }
   };
   req.onsuccess = e => {
@@ -1433,8 +1390,8 @@ function showPage(id) {
   if (id === 'list') renderList();
   if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
   // summary removed
-  if (id === 'types') renderTypes();
-  if (id === 'settings') renderSettingsNotifList();
+
+
   if (id === 'day') { loadActiveDay(); renderDaySessionsList(); }
 }
 
@@ -1559,6 +1516,7 @@ async function saveItem() {
   const buy = parseFloat(document.getElementById('f-buy').value) || 0;
   const sell = parseFloat(document.getElementById('f-sell').value) || 0;
 
+  if (!requireOpenDay()) return;
   if (!type)  { toast('⚠️ Select an item type', 'err'); return; }
   if (!code)  { toast('⚠️ Enter item code', 'err'); return; }
   if (!size)  { toast('⚠️ Enter a size (or type N/A)', 'err'); return; }
@@ -1945,60 +1903,9 @@ function showSplash(name, sell, profit) {
 }
 
 // ===== EXPORT =====
-async function exportCSV() {
-  const items = await dbAll('items');
-  let csv = 'Type,Code,Name,Size,Buying Price,Expected Profit,Selling Price,Qty Stocked,Total Cost,Total Profit\n';
-  items.forEach(i => {
-    csv += `"${i.type}","${i.code}","${i.name}","${i.size || ''}",${i.buy},${i.profit},${i.sell},${i.qty},${i.buy * i.qty},${i.profit * i.qty}\n`;
-  });
-  download('inventory-' + new Date().toISOString().split('T')[0] + '.csv', csv, 'text/csv');
-  toast('📤 CSV exported!', 'ok');
-}
 
-async function exportJSON() {
-  const items = await dbAll('items');
-  const types = await dbAll('types');
-  const data = JSON.stringify({ app: 'inventory', version: 1, exportedAt: new Date().toISOString(), currency, items, types }, null, 2);
-  download('inventory-backup-' + new Date().toISOString().split('T')[0] + '.json', data, 'application/json');
-  toast('💾 JSON backup exported!', 'ok');
-}
 
-async function importJSON(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async ev => {
-    try {
-      const data = JSON.parse(ev.target.result);
-      if (!data.app || data.app !== 'inventory') { toast('Invalid backup file', 'err'); return; }
-      if (!confirm('This will import ' + data.items.length + ' items. Existing items with same code may conflict. Continue?')) return;
-      let imported = 0;
-      for (const item of data.items) {
-        try {
-          delete item.id;
-          await dbAdd('items', item);
-          imported++;
-        } catch (_) {}
-      }
-      allItems = await dbAll('items');
-      renderList();
-      renderSummary();
-      updateHeader();
-      toast('✅ Imported ' + imported + ' items!', 'ok');
-    } catch (err) {
-      toast('Failed to import: ' + err.message, 'err');
-    }
-  };
-  reader.readAsText(file);
-}
 
-function download(filename, content, type) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
-}
 
 
 // ===== MAKE A SALE =====
@@ -2097,6 +2004,7 @@ function adjSellQty(d) {
 
 async function confirmSale() {
   if (!currentSellItemId) return;
+  if (!requireOpenDay()) return;
   const item = await dbGet('items', currentSellItemId);
   const qty = Math.max(1, parseInt(document.getElementById('sm-qty').value) || 1);
   if (qty > item.qty) { toast('⚠️ Not enough stock!', 'err'); return; }
@@ -2111,6 +2019,7 @@ async function confirmSale() {
     revenue: qty * priceUsed,
     profit: qty * (priceUsed - item.buy),
     overridden: !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== item.sell,
+    business_date: activeDay ? activeDay.business_date : todayDateStr(),
     date: new Date().toISOString()
   };
 
@@ -2185,112 +2094,7 @@ document.getElementById('sell-modal').addEventListener('click', function(e) {
 });
 
 
-// ===== NOTIFICATION BELL =====
-let notifLog = JSON.parse(localStorage.getItem('notif_log') || '[]');
-let notifPanelOpen = false;
-let unreadCount = 0;
-
-function addSyncLog(type, title, detail) {
-  // type: 'push' | 'pull' | 'live' | 'error' | 'offline' | 'online'
-  const entry = { type, title, detail, time: new Date().toISOString(), read: false };
-  notifLog.unshift(entry);
-  if (notifLog.length > 50) notifLog = notifLog.slice(0, 50);
-  localStorage.setItem('notif_log', JSON.stringify(notifLog));
-  unreadCount++;
-  updateBadge();
-  shakeBell();
-  if (notifPanelOpen) renderNotifPanel();
-}
-
-function updateBadge() {
-  const badge = document.getElementById('notif-badge');
-  const countEl = document.getElementById('notif-count');
-  if (!badge) return;
-  if (unreadCount > 0) {
-    badge.style.display = 'flex';
-    countEl.textContent = unreadCount > 9 ? '9+' : unreadCount;
-  } else {
-    badge.style.display = 'none';
-  }
-}
-
-function shakeBell() {
-  const bell = document.getElementById('bell-icon');
-  if (!bell) return;
-  bell.classList.remove('bell-shake');
-  void bell.offsetWidth; // reflow to restart animation
-  bell.classList.add('bell-shake');
-  setTimeout(() => bell.classList.remove('bell-shake'), 600);
-}
-
-function toggleNotifPanel() {
-  notifPanelOpen = !notifPanelOpen;
-  const panel = document.getElementById('notif-panel');
-  const backdrop = document.getElementById('notif-backdrop');
-  if (notifPanelOpen) {
-    panel.style.display = 'block';
-    backdrop.style.display = 'block';
-    unreadCount = 0;
-    updateBadge();
-    notifLog.forEach(n => n.read = true);
-    localStorage.setItem('notif_log', JSON.stringify(notifLog));
-    renderNotifPanel();
-  } else {
-    panel.style.display = 'none';
-    backdrop.style.display = 'none';
-  }
-}
-
-function renderNotifPanel() {
-  const list = document.getElementById('notif-list');
-  if (!notifLog.length) {
-    list.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--muted);font-size:13px;">No sync events yet</div>';
-    return;
-  }
-  const colors = { push:'var(--green)', pull:'#3b82f6', live:'var(--green)', error:'var(--red)', offline:'var(--muted)', online:'var(--accent)' };
-  const icons  = { push:'⬆️', pull:'⬇️', live:'🔄', error:'❌', offline:'📴', online:'📶' };
-  list.innerHTML = notifLog.map(n => {
-    const t = new Date(n.time);
-    const timeStr = t.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' +
-                    t.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    return `<div class="notif-item">
-      <div class="notif-dot-sm" style="background:${colors[n.type]||'var(--muted)'};"></div>
-      <div class="notif-body">
-        <div class="notif-title">${icons[n.type]||'🔔'} ${n.title}</div>
-        ${n.detail ? `<div class="notif-detail">${n.detail}</div>` : ''}
-      </div>
-      <div class="notif-time">${timeStr}</div>
-    </div>`;
-  }).join('');
-}
-
-function clearNotifs() {
-  notifLog = [];
-  unreadCount = 0;
-  localStorage.setItem('notif_log', '[]');
-  updateBadge();
-  renderNotifPanel();
-  renderSettingsNotifList();
-}
-
-// Close panel when clicking outside
-document.addEventListener('click', e => {
-  if (!notifPanelOpen) return;
-  const panel = document.getElementById('notif-panel');
-  const bell = document.getElementById('bell-wrap');
-  const backdrop = document.getElementById('notif-backdrop');
-  if (panel && !panel.contains(e.target) && bell && !bell.contains(e.target)) {
-    notifPanelOpen = false;
-    panel.style.display = 'none';
-    if (backdrop) backdrop.style.display = 'none';
-  }
-});
-
-// On load — show unread count from saved log
-window.addEventListener('DOMContentLoaded', () => {
-  unreadCount = notifLog.filter(n => !n.read).length;
-  updateBadge();
-});
+function addSyncLog() {} // bell removed
 
 // ===== FIREBASE SYNC =====
 let fbApp = null, fbDb = null, fbUnsub = null;
@@ -2369,7 +2173,6 @@ async function initFirebase() {
     }, err => { setFbStatus('error'); console.error('Firestore listen error:', err); });
     setFbStatus('on');
     toast('☁️ Firebase connected!', 'ok');
-    addSyncLog('live', 'Firebase Connected', 'Live sync active — ' + config.projectId);
   } catch (e) {
     setFbStatus('error');
     toast('Firebase error: ' + e.message, 'err');
@@ -2445,7 +2248,6 @@ async function forcePushToFirebase(silent = false) {
     await batch.commit();
     if (!silent) { setFbStatus('on'); toast('⬆️ Pushed ' + items.length + ' items + ' + sales.length + ' sales', 'ok'); }
     else setFbStatus('on');
-    addSyncLog('push', 'Data Pushed to Cloud', items.length + ' items · ' + sales.length + ' sales uploaded');
   } catch (e) { setFbStatus('error'); addSyncLog('error', 'Push Failed', e.message); if (!silent) toast('Push failed: ' + e.message, 'err'); }
 }
 
@@ -2482,129 +2284,223 @@ function disconnectFirebase() {
 }
 
 
-function renderSettingsNotifList() {
-  const list = document.getElementById('settings-notif-list');
-  if (!list) return;
-  if (!notifLog.length) {
-    list.innerHTML = '<div style="text-align:center;padding:20px 0;color:var(--muted);font-size:13px;">No sync events recorded yet</div>';
-    return;
-  }
-  const colors = { push:'var(--green)', pull:'#3b82f6', live:'var(--green)', error:'var(--red)', offline:'var(--muted)', online:'var(--accent)' };
-  const icons  = { push:'⬆️', pull:'⬇️', live:'🔄', error:'❌', offline:'📴', online:'📶' };
-  list.innerHTML = notifLog.map(n => {
-    const t = new Date(n.time);
-    const timeStr = t.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) + ' · ' +
-                    t.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    return `<div class="notif-item">
-      <div class="notif-dot-sm" style="background:${colors[n.type]||'var(--muted)'};margin-top:6px;"></div>
-      <div class="notif-body">
-        <div class="notif-title">${icons[n.type]||'🔔'} ${n.title}</div>
-        ${n.detail ? `<div class="notif-detail">${n.detail}</div>` : ''}
-        <div class="notif-detail" style="margin-top:3px;">${timeStr}</div>
-      </div>
-    </div>`;
-  }).join('');
-}
 
 
 // ===== OPEN / CLOSE DAY =====
-let activeDay = null; // { id, openTime, date }
 
+// ===================================================================
+// BUSINESS DAY MANAGEMENT
+// Statuses: PENDING → OPEN → CLOSED → LOCKED
+// ===================================================================
+let activeDay = null;      // current business day object
+let dayCheckTimer = null;  // timer for auto-open/close/lock
+
+// ── HELPERS ─────────────────────────────────────────────────────────
+function todayDateStr() {
+  return new Date().toISOString().split('T')[0];
+}
+function fmtTime(iso) {
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+function fmtFullDate(dateStr) {
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+  });
+}
+
+// Find business day by date string
+async function getBusinessDay(dateStr) {
+  const all = await dbAll('business_days');
+  return all.find(d => d.business_date === dateStr) || null;
+}
+
+// ── LOAD & INITIALIZE DAY ────────────────────────────────────────────
 async function loadActiveDay() {
-  const sessions = await dbAll('day_sessions');
-  activeDay = sessions.find(s => s.status === 'open') || null;
+  const today = todayDateStr();
+  let bday = await getBusinessDay(today);
+
+  if (!bday) {
+    // Create today's business day as PENDING
+    const id = await dbAdd('business_days', {
+      business_date: today,
+      status: 'PENDING',
+      opened_at: null,
+      closed_at: null,
+      auto_opened: false,
+      auto_closed: false,
+      reopened_count: 0,
+      final_locked_at: null,
+      notes: ''
+    });
+    bday = await dbGet('business_days', id);
+  }
+
+  // Handle locked previous days
+  if (bday.status === 'OPEN' || bday.status === 'CLOSED') {
+    // Check if it's past midnight and needs locking
+    const now = new Date();
+    const dayDate = new Date(bday.business_date + 'T23:59:59');
+    if (now > dayDate && bday.status !== 'LOCKED') {
+      await lockBusinessDay(bday);
+      bday = await getBusinessDay(today);
+    }
+  }
+
+  activeDay = bday;
   updateDayBanner();
-  if (activeDay) {
+  if (activeDay && activeDay.status === 'OPEN') {
     updateDayLiveStats();
   }
+  startDayTimer();
 }
 
-function updateDayBanner() {
-  const banner = document.getElementById('day-banner');
-  const icon = document.getElementById('day-banner-icon');
-  const title = document.getElementById('day-banner-title');
-  const sub = document.getElementById('day-banner-sub');
-  const openBtn = document.getElementById('day-open-btn');
-  const closeBtn = document.getElementById('day-close-btn');
-  const liveSection = document.getElementById('day-live');
+// ── AUTO SCHEDULER ───────────────────────────────────────────────────
+function startDayTimer() {
+  if (dayCheckTimer) clearInterval(dayCheckTimer);
+  dayCheckTimer = setInterval(async () => {
+    const now = new Date();
+    const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+    const today = todayDateStr();
+    let bday = await getBusinessDay(today);
+    if (!bday) return;
 
-  if (activeDay) {
-    const openTime = new Date(activeDay.openTime);
-    const timeStr = openTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    banner.style.background = 'var(--green-light)';
-    banner.style.borderColor = '#a8d8b5';
-    icon.textContent = '🌅';
-    title.textContent = 'Day is Open';
-    title.style.color = 'var(--green)';
-    sub.textContent = 'Opened at ' + timeStr + ' · ' + activeDay.date;
-    openBtn.style.display = 'none';
-    closeBtn.style.display = 'block';
-    liveSection.style.display = 'block';
-  } else {
-    banner.style.background = 'var(--surface2)';
-    banner.style.borderColor = 'var(--border)';
-    icon.textContent = '📅';
-    title.textContent = 'No Active Day';
-    title.style.color = 'var(--text)';
-    sub.textContent = 'Open a day to start recording sales and purchases';
-    openBtn.style.display = 'block';
-    closeBtn.style.display = 'none';
-    liveSection.style.display = 'none';
-  }
+    // Auto-open at 9:00 AM if still PENDING
+    if (bday.status === 'PENDING' && h === 9 && m === 0 && s < 30) {
+      await autoOpenDay(bday);
+    }
+    // Auto-close at 11:59:59 PM if still OPEN
+    if (bday.status === 'OPEN' && h === 23 && m === 59 && s >= 55) {
+      await autoCloseDay(bday);
+    }
+    // Lock at midnight (00:00) if CLOSED and date has passed
+    const yesterday = new Date(now - 24*60*60*1000).toISOString().split('T')[0];
+    const yBday = await getBusinessDay(yesterday);
+    if (yBday && yBday.status === 'CLOSED') {
+      await lockBusinessDay(yBday);
+    }
+  }, 30000); // check every 30 seconds
 }
 
+// ── STATUS TRANSITIONS ───────────────────────────────────────────────
+async function autoOpenDay(bday) {
+  bday.status = 'OPEN';
+  bday.opened_at = new Date().toISOString();
+  bday.auto_opened = true;
+  await dbPut('business_days', bday);
+  activeDay = bday;
+  updateDayBanner();
+  updateDayLiveStats();
+  toast('🌅 Business day auto-opened at 9:00 AM', 'ok');
+}
+
+async function autoCloseDay(bday) {
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(s => s.business_date === bday.business_date || s.date >= bday.opened_at);
+  bday.status = 'CLOSED';
+  bday.closed_at = new Date().toISOString();
+  bday.auto_closed = true;
+  bday.salesCount = daySales.length;
+  bday.revenue = daySales.reduce((a, s) => a + s.revenue, 0);
+  bday.profit  = daySales.reduce((a, s) => a + s.profit, 0);
+  bday.itemsSold = daySales.reduce((a, s) => a + s.qty, 0);
+  await dbPut('business_days', bday);
+  activeDay = bday;
+  updateDayBanner();
+  renderDaySessionsList();
+  toast('🌙 Business day auto-closed at midnight', '');
+}
+
+async function lockBusinessDay(bday) {
+  bday.status = 'LOCKED';
+  bday.final_locked_at = new Date().toISOString();
+  await dbPut('business_days', bday);
+}
+
+// ── MANUAL OPEN ──────────────────────────────────────────────────────
 async function openDay() {
-  if (activeDay) { toast('A day is already open!', 'err'); return; }
-  const now = new Date();
-  const session = {
-    status: 'open',
-    date: now.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
-    dateStr: now.toISOString().split('T')[0],
-    openTime: now.toISOString(),
-    closeTime: null,
-    notes: '',
-    // snapshot of opening stock value
-    openingStockCost: 0,
-    openingStockRetail: 0,
-  };
-  // Capture opening stock snapshot
-  const items = await dbAll('items');
-  session.openingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
-  session.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
+  const today = todayDateStr();
+  let bday = await getBusinessDay(today);
+  if (!bday) return;
 
-  const id = await dbAdd('day_sessions', session);
-  session.id = id;
-  activeDay = session;
+  if (bday.status === 'OPEN') { toast('Day is already open!', 'err'); return; }
+  if (bday.status === 'LOCKED') { toast('This day is locked. Cannot reopen.', 'err'); return; }
+
+  // Check: can only reopen CLOSED day before 11:59 PM same date
+  if (bday.status === 'CLOSED') {
+    const now = new Date();
+    const cutoff = new Date(today + 'T23:59:00');
+    if (now >= cutoff) {
+      toast('Cannot reopen — past 11:59 PM cutoff', 'err');
+      return;
+    }
+    bday.reopened_count = (bday.reopened_count || 0) + 1;
+    toast('📂 Day reopened (' + bday.reopened_count + 'x)', 'ok');
+  } else {
+    toast('🌅 Business day opened!', 'ok');
+  }
+
+  // Capture opening stock snapshot on first open only
+  if (!bday.opened_at) {
+    const items = await dbAll('items');
+    bday.openingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
+    bday.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
+  }
+
+  bday.status = 'OPEN';
+  bday.opened_at = bday.opened_at || new Date().toISOString();
+  bday.last_opened_at = new Date().toISOString();
+  bday.date = fmtFullDate(today);
+  bday.dateStr = today;
+  await dbPut('business_days', bday);
+  activeDay = bday;
   updateDayBanner();
   updateDayLiveStats();
   renderDaySessionsList();
-  toast('🌅 Day opened! Start selling.', 'ok');
-  addSyncLog('live', 'Day Opened', session.date);
 }
 
-async function closeDay() {
-  if (!activeDay) { toast('No active day to close', 'err'); return; }
-  // Build summary data for the sheet
-  const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.date >= activeDay.openTime);
-  const revenue = daySales.reduce((s, x) => s + x.revenue, 0);
-  const profit = daySales.reduce((s, x) => s + x.profit, 0);
-  const itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
+// ── GUARD: block transactions when day not OPEN ───────────────────────
+function isDayOpen() {
+  return activeDay && activeDay.status === 'OPEN';
+}
 
-  // Purchases = items added today (createdAt >= openTime)
+function requireOpenDay() {
+  if (!isDayOpen()) {
+    const status = activeDay ? activeDay.status : 'PENDING';
+    if (status === 'LOCKED') {
+      toast('🔒 Today is locked. Cannot record transactions.', 'err');
+    } else if (status === 'CLOSED') {
+      toast('🌙 Day is closed. Reopen to continue.', 'err');
+    } else {
+      toast('⚠️ Please open the business day first.', 'err');
+    }
+    showPage('day');
+    return false;
+  }
+  return true;
+}
+
+// ── CLOSE DAY ────────────────────────────────────────────────────────
+async function closeDay() {
+  if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day to close', 'err'); return; }
+
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(s => (s.business_date === activeDay.business_date) || (activeDay.opened_at && s.date >= activeDay.opened_at));
+  const revenue = daySales.reduce((s, x) => s + x.revenue, 0);
+  const profit  = daySales.reduce((s, x) => s + x.profit, 0);
+  const itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
   const items = await dbAll('items');
-  const purchases = items.filter(i => i.createdAt >= activeDay.openTime);
+  const purchases = items.filter(i => activeDay.opened_at && i.createdAt >= activeDay.opened_at);
   const purchaseCost = purchases.reduce((s, i) => s + i.buy * i.qty, 0);
 
-  // Populate sheet
-  document.getElementById('ds-date').textContent = activeDay.date;
+  // Populate close sheet
+  document.getElementById('ds-date').textContent = fmtFullDate(activeDay.business_date);
   document.getElementById('ds-sales').textContent = daySales.length;
   document.getElementById('ds-items-sold').textContent = itemsSold;
   document.getElementById('ds-revenue').textContent = fmt(revenue);
   document.getElementById('ds-profit').textContent = fmt(profit);
   document.getElementById('ds-purchases').textContent = purchases.length + ' item' + (purchases.length !== 1 ? 's' : '');
   document.getElementById('ds-purchases-val').textContent = purchases.length ? 'Total cost: ' + fmt(purchaseCost) : 'No new stock added today';
-  document.getElementById('ds-notes').value = '';
+  document.getElementById('ds-notes').value = activeDay.notes || '';
 
   // Verdict
   const verdictEl = document.getElementById('ds-verdict');
@@ -2612,27 +2508,26 @@ async function closeDay() {
   if (daySales.length === 0) {
     verdict = '😴 No sales today. Tomorrow is a new opportunity!';
     verdictBg = 'var(--surface2)'; verdictColor = 'var(--muted)';
-  } else if (profit > 0 && revenue > 0) {
-    const margin = ((profit / revenue) * 100).toFixed(0);
-    verdict = margin >= 30 ? '🔥 Excellent day! ' + margin + '% profit margin.'
-            : margin >= 15 ? '✅ Good day! ' + margin + '% profit margin.'
-            : '👍 Decent day. ' + margin + '% profit margin.';
-    verdictBg = 'var(--green-light)'; verdictColor = 'var(--green)';
   } else {
-    verdict = '⚠️ Sales made but low/no profit. Review your pricing.';
-    verdictBg = 'var(--amber-light)'; verdictColor = 'var(--amber)';
+    const margin = revenue > 0 ? ((profit / revenue) * 100).toFixed(0) : 0;
+    verdict = margin >= 30 ? '🔥 Excellent day! ' + margin + '% margin.'
+            : margin >= 15 ? '✅ Good day! ' + margin + '% margin.'
+            : '👍 Decent day. ' + margin + '% margin.';
+    verdictBg = profit > 0 ? 'var(--green-light)' : 'var(--amber-light)';
+    verdictColor = profit > 0 ? 'var(--green)' : 'var(--amber)';
   }
-  verdictEl.style.background = verdictBg;
-  verdictEl.style.color = verdictColor;
-  verdictEl.style.border = '1px solid ' + verdictColor.replace('var(', '').replace(')', '');
+  verdictEl.style.cssText = 'background:' + verdictBg + ';color:' + verdictColor + ';border:1px solid ' + verdictColor + ';border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;';
   verdictEl.innerHTML = '<div style="font-size:16px;font-weight:800;">' + verdict + '</div>';
+  if (activeDay.reopened_count > 0) {
+    verdictEl.innerHTML += '<div style="font-size:11px;margin-top:4px;opacity:0.7;">Day was reopened ' + activeDay.reopened_count + ' time(s)</div>';
+  }
 
   // Top seller
   const topSellerEl = document.getElementById('ds-top-seller');
   if (daySales.length > 0) {
     const grouped = {};
     daySales.forEach(s => { grouped[s.itemName] = (grouped[s.itemName] || 0) + s.revenue; });
-    const top = Object.entries(grouped).sort((a,b) => b[1]-a[1])[0];
+    const top = Object.entries(grouped).sort((a, b) => b[1] - a[1])[0];
     topSellerEl.innerHTML = '<div class="detail-box" style="padding:12px;"><div class="detail-key">⭐ TOP SELLER TODAY</div><div style="font-size:15px;font-weight:700;color:var(--accent2);margin-top:6px;">' + top[0] + '</div><div style="font-size:12px;color:var(--muted);font-family:var(--mono);">' + fmt(top[1]) + ' revenue</div></div>';
   } else {
     topSellerEl.innerHTML = '';
@@ -2644,183 +2539,205 @@ async function closeDay() {
 async function confirmCloseDay() {
   const notes = document.getElementById('ds-notes').value.trim();
   const now = new Date();
-
   const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.date >= activeDay.openTime);
+  const daySales = sales.filter(s => (s.business_date === activeDay.business_date) || (activeDay.opened_at && s.date >= activeDay.opened_at));
   const items = await dbAll('items');
-  const purchases = items.filter(i => i.createdAt >= activeDay.openTime);
+  const purchases = items.filter(i => activeDay.opened_at && i.createdAt >= activeDay.opened_at);
 
-  // Save closed session
-  const session = await dbGet('day_sessions', activeDay.id);
-  session.status = 'closed';
-  session.closeTime = now.toISOString();
-  session.notes = notes;
-  session.salesCount = daySales.length;
-  session.revenue = daySales.reduce((s, x) => s + x.revenue, 0);
-  session.profit = daySales.reduce((s, x) => s + x.profit, 0);
-  session.itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
-  session.purchasesCount = purchases.length;
-  session.purchaseCost = purchases.reduce((s, i) => s + i.buy * i.qty, 0);
-  session.closingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
+  activeDay.status = 'CLOSED';
+  activeDay.closed_at = now.toISOString();
+  activeDay.notes = notes;
+  activeDay.salesCount = daySales.length;
+  activeDay.revenue = daySales.reduce((s, x) => s + x.revenue, 0);
+  activeDay.profit  = daySales.reduce((s, x) => s + x.profit, 0);
+  activeDay.itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
+  activeDay.purchasesCount = purchases.length;
+  activeDay.purchaseCost = purchases.reduce((s, i) => s + i.buy * i.qty, 0);
+  activeDay.closingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
 
-  await dbPut('day_sessions', session);
-  activeDay = null;
-
+  await dbPut('business_days', activeDay);
   document.getElementById('day-summary-sheet').classList.remove('open');
   updateDayBanner();
   renderDaySessionsList();
   renderDashboard();
   toast('🌙 Day closed. Great work!', 'ok');
-  addSyncLog('live', 'Day Closed', session.date + ' · Revenue: ' + fmt(session.revenue));
 }
 
 function cancelCloseDay() {
   document.getElementById('day-summary-sheet').classList.remove('open');
 }
 
-async function updateDayLiveStats() {
+// ── BANNER UPDATE ─────────────────────────────────────────────────────
+function updateDayBanner() {
   if (!activeDay) return;
+  const banner = document.getElementById('day-banner');
+  const icon = document.getElementById('day-banner-icon');
+  const badge = document.getElementById('day-status-badge');
+  const title = document.getElementById('day-banner-title');
+  const sub = document.getElementById('day-banner-sub');
+  const actionArea = document.getElementById('day-action-area');
+  const liveSection = document.getElementById('day-live');
+  const status = activeDay.status;
+
+  const configs = {
+    PENDING: {
+      bg: 'var(--surface2)', border: 'var(--border)', icon: '📅',
+      badgeBg: '#e5e7eb', badgeColor: '#6b7280',
+      title: 'Business Day Not Started', titleColor: 'var(--text)',
+      sub: 'Auto-opens at 9:00 AM · Or tap to open now',
+      action: '<button onclick="openDay()" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">🌅 Open Day Now</button>'
+    },
+    OPEN: {
+      bg: 'var(--green-light)', border: '#a8d8b5', icon: '🌅',
+      badgeBg: '#dcfce7', badgeColor: '#16a34a',
+      title: 'Business Day is Open', titleColor: 'var(--green)',
+      sub: 'Opened at ' + (activeDay.last_opened_at ? fmtTime(activeDay.last_opened_at) : fmtTime(activeDay.opened_at)) + (activeDay.reopened_count > 0 ? ' · Reopened ' + activeDay.reopened_count + 'x' : ''),
+      action: '<button onclick="closeDay()" style="width:100%;padding:16px;background:var(--red);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">🌙 Close Day & Summary</button>'
+    },
+    CLOSED: {
+      bg: '#fef3c7', border: '#f5d9a0', icon: '🌙',
+      badgeBg: '#fef3c7', badgeColor: '#92400e',
+      title: 'Business Day is Closed', titleColor: 'var(--amber)',
+      sub: 'Closed at ' + (activeDay.closed_at ? fmtTime(activeDay.closed_at) : '—') + ' · Can reopen before 11:59 PM',
+      action: '<button onclick="openDay()" style="width:100%;padding:16px;background:var(--amber);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">📂 Reopen Day</button>'
+    },
+    LOCKED: {
+      bg: 'var(--red-light)', border: 'rgba(192,57,43,0.25)', icon: '🔒',
+      badgeBg: 'var(--red-light)', badgeColor: 'var(--red)',
+      title: 'Business Day is Locked', titleColor: 'var(--red)',
+      sub: 'Locked after 11:59 PM · A new day will open tomorrow at 9:00 AM',
+      action: '<div style="padding:14px;background:var(--surface2);border-radius:var(--r);font-size:13px;color:var(--muted);text-align:center;">🔒 No changes allowed for this day</div>'
+    }
+  };
+
+  const cfg = configs[status] || configs.PENDING;
+  banner.style.background = cfg.bg;
+  banner.style.borderColor = cfg.border;
+  icon.textContent = cfg.icon;
+  badge.textContent = status;
+  badge.style.background = cfg.badgeBg;
+  badge.style.color = cfg.badgeColor;
+  title.textContent = cfg.title;
+  title.style.color = cfg.titleColor;
+  sub.textContent = cfg.sub;
+  actionArea.innerHTML = cfg.action;
+  if (liveSection) liveSection.style.display = status === 'OPEN' ? 'block' : 'none';
+}
+
+// ── LIVE STATS ────────────────────────────────────────────────────────
+async function updateDayLiveStats() {
+  if (!activeDay || activeDay.status !== 'OPEN') return;
   const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.date >= activeDay.openTime);
+  const daySales = sales.filter(s => (s.business_date === activeDay.business_date) || (activeDay.opened_at && s.date >= activeDay.opened_at));
   const items = await dbAll('items');
-  const purchases = items.filter(i => i.createdAt >= activeDay.openTime);
+  const purchases = items.filter(i => activeDay.opened_at && i.createdAt >= activeDay.opened_at);
 
   const revenue = daySales.reduce((s, x) => s + x.revenue, 0);
-  const profit = daySales.reduce((s, x) => s + x.profit, 0);
+  const profit  = daySales.reduce((s, x) => s + x.profit, 0);
 
   document.getElementById('day-sales-count').textContent = daySales.length;
   document.getElementById('day-revenue').textContent = fmt(revenue);
   document.getElementById('day-profit').textContent = fmt(profit);
   document.getElementById('day-purchases').textContent = purchases.length;
 
-  // Sales list
   const salesList = document.getElementById('day-sales-list');
   if (!daySales.length) {
     salesList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0 12px;">No sales yet today — tap 💸 Sell to record one</div>';
   } else {
-    const sorted = [...daySales].sort((a, b) => new Date(b.date) - new Date(a.date));
-    salesList.innerHTML = sorted.map(s => {
+    salesList.innerHTML = [...daySales].sort((a,b) => new Date(b.date)-new Date(a.date)).map(s => {
       const t = getTypeObj(s.type);
       const time = new Date(s.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
-        <span style="font-size:20px;">${t.emoji}</span>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;">${s.itemName} × ${s.qty}</div>
-          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);">${time}</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
-          <div style="font-size:11px;color:var(--green);font-family:var(--mono);">+${fmt(s.profit)}</div>
-        </div>
-      </div>`;
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">' +
+        '<span style="font-size:20px;">' + t.emoji + '</span>' +
+        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;">' + s.itemName + ' × ' + s.qty + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + time + '</div></div>' +
+        '<div style="text-align:right;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue) + '</div>' +
+        '<div style="font-size:11px;color:var(--green);font-family:var(--mono);">+' + fmt(s.profit) + '</div></div></div>';
     }).join('');
   }
 
-  // Purchases list
   const purchList = document.getElementById('day-purchases-list');
   if (!purchases.length) {
-    purchList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0 12px;">No new stock added today — tap ➕ Add to record purchases</div>';
+    purchList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0 12px;">No new stock added today — tap ➕ Add to record</div>';
   } else {
     purchList.innerHTML = purchases.map(item => {
       const t = getTypeObj(item.type);
-      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
-        <span style="font-size:20px;">${t.emoji}</span>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;">${item.name}</div>
-          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);">${item.code} · ${item.qty} pcs</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--text2);">${fmt(item.buy * item.qty)}</div>
-          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);">${fmt(item.buy)}/pc</div>
-        </div>
-      </div>`;
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">' +
+        '<span style="font-size:20px;">' + t.emoji + '</span>' +
+        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;">' + item.name + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + item.code + ' · ' + item.qty + ' pcs</div></div>' +
+        '<div style="text-align:right;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--text2);">' + fmt(item.buy * item.qty) + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + fmt(item.buy) + '/pc</div></div></div>';
     }).join('');
   }
 }
 
+// ── PAST SESSIONS LIST ────────────────────────────────────────────────
 async function renderDaySessionsList() {
-  const sessions = await dbAll('day_sessions');
-  const closed = sessions.filter(s => s.status === 'closed').sort((a,b) => new Date(b.closeTime) - new Date(a.closeTime));
+  const sessions = await dbAll('business_days');
+  const done = sessions.filter(s => s.status === 'CLOSED' || s.status === 'LOCKED')
+                       .sort((a, b) => new Date(b.business_date) - new Date(a.business_date));
   const list = document.getElementById('day-sessions-list');
-  if (!closed.length) {
+  if (!done.length) {
     list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No closed sessions yet</div>';
     return;
   }
-  list.innerHTML = closed.map(s => {
-    const profitColor = s.profit > 0 ? 'var(--green)' : s.profit < 0 ? 'var(--red)' : 'var(--muted)';
-    return `<div class="card" style="margin-bottom:8px;padding:14px;cursor:pointer;" onclick="viewPastSession(${s.id})">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div>
-          <div style="font-size:14px;font-weight:800;color:var(--text);">${s.date}</div>
-          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">
-            Opened ${new Date(s.openTime).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})} · Closed ${new Date(s.closeTime).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}
-          </div>
-        </div>
-        <span style="font-size:12px;background:var(--green-light);color:var(--green);padding:4px 10px;border-radius:20px;font-weight:700;">Closed</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
-        <div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;">
-          <div style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
-          <div style="font-size:10px;color:var(--muted);">Revenue</div>
-        </div>
-        <div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;">
-          <div style="font-size:16px;font-weight:800;font-family:var(--mono);color:${profitColor};">${fmt(s.profit)}</div>
-          <div style="font-size:10px;color:var(--muted);">Profit</div>
-        </div>
-        <div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;">
-          <div style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent);">${s.salesCount}</div>
-          <div style="font-size:10px;color:var(--muted);">Sales</div>
-        </div>
-      </div>
-      ${s.notes ? '<div style="margin-top:8px;font-size:12px;color:var(--muted);font-style:italic;">"' + s.notes + '"</div>' : ''}
-    </div>`;
+  list.innerHTML = done.map(s => {
+    const profitColor = (s.profit||0) > 0 ? 'var(--green)' : (s.profit||0) < 0 ? 'var(--red)' : 'var(--muted)';
+    const isLocked = s.status === 'LOCKED';
+    const statusLabel = isLocked
+      ? '<span style="font-size:11px;background:var(--red-light);color:var(--red);padding:3px 8px;border-radius:20px;font-weight:700;">🔒 LOCKED</span>'
+      : '<span style="font-size:11px;background:var(--green-light);color:var(--green);padding:3px 8px;border-radius:20px;font-weight:700;">CLOSED</span>';
+    const openedStr = s.opened_at ? fmtTime(s.opened_at) : '—';
+    const closedStr = s.closed_at ? fmtTime(s.closed_at) : 'Auto-closed';
+    const autoFlag = s.auto_opened || s.auto_closed
+      ? '<span style="font-size:10px;color:var(--muted);margin-left:6px;">' + (s.auto_opened ? '⚡auto-opened ' : '') + (s.auto_closed ? '⚡auto-closed' : '') + '</span>'
+      : '';
+    return '<div class="card" style="margin-bottom:8px;padding:14px;cursor:pointer;" onclick="viewPastSession(' + s.id + ')">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
+      '<div><div style="font-size:14px;font-weight:800;color:var(--text);">' + fmtFullDate(s.business_date) + '</div>' +
+      '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">' + openedStr + ' → ' + closedStr + autoFlag + '</div></div>' +
+      statusLabel + '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue||0) + '</div><div style="font-size:10px;color:var(--muted);">Revenue</div></div>' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:15px;font-weight:800;font-family:var(--mono);color:' + profitColor + ';">' + fmt(s.profit||0) + '</div><div style="font-size:10px;color:var(--muted);">Profit</div></div>' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--accent);">' + (s.salesCount||0) + '</div><div style="font-size:10px;color:var(--muted);">Sales</div></div>' +
+      '</div>' +
+      (s.notes ? '<div style="margin-top:8px;font-size:12px;color:var(--muted);font-style:italic;">"' + s.notes + '"</div>' : '') +
+      (s.reopened_count > 0 ? '<div style="margin-top:6px;font-size:11px;color:var(--muted);">↩️ Reopened ' + s.reopened_count + ' time(s)</div>' : '') +
+      '</div>';
   }).join('');
 }
 
+// ── PAST SESSION DETAIL ───────────────────────────────────────────────
 async function viewPastSession(sessionId) {
-  const s = await dbGet('day_sessions', sessionId);
-  const profitColor = s.profit > 0 ? 'var(--green)' : s.profit < 0 ? 'var(--red)' : 'var(--muted)';
+  const s = await dbGet('business_days', sessionId);
+  const profitColor = (s.profit||0) > 0 ? 'var(--green)' : (s.profit||0) < 0 ? 'var(--red)' : 'var(--muted)';
   const margin = s.revenue > 0 ? ((s.profit / s.revenue) * 100).toFixed(1) : 0;
+  const statusIcon = s.status === 'LOCKED' ? '🔒' : '🌙';
 
-  document.getElementById('past-session-content').innerHTML = `
-    <div style="text-align:center;margin-bottom:18px;">
-      <div style="font-size:36px;margin-bottom:6px;">📅</div>
-      <div style="font-size:18px;font-weight:800;">${s.date}</div>
-      <div style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:4px;">
-        ${new Date(s.openTime).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})} → ${new Date(s.closeTime).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">SALES</div>
-        <div class="detail-val" style="font-size:22px;color:var(--green);">${s.salesCount}</div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">ITEMS SOLD</div>
-        <div class="detail-val" style="font-size:22px;color:var(--accent);">${s.itemsSold || 0}</div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">REVENUE</div>
-        <div class="detail-val" style="font-size:18px;color:var(--accent2);">${fmt(s.revenue)}</div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">PROFIT</div>
-        <div class="detail-val" style="font-size:18px;color:${profitColor};">${fmt(s.profit)}</div>
-      </div>
-    </div>
-    <div class="detail-box" style="padding:12px;margin-bottom:10px;">
-      <div class="detail-key">PROFIT MARGIN</div>
-      <div class="detail-val" style="font-size:20px;color:var(--accent3);">${margin}%</div>
-    </div>
-    <div class="detail-box" style="padding:12px;margin-bottom:10px;">
-      <div class="detail-key">PURCHASES (NEW STOCK ADDED)</div>
-      <div class="detail-val" style="font-size:18px;color:var(--accent3);">${s.purchasesCount || 0} items · ${fmt(s.purchaseCost || 0)}</div>
-    </div>
-    ${s.notes ? '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">NOTES</div><div style="font-size:14px;color:var(--text);margin-top:6px;font-style:italic;">"' + s.notes + '"</div></div>' : ''}
-  `;
-  document.getElementById('export-day-btn').onclick = () => exportDayReport(sessionId);
+  document.getElementById('past-session-content').innerHTML =
+    '<div style="text-align:center;margin-bottom:18px;">' +
+    '<div style="font-size:36px;margin-bottom:6px;">' + statusIcon + '</div>' +
+    '<div style="font-size:18px;font-weight:800;">' + fmtFullDate(s.business_date) + '</div>' +
+    '<div style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:4px;">' +
+    (s.opened_at ? fmtTime(s.opened_at) : '—') + ' → ' + (s.closed_at ? fmtTime(s.closed_at) : 'auto') +
+    ' · Status: <strong>' + s.status + '</strong></div></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' +
+    '<div class="detail-box" style="padding:12px;text-align:center;"><div class="detail-key">SALES</div><div class="detail-val" style="font-size:22px;color:var(--green);">' + (s.salesCount||0) + '</div></div>' +
+    '<div class="detail-box" style="padding:12px;text-align:center;"><div class="detail-key">ITEMS SOLD</div><div class="detail-val" style="font-size:22px;color:var(--accent);">' + (s.itemsSold||0) + '</div></div>' +
+    '<div class="detail-box" style="padding:12px;text-align:center;"><div class="detail-key">REVENUE</div><div class="detail-val" style="font-size:18px;color:var(--accent2);">' + fmt(s.revenue||0) + '</div></div>' +
+    '<div class="detail-box" style="padding:12px;text-align:center;"><div class="detail-key">PROFIT</div><div class="detail-val" style="font-size:18px;color:' + profitColor + ';">' + fmt(s.profit||0) + '</div></div>' +
+    '</div>' +
+    '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">PROFIT MARGIN</div><div class="detail-val" style="font-size:20px;color:var(--accent3);">' + margin + '%</div></div>' +
+    '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">PURCHASES ADDED</div><div class="detail-val" style="font-size:16px;color:var(--accent3);">' + (s.purchasesCount||0) + ' items · ' + fmt(s.purchaseCost||0) + '</div></div>' +
+    (s.auto_opened || s.auto_closed ? '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">AUTO FLAGS</div><div style="font-size:13px;color:var(--muted);margin-top:4px;">' + (s.auto_opened ? '⚡ Auto-opened at 9:00 AM<br>' : '') + (s.auto_closed ? '⚡ Auto-closed at 11:59 PM' : '') + '</div></div>' : '') +
+    (s.reopened_count > 0 ? '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">REOPENED</div><div class="detail-val" style="font-size:16px;color:var(--muted);">' + s.reopened_count + ' time(s)</div></div>' : '') +
+    (s.notes ? '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">NOTES</div><div style="font-size:14px;color:var(--text);margin-top:6px;font-style:italic;">"' + s.notes + '"</div></div>' : '');
+
   document.getElementById('past-session-sheet').classList.add('open');
 }
+
 
 function closePastSessionSheet() {
   document.getElementById('past-session-sheet').classList.remove('open');
@@ -2854,7 +2771,6 @@ async function confirmRestock() {
   updateHeader();
   updateLowStockBadge();
   toast('✅ Added ' + qty + ' pcs to ' + item.name, 'ok');
-  addSyncLog('push', 'Restocked: ' + item.code, '+' + qty + ' pcs · New total: ' + item.qty);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2889,19 +2805,6 @@ async function deleteSale(saleId) {
 // ═══════════════════════════════════════════════════════════
 // SALES EXPORT BY DATE FILTER
 // ═══════════════════════════════════════════════════════════
-async function exportSalesCSV() {
-  const filter = document.getElementById('sales-filter').value;
-  const allSales = await dbAll('sales');
-  const filtered = filterSalesByPeriod(allSales, filter);
-  if (!filtered.length) { toast('No sales to export', 'err'); return; }
-  let csv = 'Date,Time,Item,Code,Type,Size,Qty,Buy Price,Sell Price,Revenue,Profit,Custom Price\n';
-  filtered.forEach(s => {
-    const d = new Date(s.date);
-    csv += '"' + d.toLocaleDateString('en-GB') + '","' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) + '","' + s.itemName + '","' + s.itemCode + '","' + s.type + '","' + (s.size||'') + '",' + s.qty + ',' + s.buyPrice + ',' + s.actualPrice + ',' + s.revenue + ',' + s.profit + ',' + (s.overridden?'Yes':'No') + '\n';
-  });
-  download('sales-' + filter + '-' + new Date().toISOString().split('T')[0] + '.csv', csv, 'text/csv');
-  toast('📤 Sales exported!', 'ok');
-}
 
 function filterSalesByPeriod(sales, period) {
   const now = new Date();
@@ -2922,30 +2825,7 @@ function filterSalesByPeriod(sales, period) {
 // ═══════════════════════════════════════════════════════════
 // DAY REPORT EXPORT
 // ═══════════════════════════════════════════════════════════
-async function exportDayReport(sessionId) {
-  const s = await dbGet('day_sessions', sessionId || (await getLastSession()));
-  if (!s) { toast('No session to export', 'err'); return; }
-  const sales = await dbAll('sales');
-  const daySales = sales.filter(x => x.date >= s.openTime && x.date <= (s.closeTime || new Date().toISOString()));
-  let csv = 'DAY REPORT: ' + s.date + '\n\n';
-  csv += 'Opened,' + new Date(s.openTime).toLocaleTimeString() + '\n';
-  csv += 'Closed,' + (s.closeTime ? new Date(s.closeTime).toLocaleTimeString() : 'Still open') + '\n';
-  csv += 'Total Revenue,' + s.revenue + '\n';
-  csv += 'Total Profit,' + s.profit + '\n';
-  csv += 'Sales Count,' + s.salesCount + '\n\n';
-  csv += 'Time,Item,Code,Qty,Revenue,Profit\n';
-  daySales.forEach(x => {
-    csv += '"' + new Date(x.date).toLocaleTimeString() + '","' + x.itemName + '","' + x.itemCode + '",' + x.qty + ',' + x.revenue + ',' + x.profit + '\n';
-  });
-  download('day-report-' + s.dateStr + '.csv', csv, 'text/csv');
-  toast('📤 Day report exported!', 'ok');
-}
 
-async function getLastSession() {
-  const sessions = await dbAll('day_sessions');
-  const last = sessions.sort((a, b) => new Date(b.openTime) - new Date(a.openTime))[0];
-  return last ? last.id : null;
-}
 
 // ===== CLOSE SHEET ON BACKDROP =====
 document.getElementById('detail-sheet').addEventListener('click', function(e) {
@@ -3115,7 +2995,7 @@ const USERS = [
     role: 'super',
     roleLabel: 'Super User',
     // Super: access to everything
-    tabs: ['dash','list','add','sell','day','types','settings']
+    tabs: ['dash','list','add','sell','day','settings']
   },
   {
     username: 'vanice',
@@ -3124,7 +3004,7 @@ const USERS = [
     role: 'user',
     roleLabel: 'User',
     // User: everything except Settings
-    tabs: ['dash','list','add','sell','day','types']
+    tabs: ['dash','list','add','sell','day']
   },
   {
     username: 'trevor',
@@ -3143,7 +3023,7 @@ let currentUser = null;
 
 function applyRoleRestrictions(user) {
   // Show/hide nav tabs based on role
-  const allTabs = ['dash','list','add','sell','day','types','settings'];
+  const allTabs = ['dash','list','add','sell','day','settings'];
   allTabs.forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) {
@@ -3287,7 +3167,6 @@ function startAutoSync() {
 window.addEventListener('online', async () => {
   if (!fbReady || !fbDb) return;
   toast('📶 Back online — syncing…', '');
-  addSyncLog('online', 'Back Online', 'Internet restored — auto syncing now');
   setFbStatus('syncing');
   try {
     await forcePushToFirebase(true);
@@ -3298,7 +3177,6 @@ window.addEventListener('online', async () => {
 
 window.addEventListener('offline', () => {
   toast('📴 Offline — changes saved locally', '');
-  addSyncLog('offline', 'Gone Offline', 'Changes saved locally — will sync when reconnected');
   setFbStatus('off');
 });
 
