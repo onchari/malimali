@@ -1603,22 +1603,32 @@ async function loadActiveDay() {
     bday = await dbGet('business_days', id);
   }
 
-  // Only lock today's day if it's past midnight (past its date)
-  // Never lock a day that is still "today"
-  if ((bday.status === 'OPEN' || bday.status === 'CLOSED') && bday.business_date !== today) {
-    await lockBusinessDay(bday);
-    // This shouldn't happen (bday IS for today) but safety net
+  // If the stored day is from a past date (app opened next day without closing):
+  // Lock the old day and create a fresh PENDING for today
+  if (bday.business_date !== today) {
+    if (bday.status !== 'LOCKED') await lockBusinessDay(bday);
+    // Also lock any open sub-sessions from that old date
+    const oldSubs = await dbAll('sub_sessions');
+    for (const sub of oldSubs.filter(s => s.business_date === bday.business_date && (s.status === 'OPEN' || s.status === 'PAUSED'))) {
+      sub.status = 'LOCKED'; sub.final_locked_at = new Date().toISOString();
+      await dbPut('sub_sessions', sub);
+    }
     bday = await getBusinessDay(today);
     if (!bday) {
       const id = await dbAdd('business_days', {
         business_date: today, status: 'PENDING',
         opened_at: null, closed_at: null,
         auto_opened: false, auto_closed: false,
-        reopened_count: 0, final_locked_at: null, notes: ''
+        pause_count: 0, final_locked_at: null, notes: ''
       });
       bday = await dbGet('business_days', id);
     }
   }
+
+  // If today's day was left PAUSED (app closed while paused) — keep as PAUSED
+  // User will see "Day Paused" banner and can resume
+  // If today's day was left OPEN (crash/force-close) — keep as OPEN
+  // so user can continue seamlessly
 
   activeDay = bday;
   // Also load any active sub-session for today
@@ -1718,6 +1728,24 @@ async function closeSubSession() {
   scheduleSync();
 }
 
+
+// Auto-close a sub-session (called at midnight or by system)
+async function forceCloseSubSession(reason) {
+  if (!activeSubSession) return;
+  const sales = await dbAll('sales');
+  const subSales = sales.filter(s => s.sub_session_id === activeSubSession.id);
+  activeSubSession.status = 'CLOSED';
+  activeSubSession.closed_at = new Date().toISOString();
+  activeSubSession.auto_closed = true;
+  activeSubSession.close_reason = reason || 'auto';
+  activeSubSession.salesCount = subSales.length;
+  activeSubSession.revenue    = subSales.reduce((s, x) => s + x.revenue, 0);
+  activeSubSession.profit     = subSales.reduce((s, x) => s + x.profit, 0);
+  activeSubSession.itemsSold  = subSales.reduce((s, x) => s + x.qty, 0);
+  await dbPut('sub_sessions', activeSubSession);
+  activeSubSession = null;
+}
+
 async function loadSubSession(business_date) {
   const all = await dbAll('sub_sessions');
   const active = all.find(s =>
@@ -1737,36 +1765,57 @@ function startDayTimer() {
     const bday = await getBusinessDay(today);
     if (!bday) return;
 
-    // Auto-open at exactly 9:00 AM if still PENDING
+    // ── 9:00 AM: Auto-open if still PENDING ──────────────────────────
     if (bday.status === 'PENDING' && h === 9 && m === 0 && s < 30) {
       await autoOpenDay(bday);
     }
 
-    // Auto-close at 11:59:55 PM if still OPEN
+    // ── 11:45 PM: Warning toast — 15 minutes left ─────────────────────
+    if ((bday.status === 'OPEN' || (activeSubSession && activeSubSession.status === 'OPEN'))
+        && h === 23 && m === 45 && s < 30) {
+      toast('⏰ 15 minutes left — day auto-closes at midnight!', 'err');
+    }
+
+    // ── 11:59:55 PM: Auto-close open day permanently ──────────────────
     if (bday.status === 'OPEN' && h === 23 && m === 59 && s >= 55) {
       await autoCloseDay(bday);
     }
 
-    // At midnight (00:00): lock YESTERDAY's closed day and create today's PENDING
+    // ── 11:59:55 PM: Also force-close any open sub-session ────────────
+    if (activeSubSession && activeSubSession.status === 'OPEN' && h === 23 && m === 59 && s >= 55) {
+      await forceCloseSubSession('Auto-closed at midnight');
+    }
+
+    // ── 00:00: Lock yesterday, create fresh PENDING for today ─────────
     if (h === 0 && m === 0 && s < 30) {
       const yesterday = new Date(now.getTime() - 24*60*60*1000).toISOString().split('T')[0];
       const yBday = await getBusinessDay(yesterday);
       if (yBday && (yBday.status === 'CLOSED' || yBday.status === 'OPEN')) {
         await lockBusinessDay(yBday);
       }
-      // Ensure today has a PENDING day record
+      // Also lock any sub-sessions from yesterday
+      const allSubs = await dbAll('sub_sessions');
+      for (const sub of allSubs.filter(s => s.business_date === yesterday && s.status !== 'LOCKED' && s.status !== 'CLOSED')) {
+        sub.status = 'LOCKED'; sub.final_locked_at = now.toISOString();
+        await dbPut('sub_sessions', sub);
+      }
+      // Ensure today has a fresh PENDING record
       const todayExists = await getBusinessDay(today);
       if (!todayExists) {
         await dbAdd('business_days', {
           business_date: today, status: 'PENDING',
           opened_at: null, closed_at: null,
           auto_opened: false, auto_closed: false,
-          reopened_count: 0, final_locked_at: null, notes: ''
+          pause_count: 0, final_locked_at: null, notes: ''
         });
       }
-      // Refresh banner to show new day
+      // Reset state and refresh
+      activeSubSession = null;
       const newBday = await getBusinessDay(today);
-      if (newBday) { activeDay = newBday; updateDayBanner(); }
+      if (newBday) { activeDay = newBday; }
+      setDayMode(false);
+      updateDayBanner();
+      renderDaySessionsList();
     }
   }, 30000);
 }
@@ -1784,8 +1833,12 @@ async function autoOpenDay(bday) {
 }
 
 async function autoCloseDay(bday) {
+  // Force-close any open sub-session first
+  if (activeSubSession && activeSubSession.status === 'OPEN') {
+    await forceCloseSubSession('Auto-closed with main day at midnight');
+  }
   const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.business_date === bday.business_date || s.date >= bday.opened_at);
+  const daySales = sales.filter(s => s.business_date === bday.business_date);
   bday.status = 'CLOSED';   // auto permanent close at midnight
   bday.closed_at = new Date().toISOString();
   bday.auto_closed = true;
@@ -1886,10 +1939,10 @@ async function openDay() {
   bday.date    = fmtFullDate(today);
   bday.dateStr = today;
   if (isReopen) {
-    bday.pause_count = (bday.pause_count || 0); // already incremented on pause
+    // pause_count was incremented when pausing; just show resume toast
     toast('▶️ Day resumed! Continue where you left off.', 'ok');
   } else {
-    toast('🌅 Business day opened!', 'ok');
+    toast('🌅 Business day opened! Good luck today.', 'ok');
   }
   await dbPut('business_days', bday);
   activeDay = bday;
@@ -1898,9 +1951,9 @@ async function openDay() {
   renderDaySessionsList();
 }
 
-// ── PAUSE DAY (temporary close — can reopen) ─────────────────────────
+// ── PAUSE DAY (temporary close — can reopen any time today) ──────────
 async function pauseDay() {
-  if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day to pause', 'err'); return; }
+  if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day to pause.', 'err'); return; }
   await buildDaySummary('pause');
 }
 
@@ -1911,15 +1964,20 @@ async function permanentCloseDay() {
 }
 
 
-// Refresh Day tab display without re-initializing
+// Refresh Day tab — re-reads DB state without re-initialising timers
 async function refreshDayTab() {
-  // Reload from DB in case something changed
   const today = todayDateStr();
   const bday = await getBusinessDay(today);
   if (bday) {
     activeDay = bday;
+    // Re-load sub-session in case it changed on another device
+    if (bday.status === 'CLOSED') {
+      await loadSubSession(today);
+    }
     updateDayBanner();
-    if (activeDay.status === 'OPEN') updateDayLiveStats();
+    const isActive = activeDay.status === 'OPEN' ||
+                     (activeSubSession && activeSubSession.status === 'OPEN');
+    if (isActive) updateDayLiveStats();
   }
   renderDaySessionsList();
 }
@@ -1954,7 +2012,7 @@ function requireOpenDay() {
     } else if (status === 'PAUSED') {
       toast('⏸ Day is paused. Reopen to continue.', 'err');
     } else if (status === 'CLOSED') {
-      toast('🔒 Day is permanently closed. Start a new day tomorrow.', 'err');
+      toast('🔒 Day is permanently closed. Open a Sub-Session from the Day tab to continue.', 'err');
     } else {
       toast('⚠️ Please open the business day first.', 'err');
     }
@@ -1978,7 +2036,8 @@ async function buildDaySummary(mode) {
   if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day', 'err'); return; }
 
   const sales = await dbAll('sales');
-  const daySales = sales.filter(s => (s.business_date === activeDay.business_date) || (activeDay.opened_at && s.date >= activeDay.opened_at));
+  // Include all sales for this date (main day + all sub-sessions)
+  const daySales = sales.filter(s => s.business_date === activeDay.business_date);
   const revenue = daySales.reduce((s, x) => s + x.revenue, 0);
   const profit  = daySales.reduce((s, x) => s + x.profit, 0);
   const itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
@@ -2119,10 +2178,15 @@ async function confirmCloseDay() {
   };
 
   if (_daySummaryMode === 'pause') {
-    // ── PAUSE: temporary close, can reopen ───────────────────────
+    // ── PAUSE: temporary close, can resume any time before midnight ──
     activeDay.status = 'PAUSED';
     activeDay.paused_at = now.toISOString();
     activeDay.pause_count = (activeDay.pause_count || 0) + 1;
+    // Calculate duration open so far (cumulative)
+    if (activeDay.last_opened_at) {
+      const minOpen = Math.round((now - new Date(activeDay.last_opened_at)) / 60000);
+      activeDay.total_minutes_open = (activeDay.total_minutes_open || 0) + minOpen;
+    }
     Object.assign(activeDay, dayStats);
     await dbPut('business_days', activeDay);
     document.getElementById('day-summary-sheet').classList.remove('open');
@@ -2179,7 +2243,9 @@ function updateDayBanner() {
       bg: 'var(--green-light)', border: '#a8d8b5', icon: '🌅',
       badgeBg: '#dcfce7', badgeColor: '#16a34a',
       title: 'Business Day is Open', titleColor: 'var(--green)',
-      sub: 'Opened at ' + (activeDay.last_opened_at ? fmtTime(activeDay.last_opened_at) : fmtTime(activeDay.opened_at)) + (pauseCount > 0 ? ' · Resumed ' + pauseCount + 'x' : ''),
+      sub: 'Opened at ' + (activeDay.last_opened_at ? fmtTime(activeDay.last_opened_at) : fmtTime(activeDay.opened_at))
+           + (pauseCount > 0 ? ' · Resumed ' + pauseCount + 'x' : '')
+           + ' · Auto-closes at midnight',
       action:
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
         '<button onclick="pauseDay()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-pause"></i> Pause Day</button>' +
@@ -2190,7 +2256,9 @@ function updateDayBanner() {
       bg: '#fef3c7', border: '#f5d9a0', icon: '⏸',
       badgeBg: '#fef3c7', badgeColor: '#92400e',
       title: 'Day is Paused', titleColor: '#d97706',
-      sub: 'Paused at ' + (activeDay.paused_at ? fmtTime(activeDay.paused_at) : '—') + ' · Tap to resume operations',
+      sub: 'Paused at ' + (activeDay.paused_at ? fmtTime(activeDay.paused_at) : '—')
+           + (activeDay.pause_count > 1 ? ' · Paused ' + activeDay.pause_count + 'x today' : '')
+           + ' · Tap Resume to continue',
       action: '<button onclick="openDay()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-play"></i> Resume Day</button>'
     },
     CLOSED: {
@@ -2217,7 +2285,7 @@ function updateDayBanner() {
       bg: '#eff6ff', border: '#93c5fd', icon: '🔄',
       badgeBg: '#dbeafe', badgeColor: '#1d4ed8',
       title: 'Sub-Session #' + (activeSubSession.session_num || 1) + ' is Open', titleColor: '#1d4ed8',
-      sub: 'Started at ' + fmtTime(activeSubSession.opened_at) + ' · Main day is closed',
+      sub: 'Sub #' + (activeSubSession.session_num || 1) + ' · Started at ' + fmtTime(activeSubSession.opened_at) + ' · Cumulative: ' + fmt(activeSubSession.revenue || 0),
       action:
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
         '<button onclick="pauseSubSession()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-pause"></i> Pause</button>' +
