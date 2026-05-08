@@ -1,7 +1,7 @@
 // ===== DB =====
 let db;
 const DB_NAME = 'InventoryApp';
-const DB_VER = 5;
+const DB_VER = 6;
 
 function initDB() {
   const req = indexedDB.open(DB_NAME, DB_VER);
@@ -25,16 +25,10 @@ function initDB() {
     }
     if (!d.objectStoreNames.contains('business_days')) {
       const bds = d.createObjectStore('business_days', { keyPath: 'id', autoIncrement: true });
-      bds.createIndex('business_date', 'business_date', { unique: true });
+      bds.createIndex('business_date', 'business_date', { unique: false }); // non-unique: supports parallel sessions
       bds.createIndex('status', 'status', { unique: false });
     }
-    // Sub-sessions: child sessions opened after a day is permanently closed
-    if (!d.objectStoreNames.contains('sub_sessions')) {
-      const ss2 = d.createObjectStore('sub_sessions', { keyPath: 'id', autoIncrement: true });
-      ss2.createIndex('business_date', 'business_date', { unique: false });
-      ss2.createIndex('parent_day_id', 'parent_day_id', { unique: false });
-      ss2.createIndex('status', 'status', { unique: false });
-    }
+
   };
   req.onsuccess = e => {
     db = e.target.result;
@@ -647,35 +641,44 @@ async function openSheet(id) {
 
   document.getElementById('detail-sheet').classList.add('open');
 
-  // Gray out action buttons if day not open
+  // Show/hide action buttons based on day state
   const dayOpen = isDayOpen();
-  const shSellBtn = document.getElementById('sh-sell-btn');
-  const delBtn  = document.querySelector('#detail-sheet .btn-del');
-  const editBtn = document.querySelector('#detail-sheet .btn-edit');
+  const status  = activeDay ? activeDay.status : 'PENDING';
+
+  const shSellBtn  = document.getElementById('sh-sell-btn');
+  const delBtn     = document.querySelector('#detail-sheet .btn-del');
+  const editBtn    = document.querySelector('#detail-sheet .btn-edit');
   const restockBtn = document.querySelector('[onclick="toggleRestock()"]');
+  const actionRow  = document.getElementById('sh-action-row');
 
-  [shSellBtn, delBtn, editBtn, restockBtn].forEach(btn => {
-    if (!btn) return;
-    if (dayOpen) {
-      btn.style.opacity = '1';
-      btn.style.pointerEvents = 'auto';
-    } else {
-      btn.style.opacity = '0.35';
-      btn.style.pointerEvents = 'none';
-    }
-  });
+  if (dayOpen) {
+    // OPEN: show all action buttons
+    [shSellBtn, delBtn, editBtn, restockBtn].forEach(b => { if (b) { b.style.display = ''; b.style.opacity = '1'; b.style.pointerEvents = 'auto'; } });
+    if (actionRow) actionRow.style.display = '';
+  } else {
+    // Not OPEN: hide write actions, show read-only notice
+    [shSellBtn, delBtn, editBtn, restockBtn].forEach(b => { if (b) { b.style.display = 'none'; } });
+    if (actionRow) actionRow.style.display = 'none';
+  }
 
-  // Show day-closed notice in sheet when not open
+  // Status-specific notice in the detail sheet
   let notice = document.getElementById('sh-day-notice');
   if (!dayOpen) {
+    const noticeText = {
+      PENDING:    '📅 Open the business day to edit or sell items.',
+      PAUSED:     '⏸ Day is paused — resume to make changes.',
+      CLOSED:     '🌙 Day is closed — reopen from the Day tab to make changes.',
+      RECONCILED: '✅ Day is reconciled and permanently archived.',
+      LOCKED:     '🔒 This is an archived day — read only.',
+    };
     if (!notice) {
       notice = document.createElement('div');
       notice.id = 'sh-day-notice';
-      notice.style.cssText = 'background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--r);padding:10px 14px;margin-bottom:10px;font-size:12px;font-weight:700;color:var(--red);text-align:center;';
-      notice.innerHTML = '🔒 Day is not open — Sell, Edit, Delete and Restock are disabled';
+      notice.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;margin-bottom:10px;font-size:12px;font-weight:600;color:var(--text2);text-align:center;';
       const infoArea = document.querySelector('#detail-sheet .sheet > div:last-child');
       if (infoArea) infoArea.insertBefore(notice, infoArea.firstChild);
     }
+    notice.textContent = noticeText[status] || '🔒 Actions unavailable.';
     notice.style.display = 'block';
   } else {
     if (notice) notice.style.display = 'none';
@@ -1509,41 +1512,37 @@ async function runSyncDebug() {
 const DAY_RESTRICTED_TABS = ['dash', 'add', 'list'];
 
 function setDayMode(isOpen) {
-  // Gray out dash + add tabs when day not open
-  ['dash', 'add'].forEach(tab => {
-    const btn = document.getElementById('tab-' + tab);
-    if (!btn || btn.style.display === 'none') return;
-    if (isOpen) {
-      btn.classList.remove('disabled');
-    } else {
-      btn.classList.add('disabled');
-      btn.classList.remove('active');
-    }
-  });
-
-  // Stock tab: gray it but still accessible (view-only when day not open)
-  const listBtn = document.getElementById('tab-list');
-  if (listBtn && listBtn.style.display !== 'none') {
-    if (isOpen) {
-      listBtn.classList.remove('disabled');
-    } else {
-      listBtn.classList.add('disabled');
-      listBtn.classList.remove('active');
-    }
+  const status = activeDay ? activeDay.status : 'PENDING';
+  // Dashboard: accessible when OPEN or PAUSED (progress view), blocked otherwise
+  const dashOk = isOpen || status === 'PAUSED';
+  const dashBtn = document.getElementById('tab-dash');
+  if (dashBtn && dashBtn.style.display !== 'none') {
+    dashBtn.classList.toggle('disabled', !dashOk);
+    if (!dashOk) dashBtn.classList.remove('active');
   }
 
-  // If day just closed and we're on dash/add, redirect to day page
+  // Add tab: only when OPEN
+  const addBtn = document.getElementById('tab-add');
+  if (addBtn && addBtn.style.display !== 'none') {
+    addBtn.classList.toggle('disabled', !isOpen);
+    if (!isOpen) addBtn.classList.remove('active');
+  }
+
+  // Stock tab: viewable always, but grayed to signal read-only when not OPEN
+  const listBtn = document.getElementById('tab-list');
+  if (listBtn && listBtn.style.display !== 'none') {
+    listBtn.classList.toggle('disabled', !isOpen);
+    if (!isOpen) listBtn.classList.remove('active');
+  }
+
+  // Redirect if on a now-blocked page
   if (!isOpen) {
     const activePage = document.querySelector('.page.active');
     if (activePage) {
       const pageId = activePage.id.replace('page-', '');
-      if (['dash', 'add'].includes(pageId)) {
-        _origShowPage('day');
-      }
-      // If on stock list, stay but refresh to reflect disabled actions
-      if (pageId === 'list') {
-        renderList();
-      }
+      if (pageId === 'add') _origShowPage('day');
+      if (pageId === 'dash' && !dashOk) _origShowPage('day');
+      if (pageId === 'list') renderList(); // refresh to show/hide action buttons
     }
   }
 }
@@ -1573,7 +1572,6 @@ function hideDayClosedOverlay() {
 // Statuses: PENDING → OPEN → CLOSED → LOCKED
 // ===================================================================
 let activeDay = null;         // current business day object
-let activeSubSession = null;  // sub-session (opened after permanent close)
 let dayCheckTimer = null;     // timer for auto-open/close/lock
 
 // ── HELPERS ─────────────────────────────────────────────────────────
@@ -1589,25 +1587,50 @@ function fmtFullDate(dateStr) {
   });
 }
 
-// Find business day by date string
+// Find primary business day by date string
+// Returns the primary session (session_num=1 or is_primary=true), or first found
 async function getBusinessDay(dateStr) {
   const all = await dbAll('business_days');
-  return all.find(d => d.business_date === dateStr) || null;
+  const forDate = all.filter(d => d.business_date === dateStr);
+  return forDate.find(d => d.is_primary) || forDate.find(d => d.session_num === 1) || forDate[0] || null;
+}
+
+// Get ALL sessions for a given date (including parallel sessions)
+async function getAllDaySessions(dateStr) {
+  const all = await dbAll('business_days');
+  return all.filter(d => d.business_date === dateStr)
+            .sort((a, b) => (a.session_num || 1) - (b.session_num || 1));
+}
+
+// Count sessions for a date (used when creating parallel sessions)
+async function countDaySessions(dateStr) {
+  const all = await dbAll('business_days');
+  return all.filter(d => d.business_date === dateStr).length;
 }
 
 // ── LOAD & INITIALIZE DAY ────────────────────────────────────────────
 async function loadActiveDay() {
   const today = todayDateStr();
 
-  // Get today's day record — create PENDING if doesn't exist yet
-  let bday = await getBusinessDay(today);
+  // Get today's active session — prefer OPEN, then PAUSED, then primary
+  const allToday = await getAllDaySessions(today);
+  let bday;
+  if (allToday.length > 0) {
+    bday = allToday.find(s => s.status === 'OPEN') ||
+           allToday.find(s => s.status === 'PAUSED') ||
+           allToday.find(s => s.is_primary) ||
+           allToday[0];
+  }
   if (!bday) {
     const id = await dbAdd('business_days', {
       business_date: today,
       status: 'PENDING',
+      session_num: 1,
+      is_primary: true,
       opened_at: null, closed_at: null,
       auto_opened: false, auto_closed: false,
-      reopened_count: 0, final_locked_at: null, notes: ''
+      reopened_count: 0, final_locked_at: null,
+      reconciled_at: null, notes: ''
     });
     bday = await dbGet('business_days', id);
   }
@@ -1616,19 +1639,16 @@ async function loadActiveDay() {
   // Lock the old day and create a fresh PENDING for today
   if (bday.business_date !== today) {
     if (bday.status !== 'LOCKED') await lockBusinessDay(bday);
-    // Also lock any open sub-sessions from that old date
-    const oldSubs = await dbAll('sub_sessions');
-    for (const sub of oldSubs.filter(s => s.business_date === bday.business_date && (s.status === 'OPEN' || s.status === 'PAUSED'))) {
-      sub.status = 'LOCKED'; sub.final_locked_at = new Date().toISOString();
-      await dbPut('sub_sessions', sub);
-    }
+
     bday = await getBusinessDay(today);
     if (!bday) {
       const id = await dbAdd('business_days', {
         business_date: today, status: 'PENDING',
+        session_num: 1, is_primary: true,
         opened_at: null, closed_at: null,
         auto_opened: false, auto_closed: false,
-        pause_count: 0, final_locked_at: null, notes: ''
+        pause_count: 0, final_locked_at: null,
+        reconciled_at: null, notes: ''
       });
       bday = await dbGet('business_days', id);
     }
@@ -1640,128 +1660,213 @@ async function loadActiveDay() {
   // so user can continue seamlessly
 
   activeDay = bday;
-  // Also load any active sub-session for today
-  if (bday.status === 'CLOSED') {
-    await loadSubSession(today);
-  } else {
-    activeSubSession = null;
-  }
   updateDayBanner();
-  if (activeDay && (activeDay.status === 'OPEN' || (activeSubSession && activeSubSession.status === 'OPEN'))) updateDayLiveStats();
+  if (activeDay && activeDay.status === 'OPEN') updateDayLiveStats();
   startDayTimer();
 }
 
-// ===================================================================
-// SUB-SESSION MANAGEMENT
-// Child sessions opened after the main day is permanently CLOSED
-// but it is still the same calendar date (before midnight).
-// ===================================================================
 
-async function openSubSession() {
-  if (!activeDay) { toast('No active day found.', 'err'); return; }
-  if (activeDay.status !== 'CLOSED') { toast('Main day must be closed first.', 'err'); return; }
 
-  const allSubs = await dbAll('sub_sessions');
-  const daySubs = allSubs.filter(s => s.business_date === activeDay.business_date);
-  const existingOpen = daySubs.find(s => s.status === 'OPEN');
-  const existingPaused = daySubs.find(s => s.status === 'PAUSED');
+// ═══════════════════════════════════════════════════════════════
+// PARALLEL SESSION MANAGEMENT
+// User can open Session 2, 3… alongside a CLOSED main session.
+// Sessions share the same business_date but have their own records.
+// Merge: pools all session sales into the primary session.
+// Reconcile: permanently finalises the day — no further changes.
+// ═══════════════════════════════════════════════════════════════
 
-  if (existingOpen) { toast('A sub-session is already open.', 'err'); return; }
+// Open a new parallel session for today (Session 2, 3…)
+async function openNewSession() {
+  const today = todayDateStr();
+  const sessions = await getAllDaySessions(today);
 
-  if (existingPaused) {
-    // Resume the paused sub-session
-    existingPaused.status = 'OPEN';
-    existingPaused.last_opened_at = new Date().toISOString();
-    await dbPut('sub_sessions', existingPaused);
-    activeSubSession = existingPaused;
-    setDayMode(true);
-    updateDayBanner();
-    updateDayLiveStats();
-    renderDaySessionsList();
-    toast('▶️ Sub-session #' + existingPaused.session_num + ' resumed!', 'ok');
+  // Block if any session is currently OPEN
+  if (sessions.some(s => s.status === 'OPEN')) {
+    toast('Close the current open session first.', 'err');
+    return;
+  }
+  // Block if primary day is RECONCILED
+  if (sessions.some(s => s.is_primary && s.status === 'RECONCILED')) {
+    toast('Day is reconciled. No new sessions allowed.', 'err');
     return;
   }
 
-  // Create new sub-session
-  const sessionNum = daySubs.length + 1;
+  const nextNum = sessions.length + 1;
   const items = await dbAll('items');
-  const id = await dbAdd('sub_sessions', {
-    business_date: activeDay.business_date,
-    parent_day_id: activeDay.id,
-    session_num: sessionNum,
+  const id = await dbAdd('business_days', {
+    business_date: today,
+    session_num: nextNum,
+    is_primary: false,
     status: 'OPEN',
     opened_at: new Date().toISOString(),
     last_opened_at: new Date().toISOString(),
     closed_at: null,
-    paused_at: null,
+    auto_opened: false, auto_closed: false,
+    pause_count: 0, reopened_count: 0,
+    final_locked_at: null, reconciled_at: null,
     openingStockCost: items.reduce((s, i) => s + i.buy * i.qty, 0),
-    salesCount: 0, revenue: 0, profit: 0, itemsSold: 0,
+    openingStockRetail: items.reduce((s, i) => s + i.sell * i.qty, 0),
+    date: fmtFullDate(today),
+    dateStr: today,
     notes: ''
   });
-  activeSubSession = await dbGet('sub_sessions', id);
+  activeDay = await dbGet('business_days', id);
   setDayMode(true);
   updateDayBanner();
   updateDayLiveStats();
   renderDaySessionsList();
-  toast('➕ Sub-session #' + sessionNum + ' opened!', 'ok');
+  toast('➕ Session ' + nextNum + ' opened!', 'ok');
 }
 
-async function pauseSubSession() {
-  if (!activeSubSession || activeSubSession.status !== 'OPEN') return;
-  activeSubSession.status = 'PAUSED';
-  activeSubSession.paused_at = new Date().toISOString();
-  await dbPut('sub_sessions', activeSubSession);
-  setDayMode(false);
-  updateDayBanner();
-  renderDaySessionsList();
-  toast('⏸ Sub-session paused. Tap Resume to continue.', 'ok');
-}
-
-async function closeSubSession() {
-  if (!activeSubSession || activeSubSession.status !== 'OPEN') return;
+// ── RECONCILE SHEET ──────────────────────────────────────────────────
+async function showReconcileSheet() {
+  const today = todayDateStr();
+  const sessions = await getAllDaySessions(today);
   const sales = await dbAll('sales');
-  const subSales = sales.filter(s => s.sub_session_id === activeSubSession.id);
-  activeSubSession.status = 'CLOSED';
-  activeSubSession.closed_at = new Date().toISOString();
-  activeSubSession.salesCount = subSales.length;
-  activeSubSession.revenue   = subSales.reduce((s, x) => s + x.revenue, 0);
-  activeSubSession.profit    = subSales.reduce((s, x) => s + x.profit, 0);
-  activeSubSession.itemsSold = subSales.reduce((s, x) => s + x.qty, 0);
-  await dbPut('sub_sessions', activeSubSession);
-  activeSubSession = null;
+
+  // Collect totals for each session
+  const rows = await Promise.all(sessions.map(async s => {
+    const sSales = sales.filter(x => x.business_date === today && x.session_id === s.id);
+    // Also count untagged sales for primary session
+    const untagged = s.is_primary ? sales.filter(x => x.business_date === today && !x.session_id) : [];
+    const allSales = [...sSales, ...untagged];
+    return {
+      session: s,
+      count: allSales.length,
+      revenue: allSales.reduce((a, x) => a + x.revenue, 0),
+      profit: allSales.reduce((a, x) => a + x.profit, 0),
+    };
+  }));
+
+  const totalRevenue = rows.reduce((a, r) => a + r.revenue, 0);
+  const totalProfit  = rows.reduce((a, r) => a + r.profit, 0);
+  const totalSales   = rows.reduce((a, r) => a + r.count, 0);
+
+  const hasMultiple = sessions.length > 1;
+  const allClosed   = sessions.every(s => s.status === 'CLOSED' || s.status === 'RECONCILED');
+
+  const sheet = document.getElementById('reconcile-sheet');
+  const content = document.getElementById('reconcile-content');
+
+  content.innerHTML =
+    '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px;">Day Summary — ' + fmtFullDate(today) + '</div>' +
+
+    // Sessions breakdown table
+    rows.map(r =>
+      '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">' +
+      '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--text2);flex-shrink:0;">' + (r.session.session_num || 1) + '</div>' +
+      '<div style="flex:1;">' +
+      '<div style="font-size:13px;font-weight:700;">' + (r.session.is_primary ? 'Session 1 (Primary)' : 'Session ' + r.session.session_num) + '</div>' +
+      '<div style="font-size:11px;color:var(--muted);">' + r.count + ' sales · Status: ' + r.session.status + '</div>' +
+      '</div>' +
+      '<div style="text-align:right;">' +
+      '<div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(r.revenue) + '</div>' +
+      '<div style="font-size:11px;color:var(--green);font-family:var(--mono);">+' + fmt(r.profit) + '</div>' +
+      '</div></div>'
+    ).join('') +
+
+    // Grand total
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;margin-top:4px;">' +
+    '<div><div style="font-size:14px;font-weight:800;color:var(--text);">Grand Total</div><div style="font-size:12px;color:var(--muted);">' + totalSales + ' total sales</div></div>' +
+    '<div style="text-align:right;"><div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--accent2);">' + fmt(totalRevenue) + '</div>' +
+    '<div style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--green);">+' + fmt(totalProfit) + ' profit</div></div>' +
+    '</div>' +
+
+    // Merge button (only if multiple sessions)
+    (hasMultiple && allClosed ?
+      '<button onclick="mergeSessions()" style="width:100%;padding:14px;background:#7c3aed;color:white;border:none;border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">' +
+      '<i class="fa-solid fa-code-merge"></i> Merge ' + sessions.length + ' Sessions into One</button>'
+      : hasMultiple && !allClosed ?
+      '<div style="padding:12px;background:#fef3c7;border-radius:var(--r);font-size:13px;font-weight:600;color:#92400e;text-align:center;margin-bottom:10px;">Close all sessions before merging</div>'
+      : ''
+    ) +
+
+    // Reconcile notes
+    '<div style="margin-bottom:10px;">' +
+    '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px;">Reconciliation Notes</div>' +
+    '<textarea id="reconcile-notes" rows="2" placeholder="e.g. Cash counted and confirmed…" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);font-family:var(--sans);font-size:14px;padding:10px;outline:none;resize:none;box-sizing:border-box;"></textarea>' +
+    '</div>' +
+
+    // Reconcile button
+    '<button onclick="reconcileDay()" style="width:100%;padding:15px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">' +
+    '<i class="fa-solid fa-check-double"></i> Confirm Reconciliation</button>' +
+    '<button onclick="closeReconcileSheet()" style="width:100%;padding:13px;background:transparent;border:1px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:var(--sans);">Cancel</button>';
+
+  sheet.classList.add('open');
+}
+
+function closeReconcileSheet() {
+  document.getElementById('reconcile-sheet').classList.remove('open');
+}
+
+// ── MERGE SESSIONS ────────────────────────────────────────────────────
+// Tags all non-primary session sales with primary session reference,
+// then marks non-primary sessions as MERGED (closed but searchable)
+async function mergeSessions() {
+  const today = todayDateStr();
+  const sessions = await getAllDaySessions(today);
+  const primary = sessions.find(s => s.is_primary);
+  if (!primary) { toast('No primary session found.', 'err'); return; }
+
+  const nonPrimary = sessions.filter(s => !s.is_primary);
+  if (nonPrimary.length === 0) { toast('Nothing to merge.', 'err'); return; }
+
+  const sales = await dbAll('sales');
+  let mergedCount = 0;
+
+  for (const sess of nonPrimary) {
+    // Re-tag all sales from this session to point to today (already tagged by business_date)
+    // Mark session as MERGED
+    sess.status = 'MERGED';
+    sess.merged_at = new Date().toISOString();
+    sess.merged_into = primary.id;
+    await dbPut('business_days', sess);
+    mergedCount++;
+  }
+
+  toast('✅ ' + mergedCount + ' session(s) merged into Session 1!', 'ok');
+  // Refresh reconcile sheet with updated data
+  await showReconcileSheet();
+  renderDaySessionsList();
+  scheduleSync();
+}
+
+// ── RECONCILE ─────────────────────────────────────────────────────────
+// Permanently finalises the day. Sets primary session to RECONCILED.
+// All other sessions must be CLOSED or MERGED first.
+async function reconcileDay() {
+  const today = todayDateStr();
+  const sessions = await getAllDaySessions(today);
+  const primary = sessions.find(s => s.is_primary) || activeDay;
+
+  // Check all sessions are closed/merged
+  const openSessions = sessions.filter(s => s.status === 'OPEN' || s.status === 'PAUSED');
+  if (openSessions.length > 0) {
+    toast('Close all open sessions before reconciling.', 'err');
+    return;
+  }
+
+  const notes = (document.getElementById('reconcile-notes') || {}).value || '';
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(s => s.business_date === today);
+
+  primary.status = 'RECONCILED';
+  primary.reconciled_at = new Date().toISOString();
+  primary.reconcile_notes = notes;
+  primary.final_salesCount = daySales.length;
+  primary.final_revenue = daySales.reduce((a, s) => a + s.revenue, 0);
+  primary.final_profit  = daySales.reduce((a, s) => a + s.profit, 0);
+  primary.final_itemsSold = daySales.reduce((a, s) => a + s.qty, 0);
+
+  await dbPut('business_days', primary);
+  activeDay = primary;
+  closeReconcileSheet();
   setDayMode(false);
   updateDayBanner();
   renderDaySessionsList();
   renderDashboard();
-  toast('🔒 Sub-session closed.', 'ok');
+  toast('✅ Day reconciled and permanently closed!', 'ok');
   scheduleSync();
-}
-
-
-// Auto-close a sub-session (called at midnight or by system)
-async function forceCloseSubSession(reason) {
-  if (!activeSubSession) return;
-  const sales = await dbAll('sales');
-  const subSales = sales.filter(s => s.sub_session_id === activeSubSession.id);
-  activeSubSession.status = 'CLOSED';
-  activeSubSession.closed_at = new Date().toISOString();
-  activeSubSession.auto_closed = true;
-  activeSubSession.close_reason = reason || 'auto';
-  activeSubSession.salesCount = subSales.length;
-  activeSubSession.revenue    = subSales.reduce((s, x) => s + x.revenue, 0);
-  activeSubSession.profit     = subSales.reduce((s, x) => s + x.profit, 0);
-  activeSubSession.itemsSold  = subSales.reduce((s, x) => s + x.qty, 0);
-  await dbPut('sub_sessions', activeSubSession);
-  activeSubSession = null;
-}
-
-async function loadSubSession(business_date) {
-  const all = await dbAll('sub_sessions');
-  const active = all.find(s =>
-    s.business_date === business_date &&
-    (s.status === 'OPEN' || s.status === 'PAUSED')
-  );
-  activeSubSession = active || null;
 }
 
 // ── AUTO SCHEDULER ───────────────────────────────────────────────────
@@ -1780,8 +1885,7 @@ function startDayTimer() {
     }
 
     // ── 11:45 PM: Warning toast — 15 minutes left ─────────────────────
-    if ((bday.status === 'OPEN' || (activeSubSession && activeSubSession.status === 'OPEN'))
-        && h === 23 && m === 45 && s < 30) {
+    if (bday.status === 'OPEN' && h === 23 && m === 45 && s < 30) {
       toast('⏰ 15 minutes left — day auto-closes at midnight!', 'err');
     }
 
@@ -1790,24 +1894,15 @@ function startDayTimer() {
       await autoCloseDay(bday);
     }
 
-    // ── 11:59:55 PM: Also force-close any open sub-session ────────────
-    if (activeSubSession && activeSubSession.status === 'OPEN' && h === 23 && m === 59 && s >= 55) {
-      await forceCloseSubSession('Auto-closed at midnight');
-    }
 
     // ── 00:00: Lock yesterday, create fresh PENDING for today ─────────
     if (h === 0 && m === 0 && s < 30) {
       const yesterday = new Date(now.getTime() - 24*60*60*1000).toISOString().split('T')[0];
       const yBday = await getBusinessDay(yesterday);
-      if (yBday && (yBday.status === 'CLOSED' || yBday.status === 'OPEN')) {
+      if (yBday && ['CLOSED', 'OPEN', 'PAUSED', 'RECONCILED'].includes(yBday.status) && yBday.status !== 'LOCKED') {
         await lockBusinessDay(yBday);
       }
-      // Also lock any sub-sessions from yesterday
-      const allSubs = await dbAll('sub_sessions');
-      for (const sub of allSubs.filter(s => s.business_date === yesterday && s.status !== 'LOCKED' && s.status !== 'CLOSED')) {
-        sub.status = 'LOCKED'; sub.final_locked_at = now.toISOString();
-        await dbPut('sub_sessions', sub);
-      }
+
       // Ensure today has a fresh PENDING record
       const todayExists = await getBusinessDay(today);
       if (!todayExists) {
@@ -1819,7 +1914,6 @@ function startDayTimer() {
         });
       }
       // Reset state and refresh
-      activeSubSession = null;
       const newBday = await getBusinessDay(today);
       if (newBday) { activeDay = newBday; }
       setDayMode(false);
@@ -1842,10 +1936,6 @@ async function autoOpenDay(bday) {
 }
 
 async function autoCloseDay(bday) {
-  // Force-close any open sub-session first
-  if (activeSubSession && activeSubSession.status === 'OPEN') {
-    await forceCloseSubSession('Auto-closed with main day at midnight');
-  }
   const sales = await dbAll('sales');
   const daySales = sales.filter(s => s.business_date === bday.business_date);
   bday.status = 'CLOSED';   // auto permanent close at midnight
@@ -1920,20 +2010,21 @@ async function openDay() {
   if (!bday) {
     const id = await dbAdd('business_days', {
       business_date: today, status: 'PENDING',
+      session_num: 1, is_primary: true,
       opened_at: null, closed_at: null,
       auto_opened: false, auto_closed: false,
-      pause_count: 0, final_locked_at: null, notes: ''
+      pause_count: 0, final_locked_at: null,
+      reconciled_at: null, notes: ''
     });
     bday = await dbGet('business_days', id);
   }
 
   if (bday.status === 'OPEN') { toast('Day is already open!', 'err'); return; }
-  // CLOSED = permanently closed — cannot reopen
-  if (bday.status === 'CLOSED') { toast('🔒 Day is permanently closed.', 'err'); return; }
-  // LOCKED = previous day — open a new day instead
-  if (bday.status === 'LOCKED') { toast('🔒 This day is locked.', 'err'); return; }
+  if (bday.status === 'RECONCILED') { toast('✅ Day is reconciled and permanently closed.', 'err'); return; }
+  // LOCKED = previous date — cannot reopen
+  if (bday.status === 'LOCKED') { toast('🔒 This day is from a previous date and is locked.', 'err'); return; }
 
-  const isReopen = (bday.status === 'PAUSED');
+  const isReopen = (bday.status === 'PAUSED' || bday.status === 'CLOSED');
 
   if (!bday.opened_at) {
     // First open — snapshot opening stock
@@ -1947,9 +2038,11 @@ async function openDay() {
   bday.last_opened_at = new Date().toISOString();
   bday.date    = fmtFullDate(today);
   bday.dateStr = today;
-  if (isReopen) {
-    // pause_count was incremented when pausing; just show resume toast
+  if (bday.status === 'PAUSED') {
     toast('▶️ Day resumed! Continue where you left off.', 'ok');
+  } else if (bday.status === 'CLOSED') {
+    bday.reopened_count = (bday.reopened_count || 0) + 1;
+    toast('🔓 Day reopened (' + bday.reopened_count + 'x). Continue operations.', 'ok');
   } else {
     toast('🌅 Business day opened! Good luck today.', 'ok');
   }
@@ -1979,52 +2072,31 @@ async function refreshDayTab() {
   const bday = await getBusinessDay(today);
   if (bday) {
     activeDay = bday;
-    // Re-load sub-session in case it changed on another device
-    if (bday.status === 'CLOSED') {
-      await loadSubSession(today);
-    }
     updateDayBanner();
-    const isActive = activeDay.status === 'OPEN' ||
-                     (activeSubSession && activeSubSession.status === 'OPEN');
-    if (isActive) updateDayLiveStats();
+    if (activeDay.status === 'OPEN') updateDayLiveStats();
   }
   renderDaySessionsList();
 }
 
 // ── GUARD: block transactions when day not OPEN ───────────────────────
 function isDayOpen() {
-  // Day open OR active sub-session open
-  return (activeDay && activeDay.status === 'OPEN') ||
-         (activeSubSession && activeSubSession.status === 'OPEN');
+  return activeDay && activeDay.status === 'OPEN';
 }
-function isSubSessionOpen() {
-  return activeSubSession && activeSubSession.status === 'OPEN';
-}
-function getActiveDayOrSub() {
-  // Returns whichever is currently open for operations
-  if (activeSubSession && activeSubSession.status === 'OPEN') return activeSubSession;
-  return activeDay;
-}
-function isDayPaused() {
-  return activeDay && activeDay.status === 'PAUSED';
-}
-function isDayActiveToday() {
-  // True if today's day can still have operations (OPEN or PAUSED)
-  return activeDay && (activeDay.status === 'OPEN' || activeDay.status === 'PAUSED');
+function isDayReconciled() {
+  return activeDay && activeDay.status === 'RECONCILED';
 }
 
 function requireOpenDay() {
   if (!isDayOpen()) {
     const status = activeDay ? activeDay.status : 'PENDING';
-    if (status === 'LOCKED') {
-      toast('🔒 Open today\'s business day first.', 'err');
-    } else if (status === 'PAUSED') {
-      toast('⏸ Day is paused. Reopen to continue.', 'err');
-    } else if (status === 'CLOSED') {
-      toast('🔒 Day is permanently closed. Open a Sub-Session from the Day tab to continue.', 'err');
-    } else {
-      toast('⚠️ Please open the business day first.', 'err');
-    }
+    const msgs = {
+      PENDING:     '📅 Open the business day first to record transactions.',
+      PAUSED:      '⏸ Day is paused — go to Day tab and tap Resume.',
+      CLOSED:      '🌙 Day is closed — go to Day tab to reopen.',
+      RECONCILED:  '✅ Day is reconciled and permanently closed.',
+      LOCKED:      '🔒 This day is from a previous date and is locked.',
+    };
+    toast(msgs[status] || '⚠️ Open the business day first.', 'err');
     showPage('day');
     return false;
   }
@@ -2271,13 +2343,24 @@ function updateDayBanner() {
       action: '<button onclick="openDay()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-play"></i> Resume Day</button>'
     },
     CLOSED: {
-      bg: '#fee2e2', border: 'rgba(192,57,43,0.25)', icon: '🔒',
-      badgeBg: '#fee2e2', badgeColor: 'var(--red)',
-      title: 'Day Permanently Closed', titleColor: 'var(--red)',
-      sub: 'Closed at ' + (activeDay.closed_at ? fmtTime(activeDay.closed_at) : '—') + ' · You can open a sub-session to continue',
+      bg: '#fef3c7', border: '#f5d9a0', icon: '🌙',
+      badgeBg: '#fef3c7', badgeColor: '#92400e',
+      title: 'Business Day Closed' + (activeDay.session_num > 1 ? ' · Session ' + activeDay.session_num : ''), titleColor: '#d97706',
+      sub: 'Closed at ' + (activeDay.closed_at ? fmtTime(activeDay.closed_at) : '—')
+           + (activeDay.auto_closed ? ' (auto)' : ''),
       action:
-        '<div style="margin-bottom:8px;padding:10px 12px;background:var(--red-light);border-radius:var(--r);color:var(--red);font-size:12px;font-weight:600;text-align:center;">🔒 Main day is permanently closed</div>' +
-        '<button onclick="openSubSession()" style="' + BTN + 'var(--accent)' + BTN2 + '">➕ Open Sub-Session</button>'
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
+        '<button onclick="openDay()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-rotate-left"></i> Reopen</button>' +
+        '<button onclick="openNewSession()" style="' + BTN + '#7c3aed' + BTN2 + '"><i class="fa-solid fa-plus"></i> New Session</button>' +
+        '</div>' +
+        '<button onclick="showReconcileSheet()" style="' + BTN + 'var(--accent)' + BTN2 + '"><i class="fa-solid fa-check-double"></i> Reconcile &amp; Finalise</button>'
+    },
+    RECONCILED: {
+      bg: 'var(--green-light)', border: '#a8d8b5', icon: '✅',
+      badgeBg: '#dcfce7', badgeColor: '#16a34a',
+      title: 'Day Reconciled', titleColor: 'var(--green)',
+      sub: 'Reconciled at ' + (activeDay.reconciled_at ? fmtTime(activeDay.reconciled_at) : '—') + ' · Permanently closed',
+      action: '<div style="padding:12px;background:var(--green-light);border-radius:var(--r);color:var(--green);font-size:13px;font-weight:700;text-align:center;"><i class="fa-solid fa-check-double"></i> This day is fully reconciled and locked</div>'
     },
     LOCKED: {
       bg: 'var(--surface2)', border: 'var(--border)', icon: '📅',
@@ -2288,41 +2371,6 @@ function updateDayBanner() {
     }
   };
 
-  // If main day is CLOSED but a sub-session is open, show sub-session banner
-  if (status === 'CLOSED' && activeSubSession && activeSubSession.status === 'OPEN') {
-    const subCfg = {
-      bg: '#eff6ff', border: '#93c5fd', icon: '🔄',
-      badgeBg: '#dbeafe', badgeColor: '#1d4ed8',
-      title: 'Sub-Session #' + (activeSubSession.session_num || 1) + ' is Open', titleColor: '#1d4ed8',
-      sub: 'Sub #' + (activeSubSession.session_num || 1) + ' · Started at ' + fmtTime(activeSubSession.opened_at) + ' · Cumulative: ' + fmt(activeSubSession.revenue || 0),
-      action:
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
-        '<button onclick="pauseSubSession()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-pause"></i> Pause</button>' +
-        '<button onclick="closeSubSession()" style="' + BTN + 'var(--red)' + BTN2 + '"><i class="fa-solid fa-lock"></i> Close Sub-Session</button>' +
-        '</div>'
-    };
-    banner.style.background = subCfg.bg;
-    banner.style.borderColor = subCfg.border;
-    icon.textContent = subCfg.icon;
-    badge.textContent = 'SUB-SESSION';
-    badge.style.background = subCfg.badgeBg;
-    badge.style.color = subCfg.badgeColor;
-    title.textContent = subCfg.title;
-    title.style.color = subCfg.titleColor;
-    sub.textContent = subCfg.sub;
-    actionArea.innerHTML = subCfg.action;
-    liveSection.style.display = 'block';
-    setDayMode(true);
-    updateDayLiveStats();
-    return;
-  }
-  // If main day is CLOSED and sub-session is PAUSED
-  if (status === 'CLOSED' && activeSubSession && activeSubSession.status === 'PAUSED') {
-    configs.CLOSED.action =
-      '<div style="margin-bottom:8px;padding:10px 12px;background:var(--red-light);border-radius:var(--r);color:var(--red);font-size:12px;font-weight:600;text-align:center;">🔒 Main day is permanently closed</div>' +
-      '<button onclick="openSubSession()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-play"></i> Resume Sub-Session #' + (activeSubSession.session_num || 1) + '</button>';
-    configs.CLOSED.sub = 'Sub-session paused · Tap to resume or open a new one';
-  }
   const cfg = configs[status] || configs.PENDING;
   banner.style.background = cfg.bg;
   banner.style.borderColor = cfg.border;
@@ -2388,45 +2436,69 @@ async function updateDayLiveStats() {
 }
 
 // ── PAST SESSIONS LIST ────────────────────────────────────────────────
-// Helper: get all sub-sessions for a given date
-async function getSubSessionsForDate(dateStr) {
-  const all = await dbAll('sub_sessions');
-  return all.filter(s => s.business_date === dateStr)
-            .sort((a, b) => new Date(b.opened_at) - new Date(a.opened_at));
-}
-
 async function renderDaySessionsList() {
-  const sessions = await dbAll('business_days');
-  const done = sessions.filter(s => s.status === 'CLOSED' || s.status === 'LOCKED')
-                       .sort((a, b) => new Date(b.business_date) - new Date(a.business_date));
+  const all = await dbAll('business_days');
+  // Group by business_date, sort newest first
+  const dateMap = {};
+  all.forEach(s => {
+    if (!dateMap[s.business_date]) dateMap[s.business_date] = [];
+    dateMap[s.business_date].push(s);
+  });
+  const today = todayDateStr();
+  const dates = Object.keys(dateMap)
+    .filter(d => {
+      const sessions = dateMap[d];
+      // Show past dates or today if all sessions are done
+      return d !== today || sessions.every(s => s.status === 'CLOSED' || s.status === 'LOCKED' || s.status === 'RECONCILED' || s.status === 'MERGED');
+    })
+    .sort((a, b) => b.localeCompare(a));
+
   const list = document.getElementById('day-sessions-list');
-  if (!done.length) {
-    list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No closed sessions yet</div>';
+  if (!dates.length) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No past sessions yet</div>';
     return;
   }
-  list.innerHTML = done.map(s => {
-    const profitColor = (s.profit||0) > 0 ? 'var(--green)' : (s.profit||0) < 0 ? 'var(--red)' : 'var(--muted)';
-    const isLocked = s.status === 'LOCKED';
-    const statusLabel = isLocked
-      ? '<span style="font-size:11px;background:var(--red-light);color:var(--red);padding:3px 8px;border-radius:20px;font-weight:700;">🔒 LOCKED</span>'
-      : '<span style="font-size:11px;background:var(--green-light);color:var(--green);padding:3px 8px;border-radius:20px;font-weight:700;">CLOSED</span>';
-    const openedStr = s.opened_at ? fmtTime(s.opened_at) : '—';
-    const closedStr = s.closed_at ? fmtTime(s.closed_at) : 'Auto-closed';
-    const autoFlag = s.auto_opened || s.auto_closed
-      ? '<span style="font-size:10px;color:var(--muted);margin-left:6px;">' + (s.auto_opened ? '⚡auto-opened ' : '') + (s.auto_closed ? '⚡auto-closed' : '') + '</span>'
+
+  list.innerHTML = dates.map(dateStr => {
+    const sessions = dateMap[dateStr].sort((a, b) => (a.session_num||1) - (b.session_num||1));
+    const primary = sessions.find(s => s.is_primary) || sessions[0];
+    const totalRev    = sessions.reduce((a, s) => a + (s.revenue||s.final_revenue||0), 0);
+    const totalProfit = sessions.reduce((a, s) => a + (s.profit||s.final_profit||0), 0);
+    const totalSales  = sessions.reduce((a, s) => a + (s.salesCount||s.final_salesCount||0), 0);
+    const isReconciled = sessions.some(s => s.status === 'RECONCILED');
+    const isLocked     = sessions.every(s => s.status === 'LOCKED');
+    const hasMultiple  = sessions.length > 1;
+    const profitColor  = totalProfit > 0 ? 'var(--green)' : totalProfit < 0 ? 'var(--red)' : 'var(--muted)';
+
+    const badge = isReconciled
+      ? '<span style="font-size:10px;background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:20px;font-weight:700;"><i class="fa-solid fa-check-double" style="margin-right:3px;"></i>Reconciled</span>'
+      : isLocked
+        ? '<span style="font-size:10px;background:var(--surface2);color:var(--muted);padding:2px 8px;border-radius:20px;font-weight:700;"><i class="fa-solid fa-lock" style="margin-right:3px;"></i>Locked</span>'
+        : '<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:20px;font-weight:700;"><i class="fa-solid fa-moon" style="margin-right:3px;"></i>Closed</span>';
+
+    const sessionPills = hasMultiple
+      ? '<div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;">' +
+        sessions.map(s => {
+          const c = s.status === 'MERGED' ? '#7c3aed' : s.status === 'RECONCILED' ? 'var(--green)' : 'var(--muted)';
+          return '<span style="font-size:10px;border:1px solid var(--border);padding:2px 8px;border-radius:20px;color:' + c + ';font-weight:600;">Session ' + (s.session_num||1) + ' · ' + s.status + '</span>';
+        }).join('') +
+        '</div>'
       : '';
-    return '<div class="card" style="margin-bottom:8px;padding:14px;cursor:pointer;" onclick="viewPastSession(' + s.id + ')">' +
+
+    return '<div class="card" style="margin-bottom:8px;padding:14px;cursor:pointer;" onclick="viewPastSession(' + (primary.id) + ')">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
-      '<div><div style="font-size:14px;font-weight:800;color:var(--text);">' + fmtFullDate(s.business_date) + '</div>' +
-      '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">' + openedStr + ' → ' + closedStr + autoFlag + '</div></div>' +
-      statusLabel + '</div>' +
+      '<div><div style="font-size:14px;font-weight:800;color:var(--text);">' + fmtFullDate(dateStr) + '</div>' +
+      '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">' +
+        (primary.opened_at ? fmtTime(primary.opened_at) : '—') + ' → ' + (primary.closed_at ? fmtTime(primary.closed_at) : 'auto') +
+        (hasMultiple ? ' · ' + sessions.length + ' sessions' : '') +
+      '</div>' + sessionPills + '</div>' +
+      badge + '</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">' +
-      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue||0) + '</div><div style="font-size:10px;color:var(--muted);">Revenue</div></div>' +
-      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:15px;font-weight:800;font-family:var(--mono);color:' + profitColor + ';">' + fmt(s.profit||0) + '</div><div style="font-size:10px;color:var(--muted);">Profit</div></div>' +
-      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--accent);">' + (s.salesCount||0) + '</div><div style="font-size:10px;color:var(--muted);">Sales</div></div>' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(totalRev) + '</div><div style="font-size:10px;color:var(--muted);">Revenue</div></div>' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:15px;font-weight:800;font-family:var(--mono);color:' + profitColor + ';">' + fmt(totalProfit) + '</div><div style="font-size:10px;color:var(--muted);">Profit</div></div>' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--accent);">' + totalSales + '</div><div style="font-size:10px;color:var(--muted);">Sales</div></div>' +
       '</div>' +
-      (s.notes ? '<div style="margin-top:8px;font-size:12px;color:var(--muted);font-style:italic;">"' + s.notes + '"</div>' : '') +
-      (s.reopened_count > 0 ? '<div style="margin-top:6px;font-size:11px;color:var(--muted);">↩️ Reopened ' + s.reopened_count + ' time(s)</div>' : '') +
+      (primary.reconcile_notes ? '<div style="margin-top:8px;font-size:12px;color:var(--muted);font-style:italic;">📝 ' + primary.reconcile_notes + '</div>' : '') +
       '</div>';
   }).join('');
 }
@@ -2457,6 +2529,7 @@ async function viewPastSession(sessionId) {
     (s.reopened_count > 0 ? '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">REOPENED</div><div class="detail-val" style="font-size:16px;color:var(--muted);">' + s.reopened_count + ' time(s)</div></div>' : '') +
     (s.notes ? '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">NOTES</div><div style="font-size:14px;color:var(--text);margin-top:6px;font-style:italic;">"' + s.notes + '"</div></div>' : '');
 
+  document.getElementById('export-day-btn').onclick = function() { exportDayCSV(sessionId); };
   document.getElementById('past-session-sheet').classList.add('open');
 }
 
@@ -2465,6 +2538,39 @@ function closePastSessionSheet() {
   document.getElementById('past-session-sheet').classList.remove('open');
 }
 
+
+
+// ── CSV EXPORT ────────────────────────────────────────────────────────
+async function exportDayCSV(sessionId) {
+  const s = sessionId ? await dbGet('business_days', sessionId) : activeDay;
+  if (!s) return;
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(x => x.business_date === s.business_date)
+                        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const headers = ['Date', 'Time', 'Item Code', 'Item Name', 'Type', 'Qty', 'Unit Price', 'Revenue', 'Profit'];
+  const rows = daySales.map(sale => [
+    sale.business_date || '',
+    sale.date ? new Date(sale.date).toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'}) : '',
+    sale.itemCode || '',
+    sale.itemName || '',
+    sale.type || '',
+    sale.qty || 0,
+    sale.actualPrice || sale.price || 0,
+    sale.revenue || 0,
+    sale.profit || 0,
+  ]);
+
+  const csv = [headers, ...rows].map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'MGS_' + s.business_date + (s.session_num > 1 ? '_s' + s.session_num : '') + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('📤 CSV exported!', 'ok');
+}
 
 // ═══════════════════════════════════════════════════════════
 // RESTOCK

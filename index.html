@@ -1113,7 +1113,7 @@
       </div>
 
       <!-- Action buttons row: Delete · Restock · Edit -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:10px;">
+      <div id="sh-action-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:10px;">
         <button class="btn-del" onclick="deleteItem()" style="padding:10px;font-size:12px;">
           🗑 Delete
         </button>
@@ -1515,6 +1515,21 @@
 
 <!-- ── App JavaScript ──────────────────────────────────────────── -->
 <script src="app.js"></script>
+<!-- ==============================================================
+     SHEET: RECONCILE
+     Shows all parallel sessions, merge button, and final reconcile
+     ============================================================== -->
+<div class="sheet-overlay" id="reconcile-sheet">
+  <div class="sheet" style="max-height:90vh;">
+    <div class="sheet-handle"></div>
+    <div style="font-size:19px;font-weight:900;color:var(--text);margin-bottom:4px;">
+      <i class="fa-solid fa-check-double" style="color:var(--accent);margin-right:8px;"></i>Reconcile Day
+    </div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">Review, merge sessions, then finalise</div>
+    <div id="reconcile-content"></div>
+  </div>
+</div>
+
 
 </body>
 </html>
