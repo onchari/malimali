@@ -1,7 +1,7 @@
 // ===== DB =====
 let db;
 const DB_NAME = 'InventoryApp';
-const DB_VER = 4;
+const DB_VER = 5;
 
 function initDB() {
   const req = indexedDB.open(DB_NAME, DB_VER);
@@ -27,6 +27,13 @@ function initDB() {
       const bds = d.createObjectStore('business_days', { keyPath: 'id', autoIncrement: true });
       bds.createIndex('business_date', 'business_date', { unique: true });
       bds.createIndex('status', 'status', { unique: false });
+    }
+    // Sub-sessions: child sessions opened after a day is permanently closed
+    if (!d.objectStoreNames.contains('sub_sessions')) {
+      const ss2 = d.createObjectStore('sub_sessions', { keyPath: 'id', autoIncrement: true });
+      ss2.createIndex('business_date', 'business_date', { unique: false });
+      ss2.createIndex('parent_day_id', 'parent_day_id', { unique: false });
+      ss2.createIndex('status', 'status', { unique: false });
     }
   };
   req.onsuccess = e => {
@@ -509,6 +516,10 @@ async function renderList() {
 // ===== DETAIL SHEET =====
 
 function openSellFromSheet() {
+  if (!isDayOpen()) {
+    toast('⚠️ Open the business day to make sales.', 'err');
+    return;
+  }
   const id = currentDetailId;
   closeSheet();
   setTimeout(() => openSellModal(id), 150);
@@ -626,6 +637,40 @@ async function openSheet(id) {
   set('sh-profit-made', fmt(profitMade));
 
   document.getElementById('detail-sheet').classList.add('open');
+
+  // Gray out action buttons if day not open
+  const dayOpen = isDayOpen();
+  const shSellBtn = document.getElementById('sh-sell-btn');
+  const delBtn  = document.querySelector('#detail-sheet .btn-del');
+  const editBtn = document.querySelector('#detail-sheet .btn-edit');
+  const restockBtn = document.querySelector('[onclick="toggleRestock()"]');
+
+  [shSellBtn, delBtn, editBtn, restockBtn].forEach(btn => {
+    if (!btn) return;
+    if (dayOpen) {
+      btn.style.opacity = '1';
+      btn.style.pointerEvents = 'auto';
+    } else {
+      btn.style.opacity = '0.35';
+      btn.style.pointerEvents = 'none';
+    }
+  });
+
+  // Show day-closed notice in sheet when not open
+  let notice = document.getElementById('sh-day-notice');
+  if (!dayOpen) {
+    if (!notice) {
+      notice = document.createElement('div');
+      notice.id = 'sh-day-notice';
+      notice.style.cssText = 'background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--r);padding:10px 14px;margin-bottom:10px;font-size:12px;font-weight:700;color:var(--red);text-align:center;';
+      notice.innerHTML = '🔒 Day is not open — Sell, Edit, Delete and Restock are disabled';
+      const infoArea = document.querySelector('#detail-sheet .sheet > div:last-child');
+      if (infoArea) infoArea.insertBefore(notice, infoArea.firstChild);
+    }
+    notice.style.display = 'block';
+  } else {
+    if (notice) notice.style.display = 'none';
+  }
 }
 
 function closeSheet() { document.getElementById('detail-sheet').classList.remove('open'); }
@@ -645,6 +690,7 @@ async function deleteItem() {
 }
 
 async function editItem() {
+  if (!isDayOpen()) { toast('⚠️ Open the business day to edit items.', 'err'); return; }
   const item = await dbGet('items', currentDetailId);
   closeSheet();
   showPage('add');
@@ -1451,15 +1497,13 @@ async function runSyncDebug() {
 // ===================================================================
 
 // Tabs that require an open day
-const DAY_RESTRICTED_TABS = ['dash', 'add'];
+const DAY_RESTRICTED_TABS = ['dash', 'add', 'list'];
 
 function setDayMode(isOpen) {
-  // isOpen: true = OPEN, false = PAUSED/CLOSED/PENDING/LOCKED
-  DAY_RESTRICTED_TABS.forEach(tab => {
+  // Gray out dash + add tabs when day not open
+  ['dash', 'add'].forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
-    if (!btn) return;
-    // Only affect visible tabs (respect role restrictions)
-    if (btn.style.display === 'none') return;
+    if (!btn || btn.style.display === 'none') return;
     if (isOpen) {
       btn.classList.remove('disabled');
     } else {
@@ -1468,13 +1512,28 @@ function setDayMode(isOpen) {
     }
   });
 
-  // If day just closed and we're on a restricted page, show day page
+  // Stock tab: gray it but still accessible (view-only when day not open)
+  const listBtn = document.getElementById('tab-list');
+  if (listBtn && listBtn.style.display !== 'none') {
+    if (isOpen) {
+      listBtn.classList.remove('disabled');
+    } else {
+      listBtn.classList.add('disabled');
+      listBtn.classList.remove('active');
+    }
+  }
+
+  // If day just closed and we're on dash/add, redirect to day page
   if (!isOpen) {
     const activePage = document.querySelector('.page.active');
     if (activePage) {
       const pageId = activePage.id.replace('page-', '');
-      if (DAY_RESTRICTED_TABS.includes(pageId)) {
+      if (['dash', 'add'].includes(pageId)) {
         _origShowPage('day');
+      }
+      // If on stock list, stay but refresh to reflect disabled actions
+      if (pageId === 'list') {
+        renderList();
       }
     }
   }
@@ -1504,8 +1563,9 @@ function hideDayClosedOverlay() {
 // BUSINESS DAY MANAGEMENT
 // Statuses: PENDING → OPEN → CLOSED → LOCKED
 // ===================================================================
-let activeDay = null;      // current business day object
-let dayCheckTimer = null;  // timer for auto-open/close/lock
+let activeDay = null;         // current business day object
+let activeSubSession = null;  // sub-session (opened after permanent close)
+let dayCheckTimer = null;     // timer for auto-open/close/lock
 
 // ── HELPERS ─────────────────────────────────────────────────────────
 function todayDateStr() {
@@ -1561,8 +1621,14 @@ async function loadActiveDay() {
   }
 
   activeDay = bday;
+  // Also load any active sub-session for today
+  if (bday.status === 'CLOSED') {
+    await loadSubSession(today);
+  } else {
+    activeSubSession = null;
+  }
   updateDayBanner();
-  if (activeDay && activeDay.status === 'OPEN') updateDayLiveStats();
+  if (activeDay && (activeDay.status === 'OPEN' || (activeSubSession && activeSubSession.status === 'OPEN'))) updateDayLiveStats();
   startDayTimer();
 }
 
@@ -1765,7 +1831,17 @@ async function refreshDayTab() {
 
 // ── GUARD: block transactions when day not OPEN ───────────────────────
 function isDayOpen() {
-  return activeDay && activeDay.status === 'OPEN';
+  // Day open OR active sub-session open
+  return (activeDay && activeDay.status === 'OPEN') ||
+         (activeSubSession && activeSubSession.status === 'OPEN');
+}
+function isSubSessionOpen() {
+  return activeSubSession && activeSubSession.status === 'OPEN';
+}
+function getActiveDayOrSub() {
+  // Returns whichever is currently open for operations
+  if (activeSubSession && activeSubSession.status === 'OPEN') return activeSubSession;
+  return activeDay;
 }
 function isDayPaused() {
   return activeDay && activeDay.status === 'PAUSED';
@@ -2026,8 +2102,10 @@ function updateDayBanner() {
       bg: '#fee2e2', border: 'rgba(192,57,43,0.25)', icon: '🔒',
       badgeBg: '#fee2e2', badgeColor: 'var(--red)',
       title: 'Day Permanently Closed', titleColor: 'var(--red)',
-      sub: 'Closed at ' + (activeDay.closed_at ? fmtTime(activeDay.closed_at) : '—') + ' · Read-only — cannot be reopened',
-      action: '<div style="padding:12px;background:var(--red-light);border-radius:var(--r);color:var(--red);font-size:13px;font-weight:600;text-align:center;">🔒 This day is permanently closed</div>'
+      sub: 'Closed at ' + (activeDay.closed_at ? fmtTime(activeDay.closed_at) : '—') + ' · You can open a sub-session to continue',
+      action:
+        '<div style="margin-bottom:8px;padding:10px 12px;background:var(--red-light);border-radius:var(--r);color:var(--red);font-size:12px;font-weight:600;text-align:center;">🔒 Main day is permanently closed</div>' +
+        '<button onclick="openSubSession()" style="' + BTN + 'var(--accent)' + BTN2 + '">➕ Open Sub-Session</button>'
     },
     LOCKED: {
       bg: 'var(--surface2)', border: 'var(--border)', icon: '📅',
@@ -2038,6 +2116,41 @@ function updateDayBanner() {
     }
   };
 
+  // If main day is CLOSED but a sub-session is open, show sub-session banner
+  if (status === 'CLOSED' && activeSubSession && activeSubSession.status === 'OPEN') {
+    const subCfg = {
+      bg: '#eff6ff', border: '#93c5fd', icon: '🔄',
+      badgeBg: '#dbeafe', badgeColor: '#1d4ed8',
+      title: 'Sub-Session #' + (activeSubSession.session_num || 1) + ' is Open', titleColor: '#1d4ed8',
+      sub: 'Started at ' + fmtTime(activeSubSession.opened_at) + ' · Main day is closed',
+      action:
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+        '<button onclick="pauseSubSession()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-pause"></i> Pause</button>' +
+        '<button onclick="closeSubSession()" style="' + BTN + 'var(--red)' + BTN2 + '"><i class="fa-solid fa-lock"></i> Close Sub-Session</button>' +
+        '</div>'
+    };
+    banner.style.background = subCfg.bg;
+    banner.style.borderColor = subCfg.border;
+    icon.textContent = subCfg.icon;
+    badge.textContent = 'SUB-SESSION';
+    badge.style.background = subCfg.badgeBg;
+    badge.style.color = subCfg.badgeColor;
+    title.textContent = subCfg.title;
+    title.style.color = subCfg.titleColor;
+    sub.textContent = subCfg.sub;
+    actionArea.innerHTML = subCfg.action;
+    liveSection.style.display = 'block';
+    setDayMode(true);
+    updateDayLiveStats();
+    return;
+  }
+  // If main day is CLOSED and sub-session is PAUSED
+  if (status === 'CLOSED' && activeSubSession && activeSubSession.status === 'PAUSED') {
+    configs.CLOSED.action =
+      '<div style="margin-bottom:8px;padding:10px 12px;background:var(--red-light);border-radius:var(--r);color:var(--red);font-size:12px;font-weight:600;text-align:center;">🔒 Main day is permanently closed</div>' +
+      '<button onclick="openSubSession()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-play"></i> Resume Sub-Session #' + (activeSubSession.session_num || 1) + '</button>';
+    configs.CLOSED.sub = 'Sub-session paused · Tap to resume or open a new one';
+  }
   const cfg = configs[status] || configs.PENDING;
   banner.style.background = cfg.bg;
   banner.style.borderColor = cfg.border;
@@ -2103,6 +2216,13 @@ async function updateDayLiveStats() {
 }
 
 // ── PAST SESSIONS LIST ────────────────────────────────────────────────
+// Helper: get all sub-sessions for a given date
+async function getSubSessionsForDate(dateStr) {
+  const all = await dbAll('sub_sessions');
+  return all.filter(s => s.business_date === dateStr)
+            .sort((a, b) => new Date(b.opened_at) - new Date(a.opened_at));
+}
+
 async function renderDaySessionsList() {
   const sessions = await dbAll('business_days');
   const done = sessions.filter(s => s.status === 'CLOSED' || s.status === 'LOCKED')
@@ -2178,6 +2298,7 @@ function closePastSessionSheet() {
 // RESTOCK
 // ═══════════════════════════════════════════════════════════
 function toggleRestock() {
+  if (!isDayOpen()) { toast('⚠️ Open the business day to restock items.', 'err'); return; }
   const panel = document.getElementById('restock-panel');
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   if (panel.style.display === 'block') {
@@ -2550,7 +2671,7 @@ showPage = function(id) {
   }
   // Block restricted tabs when day is not open (but NOT sheet popups)
   const dayOpen = activeDay && (activeDay.status === 'OPEN');
-  if (DAY_RESTRICTED_TABS.includes(id) && !dayOpen) {
+  if (['dash', 'add'].includes(id) && !dayOpen) {
     _origShowPage('day');
     setTimeout(() => showDayClosedOverlay(id), 100);
     return;
