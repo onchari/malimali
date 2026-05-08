@@ -881,6 +881,16 @@
       </div>
     </div>
 
+    <!-- Payment method -->
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;">Payment Method</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;" id="sm-payment-btns">
+        <button onclick="selectPayment('Cash')"    id="pm-Cash"   class="pm-btn pm-active" >💵 Cash</button>
+        <button onclick="selectPayment('M-Pesa')"  id="pm-M-Pesa" class="pm-btn">📱 M-Pesa</button>
+        <button onclick="selectPayment('Credit')"  id="pm-Credit" class="pm-btn">💳 Credit</button>
+      </div>
+    </div>
+
     <!-- Totals summary -->
     <div style="background:var(--accent-light);border:1.5px solid #a8d8b5;
                 border-radius:var(--r);padding:14px 16px;margin-bottom:16px;">

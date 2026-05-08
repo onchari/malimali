@@ -957,6 +957,7 @@ function showSplash(name, sell, profit) {
 
 // ===== MAKE A SALE =====
 let currentSellItemId = null;
+let _selectedPayment = 'Cash'; // Cash | M-Pesa | Credit
 
 async function searchSell() {
   const q = (document.getElementById('sell-search').value || '').trim().toLowerCase();
@@ -1000,6 +1001,14 @@ async function searchSell() {
   }).join('');
 }
 
+function selectPayment(method) {
+  _selectedPayment = method;
+  ['Cash','M-Pesa','Credit'].forEach(m => {
+    const btn = document.getElementById('pm-' + m);
+    if (btn) btn.classList.toggle('pm-active', m === method);
+  });
+}
+
 async function openSellModal(itemId) {
   const item = await dbGet('items', itemId);
   currentSellItemId = itemId;
@@ -1016,6 +1025,7 @@ async function openSellModal(itemId) {
   document.getElementById('sm-qty').max = item.qty;
   document.getElementById('sm-actual').value = '';
   updateSellModal();
+  selectPayment('Cash'); // reset payment method
   document.getElementById('sell-modal').classList.add('open');
 }
 
@@ -1772,6 +1782,26 @@ async function showReconcileSheet() {
     '<div style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--green);">+' + fmt(totalProfit) + ' profit</div></div>' +
     '</div>' +
 
+    // Payment method breakdown
+    '<div style="background:var(--surface2);border-radius:var(--r);padding:12px;margin-bottom:12px;">' +
+    '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;">Payment Breakdown</div>' +
+    (() => {
+      const allSales = sales.filter(x => x.business_date === today);
+      const byMethod = {};
+      allSales.forEach(s => {
+        const m = s.paymentMethod || 'Cash';
+        if (!byMethod[m]) byMethod[m] = 0;
+        byMethod[m] += s.revenue;
+      });
+      const icons = { Cash:'💵', 'M-Pesa':'📱', Credit:'💳' };
+      return Object.entries(byMethod).map(([m,v]) =>
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;">' +
+        '<span style="font-size:13px;color:var(--text2);">' + (icons[m]||'💰') + ' ' + m + '</span>' +
+        '<span style="font-size:13px;font-weight:800;font-family:var(--mono);">' + fmt(v) + '</span></div>'
+      ).join('');
+    })() +
+    '</div>' +
+
     // Merge button (only if multiple sessions)
     (hasMultiple && allClosed ?
       '<button onclick="mergeSessions()" style="width:100%;padding:14px;background:#7c3aed;color:white;border:none;border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">' +
@@ -1781,6 +1811,14 @@ async function showReconcileSheet() {
       : ''
     ) +
 
+    // Closing cash count
+    '<div style="margin-bottom:12px;">' +
+    '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px;">💵 Closing Cash Count</div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Count the cash in the drawer now. Expected = opening float + cash sales</div>' +
+    '<div class="float-input-wrap">' +
+    '<span class="float-cur">' + currency + '</span>' +
+    '<input class="float-input" id="closing-cash" type="number" min="0" inputmode="decimal" placeholder="0">' +
+    '</div></div>' +
     // Reconcile notes
     '<div style="margin-bottom:10px;">' +
     '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px;">Reconciliation Notes</div>' +
@@ -1846,13 +1884,37 @@ async function reconcileDay() {
     return;
   }
 
+  // Warn if no sales recorded
+  const checkSales = await dbAll('sales');
+  const todaySales = checkSales.filter(s => s.business_date === today);
+  if (todaySales.length === 0) {
+    const proceed = await new Promise(resolve => {
+      showConfirmDialog(
+        '⚠️ No Sales Recorded',
+        'There are no sales for today. Are you sure you want to reconcile an empty day?',
+        'Yes, Reconcile Anyway',
+        'Cancel',
+        () => resolve(true)
+      );
+      // showConfirmDialog cancel calls resolve(false) implicitly via remove
+      setTimeout(() => resolve(false), 60000);
+    });
+    if (!proceed) return;
+  }
+
   const notes = (document.getElementById('reconcile-notes') || {}).value || '';
+  const closingCash = parseFloat((document.getElementById('closing-cash') || {}).value) || 0;
   const sales = await dbAll('sales');
   const daySales = sales.filter(s => s.business_date === today);
 
   primary.status = 'RECONCILED';
   primary.reconciled_at = new Date().toISOString();
   primary.reconcile_notes = notes;
+  primary.closingCash = closingCash;
+  // Cash variance: closing cash vs (opening float + cash sales)
+  const cashSales = daySales.filter(s => s.paymentMethod === 'Cash' || !s.paymentMethod).reduce((a,s)=>a+s.revenue,0);
+  primary.expectedCash = (primary.openingFloat || 0) + cashSales;
+  primary.cashVariance = closingCash - primary.expectedCash;
   primary.final_salesCount = daySales.length;
   primary.final_revenue = daySales.reduce((a, s) => a + s.revenue, 0);
   primary.final_profit  = daySales.reduce((a, s) => a + s.profit, 0);
@@ -1869,7 +1931,54 @@ async function reconcileDay() {
   scheduleSync();
 }
 
+
+
+// ── CONFIRM DIALOG ────────────────────────────────────────────────────
+// Simple inline modal confirmation — avoids native confirm() which blocks JS
+function showConfirmDialog(title, message, okLabel, cancelLabel, onOk) {
+  const existing = document.getElementById('confirm-dialog-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'confirm-dialog-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:24px;';
+  overlay.innerHTML =
+    '<div style="background:var(--surface);border-radius:var(--r-lg);max-width:360px;width:100%;padding:24px;box-shadow:0 16px 48px rgba(0,0,0,0.25);">' +
+    '<div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:10px;">' + title + '</div>' +
+    '<div style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:20px;">' + message + '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+    '<button id="cd-cancel" style="padding:13px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;font-family:var(--sans);">' + cancelLabel + '</button>' +
+    '<button id="cd-ok" style="padding:13px;background:var(--red);color:white;border:none;border-radius:var(--r);font-size:14px;font-weight:800;cursor:pointer;font-family:var(--sans);">' + okLabel + '</button>' +
+    '</div></div>';
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('#cd-cancel').onclick = () => overlay.remove();
+  overlay.querySelector('#cd-ok').onclick = () => { overlay.remove(); onOk(); };
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+}
+
+// ── VISIBILITY CHANGE — refresh when phone wakes ─────────────────────
+// When the phone screen wakes or user switches back to the app,
+// re-check if the date has changed (midnight may have passed while asleep)
+// and refresh the day state without restarting timers.
+let _lastKnownDate = todayDateStr();
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden) return;
+  const today = todayDateStr();
+  if (today !== _lastKnownDate) {
+    // Date changed while app was in background — full reload of day state
+    _lastKnownDate = today;
+    _warned1145 = null;
+    await loadActiveDay();
+  } else {
+    // Same day — just refresh display
+    await refreshDayTab();
+  }
+});
+
 // ── AUTO SCHEDULER ───────────────────────────────────────────────────
+let _warned1145 = null; // tracks which date the 11:45 warning was already shown
+
 function startDayTimer() {
   if (dayCheckTimer) clearInterval(dayCheckTimer);
   dayCheckTimer = setInterval(async () => {
@@ -1884,13 +1993,14 @@ function startDayTimer() {
       await autoOpenDay(bday);
     }
 
-    // ── 11:45 PM: Warning toast — 15 minutes left ─────────────────────
-    if (bday.status === 'OPEN' && h === 23 && m === 45 && s < 30) {
+    // ── 11:45 PM: Warning toast — once per day ────────────────────────
+    if (bday.status === 'OPEN' && h === 23 && m === 45 && s < 30 && _warned1145 !== today) {
+      _warned1145 = today;
       toast('⏰ 15 minutes left — day auto-closes at midnight!', 'err');
     }
 
-    // ── 11:59:55 PM: Auto-close open day permanently ──────────────────
-    if (bday.status === 'OPEN' && h === 23 && m === 59 && s >= 55) {
+    // ── 11:59:55 PM: Auto-close OPEN or PAUSED day permanently ─────────
+    if ((bday.status === 'OPEN' || bday.status === 'PAUSED') && h === 23 && m === 59 && s >= 55) {
       await autoCloseDay(bday);
     }
 
@@ -1898,9 +2008,10 @@ function startDayTimer() {
     // ── 00:00: Lock yesterday, create fresh PENDING for today ─────────
     if (h === 0 && m === 0 && s < 30) {
       const yesterday = new Date(now.getTime() - 24*60*60*1000).toISOString().split('T')[0];
-      const yBday = await getBusinessDay(yesterday);
-      if (yBday && ['CLOSED', 'OPEN', 'PAUSED', 'RECONCILED'].includes(yBday.status) && yBday.status !== 'LOCKED') {
-        await lockBusinessDay(yBday);
+      // Lock ALL sessions for yesterday (primary + parallel)
+      const ySessions = await getAllDaySessions(yesterday);
+      for (const ys of ySessions) {
+        if (ys.status !== 'LOCKED') await lockBusinessDay(ys);
       }
 
       // Ensure today has a fresh PENDING record
@@ -1908,9 +2019,13 @@ function startDayTimer() {
       if (!todayExists) {
         await dbAdd('business_days', {
           business_date: today, status: 'PENDING',
+          session_num: 1, is_primary: true,
           opened_at: null, closed_at: null,
           auto_opened: false, auto_closed: false,
-          pause_count: 0, final_locked_at: null, notes: ''
+          pause_count: 0, reopened_count: 0,
+          final_locked_at: null, reconciled_at: null,
+          openingFloat: 0, closingCash: 0,
+          notes: ''
         });
       }
       // Reset state and refresh
@@ -2024,13 +2139,15 @@ async function openDay() {
   // LOCKED = previous date — cannot reopen
   if (bday.status === 'LOCKED') { toast('🔒 This day is from a previous date and is locked.', 'err'); return; }
 
-  const isReopen = (bday.status === 'PAUSED' || bday.status === 'CLOSED');
+  // Capture previous status BEFORE overwriting it
+  const prevStatus = bday.status;
 
   if (!bday.opened_at) {
-    // First open — snapshot opening stock
     const items = await dbAll('items');
     bday.openingStockCost   = items.reduce((s, i) => s + i.buy * i.qty, 0);
     bday.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
+    // Ask for opening float on first open
+    bday.openingFloat = 0; // updated via openFloatPrompt if shown
   }
 
   bday.status = 'OPEN';
@@ -2038,9 +2155,11 @@ async function openDay() {
   bday.last_opened_at = new Date().toISOString();
   bday.date    = fmtFullDate(today);
   bday.dateStr = today;
-  if (bday.status === 'PAUSED') {
+  const isFirstEverOpen = !bday.opened_at || prevStatus === 'PENDING';
+
+  if (prevStatus === 'PAUSED') {
     toast('▶️ Day resumed! Continue where you left off.', 'ok');
-  } else if (bday.status === 'CLOSED') {
+  } else if (prevStatus === 'CLOSED') {
     bday.reopened_count = (bday.reopened_count || 0) + 1;
     toast('🔓 Day reopened (' + bday.reopened_count + 'x). Continue operations.', 'ok');
   } else {
@@ -2051,6 +2170,8 @@ async function openDay() {
   updateDayBanner();
   updateDayLiveStats();
   renderDaySessionsList();
+  // Ask for opening float on first-ever open
+  if (prevStatus === 'PENDING') setTimeout(() => promptOpeningFloat(bday), 600);
 }
 
 // ── PAUSE DAY (temporary close — can reopen any time today) ──────────
@@ -2062,16 +2183,28 @@ async function pauseDay() {
 // ── PERMANENTLY CLOSE DAY ────────────────────────────────────────────
 async function permanentCloseDay() {
   if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day to close', 'err'); return; }
-  await buildDaySummary('close');
+  // Confirm before permanent close
+  showConfirmDialog(
+    '🔒 Close Day Permanently?',
+    'This cannot be undone. Once closed, the day cannot be reopened (you can start a new session instead).',
+    'Yes, Close Day',
+    'Cancel',
+    () => buildDaySummary('close')
+  );
 }
 
 
 // Refresh Day tab — re-reads DB state without re-initialising timers
 async function refreshDayTab() {
   const today = todayDateStr();
-  const bday = await getBusinessDay(today);
-  if (bday) {
-    activeDay = bday;
+  const allToday = await getAllDaySessions(today);
+  if (allToday.length > 0) {
+    // Same priority as loadActiveDay: OPEN > PAUSED > primary > first
+    const best = allToday.find(s => s.status === 'OPEN') ||
+                 allToday.find(s => s.status === 'PAUSED') ||
+                 allToday.find(s => s.is_primary) ||
+                 allToday[0];
+    activeDay = best;
     updateDayBanner();
     if (activeDay.status === 'OPEN') updateDayLiveStats();
   }
@@ -2324,9 +2457,15 @@ function updateDayBanner() {
       bg: 'var(--green-light)', border: '#a8d8b5', icon: '🌅',
       badgeBg: '#dcfce7', badgeColor: '#16a34a',
       title: 'Business Day is Open', titleColor: 'var(--green)',
-      sub: 'Opened at ' + (activeDay.last_opened_at ? fmtTime(activeDay.last_opened_at) : fmtTime(activeDay.opened_at))
-           + (pauseCount > 0 ? ' · Resumed ' + pauseCount + 'x' : '')
-           + ' · Auto-closes at midnight',
+      sub: (() => {
+        const openedAt = activeDay.last_opened_at || activeDay.opened_at;
+        const mins = openedAt ? Math.floor((Date.now() - new Date(openedAt)) / 60000) : 0;
+        const dur = mins < 60 ? mins + 'm open' : Math.floor(mins/60) + 'h ' + (mins%60) + 'm open';
+        return 'Opened ' + fmtTime(activeDay.opened_at) + ' · ' + dur
+          + (pauseCount > 0 ? ' · Resumed ' + pauseCount + 'x' : '')
+          + (activeDay.openingFloat > 0 ? ' · Float: ' + fmt(activeDay.openingFloat) : '')
+          + ' · Closes midnight';
+      })(),
       action:
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
         '<button onclick="pauseDay()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-pause"></i> Pause Day</button>' +
@@ -2570,6 +2709,68 @@ async function exportDayCSV(sessionId) {
   a.click();
   URL.revokeObjectURL(url);
   toast('📤 CSV exported!', 'ok');
+}
+
+
+
+// ── OPENING FLOAT ─────────────────────────────────────────────────────
+// Prompt for cash float when opening day for first time
+function promptOpeningFloat(bday) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:24px;';
+  overlay.innerHTML =
+    '<div style="background:var(--surface);border-radius:var(--r-lg);max-width:360px;width:100%;padding:24px;">' +
+    '<div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:6px;">💵 Opening Float</div>' +
+    '<div style="font-size:13px;color:var(--muted);margin-bottom:16px;">How much cash is in the drawer at opening? (optional)</div>' +
+    '<div class="float-input-wrap" style="margin-bottom:16px;">' +
+    '<span class="float-cur">' + currency + '</span>' +
+    '<input class="float-input" id="float-input" type="number" min="0" inputmode="decimal" placeholder="0">' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+    '<button id="float-skip" style="padding:13px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;font-family:var(--sans);">Skip</button>' +
+    '<button id="float-ok" style="padding:13px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:14px;font-weight:800;cursor:pointer;font-family:var(--sans);">Confirm</button>' +
+    '</div></div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#float-skip').onclick = () => overlay.remove();
+  overlay.querySelector('#float-ok').onclick = async () => {
+    const val = parseFloat(overlay.querySelector('#float-input').value) || 0;
+    bday.openingFloat = val;
+    await dbPut('business_days', bday);
+    activeDay = bday;
+    overlay.remove();
+    toast('💵 Opening float: ' + fmt(val), 'ok');
+  };
+}
+
+// ── VOID SALE ─────────────────────────────────────────────────────────
+// Only allowed when day is OPEN. Restores item stock and removes sale.
+async function voidSale(saleId) {
+  if (!isDayOpen()) { toast('Day must be open to void a sale.', 'err'); return; }
+  showConfirmDialog(
+    '↩ Void This Sale?',
+    'This will remove the sale and restore the item quantity back to stock.',
+    'Yes, Void Sale',
+    'Cancel',
+    async () => {
+      const sale = await dbGet('sales', saleId);
+      if (!sale) { toast('Sale not found.', 'err'); return; }
+      // Restore stock
+      const item = await dbGet('items', sale.itemId);
+      if (item) {
+        item.qty += sale.qty;
+        await dbPut('items', item);
+        allItems = await dbAll('items');
+        renderList();
+      }
+      // Remove sale
+      await dbDelete('sales', saleId);
+      renderSellPage();
+      renderDashboard();
+      if (activeDay) updateDayLiveStats();
+      scheduleSync();
+      toast('↩ Sale voided — stock restored.', 'ok');
+    }
+  );
 }
 
 // ═══════════════════════════════════════════════════════════
