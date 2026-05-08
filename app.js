@@ -228,30 +228,39 @@ async function deleteType(id) {
 
 // ===== PROFIT PREVIEW =====
 function updateProfitPreview() {
-  const buy = parseFloat(document.getElementById('f-buy').value) || 0;
+  const buy  = parseFloat(document.getElementById('f-buy').value)  || 0;
   const sell = parseFloat(document.getElementById('f-sell').value) || 0;
-  const qty = parseInt(document.getElementById('f-qty').value) || 0;
+  const qty  = parseInt(document.getElementById('f-qty').value)    || 0;
   const preview = document.getElementById('profit-preview');
+  if (!preview) return;
 
   if (buy > 0 && sell > 0) {
     const profit = sell - buy;
-    const margin = ((profit / sell) * 100).toFixed(1);
+    const margin = sell > 0 ? ((profit / sell) * 100).toFixed(1) : 0;
     const profitColor = profit >= 0 ? 'var(--green)' : 'var(--red)';
-    document.getElementById('pp-buy').textContent = fmt(buy);
-    document.getElementById('pp-sell').textContent = fmt(sell);
-    document.getElementById('pp-profit').textContent = (profit >= 0 ? '+' : '') + fmt(profit);
-    document.getElementById('pp-profit').style.color = profitColor;
-    document.getElementById('pp-margin').textContent = margin + '%';
-    document.getElementById('pp-margin').style.color = profit >= 0 ? 'var(--accent3)' : 'var(--red)';
-    // Show total profit if qty entered
+
+    // Compact pill values
+    const ppProfit = document.getElementById('pp-profit');
+    const ppMargin = document.getElementById('pp-margin');
+    const ppTotal  = document.getElementById('pp-total');
+    const ppTotalRow = document.getElementById('pp-total-row');
+
+    if (ppProfit) { ppProfit.textContent = (profit >= 0 ? '+' : '') + fmt(profit); ppProfit.style.color = profitColor; }
+    if (ppMargin) { ppMargin.textContent = margin + '%'; ppMargin.style.color = profit >= 0 ? 'var(--accent)' : 'var(--red)'; }
+
     if (qty > 0) {
-      document.getElementById('pp-qty-lbl').style.display = '';
-      document.getElementById('pp-total').style.display = '';
-      document.getElementById('pp-total').textContent = (profit >= 0 ? '+' : '') + fmt(profit * qty);
+      if (ppTotal)    { ppTotal.textContent = (profit >= 0 ? '+' : '') + fmt(profit * qty); ppTotal.style.color = profitColor; }
+      if (ppTotalRow) ppTotalRow.style.display = '';
     } else {
-      document.getElementById('pp-qty-lbl').style.display = 'none';
-      document.getElementById('pp-total').style.display = 'none';
+      if (ppTotalRow) ppTotalRow.style.display = 'none';
     }
+
+    // Hidden fields kept for compatibility
+    const ppBuy  = document.getElementById('pp-buy');
+    const ppSell = document.getElementById('pp-sell');
+    if (ppBuy)  ppBuy.textContent  = fmt(buy);
+    if (ppSell) ppSell.textContent = fmt(sell);
+
     preview.style.display = 'block';
   } else {
     preview.style.display = 'none';

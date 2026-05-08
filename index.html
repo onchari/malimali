@@ -361,154 +361,135 @@
 <!-- ==============================================================
      PAGE: ADD / EDIT ITEM  (id="page-add")
      Dual-mode: "New Item" or "Edit Item" (controlled by #edit-id).
-     saveItem() in app.js handles validation and IndexedDB write.
+     saveItem() handles validation + IndexedDB write.
      editItem() pre-fills all fields and loads existing photo.
      ============================================================== -->
 <div class="page" id="page-add">
 
-  <!-- Mode label: "➕ New Item" or "Edit Item" -->
-  <div class="sec-label" id="form-mode-label">➕ New Item</div>
-
-  <!-- Hidden field: stores item.id when editing, empty when adding -->
+  <!-- Hidden: stores item.id when in edit mode -->
   <input type="hidden" id="edit-id">
 
-  <!-- 1. Item Type (select from types list) -->
-  <div class="form-field">
-    <select class="form-select form-select-bold" id="f-type">
-      <option value="">📦 Select Item Type</option>
-    </select>
+  <!-- Mode heading — "New Item" or "Edit Item" -->
+  <div class="add-form-header">
+    <span id="form-mode-label">➕ New Item</span>
   </div>
 
-  <!-- 2. Item Code (auto-uppercased) -->
-  <div class="form-field">
-    <input class="form-input form-input-bold" id="f-code" type="text"
-           placeholder="Item Code  e.g. SH001"
-           style="font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;"
-           autocomplete="off" spellcheck="false">
+  <!-- ── SECTION 1: Identity ──────────────────────────────────── -->
+  <div class="add-section">
+
+    <!-- Type selector full-width -->
+    <div class="add-field">
+      <label class="add-label">Category <span class="add-required">*</span></label>
+      <select class="add-select" id="f-type">
+        <option value="">Choose a type…</option>
+      </select>
+    </div>
+
+    <!-- Code + Size side by side -->
+    <div class="add-row-2">
+      <div class="add-field">
+        <label class="add-label">Code <span class="add-required">*</span></label>
+        <input class="add-input add-mono" id="f-code" type="text"
+               placeholder="e.g. SH001"
+               autocomplete="off" spellcheck="false"
+               oninput="this.value=this.value.toUpperCase()">
+      </div>
+      <div class="add-field">
+        <label class="add-label">Size / Variant</label>
+        <input class="add-input" id="f-size" type="text"
+               placeholder="e.g. 42 · L · 250ml"
+               autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+
+    <!-- Name full-width -->
+    <div class="add-field">
+      <label class="add-label">Name <span class="add-hint">(optional)</span></label>
+      <input class="add-input" id="f-name" type="text"
+             placeholder="e.g. Nike Air Max · Omo Washing Powder"
+             autocomplete="off" spellcheck="false">
+    </div>
+
   </div>
 
-  <!-- 3. Size (free text: 42, L, 20-30, N/A) -->
-  <div class="form-field">
-    <input class="form-input form-input-bold" id="f-size" type="text"
-           placeholder="Size  e.g. 42 · L · 20-30 · N/A"
-           autocomplete="off" spellcheck="false">
-  </div>
+  <!-- ── SECTION 2: Stock & Pricing ──────────────────────────── -->
+  <div class="add-section-title">Stock &amp; Pricing</div>
+  <div class="add-section">
 
-  <!-- 4. Name / Description (optional) -->
-  <div class="form-field">
-    <input class="form-input form-input-bold" id="f-name" type="text"
-           placeholder="Name / Description  (optional)"
-           autocomplete="off" spellcheck="false">
-  </div>
-
-  <!-- 5. Quantity Stocked -->
-  <div class="form-field">
-    <input class="form-input form-input-bold" id="f-qty" type="number"
-           placeholder="Quantity in Stock"
-           min="0" inputmode="numeric"
-           style="font-size:20px;font-family:var(--mono);"
-           oninput="updateProfitPreview()">
-  </div>
-
-  <!-- 6. Buying Price -->
-  <div class="form-field">
-    <div class="price-wrap" id="bp-wrap">
-      <span class="price-pfx" id="bp-cur">KES</span>
-      <input class="price-input" id="f-buy" type="number"
-             placeholder="Buying Price"
-             min="0" inputmode="decimal"
+    <!-- Qty full-width, large number input -->
+    <div class="add-field">
+      <label class="add-label">Quantity in Stock <span class="add-required">*</span></label>
+      <input class="add-input add-num" id="f-qty" type="number"
+             placeholder="0"
+             min="0" inputmode="numeric"
              oninput="updateProfitPreview()">
     </div>
-  </div>
 
-  <!-- 7. Selling Price -->
-  <div class="form-field">
-    <div class="price-wrap" id="sp-wrap">
-      <span class="price-pfx" id="sp-cur">KES</span>
-      <input class="price-input" id="f-sell" type="number"
-             placeholder="Selling Price"
-             min="0" inputmode="decimal"
-             oninput="updateProfitPreview()">
-    </div>
-  </div>
-
-  <!-- Live Profit Insight panel — updated by updateProfitPreview() -->
-  <div class="profit-preview" id="profit-preview">
-    <div style="font-size:11px;font-family:var(--mono);color:var(--muted);
-                letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">
-      Profit Insight
-    </div>
-    <div class="profit-row">
-      <span class="profit-key">Buying Price</span>
-      <span class="profit-val" id="pp-buy" style="color:var(--muted);"></span>
-    </div>
-    <div class="profit-row">
-      <span class="profit-key">Selling Price</span>
-      <span class="profit-val" id="pp-sell"
-            style="color:var(--accent2);font-size:18px;"></span>
-    </div>
-    <div style="height:1px;background:var(--border);margin:8px 0;"></div>
-    <div class="profit-row">
-      <span class="profit-key" style="font-weight:700;color:var(--text);">Profit per Item</span>
-      <span class="profit-val" id="pp-profit" style="font-size:22px;"></span>
-    </div>
-    <div class="profit-row" style="margin-top:6px;">
-      <span class="profit-key">Profit Margin</span>
-      <span class="profit-val" id="pp-margin" style="color:var(--accent3);"></span>
-    </div>
-    <div class="profit-row">
-      <!-- Visible only when qty > 0 -->
-      <span class="profit-key" id="pp-qty-lbl" style="display:none;">
-        Total Profit (all stock)
-      </span>
-      <span class="profit-val" id="pp-total"
-            style="color:var(--green);display:none;"></span>
-    </div>
-  </div>
-
-  <!-- Photo upload section -->
-  <div class="form-field">
-    <label class="form-label">Item Photo (optional)</label>
-    <!-- Tap the box to trigger camera/gallery choice -->
-    <div id="add-photo-preview"
-         style="width:100%;height:180px;border-radius:var(--r);
-                background:var(--surface2);border:2px dashed var(--border);
-                display:flex;align-items:center;justify-content:center;
-                position:relative;overflow:hidden;margin-bottom:10px;cursor:pointer;"
-         onclick="triggerAddPhotoUpload()">
-      <!-- Preview image (hidden until photo selected) -->
-      <img id="add-photo-img" src="" alt=""
-           style="display:none;width:100%;height:100%;object-fit:cover;border-radius:var(--r);">
-      <!-- Placeholder text -->
-      <div id="add-photo-placeholder" style="text-align:center;color:#94a3b8;">
-        <div style="font-size:36px;margin-bottom:8px;">📷</div>
-        <div style="font-size:14px;font-weight:600;color:#64748b;">Tap to add photo</div>
-        <div style="font-size:11px;margin-top:4px;color:#94a3b8;letter-spacing:0.3px;">
-          Camera · Gallery
+    <!-- Buy + Sell side by side with currency prefix -->
+    <div class="add-row-2">
+      <div class="add-field">
+        <label class="add-label">Buying Price <span class="add-required">*</span></label>
+        <div class="add-price-wrap">
+          <span class="add-price-cur" id="bp-cur">KES</span>
+          <input class="add-price-input" id="f-buy" type="number"
+                 placeholder="0"
+                 min="0" inputmode="decimal"
+                 oninput="updateProfitPreview()">
         </div>
       </div>
-      <!-- Remove photo button (visible when photo selected) -->
-      <button id="add-photo-remove"
-              onclick="removeAddPhoto(event)"
-              style="display:none;position:absolute;top:8px;right:8px;
-                     background:rgba(192,57,43,0.85);color:white;border:none;
-                     border-radius:6px;font-size:11px;font-weight:700;
-                     padding:4px 9px;cursor:pointer;font-family:var(--sans);">
-        ✕ Remove
-      </button>
+      <div class="add-field">
+        <label class="add-label">Selling Price <span class="add-required">*</span></label>
+        <div class="add-price-wrap">
+          <span class="add-price-cur" id="sp-cur">KES</span>
+          <input class="add-price-input" id="f-sell" type="number"
+                 placeholder="0"
+                 min="0" inputmode="decimal"
+                 oninput="updateProfitPreview()">
+        </div>
+      </div>
+    </div>
+
+    <!-- Live profit pill — compact, appears once prices are entered -->
+    <div class="add-profit-pill" id="profit-preview" style="display:none;">
+      <div class="app-pill-row">
+        <span class="app-pill-label">Profit / item</span>
+        <span class="app-pill-val" id="pp-profit"></span>
+      </div>
+      <div class="app-pill-row">
+        <span class="app-pill-label">Margin</span>
+        <span class="app-pill-val" id="pp-margin"></span>
+      </div>
+      <div class="app-pill-row" id="pp-total-row" style="display:none;">
+        <span class="app-pill-label">Total profit (all stock)</span>
+        <span class="app-pill-val" id="pp-total"></span>
+      </div>
+      <!-- Hidden IDs kept for compatibility with updateProfitPreview() -->
+      <span id="pp-buy"    style="display:none;"></span>
+      <span id="pp-sell"   style="display:none;"></span>
+      <span id="pp-qty-lbl" style="display:none;"></span>
+    </div>
+
+  </div>
+
+  <!-- ── SECTION 3: Photo ─────────────────────────────────────── -->
+  <div class="add-section-title">Photo <span class="add-hint">optional</span></div>
+  <div class="add-section">
+    <div class="add-photo-box" id="add-photo-preview" onclick="triggerAddPhotoUpload()">
+      <img id="add-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
+      <div id="add-photo-placeholder" class="add-photo-ph">
+        <span class="add-photo-ph-icon">📷</span>
+        <span class="add-photo-ph-text">Tap to add photo</span>
+        <span class="add-photo-ph-hint">Camera or Gallery</span>
+      </div>
+      <button id="add-photo-remove" onclick="removeAddPhoto(event)" class="add-photo-remove" style="display:none;">✕ Remove</button>
     </div>
   </div>
 
-  <!-- Save / Cancel buttons -->
-  <button class="save-btn" id="save-btn" onclick="saveItem()">
-    + Add to Inventory
+  <!-- ── SAVE / CANCEL ────────────────────────────────────────── -->
+  <button class="add-save-btn" id="save-btn" onclick="saveItem()">
+    <i class="fa-solid fa-check"></i> Add to Inventory
   </button>
-  <button id="cancel-edit-btn"
-          style="display:none;width:100%;margin-top:10px;padding:14px;
-                 background:transparent;border:1px solid var(--border);
-                 border-radius:var(--r);color:var(--muted);font-size:14px;
-                 font-weight:600;cursor:pointer;font-family:var(--sans);"
-          onclick="cancelEdit()">
+  <button id="cancel-edit-btn" class="add-cancel-btn" onclick="cancelEdit()" style="display:none;">
     Cancel Edit
   </button>
 
