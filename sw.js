@@ -1,10 +1,12 @@
-// ===== MANDELA GENERALS SERVICE WORKER =====
-// Handles offline caching + background sync
+// ===== MANDELA GENERALS SERVICE WORKER v6 =====
+// Strategy:
+//   App files  → Network-first (always try fresh, fallback to cache offline)
+//   Firebase SDK → Cache-first (static SDK, rarely changes)
+//   Firestore API → Network-only (never cache live data)
 
-const CACHE_NAME = 'mandela-v5';
+const CACHE_NAME    = 'mandela-v6';   // bump this on every deploy
 const FIREBASE_CACHE = 'firebase-sdk-v1';
 
-// App shell files - always cache these
 const APP_FILES = [
   './',
   './index.html',
@@ -15,19 +17,16 @@ const APP_FILES = [
   './icon-512.png'
 ];
 
-// Firebase SDK URLs to cache for offline use
 const FIREBASE_URLS = [
   'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js',
   'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js'
 ];
 
-// ── INSTALL: cache app shell + Firebase SDK ───────────────────────────────
+// ── INSTALL ─────────────────────────────────────────────────────────
 self.addEventListener('install', e => {
   e.waitUntil(
     Promise.all([
-      // Cache app files
       caches.open(CACHE_NAME).then(c => c.addAll(APP_FILES)),
-      // Cache Firebase SDK separately (won't fail if offline at install time)
       caches.open(FIREBASE_CACHE).then(c =>
         Promise.allSettled(FIREBASE_URLS.map(url =>
           fetch(url).then(res => c.put(url, res)).catch(() => {})
@@ -35,35 +34,43 @@ self.addEventListener('install', e => {
       )
     ])
   );
+  // Activate immediately — don't wait for old SW to stop
   self.skipWaiting();
 });
 
-// ── ACTIVATE: clean old caches ─────────────────────────────────────────────
+// ── ACTIVATE ─────────────────────────────────────────────────────────
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
         keys
           .filter(k => k !== CACHE_NAME && k !== FIREBASE_CACHE)
-          .map(k => caches.delete(k))
+          .map(k => {
+            console.log('[SW] Deleting old cache:', k);
+            return caches.delete(k);
+          })
       )
     )
   );
+  // Take control of all open pages immediately
   self.clients.claim();
 });
 
-// ── FETCH: cache-first for app + Firebase, network-first for Firestore API ─
+// ── FETCH ─────────────────────────────────────────────────────────────
 self.addEventListener('fetch', e => {
   const url = e.request.url;
 
-  // Firestore API calls — network only (never cache live data)
-  if (url.includes('firestore.googleapis.com') ||
-      url.includes('firebase.googleapis.com') ||
-      url.includes('identitytoolkit')) {
-    return; // let browser handle normally
+  // 1. Firestore / Firebase auth API — always network, never cache
+  if (
+    url.includes('firestore.googleapis.com') ||
+    url.includes('firebase.googleapis.com') ||
+    url.includes('identitytoolkit') ||
+    url.includes('googleapis.com')
+  ) {
+    return; // pass through
   }
 
-  // Firebase SDK — cache first, fallback to network
+  // 2. Firebase SDK scripts — cache-first (they never change)
   if (url.includes('gstatic.com/firebasejs')) {
     e.respondWith(
       caches.match(e.request).then(cached => {
@@ -77,36 +84,46 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // App files — cache first, fallback to network, update cache in background
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      const networkFetch = fetch(e.request).then(res => {
-        if (res && res.status === 200 && e.request.method === 'GET') {
-          caches.open(CACHE_NAME).then(c => c.put(e.request, res.clone()));
-        }
-        return res;
-      }).catch(() => cached); // if network fails, use cache
-
-      // Return cache immediately if available, otherwise wait for network
-      return cached || networkFetch;
-    })
-  );
+  // 3. App files — NETWORK-FIRST
+  //    Try the network first so updates are always seen immediately.
+  //    Fall back to cache only when offline.
+  if (e.request.method === 'GET') {
+    e.respondWith(
+      fetch(e.request)
+        .then(res => {
+          // Got a fresh response — update the cache and return it
+          if (res && res.status === 200) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+          }
+          return res;
+        })
+        .catch(() => {
+          // Network failed (offline) — serve from cache
+          return caches.match(e.request).then(cached => {
+            if (cached) return cached;
+            // Last resort: return cached index.html for navigation
+            if (e.request.mode === 'navigate') {
+              return caches.match('./index.html');
+            }
+          });
+        })
+    );
+  }
 });
 
-// ── BACKGROUND SYNC: notify app when back online ──────────────────────────
+// ── BACKGROUND SYNC ───────────────────────────────────────────────────
 self.addEventListener('sync', e => {
   if (e.tag === 'firebase-sync') {
     e.waitUntil(
       self.clients.matchAll().then(clients =>
-        clients.forEach(client =>
-          client.postMessage({ type: 'BACKGROUND_SYNC' })
-        )
+        clients.forEach(c => c.postMessage({ type: 'BACKGROUND_SYNC' }))
       )
     );
   }
 });
 
-// ── MESSAGE: handle messages from app ─────────────────────────────────────
+// ── MESSAGES ──────────────────────────────────────────────────────────
 self.addEventListener('message', e => {
   if (e.data && e.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
