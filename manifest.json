@@ -1,7 +1,7 @@
 {
   "name": "Mandela General Stores",
   "short_name": "Mandela",
-  "description": "Mandela General Stores - Rastanty Cortez",
+  "description": "Mandela General Stores - Inventory Management System",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",

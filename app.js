@@ -1454,6 +1454,7 @@ async function runSyncDebug() {
 const DAY_RESTRICTED_TABS = ['dash', 'add'];
 
 function setDayMode(isOpen) {
+  // isOpen: true = OPEN, false = PAUSED/CLOSED/PENDING/LOCKED
   DAY_RESTRICTED_TABS.forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (!btn) return;
@@ -1624,7 +1625,7 @@ async function autoOpenDay(bday) {
 async function autoCloseDay(bday) {
   const sales = await dbAll('sales');
   const daySales = sales.filter(s => s.business_date === bday.business_date || s.date >= bday.opened_at);
-  bday.status = 'CLOSED';
+  bday.status = 'CLOSED';   // auto permanent close at midnight
   bday.closed_at = new Date().toISOString();
   bday.auto_closed = true;
   bday.salesCount = daySales.length;
@@ -1688,54 +1689,64 @@ async function openNewDay() {
   toast('🌅 New business day opened!', 'ok');
 }
 
-// ── MANUAL OPEN ──────────────────────────────────────────────────────
+// ── MANUAL OPEN / REOPEN ─────────────────────────────────────────────
 async function openDay() {
   const today = todayDateStr();
   let bday = await getBusinessDay(today);
 
   if (!bday) {
-    // Create today if missing
     const id = await dbAdd('business_days', {
       business_date: today, status: 'PENDING',
       opened_at: null, closed_at: null,
       auto_opened: false, auto_closed: false,
-      reopened_count: 0, final_locked_at: null, notes: ''
+      pause_count: 0, final_locked_at: null, notes: ''
     });
     bday = await dbGet('business_days', id);
   }
 
   if (bday.status === 'OPEN') { toast('Day is already open!', 'err'); return; }
+  // CLOSED = permanently closed — cannot reopen
+  if (bday.status === 'CLOSED') { toast('🔒 Day is permanently closed.', 'err'); return; }
+  // LOCKED = previous day — open a new day instead
+  if (bday.status === 'LOCKED') { toast('🔒 This day is locked.', 'err'); return; }
 
-  // LOCKED here means this specific today record is locked — shouldn't happen normally
-  if (bday.status === 'LOCKED') {
-    toast('This day is permanently locked.', 'err');
-    return;
-  }
-
-  // Reopen closed day
-  if (bday.status === 'CLOSED') {
-    bday.reopened_count = (bday.reopened_count || 0) + 1;
-    toast('Day reopened (' + bday.reopened_count + 'x)', 'ok');
-  } else {
-    toast('🌅 Business day opened!', 'ok');
-  }
+  const isReopen = (bday.status === 'PAUSED');
 
   if (!bday.opened_at) {
+    // First open — snapshot opening stock
     const items = await dbAll('items');
-    bday.openingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
+    bday.openingStockCost   = items.reduce((s, i) => s + i.buy * i.qty, 0);
     bday.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
   }
 
   bday.status = 'OPEN';
-  bday.opened_at = bday.opened_at || new Date().toISOString();
+  bday.opened_at      = bday.opened_at || new Date().toISOString();
   bday.last_opened_at = new Date().toISOString();
-  bday.date = fmtFullDate(today);
+  bday.date    = fmtFullDate(today);
   bday.dateStr = today;
+  if (isReopen) {
+    bday.pause_count = (bday.pause_count || 0); // already incremented on pause
+    toast('▶️ Day resumed! Continue where you left off.', 'ok');
+  } else {
+    toast('🌅 Business day opened!', 'ok');
+  }
   await dbPut('business_days', bday);
   activeDay = bday;
   updateDayBanner();
   updateDayLiveStats();
   renderDaySessionsList();
+}
+
+// ── PAUSE DAY (temporary close — can reopen) ─────────────────────────
+async function pauseDay() {
+  if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day to pause', 'err'); return; }
+  await buildDaySummary('pause');
+}
+
+// ── PERMANENTLY CLOSE DAY ────────────────────────────────────────────
+async function permanentCloseDay() {
+  if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day to close', 'err'); return; }
+  await buildDaySummary('close');
 }
 
 
@@ -1756,14 +1767,23 @@ async function refreshDayTab() {
 function isDayOpen() {
   return activeDay && activeDay.status === 'OPEN';
 }
+function isDayPaused() {
+  return activeDay && activeDay.status === 'PAUSED';
+}
+function isDayActiveToday() {
+  // True if today's day can still have operations (OPEN or PAUSED)
+  return activeDay && (activeDay.status === 'OPEN' || activeDay.status === 'PAUSED');
+}
 
 function requireOpenDay() {
   if (!isDayOpen()) {
     const status = activeDay ? activeDay.status : 'PENDING';
     if (status === 'LOCKED') {
       toast('🔒 Open today\'s business day first.', 'err');
+    } else if (status === 'PAUSED') {
+      toast('⏸ Day is paused. Reopen to continue.', 'err');
     } else if (status === 'CLOSED') {
-      toast('🌙 Day is closed. Reopen to continue.', 'err');
+      toast('🔒 Day is permanently closed. Start a new day tomorrow.', 'err');
     } else {
       toast('⚠️ Please open the business day first.', 'err');
     }
@@ -1773,9 +1793,18 @@ function requireOpenDay() {
   return true;
 }
 
-// ── CLOSE DAY ────────────────────────────────────────────────────────
+// ── BUILD DAY SUMMARY (shared between pause + permanent close) ────────
+// mode: 'pause' | 'close'
+let _daySummaryMode = 'pause';
+
+// Legacy alias — Close Day button in banner still works
 async function closeDay() {
-  if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day to close', 'err'); return; }
+  await pauseDay();
+}
+
+async function buildDaySummary(mode) {
+  _daySummaryMode = mode || 'pause';
+  if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day', 'err'); return; }
 
   const sales = await dbAll('sales');
   const daySales = sales.filter(s => (s.business_date === activeDay.business_date) || (activeDay.opened_at && s.date >= activeDay.opened_at));
@@ -1883,9 +1912,21 @@ async function closeDay() {
     typeBreakEl.innerHTML = '';
   }
 
+  // Update footer buttons based on mode
+  const confirmBtn = document.getElementById('ds-confirm-btn');
+  const pauseBtn   = document.getElementById('ds-pause-btn');
+  if (_daySummaryMode === 'pause') {
+    if (confirmBtn) { confirmBtn.style.display = 'none'; }
+    if (pauseBtn)   { pauseBtn.style.display = 'block'; pauseBtn.textContent = '⏸ Pause & View Summary'; }
+  } else {
+    if (confirmBtn) { confirmBtn.style.display = 'block'; }
+    if (pauseBtn)   { pauseBtn.style.display = 'none'; }
+  }
   document.getElementById('day-summary-sheet').classList.add('open');
 }
 
+
+// Called when user taps the confirm button on summary sheet
 async function confirmCloseDay() {
   const notes = document.getElementById('ds-notes').value.trim();
   const now = new Date();
@@ -1894,24 +1935,46 @@ async function confirmCloseDay() {
   const items = await dbAll('items');
   const purchases = items.filter(i => activeDay.opened_at && i.createdAt >= activeDay.opened_at);
 
-  activeDay.status = 'CLOSED';
-  activeDay.closed_at = now.toISOString();
-  activeDay.notes = notes;
-  activeDay.salesCount = daySales.length;
-  activeDay.revenue = daySales.reduce((s, x) => s + x.revenue, 0);
-  activeDay.profit  = daySales.reduce((s, x) => s + x.profit, 0);
-  activeDay.itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
-  activeDay.purchasesCount = purchases.length;
-  activeDay.purchaseCost = purchases.reduce((s, i) => s + i.buy * i.qty, 0);
-  activeDay.closingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
+  // Shared stats
+  const dayStats = {
+    notes,
+    salesCount: daySales.length,
+    revenue: daySales.reduce((s, x) => s + x.revenue, 0),
+    profit:  daySales.reduce((s, x) => s + x.profit, 0),
+    itemsSold: daySales.reduce((s, x) => s + x.qty, 0),
+    purchasesCount: purchases.length,
+    purchaseCost: purchases.reduce((s, i) => s + i.buy * i.qty, 0),
+    closingStockCost: items.reduce((s, i) => s + i.buy * i.qty, 0),
+  };
 
-  await dbPut('business_days', activeDay);
-  document.getElementById('day-summary-sheet').classList.remove('open');
-  updateDayBanner(); // this calls setDayMode(false) which disables tabs
-  renderDaySessionsList();
-  renderDashboard();
-  _origShowPage('day'); // force back to day page
-  toast('🌙 Day closed! All modules locked.', 'ok');
+  if (_daySummaryMode === 'pause') {
+    // ── PAUSE: temporary close, can reopen ───────────────────────
+    activeDay.status = 'PAUSED';
+    activeDay.paused_at = now.toISOString();
+    activeDay.pause_count = (activeDay.pause_count || 0) + 1;
+    Object.assign(activeDay, dayStats);
+    await dbPut('business_days', activeDay);
+    document.getElementById('day-summary-sheet').classList.remove('open');
+    updateDayBanner();
+    renderDaySessionsList();
+    renderDashboard();
+    _origShowPage('day');
+    toast('⏸ Day paused. You can reopen at any time.', 'ok');
+
+  } else {
+    // ── PERMANENT CLOSE: read-only, cannot reopen ─────────────────
+    activeDay.status = 'CLOSED';
+    activeDay.closed_at = now.toISOString();
+    Object.assign(activeDay, dayStats);
+    await dbPut('business_days', activeDay);
+    document.getElementById('day-summary-sheet').classList.remove('open');
+    updateDayBanner();
+    renderDaySessionsList();
+    renderDashboard();
+    _origShowPage('day');
+    toast('🌙 Day permanently closed. Cannot be reopened.', 'ok');
+  }
+  scheduleSync();
 }
 
 function cancelCloseDay() {
@@ -1930,34 +1993,48 @@ function updateDayBanner() {
   const liveSection = document.getElementById('day-live');
   const status = activeDay.status;
 
+  const BTN = 'width:100%;padding:16px;background:';
+  const BTN2 = ';color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);';
+  const pauseCount = activeDay.pause_count || 0;
   const configs = {
     PENDING: {
       bg: 'var(--surface2)', border: 'var(--border)', icon: '📅',
       badgeBg: '#e5e7eb', badgeColor: '#6b7280',
       title: 'Business Day Not Started', titleColor: 'var(--text)',
       sub: 'Auto-opens at 9:00 AM · Or tap to open now',
-      action: '<button onclick="openDay()" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);"><i class="fa-solid fa-sun"></i> Open Day Now</button>'
+      action: '<button onclick="openDay()" style="' + BTN + 'var(--accent)' + BTN2 + '"><i class="fa-solid fa-sun"></i> Open Day Now</button>'
     },
     OPEN: {
       bg: 'var(--green-light)', border: '#a8d8b5', icon: '🌅',
       badgeBg: '#dcfce7', badgeColor: '#16a34a',
       title: 'Business Day is Open', titleColor: 'var(--green)',
-      sub: 'Opened at ' + (activeDay.last_opened_at ? fmtTime(activeDay.last_opened_at) : fmtTime(activeDay.opened_at)) + (activeDay.reopened_count > 0 ? ' · Reopened ' + activeDay.reopened_count + 'x' : ''),
-      action: '<button onclick="closeDay()" style="width:100%;padding:16px;background:var(--red);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);"><i class="fa-solid fa-moon"></i> Close Day</button>'
+      sub: 'Opened at ' + (activeDay.last_opened_at ? fmtTime(activeDay.last_opened_at) : fmtTime(activeDay.opened_at)) + (pauseCount > 0 ? ' · Resumed ' + pauseCount + 'x' : ''),
+      action:
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+        '<button onclick="pauseDay()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-pause"></i> Pause Day</button>' +
+        '<button onclick="permanentCloseDay()" style="' + BTN + 'var(--red)' + BTN2 + '"><i class="fa-solid fa-lock"></i> Close Day</button>' +
+        '</div>'
+    },
+    PAUSED: {
+      bg: '#fef3c7', border: '#f5d9a0', icon: '⏸',
+      badgeBg: '#fef3c7', badgeColor: '#92400e',
+      title: 'Day is Paused', titleColor: '#d97706',
+      sub: 'Paused at ' + (activeDay.paused_at ? fmtTime(activeDay.paused_at) : '—') + ' · Tap to resume operations',
+      action: '<button onclick="openDay()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-play"></i> Resume Day</button>'
     },
     CLOSED: {
-      bg: '#fef3c7', border: '#f5d9a0', icon: '🌙',
-      badgeBg: '#fef3c7', badgeColor: '#92400e',
-      title: 'Business Day is Closed', titleColor: 'var(--amber)',
-      sub: 'Closed at ' + (activeDay.closed_at ? fmtTime(activeDay.closed_at) : '—') + ' · Can reopen before 11:59 PM',
-      action: '<button onclick="openDay()" style="width:100%;padding:16px;background:var(--amber);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);"><i class="fa-solid fa-rotate-left"></i> Reopen Day</button>'
+      bg: '#fee2e2', border: 'rgba(192,57,43,0.25)', icon: '🔒',
+      badgeBg: '#fee2e2', badgeColor: 'var(--red)',
+      title: 'Day Permanently Closed', titleColor: 'var(--red)',
+      sub: 'Closed at ' + (activeDay.closed_at ? fmtTime(activeDay.closed_at) : '—') + ' · Read-only — cannot be reopened',
+      action: '<div style="padding:12px;background:var(--red-light);border-radius:var(--r);color:var(--red);font-size:13px;font-weight:600;text-align:center;">🔒 This day is permanently closed</div>'
     },
     LOCKED: {
-      bg: 'var(--red-light)', border: 'rgba(192,57,43,0.25)', icon: '🔒',
-      badgeBg: 'var(--red-light)', badgeColor: 'var(--red)',
-      title: 'Previous Day is Locked', titleColor: 'var(--red)',
-      sub: 'Yesterday is permanently closed. Open today now',
-      action: '<button onclick="openNewDay()" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">🌅 Open Today</button>'
+      bg: 'var(--surface2)', border: 'var(--border)', icon: '📅',
+      badgeBg: '#e5e7eb', badgeColor: '#6b7280',
+      title: 'Ready for a New Day', titleColor: 'var(--text)',
+      sub: 'Previous day is locked. Open today now',
+      action: '<button onclick="openNewDay()" style="' + BTN + 'var(--accent)' + BTN2 + '">🌅 Open Today</button>'
     }
   };
 
@@ -2472,7 +2549,7 @@ showPage = function(id) {
     return;
   }
   // Block restricted tabs when day is not open (but NOT sheet popups)
-  const dayOpen = activeDay && activeDay.status === 'OPEN';
+  const dayOpen = activeDay && (activeDay.status === 'OPEN');
   if (DAY_RESTRICTED_TABS.includes(id) && !dayOpen) {
     _origShowPage('day');
     setTimeout(() => showDayClosedOverlay(id), 100);
