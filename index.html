@@ -1525,6 +1525,743 @@
 
 <!-- ── App JavaScript ──────────────────────────────────────────── -->
 <script src="app.js"></script>
+
+<!-- ==============================================================
+     SHEET: SELL MODAL  (id="sell-modal")
+     Opens when SELL button is tapped on item detail.
+     openSellModal(itemId) populates fields.
+     confirmSale() records the transaction.
+     ============================================================== -->
+<div class="sheet-overlay" id="sell-modal">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+
+    <!-- Item info row -->
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <div id="sm-icon"
+           style="width:52px;height:52px;border-radius:14px;
+                  display:flex;align-items:center;justify-content:center;
+                  font-size:28px;flex-shrink:0;"></div>
+      <div style="flex:1;min-width:0;">
+        <div id="sm-name" style="font-size:17px;font-weight:800;color:var(--text);"></div>
+        <div id="sm-meta"
+             style="font-size:12px;font-family:var(--mono);color:var(--muted);margin-top:2px;"></div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div id="sm-stock" style="font-size:13px;font-weight:700;font-family:var(--mono);"></div>
+        <div style="font-size:11px;color:var(--muted);">in stock</div>
+      </div>
+    </div>
+
+    <!-- Sell price + profit boxes -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+      <div class="detail-box">
+        <div class="detail-key">SELL PRICE</div>
+        <div class="detail-val" id="sm-sell" style="color:var(--accent2);font-size:18px;"></div>
+      </div>
+      <div class="detail-box">
+        <div class="detail-key">PROFIT / ITEM</div>
+        <div class="detail-val" id="sm-profit" style="color:var(--green);font-size:18px;"></div>
+      </div>
+    </div>
+
+    <!-- Quantity stepper -->
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;">
+        Quantity to Sell
+      </div>
+      <div style="display:flex;align-items:center;border:2px solid var(--border);
+                  border-radius:var(--r);overflow:hidden;background:var(--surface);">
+        <button onclick="adjSellQty(-1)"
+                style="width:52px;height:52px;border:none;background:var(--surface2);
+                       font-size:24px;font-weight:700;cursor:pointer;color:var(--text);flex-shrink:0;">
+          −
+        </button>
+        <input id="sm-qty" type="number" value="1" min="1"
+               style="flex:1;border:none;text-align:center;font-size:24px;font-weight:800;
+                      font-family:var(--mono);color:var(--text);background:transparent;
+                      outline:none;padding:10px;"
+               oninput="updateSellModal()">
+        <button onclick="adjSellQty(1)"
+                style="width:52px;height:52px;border:none;background:var(--surface2);
+                       font-size:24px;font-weight:700;cursor:pointer;color:var(--text);flex-shrink:0;">
+          +
+        </button>
+      </div>
+    </div>
+
+    <!-- Optional price override -->
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;">
+        Actual Sale Price
+        <span style="font-size:11px;font-weight:500;color:var(--muted);
+                     background:var(--surface2);padding:2px 8px;border-radius:10px;margin-left:4px;">
+          optional — overrides sell price
+        </span>
+      </div>
+      <div style="display:flex;align-items:center;border:2px solid var(--border);
+                  border-radius:var(--r);overflow:hidden;background:var(--surface);">
+        <span id="sm-cur"
+              style="padding:0 12px;font-size:13px;font-weight:700;font-family:var(--mono);
+                     color:var(--accent);background:var(--accent-light);
+                     border-right:2px solid var(--border);min-height:50px;
+                     display:flex;align-items:center;">
+          KES
+        </span>
+        <input id="sm-actual" type="number"
+               placeholder="Leave blank to use sell price"
+               min="0" inputmode="decimal"
+               style="flex:1;border:none;font-size:15px;font-weight:600;
+                      font-family:var(--mono);color:var(--text);background:transparent;
+                      outline:none;padding:13px 14px;"
+               oninput="updateSellModal()">
+      </div>
+    </div>
+
+    <!-- Payment method -->
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;">Payment Method</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;" id="sm-payment-btns">
+        <button onclick="selectPayment('Cash')"    id="pm-Cash"   class="pm-btn pm-active" >💵 Cash</button>
+        <button onclick="selectPayment('M-Pesa')"  id="pm-M-Pesa" class="pm-btn">📱 M-Pesa</button>
+        <button onclick="selectPayment('Credit')"  id="pm-Credit" class="pm-btn">💳 Credit</button>
+      </div>
+    </div>
+
+    <!-- Totals summary -->
+    <div style="background:var(--accent-light);border:1.5px solid #a8d8b5;
+                border-radius:var(--r);padding:14px 16px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:13px;color:var(--muted);">Price Used</span>
+        <span id="sm-price-used"
+              style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--accent);">
+        </span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:14px;font-weight:700;color:var(--text);">Total Revenue</span>
+        <span id="sm-total-rev"
+              style="font-size:20px;font-weight:800;font-family:var(--mono);color:var(--accent2);">
+        </span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13px;color:var(--muted);">Total Profit</span>
+        <span id="sm-total-profit"
+              style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--green);">
+        </span>
+      </div>
+    </div>
+
+    <!-- Cancel / Confirm -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <button onclick="closeSellModal()"
+              style="padding:15px;background:transparent;border:1.5px solid var(--border);
+                     border-radius:var(--r);font-size:15px;font-weight:700;
+                     color:var(--muted);cursor:pointer;font-family:var(--sans);">
+        Cancel
+      </button>
+      <button onclick="confirmSale()"
+              style="padding:15px;background:var(--accent);color:white;border:none;
+                     border-radius:var(--r);font-size:15px;font-weight:800;
+                     cursor:pointer;font-family:var(--sans);">
+        ✅ Confirm Sale
+      </button>
+    </div>
+  </div>
+</div><!-- /sell-modal -->
+
+
+<!-- ==============================================================
+     SHEET: ITEM DETAIL  (id="detail-sheet")
+     Opens when a stock card is tapped.
+     openSheet(id) in app.js populates all *id* elements.
+     Top: 400px photo area (pannable with touch, pinch-to-zoom).
+     Bottom: prices, stock counts, restock, edit, delete, CLOSE.
+     ============================================================== -->
+<div class="sheet-overlay" id="detail-sheet">
+  <div class="sheet" style="padding:0;overflow:hidden;border-radius:16px;">
+    <!-- Handle -->
+    <div class="sheet-handle"
+         style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:3;"></div>
+
+    <!-- ── Photo area (400px tall) ─────────────────────────── -->
+    <div id="sh-photo-area"
+         style="width:100%;height:400px;display:flex;align-items:center;
+                justify-content:center;position:relative;
+                background:var(--surface2);border-radius:16px 16px 0 0;overflow:hidden;">
+
+      <!-- Pannable/zoomable photo wrapper (visible when photo exists) -->
+      <div id="sh-photo-pan"
+           style="display:none;width:100%;height:100%;overflow:hidden;
+                  touch-action:none;position:absolute;inset:0;cursor:grab;">
+        <img id="sh-photo-img" src="" alt=""
+             style="width:100%;height:100%;object-fit:cover;
+                    transform-origin:center center;
+                    user-select:none;-webkit-user-drag:none;">
+      </div>
+
+      <!-- Emoji fallback circle (shown when no photo) -->
+      <div id="sh-photo-fallback"
+           style="width:110px;height:110px;border-radius:50%;
+                  display:flex;align-items:center;justify-content:center;
+                  font-size:52px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+        <span id="sh-icon"></span>
+      </div>
+
+      <!-- Diagonal OUT OF STOCK banner (shown when qty = 0) -->
+      <div id="sh-out-badge"
+           style="display:none;position:absolute;inset:0;
+                  pointer-events:none;overflow:hidden;">
+        <div style="position:absolute;top:50%;left:50%;
+                    transform:translate(-50%,-50%) rotate(-35deg);
+                    white-space:nowrap;font-size:36px;font-weight:900;
+                    color:rgba(255,255,255,0.92);letter-spacing:2px;
+                    text-shadow:0 2px 12px rgba(0,0,0,0.7);text-transform:uppercase;
+                    background:rgba(192,57,43,0.7);padding:10px 40px;border-radius:8px;">
+          OUT OF STOCK
+        </div>
+      </div>
+
+      <!-- Item type badge — top-left -->
+      <div id="sh-type-badge"
+           style="position:absolute;top:14px;left:14px;
+                  background:rgba(0,0,0,0.45);color:white;font-size:11px;
+                  font-weight:700;padding:5px 11px;border-radius:20px;
+                  font-family:var(--sans);backdrop-filter:blur(4px);
+                  letter-spacing:0.3px;z-index:2;">
+      </div>
+
+      <!-- Photo add/change button — top-right -->
+      <button id="sh-photo-btn"
+              onclick="triggerSheetPhotoUpload(event)"
+              style="position:absolute;top:14px;right:14px;
+                     background:rgba(0,0,0,0.4);color:white;
+                     border:1px solid rgba(255,255,255,0.3);border-radius:6px;
+                     font-size:11px;font-weight:700;padding:5px 10px;
+                     cursor:pointer;font-family:var(--sans);
+                     backdrop-filter:blur(4px);z-index:2;">
+        📷 Photo
+      </button>
+
+      <!-- Bottom gradient overlay: code + name + SELL button -->
+      <div style="position:absolute;bottom:0;left:0;right:0;
+                  background:linear-gradient(to top,rgba(0,0,0,0.82),transparent);
+                  padding:16px 16px 14px;z-index:2;">
+        <!-- Item code (large monospace) -->
+        <div id="sh-code"
+             style="font-size:22px;font-weight:900;color:white;
+                    font-family:var(--mono);letter-spacing:0.5px;">
+        </div>
+        <!-- Item name -->
+        <div id="sh-name"
+             style="font-size:13px;color:rgba(255,255,255,0.75);
+                    margin-top:2px;margin-bottom:12px;">
+        </div>
+        <!-- SELL button — disabled when out of stock -->
+        <button id="sh-sell-btn"
+                onclick="openSellFromSheet()"
+                style="width:100%;padding:16px;background:#1e7a3e;color:white;
+                       border:none;border-radius:14px;font-size:20px;font-weight:900;
+                       cursor:pointer;font-family:var(--sans);letter-spacing:1px;
+                       box-shadow:0 4px 16px rgba(30,122,62,0.5);">
+          SELL
+        </button>
+      </div>
+    </div><!-- /sh-photo-area -->
+
+    <!-- ── Info panel (scrollable) ─────────────────────────── -->
+    <div style="padding:14px 16px 20px;overflow-y:auto;max-height:55vh;">
+
+      <!-- Type tag + large Item Code + size tag -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span class="tag tag-cyan" id="sh-type"
+              style="font-size:11px;padding:3px 9px;flex-shrink:0;"></span>
+        <div style="flex:1;">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);
+                      text-transform:uppercase;letter-spacing:0.3px;">
+            Item Code
+          </div>
+          <div style="font-size:20px;font-weight:900;font-family:var(--mono);color:var(--text);"
+               id="sh-code-large">
+          </div>
+        </div>
+        <span class="tag tag-purple" id="sh-size"
+              style="font-size:11px;padding:3px 9px;flex-shrink:0;"></span>
+      </div>
+
+      <!-- Buying price / Selling price (full, no abbreviation) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+        <div style="padding:12px;border:1px solid var(--border);
+                    border-radius:var(--r);text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);
+                      text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">
+            Buying Price
+          </div>
+          <div id="sh-buy"
+               style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--muted);">
+          </div>
+        </div>
+        <div style="padding:12px;border:1px solid var(--border);
+                    border-radius:var(--r);text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);
+                      text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">
+            Selling Price
+          </div>
+          <div id="sh-sell"
+               style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent2);">
+          </div>
+        </div>
+      </div>
+
+      <!-- In store qty + Units sold -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+        <div style="padding:12px;background:var(--surface2);
+                    border-radius:var(--r);text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);
+                      text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">
+            In Store
+          </div>
+          <div id="sh-qty"
+               style="font-size:22px;font-weight:900;font-family:var(--mono);color:var(--accent);">
+          </div>
+        </div>
+        <div style="padding:12px;background:var(--surface2);
+                    border-radius:var(--r);text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);
+                      text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">
+            Units Sold
+          </div>
+          <div id="sh-sold"
+               style="font-size:22px;font-weight:900;font-family:var(--mono);color:var(--green);">
+            0
+          </div>
+        </div>
+      </div>
+
+      <!-- Restock panel (toggled by toggleRestock()) -->
+      <div id="restock-panel"
+           style="display:none;margin-bottom:10px;background:var(--accent-light);
+                  border:1.5px solid #a8d8b5;border-radius:var(--r);padding:12px;">
+        <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">
+          📦 Add Stock
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="restock-qty" type="number" min="1"
+                 placeholder="Qty to add" inputmode="numeric"
+                 style="flex:1;padding:10px 12px;border:1.5px solid var(--border);
+                        border-radius:var(--r);font-size:15px;font-weight:700;
+                        font-family:var(--mono);background:white;outline:none;">
+          <button onclick="confirmRestock()"
+                  style="padding:10px 16px;background:var(--accent);color:white;
+                         border:none;border-radius:var(--r);font-size:13px;font-weight:800;
+                         cursor:pointer;font-family:var(--sans);">
+            Add ✓
+          </button>
+        </div>
+      </div>
+
+      <!-- Action buttons row: Delete · Restock · Edit -->
+      <div id="sh-action-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:10px;">
+        <button class="btn-del" onclick="deleteItem()" style="padding:10px;font-size:12px;">
+          🗑 Delete
+        </button>
+        <button onclick="toggleRestock()"
+                style="padding:10px;background:#dbeafe;color:#1d4ed8;
+                       border:1px solid #93c5fd;border-radius:var(--r);font-size:12px;
+                       font-weight:700;cursor:pointer;font-family:var(--sans);">
+          📦 Restock
+        </button>
+        <button class="btn-edit" onclick="editItem()" style="padding:10px;font-size:12px;">
+          ✏️ Edit
+        </button>
+      </div>
+
+      <!-- CLOSE button — big blue -->
+      <button onclick="closeSheet()"
+              style="width:100%;padding:16px;background:#1d4ed8;color:white;
+                     border:none;border-radius:var(--r);font-size:18px;font-weight:800;
+                     cursor:pointer;font-family:var(--sans);letter-spacing:0.3px;">
+        CLOSE
+      </button>
+
+    </div><!-- /info-panel -->
+  </div>
+</div><!-- /detail-sheet -->
+
+
+<!-- ==============================================================
+     SHEET: DAY CLOSE SUMMARY  (id="day-summary-sheet")
+     Opens when Close Day is tapped.
+     showDaySummary() populates all ds-* elements.
+     confirmCloseDay() saves final status to DB.
+     ============================================================== -->
+<div class="sheet-overlay" id="day-summary-sheet">
+  <div class="sheet" style="max-height:96vh;padding-bottom:24px;">
+    <div class="sheet-handle"></div>
+
+    <!-- Header gradient -->
+    <div style="text-align:center;margin-bottom:18px;padding:16px;
+                background:linear-gradient(135deg,#0d4a22,#1e7a3e);
+                border-radius:var(--r-lg);color:white;">
+      <div style="font-size:44px;margin-bottom:8px;">🌙</div>
+      <div style="font-size:22px;font-weight:800;">End of Day Report</div>
+      <div id="ds-date"
+           style="font-size:13px;opacity:0.75;font-family:var(--mono);margin-top:4px;"></div>
+      <div id="ds-time-range"
+           style="font-size:12px;opacity:0.6;font-family:var(--mono);margin-top:2px;"></div>
+    </div>
+
+    <!-- Day verdict banner -->
+    <div id="ds-verdict"
+         style="border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;">
+    </div>
+
+    <!-- Financials grid -->
+    <div style="font-size:11px;font-weight:700;color:var(--muted);
+                letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">
+      💰 Financials
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div class="detail-box" style="padding:14px;text-align:center;">
+        <div class="detail-key">REVENUE</div>
+        <div class="detail-val" id="ds-revenue" style="font-size:22px;color:var(--accent2);"></div>
+      </div>
+      <div class="detail-box" style="padding:14px;text-align:center;">
+        <div class="detail-key">PROFIT</div>
+        <div class="detail-val" id="ds-profit" style="font-size:22px;color:var(--green);"></div>
+      </div>
+      <div class="detail-box" style="padding:14px;text-align:center;">
+        <div class="detail-key">PROFIT MARGIN</div>
+        <div class="detail-val" id="ds-margin" style="font-size:22px;color:var(--accent3);"></div>
+      </div>
+      <div class="detail-box" style="padding:14px;text-align:center;">
+        <div class="detail-key">AVG SALE VALUE</div>
+        <div class="detail-val" id="ds-avg-sale" style="font-size:22px;color:var(--accent);"></div>
+      </div>
+    </div>
+
+    <!-- Sales activity grid -->
+    <div style="font-size:11px;font-weight:700;color:var(--muted);
+                letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">
+      📊 Sales Activity
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">SALES</div>
+        <div class="detail-val" id="ds-sales" style="font-size:26px;color:var(--green);"></div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">ITEMS SOLD</div>
+        <div class="detail-val" id="ds-items-sold" style="font-size:26px;color:var(--accent);"></div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">CUSTOM PRICE</div>
+        <div class="detail-val" id="ds-custom-price" style="font-size:26px;color:var(--accent3);"></div>
+      </div>
+    </div>
+
+    <!-- Stock summary grid -->
+    <div style="font-size:11px;font-weight:700;color:var(--muted);
+                letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">
+      📦 Stock Summary
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">OPENING STOCK</div>
+        <div class="detail-val" id="ds-opening-stock" style="font-size:16px;color:var(--text2);"></div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">CLOSING STOCK</div>
+        <div class="detail-val" id="ds-closing-stock" style="font-size:16px;color:var(--accent);"></div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">PURCHASES ADDED</div>
+        <div class="detail-val" id="ds-purchases" style="font-size:18px;color:var(--accent3);"></div>
+      </div>
+      <div class="detail-box" style="padding:12px;text-align:center;">
+        <div class="detail-key">PURCHASE COST</div>
+        <div class="detail-val" id="ds-purchases-val" style="font-size:16px;color:var(--muted);"></div>
+      </div>
+    </div>
+
+    <!-- Stock movement progress bar -->
+    <div class="detail-box" style="padding:14px;margin-bottom:14px;">
+      <div class="detail-key" style="margin-bottom:8px;">STOCK MOVEMENT TODAY</div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;
+                  color:var(--muted);font-family:var(--mono);margin-bottom:6px;">
+        <span>Sold</span>
+        <span id="ds-stock-pct-label">0%</span>
+      </div>
+      <div style="background:var(--surface2);border-radius:6px;height:12px;overflow:hidden;">
+        <div id="ds-stock-bar"
+             style="height:100%;background:linear-gradient(90deg,var(--green),var(--accent));
+                    border-radius:6px;width:0%;transition:width 0.8s ease;">
+        </div>
+      </div>
+    </div>
+
+    <!-- Top seller -->
+    <div id="ds-top-seller" style="margin-bottom:14px;"></div>
+
+    <!-- Type breakdown -->
+    <div id="ds-type-breakdown" style="margin-bottom:14px;"></div>
+
+    <!-- Optional notes textarea -->
+    <div style="margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;
+                  text-transform:uppercase;letter-spacing:0.5px;">
+        Day Notes (optional)
+      </div>
+      <textarea id="ds-notes" rows="2"
+                placeholder="Any notes for the day…"
+                style="width:100%;background:var(--surface2);border:1.5px solid var(--border);
+                       border-radius:var(--r);color:var(--text);font-family:var(--sans);
+                       font-size:14px;padding:10px;outline:none;resize:none;"
+                onfocus="this.style.borderColor='var(--accent)'"
+                onblur="this.style.borderColor='var(--border)'">
+      </textarea>
+    </div>
+
+    <!-- Confirm / Cancel -->
+    <button onclick="confirmCloseDay()"
+            style="width:100%;padding:16px;background:var(--accent);color:white;
+                   border:none;border-radius:var(--r);font-size:16px;font-weight:800;
+                   cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
+      <i class="fa-solid fa-circle-check"></i> Confirm &amp; Close Day
+    </button>
+    <button onclick="cancelCloseDay()"
+            style="width:100%;padding:13px;background:transparent;
+                   border:1.5px solid var(--border);border-radius:var(--r);
+                   font-size:14px;font-weight:600;color:var(--muted);
+                   cursor:pointer;font-family:var(--sans);">
+      ← Keep Day Open
+    </button>
+  </div>
+</div><!-- /day-summary-sheet -->
+
+
+<!-- ==============================================================
+     SHEET: PAST SESSION VIEW  (id="past-session-sheet")
+     Opens when a past session card is tapped in page-day.
+     Content injected dynamically by openPastSessionSheet().
+     ============================================================== -->
+<div class="sheet-overlay" id="past-session-sheet">
+  <div class="sheet" style="max-height:92vh;">
+    <div class="sheet-handle"></div>
+    <!-- Dynamic content injected here -->
+    <div id="past-session-content"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;">
+      <button id="export-day-btn" onclick=""
+              style="padding:13px;background:var(--green-light);color:var(--green);
+                     border:1.5px solid #a8d8b5;border-radius:var(--r);font-size:13px;
+                     font-weight:700;cursor:pointer;font-family:var(--sans);">
+        📤 Export CSV
+      </button>
+      <button onclick="closePastSessionSheet()"
+              style="padding:13px;background:transparent;border:1.5px solid var(--border);
+                     border-radius:var(--r);font-size:14px;font-weight:600;
+                     color:var(--muted);cursor:pointer;font-family:var(--sans);">
+        Close
+      </button>
+    </div>
+  </div>
+</div><!-- /past-session-sheet -->
+
+
+<!-- ==============================================================
+     SHEET: USER PROFILE  (id="profile-sheet")
+     Shows current user's name, role, username, tab permissions.
+     Opened by showUserProfile() from the header dropdown.
+     ============================================================== -->
+<div class="sheet-overlay" id="profile-sheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+
+    <!-- Avatar + name -->
+    <div style="text-align:center;padding:10px 0 20px;">
+      <div style="width:72px;height:72px;border-radius:50%;background:var(--accent);
+                  display:flex;align-items:center;justify-content:center;
+                  font-size:32px;color:white;margin:0 auto 12px;">
+        <i class="fa-solid fa-user"></i>
+      </div>
+      <div style="font-size:20px;font-weight:800;color:var(--text);" id="profile-name"></div>
+      <div style="font-size:13px;font-family:var(--mono);margin-top:4px;" id="profile-role"></div>
+    </div>
+
+    <!-- Details rows -->
+    <div style="background:var(--surface2);border-radius:var(--r);overflow:hidden;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;
+                  padding:12px 16px;border-bottom:1px solid var(--border);">
+        <span style="font-size:13px;color:var(--muted);font-weight:600;">Username</span>
+        <span style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--text);"
+              id="profile-username"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;
+                  padding:12px 16px;border-bottom:1px solid var(--border);">
+        <span style="font-size:13px;color:var(--muted);font-weight:600;">Access Level</span>
+        <span style="font-size:13px;font-weight:700;" id="profile-access"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;">
+        <span style="font-size:13px;color:var(--muted);font-weight:600;">Permissions</span>
+        <span style="font-size:13px;font-weight:600;color:var(--accent);"
+              id="profile-tabs"></span>
+      </div>
+    </div>
+
+    <!-- Sign out -->
+    <button onclick="closeProfileSheet();confirmLogout();"
+            style="width:100%;padding:14px;background:var(--red-light);color:var(--red);
+                   border:1.5px solid rgba(192,57,43,0.25);border-radius:var(--r);
+                   font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans);
+                   margin-bottom:10px;">
+      <i class="fa-solid fa-right-from-bracket"></i> Sign Out
+    </button>
+    <button onclick="closeProfileSheet()"
+            style="width:100%;padding:13px;background:transparent;
+                   border:1.5px solid var(--border);border-radius:var(--r);
+                   font-size:14px;font-weight:600;color:var(--muted);
+                   cursor:pointer;font-family:var(--sans);">
+      Close
+    </button>
+  </div>
+</div><!-- /profile-sheet -->
+
+
+<!-- ==============================================================
+     UTILITY: ADD ITEM SUCCESS SPLASH
+     Shown for ~2 s after a new item is saved.
+     showSplash(name, sell, profit) in app.js animates this.
+     ============================================================== -->
+<div class="splash" id="splash">
+  <div class="splash-circle" id="splash-circle">
+    <svg viewBox="0 0 60 60" width="70" height="70">
+      <!-- Animated tick drawn via stroke-dashoffset -->
+      <polyline id="splash-tick"
+                points="10,32 24,46 50,18"
+                fill="none" stroke="#1e7a3e" stroke-width="5"
+                stroke-linecap="round" stroke-linejoin="round"
+                stroke-dasharray="65" stroke-dashoffset="65"
+                style="transition:stroke-dashoffset 0.4s ease 0.3s;"/>
+    </svg>
+  </div>
+  <div class="splash-msg" id="splash-msg">Item Saved!</div>
+  <div class="splash-sub" id="splash-sub"></div>
+  <div class="splash-profit-wrap" id="splash-profit-wrap">
+    <div class="splash-profit-lbl">Selling Price</div>
+    <div>
+      <span class="splash-profit-unit" id="splash-cur">KES</span>
+      <span class="splash-profit-val" id="splash-val"></span>
+    </div>
+    <div id="splash-profit-insight"
+         style="font-size:14px;font-family:var(--mono);margin-top:6px;font-weight:600;">
+    </div>
+  </div>
+</div><!-- /splash -->
+
+
+<!-- ==============================================================
+     OVERLAY: DAY CLOSED
+     Full-screen overlay shown on restricted pages (Dash, Add)
+     when the business day is not OPEN.
+     showDayClosedOverlay(attemptedTab) and hideDayClosedOverlay()
+     in app.js control visibility.
+     ============================================================== -->
+<div id="day-closed-overlay">
+  <div style="font-size:64px;margin-bottom:16px;">🔒</div>
+  <div style="font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px;">
+    Day Not Open
+  </div>
+  <div style="font-size:15px;color:var(--muted);margin-bottom:28px;line-height:1.6;"
+       id="day-closed-msg">
+    Please open the business day to access this section.
+  </div>
+  <button onclick="showPage('day')"
+          style="padding:16px 32px;background:var(--accent);color:white;border:none;
+                 border-radius:var(--r);font-size:16px;font-weight:800;
+                 cursor:pointer;font-family:var(--sans);">
+    📅 Go to Day
+  </button>
+</div>
+
+
+<!-- ==============================================================
+     UTILITY: TOAST NOTIFICATION
+     Brief pop-up message at bottom of screen.
+     toast(msg, type) in app.js drives this — type: 'ok' | 'err' | ''
+     ============================================================== -->
+<div class="toast" id="toast"></div>
+
+
+<!-- ==============================================================
+     UTILITY: INSTALL BANNER
+     Shown to encourage PWA installation.
+     Detects browser and shows appropriate instructions.
+     dismissInstall(permanent) hides and optionally suppresses forever.
+     ============================================================== -->
+<div id="install-banner"
+     style="display:none;position:fixed;bottom:0;left:0;right:0;
+            max-width:520px;margin:0 auto;z-index:997;background:var(--surface);
+            border-top:3px solid var(--accent);
+            box-shadow:0 -4px 24px rgba(0,0,0,0.15);padding:16px 18px 20px;">
+
+  <!-- Title row -->
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+    <div style="width:50px;height:50px;border-radius:12px;background:var(--accent);
+                display:flex;align-items:center;justify-content:center;
+                font-size:28px;flex-shrink:0;">
+      📦
+    </div>
+    <div style="flex:1;">
+      <div style="font-size:16px;font-weight:800;color:var(--text);">
+        Install Mandela General Stores
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px;">
+        Add to home screen · Works offline
+      </div>
+    </div>
+    <button onclick="dismissInstall(true)"
+            style="background:none;border:none;font-size:22px;
+                   color:var(--muted);cursor:pointer;padding:4px;flex-shrink:0;">
+      ✕
+    </button>
+  </div>
+
+  <!-- Native install button (Chrome/Edge only — shown by JS) -->
+  <div id="install-native" style="display:none;margin-bottom:12px;">
+    <button onclick="triggerInstall()"
+            style="width:100%;padding:14px;background:var(--accent);color:white;
+                   border:none;border-radius:var(--r);font-size:15px;font-weight:800;
+                   cursor:pointer;font-family:var(--sans);">
+      📲 Tap to Install (1 tap)
+    </button>
+  </div>
+
+  <!-- Manual steps for other browsers -->
+  <div id="install-steps"
+       style="background:var(--surface2);border-radius:var(--r);
+              padding:14px;font-size:13px;line-height:2.2;">
+    <div id="install-steps-content" style="color:var(--text2);"></div>
+  </div>
+
+  <!-- Later / Don't show again -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
+    <button onclick="dismissInstall(false)"
+            style="padding:13px;background:var(--surface2);color:var(--muted);
+                   border:1px solid var(--border);border-radius:var(--r);font-size:14px;
+                   font-weight:700;cursor:pointer;font-family:var(--sans);">
+      Later
+    </button>
+    <button onclick="dismissInstall(true)"
+            style="padding:13px;background:var(--surface2);color:var(--muted);
+                   border:1px solid var(--border);border-radius:var(--r);font-size:14px;
+                   font-weight:700;cursor:pointer;font-family:var(--sans);">
+      Don't show again
+    </button>
+  </div>
+</div><!-- /install-banner -->
+
+
+<!-- ── App JavaScript ──────────────────────────────────────────── -->
+<script src="app.js"></script>
 <!-- ==============================================================
      SHEET: RECONCILE
      Shows all parallel sessions, merge button, and final reconcile

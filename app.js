@@ -1579,14 +1579,32 @@ function hideDayClosedOverlay() {
 
 // ===================================================================
 // BUSINESS DAY MANAGEMENT
-// Statuses: PENDING → OPEN → CLOSED → LOCKED
+//
+// Simple two-state model:
+//   OPEN   → day is active, all operations allowed
+//   CLOSED → day is closed, operations blocked
+//
+// Rules:
+//   • User can open and close the day as many times as needed
+//     within the same calendar date
+//   • On date change, the system auto-creates and opens a new day
+//   • At midnight, current day closes automatically
+//   • Past days are LOCKED (read-only archive)
 // ===================================================================
-let activeDay = null;         // current business day object
-let dayCheckTimer = null;     // timer for auto-open/close/lock
 
-// ── HELPERS ─────────────────────────────────────────────────────────
+let activeDay = null;
+let dayCheckTimer = null;
+let _warned1145 = null; // date string of the last 11:45 PM warning shown
+
+// ── DATE / TIME HELPERS ──────────────────────────────────────────────
 function todayDateStr() {
-  return new Date().toISOString().split('T')[0];
+  // Use local date, not UTC — important for UTC+3 (Nairobi) where
+  // new Date().toISOString() returns UTC which drifts 3 hours behind local time
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
 }
 function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -1597,832 +1615,220 @@ function fmtFullDate(dateStr) {
   });
 }
 
-// Find primary business day by date string
-// Returns the primary session (session_num=1 or is_primary=true), or first found
-async function getBusinessDay(dateStr) {
-  const all = await dbAll('business_days');
-  const forDate = all.filter(d => d.business_date === dateStr);
-  return forDate.find(d => d.is_primary) || forDate.find(d => d.session_num === 1) || forDate[0] || null;
-}
-
-// Get ALL sessions for a given date (including parallel sessions)
-async function getAllDaySessions(dateStr) {
-  const all = await dbAll('business_days');
-  return all.filter(d => d.business_date === dateStr)
-            .sort((a, b) => (a.session_num || 1) - (b.session_num || 1));
-}
-
-// Count sessions for a date (used when creating parallel sessions)
-async function countDaySessions(dateStr) {
-  const all = await dbAll('business_days');
-  return all.filter(d => d.business_date === dateStr).length;
-}
-
-// ── LOAD & INITIALIZE DAY ────────────────────────────────────────────
-async function loadActiveDay() {
-  const today = todayDateStr();
-
-  // Get today's active session — prefer OPEN, then PAUSED, then primary
-  const allToday = await getAllDaySessions(today);
-  let bday;
-  if (allToday.length > 0) {
-    bday = allToday.find(s => s.status === 'OPEN') ||
-           allToday.find(s => s.status === 'PAUSED') ||
-           allToday.find(s => s.is_primary) ||
-           allToday[0];
-  }
-  if (!bday) {
-    const id = await dbAdd('business_days', {
-      business_date: today,
-      status: 'PENDING',
-      session_num: 1,
-      is_primary: true,
-      opened_at: null, closed_at: null,
-      auto_opened: false, auto_closed: false,
-      reopened_count: 0, final_locked_at: null,
-      reconciled_at: null, notes: ''
-    });
-    bday = await dbGet('business_days', id);
-  }
-
-  // If the stored day is from a past date (app opened next day without closing):
-  // Lock the old day and create a fresh PENDING for today
-  if (bday.business_date !== today) {
-    if (bday.status !== 'LOCKED') await lockBusinessDay(bday);
-
-    bday = await getBusinessDay(today);
-    if (!bday) {
-      const id = await dbAdd('business_days', {
-        business_date: today, status: 'PENDING',
-        session_num: 1, is_primary: true,
-        opened_at: null, closed_at: null,
-        auto_opened: false, auto_closed: false,
-        pause_count: 0, final_locked_at: null,
-        reconciled_at: null, notes: ''
-      });
-      bday = await dbGet('business_days', id);
-    }
-  }
-
-  // If today's day was left PAUSED (app closed while paused) — keep as PAUSED
-  // User will see "Day Paused" banner and can resume
-  // If today's day was left OPEN (crash/force-close) — keep as OPEN
-  // so user can continue seamlessly
-
-  activeDay = bday;
-  updateDayBanner();
-  if (activeDay && activeDay.status === 'OPEN') updateDayLiveStats();
-  startDayTimer();
-}
-
-
-
-// ═══════════════════════════════════════════════════════════════
-// PARALLEL SESSION MANAGEMENT
-// User can open Session 2, 3… alongside a CLOSED main session.
-// Sessions share the same business_date but have their own records.
-// Merge: pools all session sales into the primary session.
-// Reconcile: permanently finalises the day — no further changes.
-// ═══════════════════════════════════════════════════════════════
-
-// Open a new parallel session for today (Session 2, 3…)
-async function openNewSession() {
-  const today = todayDateStr();
-  const sessions = await getAllDaySessions(today);
-
-  // Block if any session is currently OPEN
-  if (sessions.some(s => s.status === 'OPEN')) {
-    toast('Close the current open session first.', 'err');
-    return;
-  }
-  // Block if primary day is RECONCILED
-  if (sessions.some(s => s.is_primary && s.status === 'RECONCILED')) {
-    toast('Day is reconciled. No new sessions allowed.', 'err');
-    return;
-  }
-
-  const nextNum = sessions.length + 1;
-  const items = await dbAll('items');
-  const id = await dbAdd('business_days', {
-    business_date: today,
-    session_num: nextNum,
-    is_primary: false,
-    status: 'OPEN',
-    opened_at: new Date().toISOString(),
-    last_opened_at: new Date().toISOString(),
-    closed_at: null,
-    auto_opened: false, auto_closed: false,
-    pause_count: 0, reopened_count: 0,
-    final_locked_at: null, reconciled_at: null,
-    openingStockCost: items.reduce((s, i) => s + i.buy * i.qty, 0),
-    openingStockRetail: items.reduce((s, i) => s + i.sell * i.qty, 0),
-    date: fmtFullDate(today),
-    dateStr: today,
-    notes: ''
-  });
-  activeDay = await dbGet('business_days', id);
-  setDayMode(true);
-  updateDayBanner();
-  updateDayLiveStats();
-  renderDaySessionsList();
-  toast('➕ Session ' + nextNum + ' opened!', 'ok');
-}
-
-// ── RECONCILE SHEET ──────────────────────────────────────────────────
-async function showReconcileSheet() {
-  const today = todayDateStr();
-  const sessions = await getAllDaySessions(today);
-  const sales = await dbAll('sales');
-
-  // Collect totals for each session
-  const rows = await Promise.all(sessions.map(async s => {
-    const sSales = sales.filter(x => x.business_date === today && x.session_id === s.id);
-    // Also count untagged sales for primary session
-    const untagged = s.is_primary ? sales.filter(x => x.business_date === today && !x.session_id) : [];
-    const allSales = [...sSales, ...untagged];
-    return {
-      session: s,
-      count: allSales.length,
-      revenue: allSales.reduce((a, x) => a + x.revenue, 0),
-      profit: allSales.reduce((a, x) => a + x.profit, 0),
-    };
-  }));
-
-  const totalRevenue = rows.reduce((a, r) => a + r.revenue, 0);
-  const totalProfit  = rows.reduce((a, r) => a + r.profit, 0);
-  const totalSales   = rows.reduce((a, r) => a + r.count, 0);
-
-  const hasMultiple = sessions.length > 1;
-  const allClosed   = sessions.every(s => s.status === 'CLOSED' || s.status === 'RECONCILED');
-
-  const sheet = document.getElementById('reconcile-sheet');
-  const content = document.getElementById('reconcile-content');
-
-  content.innerHTML =
-    '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px;">Day Summary — ' + fmtFullDate(today) + '</div>' +
-
-    // Sessions breakdown table
-    rows.map(r =>
-      '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">' +
-      '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--text2);flex-shrink:0;">' + (r.session.session_num || 1) + '</div>' +
-      '<div style="flex:1;">' +
-      '<div style="font-size:13px;font-weight:700;">' + (r.session.is_primary ? 'Session 1 (Primary)' : 'Session ' + r.session.session_num) + '</div>' +
-      '<div style="font-size:11px;color:var(--muted);">' + r.count + ' sales · Status: ' + r.session.status + '</div>' +
-      '</div>' +
-      '<div style="text-align:right;">' +
-      '<div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(r.revenue) + '</div>' +
-      '<div style="font-size:11px;color:var(--green);font-family:var(--mono);">+' + fmt(r.profit) + '</div>' +
-      '</div></div>'
-    ).join('') +
-
-    // Grand total
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;margin-top:4px;">' +
-    '<div><div style="font-size:14px;font-weight:800;color:var(--text);">Grand Total</div><div style="font-size:12px;color:var(--muted);">' + totalSales + ' total sales</div></div>' +
-    '<div style="text-align:right;"><div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--accent2);">' + fmt(totalRevenue) + '</div>' +
-    '<div style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--green);">+' + fmt(totalProfit) + ' profit</div></div>' +
-    '</div>' +
-
-    // Payment method breakdown
-    '<div style="background:var(--surface2);border-radius:var(--r);padding:12px;margin-bottom:12px;">' +
-    '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;">Payment Breakdown</div>' +
-    (() => {
-      const allSales = sales.filter(x => x.business_date === today);
-      const byMethod = {};
-      allSales.forEach(s => {
-        const m = s.paymentMethod || 'Cash';
-        if (!byMethod[m]) byMethod[m] = 0;
-        byMethod[m] += s.revenue;
-      });
-      const icons = { Cash:'💵', 'M-Pesa':'📱', Credit:'💳' };
-      return Object.entries(byMethod).map(([m,v]) =>
-        '<div style="display:flex;justify-content:space-between;padding:4px 0;">' +
-        '<span style="font-size:13px;color:var(--text2);">' + (icons[m]||'💰') + ' ' + m + '</span>' +
-        '<span style="font-size:13px;font-weight:800;font-family:var(--mono);">' + fmt(v) + '</span></div>'
-      ).join('');
-    })() +
-    '</div>' +
-
-    // Merge button (only if multiple sessions)
-    (hasMultiple && allClosed ?
-      '<button onclick="mergeSessions()" style="width:100%;padding:14px;background:#7c3aed;color:white;border:none;border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">' +
-      '<i class="fa-solid fa-code-merge"></i> Merge ' + sessions.length + ' Sessions into One</button>'
-      : hasMultiple && !allClosed ?
-      '<div style="padding:12px;background:#fef3c7;border-radius:var(--r);font-size:13px;font-weight:600;color:#92400e;text-align:center;margin-bottom:10px;">Close all sessions before merging</div>'
-      : ''
-    ) +
-
-    // Closing cash count
-    '<div style="margin-bottom:12px;">' +
-    '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px;">💵 Closing Cash Count</div>' +
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Count the cash in the drawer now. Expected = opening float + cash sales</div>' +
-    '<div class="float-input-wrap">' +
-    '<span class="float-cur">' + currency + '</span>' +
-    '<input class="float-input" id="closing-cash" type="number" min="0" inputmode="decimal" placeholder="0">' +
-    '</div></div>' +
-    // Reconcile notes
-    '<div style="margin-bottom:10px;">' +
-    '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px;">Reconciliation Notes</div>' +
-    '<textarea id="reconcile-notes" rows="2" placeholder="e.g. Cash counted and confirmed…" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);font-family:var(--sans);font-size:14px;padding:10px;outline:none;resize:none;box-sizing:border-box;"></textarea>' +
-    '</div>' +
-
-    // Reconcile button
-    '<button onclick="reconcileDay()" style="width:100%;padding:15px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">' +
-    '<i class="fa-solid fa-check-double"></i> Confirm Reconciliation</button>' +
-    '<button onclick="closeReconcileSheet()" style="width:100%;padding:13px;background:transparent;border:1px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:var(--sans);">Cancel</button>';
-
-  sheet.classList.add('open');
-}
-
-function closeReconcileSheet() {
-  document.getElementById('reconcile-sheet').classList.remove('open');
-}
-
-// ── MERGE SESSIONS ────────────────────────────────────────────────────
-// Tags all non-primary session sales with primary session reference,
-// then marks non-primary sessions as MERGED (closed but searchable)
-async function mergeSessions() {
-  const today = todayDateStr();
-  const sessions = await getAllDaySessions(today);
-  const primary = sessions.find(s => s.is_primary);
-  if (!primary) { toast('No primary session found.', 'err'); return; }
-
-  const nonPrimary = sessions.filter(s => !s.is_primary);
-  if (nonPrimary.length === 0) { toast('Nothing to merge.', 'err'); return; }
-
-  const sales = await dbAll('sales');
-  let mergedCount = 0;
-
-  for (const sess of nonPrimary) {
-    // Re-tag all sales from this session to point to today (already tagged by business_date)
-    // Mark session as MERGED
-    sess.status = 'MERGED';
-    sess.merged_at = new Date().toISOString();
-    sess.merged_into = primary.id;
-    await dbPut('business_days', sess);
-    mergedCount++;
-  }
-
-  toast('✅ ' + mergedCount + ' session(s) merged into Session 1!', 'ok');
-  // Refresh reconcile sheet with updated data
-  await showReconcileSheet();
-  renderDaySessionsList();
-  scheduleSync();
-}
-
-// ── RECONCILE ─────────────────────────────────────────────────────────
-// Permanently finalises the day. Sets primary session to RECONCILED.
-// All other sessions must be CLOSED or MERGED first.
-async function reconcileDay() {
-  const today = todayDateStr();
-  const sessions = await getAllDaySessions(today);
-  const primary = sessions.find(s => s.is_primary) || activeDay;
-
-  // Check all sessions are closed/merged
-  const openSessions = sessions.filter(s => s.status === 'OPEN' || s.status === 'PAUSED');
-  if (openSessions.length > 0) {
-    toast('Close all open sessions before reconciling.', 'err');
-    return;
-  }
-
-  // Warn if no sales recorded
-  const checkSales = await dbAll('sales');
-  const todaySales = checkSales.filter(s => s.business_date === today);
-  if (todaySales.length === 0) {
-    const proceed = await new Promise(resolve => {
-      showConfirmDialog(
-        '⚠️ No Sales Recorded',
-        'There are no sales for today. Are you sure you want to reconcile an empty day?',
-        'Yes, Reconcile Anyway',
-        'Cancel',
-        () => resolve(true)
-      );
-      // showConfirmDialog cancel calls resolve(false) implicitly via remove
-      setTimeout(() => resolve(false), 60000);
-    });
-    if (!proceed) return;
-  }
-
-  const notes = (document.getElementById('reconcile-notes') || {}).value || '';
-  const closingCash = parseFloat((document.getElementById('closing-cash') || {}).value) || 0;
-  const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.business_date === today);
-
-  primary.status = 'RECONCILED';
-  primary.reconciled_at = new Date().toISOString();
-  primary.reconcile_notes = notes;
-  primary.closingCash = closingCash;
-  // Cash variance: closing cash vs (opening float + cash sales)
-  const cashSales = daySales.filter(s => s.paymentMethod === 'Cash' || !s.paymentMethod).reduce((a,s)=>a+s.revenue,0);
-  primary.expectedCash = (primary.openingFloat || 0) + cashSales;
-  primary.cashVariance = closingCash - primary.expectedCash;
-  primary.final_salesCount = daySales.length;
-  primary.final_revenue = daySales.reduce((a, s) => a + s.revenue, 0);
-  primary.final_profit  = daySales.reduce((a, s) => a + s.profit, 0);
-  primary.final_itemsSold = daySales.reduce((a, s) => a + s.qty, 0);
-
-  await dbPut('business_days', primary);
-  activeDay = primary;
-  closeReconcileSheet();
-  setDayMode(false);
-  updateDayBanner();
-  renderDaySessionsList();
-  renderDashboard();
-  toast('✅ Day reconciled and permanently closed!', 'ok');
-  scheduleSync();
-}
-
-
-
-// ── CONFIRM DIALOG ────────────────────────────────────────────────────
-// Simple inline modal confirmation — avoids native confirm() which blocks JS
-function showConfirmDialog(title, message, okLabel, cancelLabel, onOk) {
-  const existing = document.getElementById('confirm-dialog-overlay');
-  if (existing) existing.remove();
-
-  const overlay = document.createElement('div');
-  overlay.id = 'confirm-dialog-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:24px;';
-  overlay.innerHTML =
-    '<div style="background:var(--surface);border-radius:var(--r-lg);max-width:360px;width:100%;padding:24px;box-shadow:0 16px 48px rgba(0,0,0,0.25);">' +
-    '<div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:10px;">' + title + '</div>' +
-    '<div style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:20px;">' + message + '</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-    '<button id="cd-cancel" style="padding:13px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;font-family:var(--sans);">' + cancelLabel + '</button>' +
-    '<button id="cd-ok" style="padding:13px;background:var(--red);color:white;border:none;border-radius:var(--r);font-size:14px;font-weight:800;cursor:pointer;font-family:var(--sans);">' + okLabel + '</button>' +
-    '</div></div>';
-
-  document.body.appendChild(overlay);
-  overlay.querySelector('#cd-cancel').onclick = () => overlay.remove();
-  overlay.querySelector('#cd-ok').onclick = () => { overlay.remove(); onOk(); };
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-}
-
-// ── VISIBILITY CHANGE — refresh when phone wakes ─────────────────────
-// When the phone screen wakes or user switches back to the app,
-// re-check if the date has changed (midnight may have passed while asleep)
-// and refresh the day state without restarting timers.
-let _lastKnownDate = todayDateStr();
-document.addEventListener('visibilitychange', async () => {
-  if (document.hidden) return;
-  const today = todayDateStr();
-  if (today !== _lastKnownDate) {
-    // Date changed while app was in background — full reload of day state
-    _lastKnownDate = today;
-    _warned1145 = null;
-    await loadActiveDay();
-  } else {
-    // Same day — just refresh display
-    await refreshDayTab();
-  }
-});
-
-// ── AUTO SCHEDULER ───────────────────────────────────────────────────
-let _warned1145 = null; // tracks which date the 11:45 warning was already shown
-
-function startDayTimer() {
-  if (dayCheckTimer) clearInterval(dayCheckTimer);
-  dayCheckTimer = setInterval(async () => {
-    const now = new Date();
-    const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
-    const today = todayDateStr();
-    const bday = await getBusinessDay(today);
-    if (!bday) return;
-
-    // ── 9:00 AM: Auto-open if still PENDING ──────────────────────────
-    if (bday.status === 'PENDING' && h === 9 && m === 0 && s < 30) {
-      await autoOpenDay(bday);
-    }
-
-    // ── 11:45 PM: Warning toast — once per day ────────────────────────
-    if (bday.status === 'OPEN' && h === 23 && m === 45 && s < 30 && _warned1145 !== today) {
-      _warned1145 = today;
-      toast('⏰ 15 minutes left — day auto-closes at midnight!', 'err');
-    }
-
-    // ── 11:59:55 PM: Auto-close OPEN or PAUSED day permanently ─────────
-    if ((bday.status === 'OPEN' || bday.status === 'PAUSED') && h === 23 && m === 59 && s >= 55) {
-      await autoCloseDay(bday);
-    }
-
-
-    // ── 00:00: Lock yesterday, create fresh PENDING for today ─────────
-    if (h === 0 && m === 0 && s < 30) {
-      const yesterday = new Date(now.getTime() - 24*60*60*1000).toISOString().split('T')[0];
-      // Lock ALL sessions for yesterday (primary + parallel)
-      const ySessions = await getAllDaySessions(yesterday);
-      for (const ys of ySessions) {
-        if (ys.status !== 'LOCKED') await lockBusinessDay(ys);
-      }
-
-      // Ensure today has a fresh PENDING record
-      const todayExists = await getBusinessDay(today);
-      if (!todayExists) {
-        await dbAdd('business_days', {
-          business_date: today, status: 'PENDING',
-          session_num: 1, is_primary: true,
-          opened_at: null, closed_at: null,
-          auto_opened: false, auto_closed: false,
-          pause_count: 0, reopened_count: 0,
-          final_locked_at: null, reconciled_at: null,
-          openingFloat: 0, closingCash: 0,
-          notes: ''
-        });
-      }
-      // Reset state and refresh
-      const newBday = await getBusinessDay(today);
-      if (newBday) { activeDay = newBday; }
-      setDayMode(false);
-      updateDayBanner();
-      renderDaySessionsList();
-    }
-  }, 30000);
-}
-
-// ── STATUS TRANSITIONS ───────────────────────────────────────────────
-async function autoOpenDay(bday) {
-  bday.status = 'OPEN';
-  bday.opened_at = new Date().toISOString();
-  bday.auto_opened = true;
-  await dbPut('business_days', bday);
-  activeDay = bday;
-  updateDayBanner();
-  updateDayLiveStats();
-  toast('🌅 Business day auto-opened at 9:00 AM', 'ok');
-}
-
-async function autoCloseDay(bday) {
-  const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.business_date === bday.business_date);
-  bday.status = 'CLOSED';   // auto permanent close at midnight
-  bday.closed_at = new Date().toISOString();
-  bday.auto_closed = true;
-  bday.salesCount = daySales.length;
-  bday.revenue = daySales.reduce((a, s) => a + s.revenue, 0);
-  bday.profit  = daySales.reduce((a, s) => a + s.profit, 0);
-  bday.itemsSold = daySales.reduce((a, s) => a + s.qty, 0);
-  await dbPut('business_days', bday);
-  activeDay = bday;
-  updateDayBanner();
-  renderDaySessionsList();
-  toast('🌙 Business day auto-closed at midnight', '');
-}
-
-async function lockBusinessDay(bday) {
-  bday.status = 'LOCKED';
-  bday.final_locked_at = new Date().toISOString();
-  await dbPut('business_days', bday);
-}
-
-
-// Open a brand new business day (used when previous day is LOCKED)
-async function openNewDay() {
-  const today = todayDateStr();
-  let bday = await getBusinessDay(today);
-
-  if (bday && bday.status === 'OPEN') {
-    toast('Today is already open!', 'err');
-    return;
-  }
-
-  if (!bday) {
-    // Create fresh day for today
-    const id = await dbAdd('business_days', {
-      business_date: today,
-      status: 'PENDING',
-      opened_at: null,
-      closed_at: null,
-      auto_opened: false,
-      auto_closed: false,
-      reopened_count: 0,
-      final_locked_at: null,
-      notes: ''
-    });
-    bday = await dbGet('business_days', id);
-  }
-
-  // Now open it
-  const items = await dbAll('items');
-  bday.openingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
-  bday.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
-  bday.status = 'OPEN';
-  bday.opened_at = new Date().toISOString();
-  bday.last_opened_at = new Date().toISOString();
-  bday.date = fmtFullDate(today);
-  bday.dateStr = today;
-  await dbPut('business_days', bday);
-  activeDay = bday;
-  updateDayBanner();
-  updateDayLiveStats();
-  renderDaySessionsList();
-  toast('🌅 New business day opened!', 'ok');
-}
-
-// ── MANUAL OPEN / REOPEN ─────────────────────────────────────────────
-async function openDay() {
-  const today = todayDateStr();
-  let bday = await getBusinessDay(today);
-
-  if (!bday) {
-    const id = await dbAdd('business_days', {
-      business_date: today, status: 'PENDING',
-      session_num: 1, is_primary: true,
-      opened_at: null, closed_at: null,
-      auto_opened: false, auto_closed: false,
-      pause_count: 0, final_locked_at: null,
-      reconciled_at: null, notes: ''
-    });
-    bday = await dbGet('business_days', id);
-  }
-
-  if (bday.status === 'OPEN') { toast('Day is already open!', 'err'); return; }
-  if (bday.status === 'RECONCILED') { toast('✅ Day is reconciled and permanently closed.', 'err'); return; }
-  // LOCKED = previous date — cannot reopen
-  if (bday.status === 'LOCKED') { toast('🔒 This day is from a previous date and is locked.', 'err'); return; }
-
-  // Capture previous status BEFORE overwriting it
-  const prevStatus = bday.status;
-
-  if (!bday.opened_at) {
-    const items = await dbAll('items');
-    bday.openingStockCost   = items.reduce((s, i) => s + i.buy * i.qty, 0);
-    bday.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
-    // Ask for opening float on first open
-    bday.openingFloat = 0; // updated via openFloatPrompt if shown
-  }
-
-  bday.status = 'OPEN';
-  bday.opened_at      = bday.opened_at || new Date().toISOString();
-  bday.last_opened_at = new Date().toISOString();
-  bday.date    = fmtFullDate(today);
-  bday.dateStr = today;
-  const isFirstEverOpen = !bday.opened_at || prevStatus === 'PENDING';
-
-  if (prevStatus === 'PAUSED') {
-    toast('▶️ Day resumed! Continue where you left off.', 'ok');
-  } else if (prevStatus === 'CLOSED') {
-    bday.reopened_count = (bday.reopened_count || 0) + 1;
-    toast('🔓 Day reopened (' + bday.reopened_count + 'x). Continue operations.', 'ok');
-  } else {
-    toast('🌅 Business day opened! Good luck today.', 'ok');
-  }
-  await dbPut('business_days', bday);
-  activeDay = bday;
-  updateDayBanner();
-  updateDayLiveStats();
-  renderDaySessionsList();
-  // Ask for opening float on first-ever open
-  if (prevStatus === 'PENDING') setTimeout(() => promptOpeningFloat(bday), 600);
-}
-
-// ── PAUSE DAY (temporary close — can reopen any time today) ──────────
-async function pauseDay() {
-  if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day to pause.', 'err'); return; }
-  await buildDaySummary('pause');
-}
-
-// ── PERMANENTLY CLOSE DAY ────────────────────────────────────────────
-async function permanentCloseDay() {
-  if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day to close', 'err'); return; }
-  // Confirm before permanent close
-  showConfirmDialog(
-    '🔒 Close Day Permanently?',
-    'This cannot be undone. Once closed, the day cannot be reopened (you can start a new session instead).',
-    'Yes, Close Day',
-    'Cancel',
-    () => buildDaySummary('close')
-  );
-}
-
-
-// Refresh Day tab — re-reads DB state without re-initialising timers
-async function refreshDayTab() {
-  const today = todayDateStr();
-  const allToday = await getAllDaySessions(today);
-  if (allToday.length > 0) {
-    // Same priority as loadActiveDay: OPEN > PAUSED > primary > first
-    const best = allToday.find(s => s.status === 'OPEN') ||
-                 allToday.find(s => s.status === 'PAUSED') ||
-                 allToday.find(s => s.is_primary) ||
-                 allToday[0];
-    activeDay = best;
-    updateDayBanner();
-    if (activeDay.status === 'OPEN') updateDayLiveStats();
-  }
-  renderDaySessionsList();
-}
-
-// ── GUARD: block transactions when day not OPEN ───────────────────────
+// ── STATE CHECKS ─────────────────────────────────────────────────────
 function isDayOpen() {
   return activeDay && activeDay.status === 'OPEN';
-}
-function isDayReconciled() {
-  return activeDay && activeDay.status === 'RECONCILED';
 }
 
 function requireOpenDay() {
   if (!isDayOpen()) {
-    const status = activeDay ? activeDay.status : 'PENDING';
-    const msgs = {
-      PENDING:     '📅 Open the business day first to record transactions.',
-      PAUSED:      '⏸ Day is paused — go to Day tab and tap Resume.',
-      CLOSED:      '🌙 Day is closed — go to Day tab to reopen.',
-      RECONCILED:  '✅ Day is reconciled and permanently closed.',
-      LOCKED:      '🔒 This day is from a previous date and is locked.',
-    };
-    toast(msgs[status] || '⚠️ Open the business day first.', 'err');
+    const status = activeDay ? activeDay.status : 'NONE';
+    const msg = status === 'CLOSED'
+      ? '🌙 Day is closed — tap Open Day to continue.'
+      : status === 'LOCKED'
+        ? '🔒 This day is archived and cannot be modified.'
+        : '📅 Open the business day to record transactions.';
+    toast(msg, 'err');
     showPage('day');
     return false;
   }
   return true;
 }
 
-// ── BUILD DAY SUMMARY (shared between pause + permanent close) ────────
-// mode: 'pause' | 'close'
-let _daySummaryMode = 'pause';
+// ── LOAD ACTIVE DAY ON APP START ─────────────────────────────────────
+// Called once at startup. Finds or creates today's day record.
+// Also locks any past days that were left OPEN or CLOSED overnight.
+async function loadActiveDay() {
+  const today = todayDateStr();
 
-// Legacy alias — Close Day button in banner still works
-async function closeDay() {
-  await pauseDay();
+  // Lock any past days left open (e.g. app not opened since yesterday)
+  const all = await dbAll('business_days');
+  for (const d of all) {
+    if (d.business_date !== today && d.status !== 'LOCKED') {
+      d.status = 'LOCKED';
+      d.final_locked_at = new Date().toISOString();
+      await dbPut('business_days', d);
+    }
+  }
+
+  // Find or create today's record
+  let bday = await getBusinessDay(today);
+  if (!bday) bday = await createDayRecord(today);
+
+  activeDay = bday;
+  updateDayBanner();
+  if (isDayOpen()) updateDayLiveStats();
+  startDayTimer();
+  startBannerClock();
 }
 
-async function buildDaySummary(mode) {
-  _daySummaryMode = mode || 'pause';
-  if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day', 'err'); return; }
+// ── REFRESH DAY TAB (no re-init) ─────────────────────────────────────
+async function refreshDayTab() {
+  const today = todayDateStr();
+  const bday = await getBusinessDay(today);
+  if (bday) {
+    activeDay = bday;
+    updateDayBanner();
+    if (isDayOpen()) updateDayLiveStats();
+  }
+  renderDaySessionsList();
+}
+
+// ── CREATE A NEW DAY RECORD ──────────────────────────────────────────
+async function createDayRecord(dateStr) {
+  const id = await dbAdd('business_days', {
+    business_date: dateStr,
+    status: 'CLOSED',          // starts CLOSED, user opens it
+    opened_at: null,
+    closed_at: null,
+    reopened_count: 0,
+    final_locked_at: null,
+    salesCount: 0, revenue: 0, profit: 0, itemsSold: 0,
+    notes: ''
+  });
+  return await dbGet('business_days', id);
+}
+
+// ── GET BUSINESS DAY ─────────────────────────────────────────────────
+async function getBusinessDay(dateStr) {
+  const all = await dbAll('business_days');
+  return all.find(d => d.business_date === dateStr) || null;
+}
+
+// ── OPEN DAY ─────────────────────────────────────────────────────────
+async function openDay() {
+  const today = todayDateStr();
+  let bday = await getBusinessDay(today);
+  if (!bday) bday = await createDayRecord(today);
+
+  if (bday.status === 'OPEN')   { toast('Day is already open!', 'err'); return; }
+  if (bday.status === 'LOCKED') { toast('🔒 This day is archived.', 'err'); return; }
+
+  const isReopen = bday.status === 'CLOSED' && !!bday.opened_at;
+
+  if (!bday.opened_at) {
+    // First open of the day — snapshot opening stock value
+    const items = await dbAll('items');
+    bday.openingStockCost   = items.reduce((s, i) => s + i.buy * i.qty, 0);
+    bday.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
+  }
+
+  bday.status          = 'OPEN';
+  bday.opened_at       = bday.opened_at || new Date().toISOString();
+  bday.last_opened_at  = new Date().toISOString();
+  if (isReopen) bday.reopened_count = (bday.reopened_count || 0) + 1;
+
+  await dbPut('business_days', bday);
+  activeDay = bday;
+  setDayMode(true);
+  updateDayBanner();
+  updateDayLiveStats();
+  renderDaySessionsList();
+  toast(isReopen ? '🔓 Day reopened! Continue recording.' : '🌅 Business day opened!', 'ok');
+}
+
+// ── CLOSE DAY ────────────────────────────────────────────────────────
+async function closeDay() {
+  if (!isDayOpen()) { toast('No open day to close.', 'err'); return; }
 
   const sales = await dbAll('sales');
-  // Include all sales for this date (main day + all sub-sessions)
   const daySales = sales.filter(s => s.business_date === activeDay.business_date);
-  const revenue = daySales.reduce((s, x) => s + x.revenue, 0);
-  const profit  = daySales.reduce((s, x) => s + x.profit, 0);
+  const revenue   = daySales.reduce((s, x) => s + x.revenue, 0);
+  const profit    = daySales.reduce((s, x) => s + x.profit, 0);
   const itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
-  const items = await dbAll('items');
-  const purchases = items.filter(i => activeDay.opened_at && i.createdAt >= activeDay.opened_at);
-  const purchaseCost = purchases.reduce((s, i) => s + i.buy * i.qty, 0);
-
-  // ── Populate rich summary sheet ─────────────────────────────
-  document.getElementById('ds-date').textContent = fmtFullDate(activeDay.business_date);
-  const openT = activeDay.opened_at ? fmtTime(activeDay.opened_at) : '?';
-  const nowT = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  document.getElementById('ds-time-range').textContent = openT + ' → ' + nowT;
-
-  // Financials
-  const margin2 = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : 0;
+  // Note: tracks NEW items added today (by createdAt).
+  // Restocks to existing items are not separately tracked — a future
+  // 'stock_events' log store would capture this properly.
+  const todayStart = today + 'T00:00:00';
+  const items     = await dbAll('items');
+  const purchases = items.filter(i => i.createdAt && i.createdAt >= todayStart);
+  const closingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
+  const margin = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : 0;
   const avgSale = daySales.length > 0 ? (revenue / daySales.length) : 0;
-  const customPriceCount = daySales.filter(s => s.overridden).length;
-  document.getElementById('ds-revenue').textContent = fmt(revenue);
-  document.getElementById('ds-profit').textContent = fmt(profit);
-  document.getElementById('ds-margin').textContent = margin2 + '%';
-  document.getElementById('ds-avg-sale').textContent = fmt(Math.round(avgSale));
+  const openT = activeDay.opened_at ? fmtTime(activeDay.opened_at) : '?';
+  const nowT  = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
 
-  // Sales
-  document.getElementById('ds-sales').textContent = daySales.length;
-  document.getElementById('ds-items-sold').textContent = itemsSold;
-  document.getElementById('ds-custom-price').textContent = customPriceCount;
+  // Populate summary sheet
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('ds-date',       fmtFullDate(activeDay.business_date));
+  set('ds-time-range', openT + ' → ' + nowT);
+  set('ds-revenue',    fmt(revenue));
+  set('ds-profit',     fmt(profit));
+  set('ds-margin',     margin + '%');
+  set('ds-avg-sale',   fmt(avgSale));
+  set('ds-sales',      daySales.length);
+  set('ds-items-sold', itemsSold);
+  set('ds-custom-price', daySales.filter(s => s.overridden).length);
+  set('ds-opening-stock', fmt(activeDay.openingStockCost || 0));
+  set('ds-closing-stock', fmt(closingStockCost));
+  set('ds-purchases',     purchases.length);
+  set('ds-purchases-val', fmt(purchases.reduce((s, i) => s + i.buy * i.qty, 0)));
 
-  // Stock
-  const allItems = await dbAll('items');
-  const closingStockCost = allItems.reduce((s, i) => s + i.buy * i.qty, 0);
-  document.getElementById('ds-opening-stock').textContent = fmt(activeDay.openingStockCost || 0);
-  document.getElementById('ds-closing-stock').textContent = fmt(closingStockCost);
-  document.getElementById('ds-purchases').textContent = purchases.length + ' item' + (purchases.length !== 1 ? 's' : '');
-  document.getElementById('ds-purchases-val').textContent = purchases.length ? fmt(purchaseCost) : 'KES 0';
-
-  // Stock progress bar
-  const totalPossibleSold = itemsSold + (allItems.reduce((s, i) => s + i.qty, 0));
-  const soldPct = totalPossibleSold > 0 ? Math.min(100, (itemsSold / totalPossibleSold * 100)).toFixed(0) : 0;
-  document.getElementById('ds-stock-bar').style.width = soldPct + '%';
-  document.getElementById('ds-stock-pct-label').textContent = soldPct + '% of stock moved today';
-
-  document.getElementById('ds-notes').value = activeDay.notes || '';
+  // Stock movement bar
+  const opening = activeDay.openingStockCost || 0;
+  const pct = opening > 0 ? Math.min(100, Math.round(((opening - closingStockCost) / opening) * 100)) : 0;
+  const bar = document.getElementById('ds-stock-bar');
+  const lbl = document.getElementById('ds-stock-pct-label');
+  if (bar) bar.style.width = pct + '%';
+  if (lbl) lbl.textContent = pct + '%';
 
   // Verdict
   const verdictEl = document.getElementById('ds-verdict');
-  let verdict, verdictBg, verdictColor;
-  if (daySales.length === 0) {
-    verdict = '😴 No sales today. Tomorrow is a new opportunity!';
-    verdictBg = 'var(--surface2)'; verdictColor = 'var(--muted)';
-  } else {
-    const margin = revenue > 0 ? ((profit / revenue) * 100).toFixed(0) : 0;
-    verdict = margin >= 30 ? '🔥 Excellent day! ' + margin + '% margin.'
-            : margin >= 15 ? '✅ Good day! ' + margin + '% margin.'
-            : '👍 Decent day. ' + margin + '% margin.';
-    verdictBg = profit > 0 ? 'var(--green-light)' : 'var(--amber-light)';
-    verdictColor = profit > 0 ? 'var(--green)' : 'var(--amber)';
-  }
-  verdictEl.style.cssText = 'background:' + verdictBg + ';color:' + verdictColor + ';border:1px solid ' + verdictColor + ';border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;';
-  verdictEl.innerHTML = '<div style="font-size:16px;font-weight:800;">' + verdict + '</div>';
-  if (activeDay.reopened_count > 0) {
-    verdictEl.innerHTML += '<div style="font-size:11px;margin-top:4px;opacity:0.7;">Day was reopened ' + activeDay.reopened_count + ' time(s)</div>';
+  if (verdictEl) {
+    let verdict = '😴 Quiet day. ' + daySales.length + ' sales.';
+    let vBg = 'var(--surface2)', vColor = 'var(--muted)';
+    if (daySales.length > 0) {
+      const m = parseFloat(margin);
+      if (m >= 30) { verdict = '🔥 Excellent! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
+      else if (m >= 15) { verdict = '✅ Good day! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
+      else { verdict = '👍 Decent. ' + margin + '% margin.'; vBg = 'var(--amber-light)'; vColor = 'var(--amber)'; }
+    }
+    verdictEl.style.cssText = 'background:' + vBg + ';color:' + vColor + ';border:1px solid ' + vColor + ';border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;';
+    verdictEl.innerHTML = '<div style="font-size:16px;font-weight:800;">' + verdict + '</div>';
   }
 
-  // Top seller
-  const topSellerEl = document.getElementById('ds-top-seller');
-  if (daySales.length > 0) {
-    const grouped = {};
-    daySales.forEach(s => { grouped[s.itemName] = (grouped[s.itemName] || 0) + s.revenue; });
-    const topItems = Object.entries(grouped).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    topSellerEl.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">🏆 Top Sellers</div>' +
-      topItems.map(([ name, rev ], i) =>
-        '<div class="detail-box" style="padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;">' +
-        '<span style="font-size:18px;">' + ['🥇','🥈','🥉'][i] + '</span>' +
-        '<div style="flex:1;"><div style="font-size:13px;font-weight:700;">' + name + '</div></div>' +
-        '<div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(rev) + '</div></div>'
-      ).join('');
-  } else {
-    topSellerEl.innerHTML = '';
-  }
+  // Notes reset
+  const notes = document.getElementById('ds-notes');
+  if (notes) notes.value = '';
 
-  // Sales by type breakdown
-  const typeBreakEl = document.getElementById('ds-type-breakdown');
-  if (daySales.length > 0) {
-    const byType = {};
-    daySales.forEach(s => {
-      if (!byType[s.type]) byType[s.type] = { rev: 0, profit: 0, qty: 0 };
-      byType[s.type].rev += s.revenue;
-      byType[s.type].profit += s.profit;
-      byType[s.type].qty += s.qty;
-    });
-    typeBreakEl.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">📂 Sales by Category</div>' +
-      Object.entries(byType).sort((a,b) => b[1].rev - a[1].rev).map(([type, data]) => {
-        const t = getTypeObj(type);
-        return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">' +
-          '<span style="font-size:20px;">' + t.emoji + '</span>' +
-          '<div style="flex:1;"><div style="font-size:13px;font-weight:700;">' + type + '</div>' +
-          '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + data.qty + ' pcs sold</div></div>' +
-          '<div style="text-align:right;"><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(data.rev) + '</div>' +
-          '<div style="font-size:11px;color:var(--green);font-family:var(--mono);">+' + fmt(data.profit) + '</div></div></div>';
-      }).join('');
-  } else {
-    typeBreakEl.innerHTML = '';
-  }
-
-  // Update footer buttons based on mode
+  // Show confirm button, hide pause button
   const confirmBtn = document.getElementById('ds-confirm-btn');
   const pauseBtn   = document.getElementById('ds-pause-btn');
-  if (_daySummaryMode === 'pause') {
-    if (confirmBtn) { confirmBtn.style.display = 'none'; }
-    if (pauseBtn)   { pauseBtn.style.display = 'block'; pauseBtn.textContent = '⏸ Pause & View Summary'; }
-  } else {
-    if (confirmBtn) { confirmBtn.style.display = 'block'; }
-    if (pauseBtn)   { pauseBtn.style.display = 'none'; }
-  }
+  if (confirmBtn) { confirmBtn.style.display = 'block'; confirmBtn.textContent = '🌙 Confirm Close Day'; }
+  if (pauseBtn)   pauseBtn.style.display = 'none';
+
   document.getElementById('day-summary-sheet').classList.add('open');
 }
 
-
-// Called when user taps the confirm button on summary sheet
+// ── CONFIRM CLOSE ────────────────────────────────────────────────────
 async function confirmCloseDay() {
-  const notes = document.getElementById('ds-notes').value.trim();
-  const now = new Date();
+  const notes = (document.getElementById('ds-notes') || {}).value || '';
+  const now   = new Date();
   const sales = await dbAll('sales');
-  const daySales = sales.filter(s => (s.business_date === activeDay.business_date) || (activeDay.opened_at && s.date >= activeDay.opened_at));
+  const daySales = sales.filter(s => s.business_date === activeDay.business_date);
   const items = await dbAll('items');
-  const purchases = items.filter(i => activeDay.opened_at && i.createdAt >= activeDay.opened_at);
+  const todayStart2 = activeDay.business_date + 'T00:00:00';
+  const purchases = items.filter(i => i.createdAt && i.createdAt >= todayStart2);
 
-  // Shared stats
-  const dayStats = {
-    notes,
-    salesCount: daySales.length,
-    revenue: daySales.reduce((s, x) => s + x.revenue, 0),
-    profit:  daySales.reduce((s, x) => s + x.profit, 0),
-    itemsSold: daySales.reduce((s, x) => s + x.qty, 0),
-    purchasesCount: purchases.length,
-    purchaseCost: purchases.reduce((s, i) => s + i.buy * i.qty, 0),
-    closingStockCost: items.reduce((s, i) => s + i.buy * i.qty, 0),
-  };
+  activeDay.status       = 'CLOSED';
+  activeDay.closed_at    = now.toISOString();
+  activeDay.notes        = notes;
+  activeDay.salesCount   = daySales.length;
+  activeDay.revenue      = daySales.reduce((s, x) => s + x.revenue, 0);
+  activeDay.profit       = daySales.reduce((s, x) => s + x.profit, 0);
+  activeDay.itemsSold    = daySales.reduce((s, x) => s + x.qty, 0);
+  activeDay.purchasesCount = purchases.length;
+  activeDay.purchaseCost   = purchases.reduce((s, i) => s + i.buy * i.qty, 0);
+  activeDay.closingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
 
-  if (_daySummaryMode === 'pause') {
-    // ── PAUSE: temporary close, can resume any time before midnight ──
-    activeDay.status = 'PAUSED';
-    activeDay.paused_at = now.toISOString();
-    activeDay.pause_count = (activeDay.pause_count || 0) + 1;
-    // Calculate duration open so far (cumulative)
-    if (activeDay.last_opened_at) {
-      const minOpen = Math.round((now - new Date(activeDay.last_opened_at)) / 60000);
-      activeDay.total_minutes_open = (activeDay.total_minutes_open || 0) + minOpen;
-    }
-    Object.assign(activeDay, dayStats);
-    await dbPut('business_days', activeDay);
-    document.getElementById('day-summary-sheet').classList.remove('open');
-    updateDayBanner();
-    renderDaySessionsList();
-    renderDashboard();
-    _origShowPage('day');
-    toast('⏸ Day paused. You can reopen at any time.', 'ok');
-
-  } else {
-    // ── PERMANENT CLOSE: read-only, cannot reopen ─────────────────
-    activeDay.status = 'CLOSED';
-    activeDay.closed_at = now.toISOString();
-    Object.assign(activeDay, dayStats);
-    await dbPut('business_days', activeDay);
-    document.getElementById('day-summary-sheet').classList.remove('open');
-    updateDayBanner();
-    renderDaySessionsList();
-    renderDashboard();
-    _origShowPage('day');
-    toast('🌙 Day permanently closed. Cannot be reopened.', 'ok');
-  }
+  await dbPut('business_days', activeDay);
+  document.getElementById('day-summary-sheet').classList.remove('open');
+  setDayMode(false);
+  updateDayBanner();
+  renderDaySessionsList();
+  renderDashboard();
+  _origShowPage('day');
+  toast('🌙 Day closed. Tap Open Day to continue anytime.', 'ok');
   scheduleSync();
 }
 
@@ -2430,349 +1836,230 @@ function cancelCloseDay() {
   document.getElementById('day-summary-sheet').classList.remove('open');
 }
 
-// ── BANNER UPDATE ─────────────────────────────────────────────────────
-function updateDayBanner() {
-  if (!activeDay) return;
-  const banner = document.getElementById('day-banner');
-  const icon = document.getElementById('day-banner-icon');
-  const badge = document.getElementById('day-status-badge');
-  const title = document.getElementById('day-banner-title');
-  const sub = document.getElementById('day-banner-sub');
-  const actionArea = document.getElementById('day-action-area');
-  const liveSection = document.getElementById('day-live');
-  const status = activeDay.status;
-
-  const BTN = 'width:100%;padding:16px;background:';
-  const BTN2 = ';color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);';
-  const pauseCount = activeDay.pause_count || 0;
-  const configs = {
-    PENDING: {
-      bg: 'var(--surface2)', border: 'var(--border)', icon: '📅',
-      badgeBg: '#e5e7eb', badgeColor: '#6b7280',
-      title: 'Business Day Not Started', titleColor: 'var(--text)',
-      sub: 'Auto-opens at 9:00 AM · Or tap to open now',
-      action: '<button onclick="openDay()" style="' + BTN + 'var(--accent)' + BTN2 + '"><i class="fa-solid fa-sun"></i> Open Day Now</button>'
-    },
-    OPEN: {
-      bg: 'var(--green-light)', border: '#a8d8b5', icon: '🌅',
-      badgeBg: '#dcfce7', badgeColor: '#16a34a',
-      title: 'Business Day is Open', titleColor: 'var(--green)',
-      sub: (() => {
-        const openedAt = activeDay.last_opened_at || activeDay.opened_at;
-        const mins = openedAt ? Math.floor((Date.now() - new Date(openedAt)) / 60000) : 0;
-        const dur = mins < 60 ? mins + 'm open' : Math.floor(mins/60) + 'h ' + (mins%60) + 'm open';
-        return 'Opened ' + fmtTime(activeDay.opened_at) + ' · ' + dur
-          + (pauseCount > 0 ? ' · Resumed ' + pauseCount + 'x' : '')
-          + (activeDay.openingFloat > 0 ? ' · Float: ' + fmt(activeDay.openingFloat) : '')
-          + ' · Closes midnight';
-      })(),
-      action:
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
-        '<button onclick="pauseDay()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-pause"></i> Pause Day</button>' +
-        '<button onclick="permanentCloseDay()" style="' + BTN + 'var(--red)' + BTN2 + '"><i class="fa-solid fa-lock"></i> Close Day</button>' +
-        '</div>'
-    },
-    PAUSED: {
-      bg: '#fef3c7', border: '#f5d9a0', icon: '⏸',
-      badgeBg: '#fef3c7', badgeColor: '#92400e',
-      title: 'Day is Paused', titleColor: '#d97706',
-      sub: 'Paused at ' + (activeDay.paused_at ? fmtTime(activeDay.paused_at) : '—')
-           + (activeDay.pause_count > 1 ? ' · Paused ' + activeDay.pause_count + 'x today' : '')
-           + ' · Tap Resume to continue',
-      action: '<button onclick="openDay()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-play"></i> Resume Day</button>'
-    },
-    CLOSED: {
-      bg: '#fef3c7', border: '#f5d9a0', icon: '🌙',
-      badgeBg: '#fef3c7', badgeColor: '#92400e',
-      title: 'Business Day Closed' + (activeDay.session_num > 1 ? ' · Session ' + activeDay.session_num : ''), titleColor: '#d97706',
-      sub: 'Closed at ' + (activeDay.closed_at ? fmtTime(activeDay.closed_at) : '—')
-           + (activeDay.auto_closed ? ' (auto)' : ''),
-      action:
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
-        '<button onclick="openDay()" style="' + BTN + '#d97706' + BTN2 + '"><i class="fa-solid fa-rotate-left"></i> Reopen</button>' +
-        '<button onclick="openNewSession()" style="' + BTN + '#7c3aed' + BTN2 + '"><i class="fa-solid fa-plus"></i> New Session</button>' +
-        '</div>' +
-        '<button onclick="showReconcileSheet()" style="' + BTN + 'var(--accent)' + BTN2 + '"><i class="fa-solid fa-check-double"></i> Reconcile &amp; Finalise</button>'
-    },
-    RECONCILED: {
-      bg: 'var(--green-light)', border: '#a8d8b5', icon: '✅',
-      badgeBg: '#dcfce7', badgeColor: '#16a34a',
-      title: 'Day Reconciled', titleColor: 'var(--green)',
-      sub: 'Reconciled at ' + (activeDay.reconciled_at ? fmtTime(activeDay.reconciled_at) : '—') + ' · Permanently closed',
-      action: '<div style="padding:12px;background:var(--green-light);border-radius:var(--r);color:var(--green);font-size:13px;font-weight:700;text-align:center;"><i class="fa-solid fa-check-double"></i> This day is fully reconciled and locked</div>'
-    },
-    LOCKED: {
-      bg: 'var(--surface2)', border: 'var(--border)', icon: '📅',
-      badgeBg: '#e5e7eb', badgeColor: '#6b7280',
-      title: 'Ready for a New Day', titleColor: 'var(--text)',
-      sub: 'Previous day is locked. Open today now',
-      action: '<button onclick="openNewDay()" style="' + BTN + 'var(--accent)' + BTN2 + '">🌅 Open Today</button>'
-    }
-  };
-
-  const cfg = configs[status] || configs.PENDING;
-  banner.style.background = cfg.bg;
-  banner.style.borderColor = cfg.border;
-  icon.textContent = cfg.icon;
-  badge.textContent = status;
-  badge.style.background = cfg.badgeBg;
-  badge.style.color = cfg.badgeColor;
-  title.textContent = cfg.title;
-  title.style.color = cfg.titleColor;
-  sub.textContent = cfg.sub;
-  actionArea.innerHTML = cfg.action;
-  if (liveSection) liveSection.style.display = status === 'OPEN' ? 'block' : 'none';
-  setDayMode(status === 'OPEN');
-  if (status === 'OPEN') hideDayClosedOverlay();
+// ── BANNER LIVE CLOCK — refresh duration display every minute ────────
+let _bannerClockTimer = null;
+function startBannerClock() {
+  if (_bannerClockTimer) clearInterval(_bannerClockTimer);
+  _bannerClockTimer = setInterval(() => {
+    if (isDayOpen()) updateDayBanner(); // refreshes the "Xh Ym running" text
+  }, 60000);
 }
 
-// ── LIVE STATS ────────────────────────────────────────────────────────
+// ── AUTO SCHEDULER ───────────────────────────────────────────────────
+// Checks every 30s for time-triggered actions
+function startDayTimer() {
+  if (dayCheckTimer) clearInterval(dayCheckTimer);
+  dayCheckTimer = setInterval(async () => {
+    const now   = new Date();
+    const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+    const today = todayDateStr();
+    const bday  = await getBusinessDay(today);
+    if (!bday) return;
+
+    // 11:45 PM — warn once that auto-close is coming
+    if (bday.status === 'OPEN' && h === 23 && m === 45 && s < 30 && _warned1145 !== today) {
+      _warned1145 = today;
+      toast('⏰ 15 minutes left — day auto-closes at midnight!', 'err');
+    }
+
+    // 11:59:55 PM — auto-close the open day
+    if (bday.status === 'OPEN' && h === 23 && m === 59 && s >= 55) {
+      const sales = await dbAll('sales');
+      const ds = sales.filter(s => s.business_date === today);
+      bday.status     = 'CLOSED';
+      bday.closed_at  = now.toISOString();
+      bday.auto_closed = true;
+      bday.salesCount = ds.length;
+      bday.revenue    = ds.reduce((a, s) => a + s.revenue, 0);
+      bday.profit     = ds.reduce((a, s) => a + s.profit, 0);
+      bday.itemsSold  = ds.reduce((a, s) => a + s.qty, 0);
+      await dbPut('business_days', bday);
+      activeDay = bday;
+      setDayMode(false);
+      updateDayBanner();
+      renderDaySessionsList();
+      toast('🌙 Day auto-closed at midnight.', '');
+    }
+
+    // 00:00 — lock yesterday, create today fresh
+    if (h === 0 && m === 0 && s < 30) {
+      const yesterday = new Date(now - 864e5).toISOString().split('T')[0];
+      const yBday = await getBusinessDay(yesterday);
+      if (yBday && yBday.status !== 'LOCKED') {
+        yBday.status = 'LOCKED';
+        yBday.final_locked_at = now.toISOString();
+        await dbPut('business_days', yBday);
+      }
+      // Ensure today's record exists
+      let todayBday = await getBusinessDay(today);
+      if (!todayBday) todayBday = await createDayRecord(today);
+      _warned1145 = null; // reset warning for new day
+      _lastKnownDate = today;
+      activeDay = todayBday;
+      setDayMode(false);
+      updateDayBanner();
+      renderDaySessionsList();
+      // Restart banner clock for new day
+      startBannerClock();
+    }
+  }, 30000);
+}
+
+// ── VISIBILITY CHANGE — handle phone wake ────────────────────────────
+let _lastKnownDate = todayDateStr();
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden) return;
+  const today = todayDateStr();
+  if (today !== _lastKnownDate) {
+    _lastKnownDate = today;
+    _warned1145 = null;
+    await loadActiveDay(); // date changed overnight — full reinit
+  } else {
+    await refreshDayTab(); // same day — just refresh display
+  }
+});
+
+// ── LOCK OLD DAY ─────────────────────────────────────────────────────
+async function lockBusinessDay(bday) {
+  bday.status = 'LOCKED';
+  bday.final_locked_at = new Date().toISOString();
+  await dbPut('business_days', bday);
+}
+
+// ── DAY BANNER ───────────────────────────────────────────────────────
+function updateDayBanner() {
+  if (!activeDay) return;
+  const { status, opened_at, closed_at, last_opened_at, auto_closed, reopened_count } = activeDay;
+  const banner    = document.getElementById('day-banner');
+  const icon      = document.getElementById('day-banner-icon');
+  const badge     = document.getElementById('day-status-badge');
+  const title     = document.getElementById('day-banner-title');
+  const sub       = document.getElementById('day-banner-sub');
+  const actionArea = document.getElementById('day-action-area');
+  const liveSection = document.getElementById('day-live');
+  if (!banner) return;
+
+  const BTN = 'width:100%;padding:16px;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);';
+
+  if (status === 'OPEN') {
+    const mins = opened_at ? Math.floor((Date.now() - new Date(opened_at)) / 60000) : 0;
+    const dur  = mins < 60 ? mins + 'm' : Math.floor(mins/60) + 'h ' + (mins%60) + 'm';
+    banner.style.cssText = 'background:var(--green-light);border:2px solid #a8d8b5;border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
+    icon.textContent  = '🌅';
+    badge.textContent = 'OPEN';
+    badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:#dcfce7;color:#16a34a;';
+    title.textContent = 'Business Day Open';
+    title.style.color = 'var(--green)';
+    sub.textContent   = 'Opened ' + fmtTime(opened_at)
+      + ' · ' + dur + ' running'
+      + (reopened_count > 0 ? ' · Reopened ' + reopened_count + 'x' : '');
+    actionArea.innerHTML = '<button onclick="closeDay()" style="' + BTN + 'background:var(--red);color:white;"><i class="fa-solid fa-moon"></i> Close Day</button>';
+    if (liveSection) liveSection.style.display = 'block';
+    setDayMode(true);
+  } else if (status === 'CLOSED') {
+    banner.style.cssText = 'background:#fef3c7;border:2px solid #f5d9a0;border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
+    icon.textContent  = '🌙';
+    badge.textContent = 'CLOSED';
+    badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:#fef3c7;color:#92400e;';
+    title.textContent = 'Business Day Closed';
+    title.style.color = '#d97706';
+    sub.textContent   = closed_at
+      ? 'Closed at ' + fmtTime(closed_at) + (auto_closed ? ' · auto' : '') + (reopened_count > 0 ? ' · Opened ' + (reopened_count + 1) + 'x today' : '') + ' · Tap to reopen'
+      : 'Tap Open Day to begin — ' + fmtFullDate(todayDateStr());
+    actionArea.innerHTML = '<button onclick="openDay()" style="' + BTN + 'background:var(--accent);color:white;"><i class="fa-solid fa-sun"></i> Open Day</button>';
+    if (liveSection) liveSection.style.display = 'none';
+    setDayMode(false);
+  } else if (status === 'LOCKED') {
+    banner.style.cssText = 'background:var(--surface2);border:2px solid var(--border);border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
+    icon.textContent  = '🔒';
+    badge.textContent = 'LOCKED';
+    badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:var(--surface2);color:var(--muted);';
+    title.textContent = 'Archived Day';
+    title.style.color = 'var(--muted)';
+    sub.textContent   = fmtFullDate(activeDay.business_date) + ' — read only';
+    actionArea.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:10px 0;">This day is read-only. A new day will appear automatically tomorrow.</div>';
+    if (liveSection) liveSection.style.display = 'none';
+    setDayMode(false);
+  }
+}
+
+// ── LIVE STATS ───────────────────────────────────────────────────────
 async function updateDayLiveStats() {
-  if (!activeDay || activeDay.status !== 'OPEN') return;
+  if (!activeDay) return;
   const sales = await dbAll('sales');
-  const daySales = sales.filter(s => (s.business_date === activeDay.business_date) || (activeDay.opened_at && s.date >= activeDay.opened_at));
+  const daySales = sales.filter(s => s.business_date === activeDay.business_date);
+  const rev   = daySales.reduce((a, s) => a + s.revenue, 0);
+  const profit = daySales.reduce((a, s) => a + s.profit, 0);
+  const count = daySales.length;
   const items = await dbAll('items');
   const purchases = items.filter(i => activeDay.opened_at && i.createdAt >= activeDay.opened_at);
 
-  const revenue = daySales.reduce((s, x) => s + x.revenue, 0);
-  const profit  = daySales.reduce((s, x) => s + x.profit, 0);
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('day-sales-count', count);
+  set('day-revenue',     fmt(rev));
+  set('day-profit',      fmt(profit));
+  set('day-purchases',   purchases.length);
 
-  document.getElementById('day-sales-count').textContent = daySales.length;
-  document.getElementById('day-revenue').textContent = fmt(revenue);
-  document.getElementById('day-profit').textContent = fmt(profit);
-  document.getElementById('day-purchases').textContent = purchases.length;
-
-  const salesList = document.getElementById('day-sales-list');
-  if (!daySales.length) {
-    salesList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0 12px;">No sales yet today — tap 💸 Sell to record one</div>';
-  } else {
-    salesList.innerHTML = [...daySales].sort((a,b) => new Date(b.date)-new Date(a.date)).map(s => {
-      const t = getTypeObj(s.type);
-      const time = new Date(s.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">' +
-        '<span style="font-size:20px;">' + t.emoji + '</span>' +
-        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;">' + s.itemName + ' × ' + s.qty + '</div>' +
-        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + time + '</div></div>' +
-        '<div style="text-align:right;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue) + '</div>' +
-        '<div style="font-size:11px;color:var(--green);font-family:var(--mono);">+' + fmt(s.profit) + '</div></div></div>';
-    }).join('');
-  }
-
-  const purchList = document.getElementById('day-purchases-list');
-  if (!purchases.length) {
-    purchList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0 12px;">No new stock added today — tap ➕ Add to record</div>';
-  } else {
-    purchList.innerHTML = purchases.map(item => {
-      const t = getTypeObj(item.type);
-      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">' +
-        '<span style="font-size:20px;">' + t.emoji + '</span>' +
-        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;">' + item.name + '</div>' +
-        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + item.code + ' · ' + item.qty + ' pcs</div></div>' +
-        '<div style="text-align:right;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--text2);">' + fmt(item.buy * item.qty) + '</div>' +
-        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + fmt(item.buy) + '/pc</div></div></div>';
-    }).join('');
+  // Today's sales list
+  const sl = document.getElementById('day-sales-list');
+  if (sl) {
+    sl.innerHTML = daySales.length
+      ? daySales.slice().reverse().slice(0, 20).map(s =>
+          '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">' +
+          '<div style="flex:1;"><div style="font-size:13px;font-weight:700;">' + (s.itemName||'') + '</div>' +
+          '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + fmtTime(s.date) + ' · ' + (s.itemCode||'') + ' · ' + (s.paymentMethod||'Cash') + '</div></div>' +
+          '<div style="text-align:right;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue) + '</div>' +
+          '<div style="font-size:11px;color:var(--green);">+' + fmt(s.profit) + '</div></div>' +
+          (isDayOpen() ? '<button onclick="voidSale(' + s.id + ')" style="font-size:10px;padding:2px 8px;background:var(--red-light);color:var(--red);border:1px solid var(--red);border-radius:4px;cursor:pointer;font-weight:700;flex-shrink:0;">Void</button>' : '') +
+          '</div>'
+        ).join('')
+      : '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales yet today</div>';
   }
 }
 
 // ── PAST SESSIONS LIST ────────────────────────────────────────────────
 async function renderDaySessionsList() {
   const all = await dbAll('business_days');
-  // Group by business_date, sort newest first
-  const dateMap = {};
-  all.forEach(s => {
-    if (!dateMap[s.business_date]) dateMap[s.business_date] = [];
-    dateMap[s.business_date].push(s);
-  });
   const today = todayDateStr();
-  const dates = Object.keys(dateMap)
-    .filter(d => {
-      const sessions = dateMap[d];
-      // Show past dates or today if all sessions are done
-      return d !== today || sessions.every(s => s.status === 'CLOSED' || s.status === 'LOCKED' || s.status === 'RECONCILED' || s.status === 'MERGED');
-    })
-    .sort((a, b) => b.localeCompare(a));
+  const past = all
+    .filter(d => d.business_date !== today && (d.status === 'CLOSED' || d.status === 'LOCKED'))
+    .sort((a, b) => b.business_date.localeCompare(a.business_date));
 
   const list = document.getElementById('day-sessions-list');
-  if (!dates.length) {
+  if (!list) return;
+
+  if (!past.length) {
     list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No past sessions yet</div>';
     return;
   }
 
-  list.innerHTML = dates.map(dateStr => {
-    const sessions = dateMap[dateStr].sort((a, b) => (a.session_num||1) - (b.session_num||1));
-    const primary = sessions.find(s => s.is_primary) || sessions[0];
-    const totalRev    = sessions.reduce((a, s) => a + (s.revenue||s.final_revenue||0), 0);
-    const totalProfit = sessions.reduce((a, s) => a + (s.profit||s.final_profit||0), 0);
-    const totalSales  = sessions.reduce((a, s) => a + (s.salesCount||s.final_salesCount||0), 0);
-    const isReconciled = sessions.some(s => s.status === 'RECONCILED');
-    const isLocked     = sessions.every(s => s.status === 'LOCKED');
-    const hasMultiple  = sessions.length > 1;
-    const profitColor  = totalProfit > 0 ? 'var(--green)' : totalProfit < 0 ? 'var(--red)' : 'var(--muted)';
-
-    const badge = isReconciled
-      ? '<span style="font-size:10px;background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:20px;font-weight:700;"><i class="fa-solid fa-check-double" style="margin-right:3px;"></i>Reconciled</span>'
-      : isLocked
-        ? '<span style="font-size:10px;background:var(--surface2);color:var(--muted);padding:2px 8px;border-radius:20px;font-weight:700;"><i class="fa-solid fa-lock" style="margin-right:3px;"></i>Locked</span>'
-        : '<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:20px;font-weight:700;"><i class="fa-solid fa-moon" style="margin-right:3px;"></i>Closed</span>';
-
-    const sessionPills = hasMultiple
-      ? '<div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;">' +
-        sessions.map(s => {
-          const c = s.status === 'MERGED' ? '#7c3aed' : s.status === 'RECONCILED' ? 'var(--green)' : 'var(--muted)';
-          return '<span style="font-size:10px;border:1px solid var(--border);padding:2px 8px;border-radius:20px;color:' + c + ';font-weight:600;">Session ' + (s.session_num||1) + ' · ' + s.status + '</span>';
-        }).join('') +
-        '</div>'
-      : '';
-
-    return '<div class="card" style="margin-bottom:8px;padding:14px;cursor:pointer;" onclick="viewPastSession(' + (primary.id) + ')">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
-      '<div><div style="font-size:14px;font-weight:800;color:var(--text);">' + fmtFullDate(dateStr) + '</div>' +
-      '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">' +
-        (primary.opened_at ? fmtTime(primary.opened_at) : '—') + ' → ' + (primary.closed_at ? fmtTime(primary.closed_at) : 'auto') +
-        (hasMultiple ? ' · ' + sessions.length + ' sessions' : '') +
-      '</div>' + sessionPills + '</div>' +
-      badge + '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">' +
-      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(totalRev) + '</div><div style="font-size:10px;color:var(--muted);">Revenue</div></div>' +
-      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:15px;font-weight:800;font-family:var(--mono);color:' + profitColor + ';">' + fmt(totalProfit) + '</div><div style="font-size:10px;color:var(--muted);">Profit</div></div>' +
-      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--accent);">' + totalSales + '</div><div style="font-size:10px;color:var(--muted);">Sales</div></div>' +
+  list.innerHTML = past.map(s => {
+    const profitColor = (s.profit||0) >= 0 ? 'var(--green)' : 'var(--red)';
+    const locked = s.status === 'LOCKED';
+    return '<div class="card" style="margin-bottom:8px;padding:14px;cursor:pointer;" onclick="viewPastSession(' + s.id + ')">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
+      '<div>' +
+        '<div style="font-size:14px;font-weight:800;color:var(--text);">' + fmtFullDate(s.business_date) + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">' +
+          (s.opened_at ? fmtTime(s.opened_at) : '—') + ' → ' +
+          (s.closed_at ? fmtTime(s.closed_at) : 'auto') +
+          (s.reopened_count > 0 ? ' · Reopened ' + s.reopened_count + 'x' : '') +
+        '</div>' +
       '</div>' +
-      (primary.reconcile_notes ? '<div style="margin-top:8px;font-size:12px;color:var(--muted);font-style:italic;">📝 ' + primary.reconcile_notes + '</div>' : '') +
+      (locked
+        ? '<span style="font-size:10px;background:var(--surface2);color:var(--muted);padding:2px 8px;border-radius:20px;font-weight:700;"><i class="fa-solid fa-lock" style="margin-right:3px;"></i>Locked</span>'
+        : '<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:20px;font-weight:700;"><i class="fa-solid fa-moon" style="margin-right:3px;"></i>Closed</span>'
+      ) +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue||0) + '</div><div style="font-size:10px;color:var(--muted);">Revenue</div></div>' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:' + profitColor + ';">' + fmt(s.profit||0) + '</div><div style="font-size:10px;color:var(--muted);">Profit</div></div>' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent);">' + (s.salesCount||0) + '</div><div style="font-size:10px;color:var(--muted);">Sales</div></div>' +
+      '</div>' +
+      (s.notes ? '<div style="margin-top:8px;font-size:12px;color:var(--muted);font-style:italic;">"' + s.notes + '"</div>' : '') +
       '</div>';
   }).join('');
 }
-
-// ── PAST SESSION DETAIL ───────────────────────────────────────────────
-async function viewPastSession(sessionId) {
-  const s = await dbGet('business_days', sessionId);
-  const profitColor = (s.profit||0) > 0 ? 'var(--green)' : (s.profit||0) < 0 ? 'var(--red)' : 'var(--muted)';
-  const margin = s.revenue > 0 ? ((s.profit / s.revenue) * 100).toFixed(1) : 0;
-  const statusIcon = s.status === 'LOCKED' ? '🔒' : '🌙';
-
-  document.getElementById('past-session-content').innerHTML =
-    '<div style="text-align:center;margin-bottom:18px;">' +
-    '<div style="font-size:36px;margin-bottom:6px;">' + statusIcon + '</div>' +
-    '<div style="font-size:18px;font-weight:800;">' + fmtFullDate(s.business_date) + '</div>' +
-    '<div style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:4px;">' +
-    (s.opened_at ? fmtTime(s.opened_at) : '—') + ' → ' + (s.closed_at ? fmtTime(s.closed_at) : 'auto') +
-    ' · Status: <strong>' + s.status + '</strong></div></div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' +
-    '<div class="detail-box" style="padding:12px;text-align:center;"><div class="detail-key">SALES</div><div class="detail-val" style="font-size:22px;color:var(--green);">' + (s.salesCount||0) + '</div></div>' +
-    '<div class="detail-box" style="padding:12px;text-align:center;"><div class="detail-key">ITEMS SOLD</div><div class="detail-val" style="font-size:22px;color:var(--accent);">' + (s.itemsSold||0) + '</div></div>' +
-    '<div class="detail-box" style="padding:12px;text-align:center;"><div class="detail-key">REVENUE</div><div class="detail-val" style="font-size:18px;color:var(--accent2);">' + fmt(s.revenue||0) + '</div></div>' +
-    '<div class="detail-box" style="padding:12px;text-align:center;"><div class="detail-key">PROFIT</div><div class="detail-val" style="font-size:18px;color:' + profitColor + ';">' + fmt(s.profit||0) + '</div></div>' +
-    '</div>' +
-    '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">PROFIT MARGIN</div><div class="detail-val" style="font-size:20px;color:var(--accent3);">' + margin + '%</div></div>' +
-    '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">PURCHASES ADDED</div><div class="detail-val" style="font-size:16px;color:var(--accent3);">' + (s.purchasesCount||0) + ' items · ' + fmt(s.purchaseCost||0) + '</div></div>' +
-    (s.auto_opened || s.auto_closed ? '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">AUTO FLAGS</div><div style="font-size:13px;color:var(--muted);margin-top:4px;">' + (s.auto_opened ? '⚡ Auto-opened at 9:00 AM<br>' : '') + (s.auto_closed ? '⚡ Auto-closed at 11:59 PM' : '') + '</div></div>' : '') +
-    (s.reopened_count > 0 ? '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">REOPENED</div><div class="detail-val" style="font-size:16px;color:var(--muted);">' + s.reopened_count + ' time(s)</div></div>' : '') +
-    (s.notes ? '<div class="detail-box" style="padding:12px;margin-bottom:10px;"><div class="detail-key">NOTES</div><div style="font-size:14px;color:var(--text);margin-top:6px;font-style:italic;">"' + s.notes + '"</div></div>' : '');
-
-  document.getElementById('export-day-btn').onclick = function() { exportDayCSV(sessionId); };
-  document.getElementById('past-session-sheet').classList.add('open');
-}
-
-
-function closePastSessionSheet() {
-  document.getElementById('past-session-sheet').classList.remove('open');
-}
-
-
-
-// ── CSV EXPORT ────────────────────────────────────────────────────────
-async function exportDayCSV(sessionId) {
-  const s = sessionId ? await dbGet('business_days', sessionId) : activeDay;
-  if (!s) return;
-  const sales = await dbAll('sales');
-  const daySales = sales.filter(x => x.business_date === s.business_date)
-                        .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  const headers = ['Date', 'Time', 'Item Code', 'Item Name', 'Type', 'Qty', 'Unit Price', 'Revenue', 'Profit'];
-  const rows = daySales.map(sale => [
-    sale.business_date || '',
-    sale.date ? new Date(sale.date).toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'}) : '',
-    sale.itemCode || '',
-    sale.itemName || '',
-    sale.type || '',
-    sale.qty || 0,
-    sale.actualPrice || sale.price || 0,
-    sale.revenue || 0,
-    sale.profit || 0,
-  ]);
-
-  const csv = [headers, ...rows].map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = 'MGS_' + s.business_date + (s.session_num > 1 ? '_s' + s.session_num : '') + '.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-  toast('📤 CSV exported!', 'ok');
-}
-
-
-
-// ── OPENING FLOAT ─────────────────────────────────────────────────────
-// Prompt for cash float when opening day for first time
-function promptOpeningFloat(bday) {
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:24px;';
-  overlay.innerHTML =
-    '<div style="background:var(--surface);border-radius:var(--r-lg);max-width:360px;width:100%;padding:24px;">' +
-    '<div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:6px;">💵 Opening Float</div>' +
-    '<div style="font-size:13px;color:var(--muted);margin-bottom:16px;">How much cash is in the drawer at opening? (optional)</div>' +
-    '<div class="float-input-wrap" style="margin-bottom:16px;">' +
-    '<span class="float-cur">' + currency + '</span>' +
-    '<input class="float-input" id="float-input" type="number" min="0" inputmode="decimal" placeholder="0">' +
-    '</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-    '<button id="float-skip" style="padding:13px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;font-family:var(--sans);">Skip</button>' +
-    '<button id="float-ok" style="padding:13px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:14px;font-weight:800;cursor:pointer;font-family:var(--sans);">Confirm</button>' +
-    '</div></div>';
-  document.body.appendChild(overlay);
-  overlay.querySelector('#float-skip').onclick = () => overlay.remove();
-  overlay.querySelector('#float-ok').onclick = async () => {
-    const val = parseFloat(overlay.querySelector('#float-input').value) || 0;
-    bday.openingFloat = val;
-    await dbPut('business_days', bday);
-    activeDay = bday;
-    overlay.remove();
-    toast('💵 Opening float: ' + fmt(val), 'ok');
-  };
-}
-
-// ── VOID SALE ─────────────────────────────────────────────────────────
-// Only allowed when day is OPEN. Restores item stock and removes sale.
-async function voidSale(saleId) {
-  if (!isDayOpen()) { toast('Day must be open to void a sale.', 'err'); return; }
-  showConfirmDialog(
-    '↩ Void This Sale?',
-    'This will remove the sale and restore the item quantity back to stock.',
-    'Yes, Void Sale',
-    'Cancel',
-    async () => {
-      const sale = await dbGet('sales', saleId);
-      if (!sale) { toast('Sale not found.', 'err'); return; }
-      // Restore stock
-      const item = await dbGet('items', sale.itemId);
-      if (item) {
-        item.qty += sale.qty;
-        await dbPut('items', item);
-        allItems = await dbAll('items');
-        renderList();
-      }
-      // Remove sale
-      await dbDelete('sales', saleId);
-      renderSellPage();
-      renderDashboard();
-      if (activeDay) updateDayLiveStats();
-      scheduleSync();
-      toast('↩ Sale voided — stock restored.', 'ok');
-    }
-  );
-}
-
 // ═══════════════════════════════════════════════════════════
 // RESTOCK
 // ═══════════════════════════════════════════════════════════
