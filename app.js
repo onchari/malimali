@@ -1632,6 +1632,101 @@ async function loadActiveDay() {
   startDayTimer();
 }
 
+// ===================================================================
+// SUB-SESSION MANAGEMENT
+// Child sessions opened after the main day is permanently CLOSED
+// but it is still the same calendar date (before midnight).
+// ===================================================================
+
+async function openSubSession() {
+  if (!activeDay) { toast('No active day found.', 'err'); return; }
+  if (activeDay.status !== 'CLOSED') { toast('Main day must be closed first.', 'err'); return; }
+
+  const allSubs = await dbAll('sub_sessions');
+  const daySubs = allSubs.filter(s => s.business_date === activeDay.business_date);
+  const existingOpen = daySubs.find(s => s.status === 'OPEN');
+  const existingPaused = daySubs.find(s => s.status === 'PAUSED');
+
+  if (existingOpen) { toast('A sub-session is already open.', 'err'); return; }
+
+  if (existingPaused) {
+    // Resume the paused sub-session
+    existingPaused.status = 'OPEN';
+    existingPaused.last_opened_at = new Date().toISOString();
+    await dbPut('sub_sessions', existingPaused);
+    activeSubSession = existingPaused;
+    setDayMode(true);
+    updateDayBanner();
+    updateDayLiveStats();
+    renderDaySessionsList();
+    toast('▶️ Sub-session #' + existingPaused.session_num + ' resumed!', 'ok');
+    return;
+  }
+
+  // Create new sub-session
+  const sessionNum = daySubs.length + 1;
+  const items = await dbAll('items');
+  const id = await dbAdd('sub_sessions', {
+    business_date: activeDay.business_date,
+    parent_day_id: activeDay.id,
+    session_num: sessionNum,
+    status: 'OPEN',
+    opened_at: new Date().toISOString(),
+    last_opened_at: new Date().toISOString(),
+    closed_at: null,
+    paused_at: null,
+    openingStockCost: items.reduce((s, i) => s + i.buy * i.qty, 0),
+    salesCount: 0, revenue: 0, profit: 0, itemsSold: 0,
+    notes: ''
+  });
+  activeSubSession = await dbGet('sub_sessions', id);
+  setDayMode(true);
+  updateDayBanner();
+  updateDayLiveStats();
+  renderDaySessionsList();
+  toast('➕ Sub-session #' + sessionNum + ' opened!', 'ok');
+}
+
+async function pauseSubSession() {
+  if (!activeSubSession || activeSubSession.status !== 'OPEN') return;
+  activeSubSession.status = 'PAUSED';
+  activeSubSession.paused_at = new Date().toISOString();
+  await dbPut('sub_sessions', activeSubSession);
+  setDayMode(false);
+  updateDayBanner();
+  renderDaySessionsList();
+  toast('⏸ Sub-session paused. Tap Resume to continue.', 'ok');
+}
+
+async function closeSubSession() {
+  if (!activeSubSession || activeSubSession.status !== 'OPEN') return;
+  const sales = await dbAll('sales');
+  const subSales = sales.filter(s => s.sub_session_id === activeSubSession.id);
+  activeSubSession.status = 'CLOSED';
+  activeSubSession.closed_at = new Date().toISOString();
+  activeSubSession.salesCount = subSales.length;
+  activeSubSession.revenue   = subSales.reduce((s, x) => s + x.revenue, 0);
+  activeSubSession.profit    = subSales.reduce((s, x) => s + x.profit, 0);
+  activeSubSession.itemsSold = subSales.reduce((s, x) => s + x.qty, 0);
+  await dbPut('sub_sessions', activeSubSession);
+  activeSubSession = null;
+  setDayMode(false);
+  updateDayBanner();
+  renderDaySessionsList();
+  renderDashboard();
+  toast('🔒 Sub-session closed.', 'ok');
+  scheduleSync();
+}
+
+async function loadSubSession(business_date) {
+  const all = await dbAll('sub_sessions');
+  const active = all.find(s =>
+    s.business_date === business_date &&
+    (s.status === 'OPEN' || s.status === 'PAUSED')
+  );
+  activeSubSession = active || null;
+}
+
 // ── AUTO SCHEDULER ───────────────────────────────────────────────────
 function startDayTimer() {
   if (dayCheckTimer) clearInterval(dayCheckTimer);
