@@ -1,13 +1,15 @@
 // ===== MANDELA GENERALS SERVICE WORKER =====
 // Handles offline caching + background sync
 
-const CACHE_NAME = 'mandela-v4';
+const CACHE_NAME = 'mandela-v5';
 const FIREBASE_CACHE = 'firebase-sdk-v1';
 
 // App shell files - always cache these
 const APP_FILES = [
   './',
   './index.html',
+  './app.css',
+  './app.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
