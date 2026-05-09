@@ -156,6 +156,19 @@ function dbDelete(store, id) {
   });
 }
 
+
+// ── HTML ESCAPE ───────────────────────────────────────────────────────
+// Prevent XSS when injecting user-supplied data (item names, codes) into innerHTML.
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
 // ===== STATE =====
 let types = [];
 let allItems = [];
@@ -728,60 +741,66 @@ async function saveShoeItems(baseCode, baseName, type) {
 }
 
 // ===================================================================
-// CODE AUTOCOMPLETE — search existing items as user types code
-// Shows a dropdown of matching items. Selecting one pre-fills the
-// form in "restock" mode: adding qty increments existing stock.
+// ===================================================================
+// CODE AUTOCOMPLETE + STOCK UPDATE
+// Req: type code → see existing items → select → restock (qty added)
+// If code not found → new item flow.
+//
+// Edge cases:
+//   • Zero/negative qty rejected
+//   • Large qty (>9999) confirmation required
+//   • Code sanitised (uppercase, strip invalid chars)
+//   • Item deleted between search and save → graceful error
+//   • Exact match shown first in dropdown
+//   • ConstraintError (duplicate insert) → offer restock
+//   • Concurrent update → re-fetch before save
 // ===================================================================
 
-let _codeDropdownActive = false; // true when user selected from dropdown
+const CODE_MAX_QTY = 9999;
+let _codeDropdownActive = false;
 
-function onCodeInput() {
-  const raw = document.getElementById('f-code').value.trim().toUpperCase();
-  document.getElementById('f-code').value = raw;
-
-  if (!raw || raw.length < 1) {
-    hideCodeDropdown();
-    _codeDropdownActive = false;
-    return;
-  }
-
-  // Search existing items whose code starts with or contains the typed string
-  const matches = allItems.filter(i =>
-    i.code && i.code.toUpperCase().includes(raw)
-  ).slice(0, 8); // cap at 8 suggestions
-
-  if (matches.length === 0) {
-    hideCodeDropdown();
-    return;
-  }
-  showCodeDropdown(matches);
+function sanitiseCode(raw) {
+  return (raw || '').trim().toUpperCase().replace(/[^A-Z0-9\-.]/g, '');
 }
 
-function showCodeDropdown(items) {
+function onCodeInput() {
+  const clean = sanitiseCode(document.getElementById('f-code').value);
+  document.getElementById('f-code').value = clean;
+  if (!clean) { hideCodeDropdown(); return; }
+
+  const exact      = allItems.filter(i => i.code === clean);
+  const startsWith = allItems.filter(i => i.code && i.code !== clean && i.code.startsWith(clean));
+  const contains   = allItems.filter(i => i.code && i.code !== clean && !i.code.startsWith(clean) && i.code.includes(clean));
+  const matches    = [...exact, ...startsWith, ...contains].slice(0, 8);
+
+  if (!matches.length) { hideCodeDropdown(); return; }
+  showCodeDropdown(matches, clean);
+}
+
+function showCodeDropdown(items, typedCode) {
   let dd = document.getElementById('code-dropdown');
   if (!dd) {
     dd = document.createElement('div');
     dd.id = 'code-dropdown';
     dd.className = 'code-dd';
-    // Insert after the code input field
     const codeField = document.getElementById('f-code');
     codeField.parentNode.insertBefore(dd, codeField.nextSibling);
   }
-
   dd.innerHTML = items.map(item => {
-    const stockColor = item.qty <= 0 ? 'var(--red)' : item.qty <= 3 ? '#d97706' : 'var(--green)';
-    return `<div class="code-dd-item" onclick="selectExistingItem(${item.id})">
-      <div class="code-dd-main">
-        <span class="code-dd-code">${item.code}</span>
-        <span class="code-dd-name">${item.name || ''}</span>
-      </div>
-      <div class="code-dd-meta">
-        <span style="font-family:var(--mono);font-size:11px;color:${stockColor};font-weight:700;">${item.qty} in stock</span>
-        <span style="font-size:11px;color:var(--muted);font-family:var(--mono);">${fmt(item.sell)}</span>
-      </div>
-    </div>`;
+    const isExact = item.code === typedCode;
+    const sc = item.qty <= 0 ? 'var(--red)' : item.qty <= 3 ? '#d97706' : 'var(--green)';
+    const sl = item.qty <= 0 ? 'Out of stock' : item.qty + ' in stock';
+    return '<div class="code-dd-item' + (isExact ? ' code-dd-exact' : '') + '" onclick="selectExistingItem(' + item.id + ')">' +
+      '<div class="code-dd-left">' +
+        '<span class="code-dd-code">' + escapeHtml(item.code) + '</span>' +
+        (isExact ? '<span class="code-dd-match-badge">exact</span>' : '') +
+        '<span class="code-dd-name">' + escapeHtml(item.name || '') + (item.size && item.size !== 'N/A' ? ' · ' + escapeHtml(item.size) : '') + '</span>' +
+      '</div>' +
+      '<div class="code-dd-right">' +
+        '<span class="code-dd-stock" style="color:' + sc + ';">' + sl + '</span>' +
+        '<span class="code-dd-price">' + fmt(item.sell) + '</span>' +
+      '</div></div>';
   }).join('');
-
   dd.style.display = 'block';
 }
 
@@ -790,29 +809,23 @@ function hideCodeDropdown() {
   if (dd) dd.style.display = 'none';
 }
 
-// Called when user taps an item from the dropdown
-// Pre-fills form in RESTOCK mode — saving will ADD qty to existing item
 async function selectExistingItem(itemId) {
+  // Re-fetch from DB — handles concurrent delete between search and tap
   const item = await dbGet('items', itemId);
-  if (!item) return;
+  if (!item) { toast('⚠️ Item no longer exists — it may have been deleted.', 'err'); hideCodeDropdown(); return; }
 
   hideCodeDropdown();
   _codeDropdownActive = true;
 
-  // Fill identity fields (read-only in restock mode)
   document.getElementById('f-code').value = item.code;
   document.getElementById('f-name').value = item.name || '';
   document.getElementById('f-size').value = item.size || '';
-
-  // Set type selector
   const typeEl = document.getElementById('f-type');
   if (typeEl) typeEl.value = item.type || '';
   onTypeChange();
-
-  // Store the target item id in edit-id for restock save
   document.getElementById('edit-id').value = 'restock_' + itemId;
 
-  // Show current stock info banner
+  // Restock banner
   let banner = document.getElementById('restock-mode-banner');
   if (!banner) {
     banner = document.createElement('div');
@@ -821,70 +834,76 @@ async function selectExistingItem(itemId) {
     const codeField = document.getElementById('f-code');
     codeField.closest('.add-field').after(banner);
   }
+  const sc = item.qty <= 0 ? 'var(--red)' : item.qty <= 3 ? '#d97706' : 'var(--green)';
   banner.innerHTML =
-    '<i class="fa-solid fa-boxes-stacked" style="color:var(--accent);"></i>' +
-    '<div style="flex:1;">' +
-      '<div style="font-size:12px;font-weight:800;color:var(--text);">Restock Mode — ' + item.code + '</div>' +
-      '<div style="font-size:11px;color:var(--muted);">Current stock: <strong>' + item.qty + '</strong> units · ' +
-      'Buy: <strong>' + fmt(item.buy) + '</strong> · Sell: <strong>' + fmt(item.sell) + '</strong></div>' +
+    '<i class="fa-solid fa-boxes-stacked" style="color:var(--accent);font-size:18px;"></i>' +
+    '<div style="flex:1;min-width:0;">' +
+      '<div style="font-size:13px;font-weight:800;color:var(--text);">Restock Mode</div>' +
+      '<div style="font-size:11px;color:var(--muted);line-height:1.7;">' +
+        '<span style="font-family:var(--mono);font-weight:700;color:var(--text);">' + item.code + '</span>' +
+        (item.name ? ' · ' + item.name : '') +
+        '<br>Stock now: <strong style="color:' + sc + ';">' + item.qty + '</strong>' +
+        ' · Buy: ' + fmt(item.buy) + ' · Sell: ' + fmt(item.sell) +
+      '</div>' +
     '</div>' +
-    '<button onclick="exitRestockMode()" class="restock-banner-exit">✕</button>';
+    '<button onclick="exitRestockMode()" class="restock-banner-exit" title="Cancel">✕</button>';
   banner.style.display = 'flex';
 
-  // Pre-fill pricing with existing values
   document.getElementById('f-buy').value  = item.buy  || '';
   document.getElementById('f-sell').value = item.sell || '';
-  document.getElementById('f-qty').value  = '';  // qty to ADD — user fills this
+  document.getElementById('f-qty').value  = '';
   updateProfitPreview();
-
-  // Update save button label and form header
   document.getElementById('save-btn').textContent = '📦 Add to Stock';
-  document.getElementById('form-mode-label').textContent = 'Restock Item';
+  document.getElementById('form-mode-label').textContent = '📦 Restock · ' + item.code;
   document.getElementById('cancel-edit-btn').style.display = 'block';
-
-  // Focus qty field
-  setTimeout(() => { const q = document.getElementById('f-qty'); if (q) q.focus(); }, 100);
+  setTimeout(() => { const q = document.getElementById('f-qty'); if (q) q.focus(); }, 120);
 }
 
 function exitRestockMode() {
   _codeDropdownActive = false;
-  clearForm();
   const banner = document.getElementById('restock-mode-banner');
   if (banner) banner.style.display = 'none';
+  clearForm();
 }
 
 // ===================================================================
-// SAVE ITEM — handles regular add, edit, restock, and shoe items
+// SAVE ITEM
 // ===================================================================
 async function saveItem() {
   const editIdRaw = document.getElementById('edit-id').value;
-  const type   = document.getElementById('f-type').value;
-  const code   = document.getElementById('f-code').value.trim().toUpperCase();
-  const name   = document.getElementById('f-name').value.trim();
+  const type      = document.getElementById('f-type').value;
+  const code      = sanitiseCode(document.getElementById('f-code').value);
+  const name      = document.getElementById('f-name').value.trim();
 
   if (!requireOpenDay()) return;
   if (!type) { toast('⚠️ Select an item type', 'err'); return; }
   if (!code) { toast('⚠️ Enter item code', 'err'); return; }
 
-  // ── RESTOCK MODE (user selected existing item from dropdown) ─────
-  if (editIdRaw.startsWith('restock_')) {
-    const itemId = parseInt(editIdRaw.replace('restock_', ''));
-    const existing = await dbGet('items', itemId);
-    if (!existing) { toast('Item not found', 'err'); return; }
+  // ── RESTOCK MODE ─────────────────────────────────────────────────
+  if (editIdRaw && editIdRaw.startsWith('restock_')) {
+    const existing = await dbGet('items', parseInt(editIdRaw.replace('restock_', '')));
+    if (!existing) { toast('⚠️ Item no longer exists — it may have been deleted.', 'err'); exitRestockMode(); return; }
 
     const qtyRaw = document.getElementById('f-qty').value;
     const addQty = parseInt(qtyRaw);
-    if (!qtyRaw || isNaN(addQty) || addQty <= 0) {
-      toast('⚠️ Enter quantity to add', 'err'); return;
-    }
+    if (!qtyRaw || isNaN(addQty)) { toast('⚠️ Enter quantity to add', 'err'); return; }
+    if (addQty <= 0)               { toast('⚠️ Quantity must be at least 1', 'err'); return; }
+    if (addQty > CODE_MAX_QTY && !confirm('⚠️ Adding ' + addQty + ' units — is that correct?')) return;
 
-    const buy  = parseFloat(document.getElementById('f-buy').value)  || existing.buy;
-    const sell = parseFloat(document.getElementById('f-sell').value) || existing.sell;
+    const newQty = existing.qty + addQty;
+    if (newQty > 999999)           { toast('⚠️ Stock would exceed maximum of 999,999 units', 'err'); return; }
 
-    existing.qty  += addQty;
-    existing.buy   = buy;
-    existing.sell  = sell;
-    existing.profit = sell - buy;
+    const buyRaw = document.getElementById('f-buy').value;
+    const sellRaw = document.getElementById('f-sell').value;
+    const buy  = buyRaw  ? parseFloat(buyRaw)  : existing.buy;
+    const sell = sellRaw ? parseFloat(sellRaw) : existing.sell;
+    if (buy  <= 0) { toast('⚠️ Buying price must be greater than 0', 'err'); return; }
+    if (sell <= 0) { toast('⚠️ Selling price must be greater than 0', 'err'); return; }
+
+    existing.qty       = newQty;
+    existing.buy       = buy;
+    existing.sell      = sell;
+    existing.profit    = sell - buy;
     existing.updatedAt = new Date().toISOString();
 
     await dbPut('items', existing);
@@ -894,7 +913,7 @@ async function saveItem() {
     if (activeDay) updateDayLiveStats();
     scheduleSync();
     exitRestockMode();
-    toast('📦 Restocked! ' + existing.code + ' now has ' + existing.qty + ' units.', 'ok');
+    toast('📦 ' + existing.code + ' restocked → now ' + newQty + ' units.', 'ok');
     return;
   }
 
@@ -902,45 +921,44 @@ async function saveItem() {
   if (isFootwearType(type) && !editIdRaw) {
     const savedCount = await saveShoeItems(code, name, type);
     if (!savedCount) return;
-    clearForm();
-    clearAddFormPhoto();
+    clearForm(); clearAddFormPhoto();
     allItems = await dbAll('items');
     renderList(); renderDashboard(); updateHeader();
     scheduleSync();
-    toast('✅ ' + savedCount + ' shoe size(s) added!', 'ok');
     if (activeDay) updateDayLiveStats();
+    toast('✅ ' + savedCount + ' shoe size(s) added!', 'ok');
     return;
   }
 
-  // ── STANDARD EDIT MODE ───────────────────────────────────────────
+  // ── STANDARD ADD / EDIT ──────────────────────────────────────────
   const size   = document.getElementById('f-size').value.trim();
   const qtyRaw = document.getElementById('f-qty').value;
   const qty    = parseInt(qtyRaw);
-  const buy    = parseFloat(document.getElementById('f-buy').value) || 0;
+  const buy    = parseFloat(document.getElementById('f-buy').value)  || 0;
   const sell   = parseFloat(document.getElementById('f-sell').value) || 0;
 
-  if (!size)   { toast('⚠️ Enter a size (or type N/A)', 'err'); return; }
-  if (qtyRaw === '' || isNaN(qty) || qty < 0) { toast('⚠️ Enter quantity stocked', 'err'); return; }
-  if (buy <= 0)  { toast('⚠️ Enter buying price', 'err'); return; }
+  if (!size)                                  { toast('⚠️ Enter a size (or N/A)', 'err'); return; }
+  if (qtyRaw === '' || isNaN(qty) || qty < 0) { toast('⚠️ Enter quantity in stock', 'err'); return; }
+  if (qty > CODE_MAX_QTY && !confirm('⚠️ Adding ' + qty + ' units — confirm?')) return;
+  if (buy  <= 0) { toast('⚠️ Enter buying price',  'err'); return; }
   if (sell <= 0) { toast('⚠️ Enter selling price', 'err'); return; }
 
   const profit   = sell - buy;
   const itemName = name || (type + ' ' + code);
-  const item = { type, code, name: itemName, size, buy, sell, profit, qty, createdAt: new Date().toISOString() };
+  const item     = { type, code, name: itemName, size, buy, sell, profit, qty, createdAt: new Date().toISOString() };
 
   try {
     if (editIdRaw) {
-      // Pure edit — replace the whole item
       item.id = parseInt(editIdRaw);
       await dbPut('items', item);
       fbSyncItem(item);
-      toast('✅ Item updated!', 'ok');
       clearForm();
       allItems = await dbAll('items');
       renderList(); renderDashboard(); updateHeader();
+      scheduleSync();
+      toast('✅ Item updated!', 'ok');
       showPage('list');
     } else {
-      // Brand new item
       const newId = await dbAdd('items', item);
       item.id = newId;
       if (_addFormPhotoData) setItemPhoto(newId, _addFormPhotoData);
@@ -948,16 +966,21 @@ async function saveItem() {
       clearForm(); clearAddFormPhoto();
       allItems = await dbAll('items');
       renderList(); renderDashboard(); updateHeader();
+      scheduleSync();
       showSplash(itemName, sell, profit);
       if (activeDay) updateDayLiveStats();
     }
-    scheduleSync();
   } catch (e) {
-    if (e.name === 'ConstraintError') toast('⚠️ Code "' + code + '" already exists — select it from the dropdown to restock.', 'err');
-    else toast('Error saving: ' + e.message, 'err');
+    if (e.name === 'ConstraintError') {
+      const dup = allItems.find(i => i.code === code);
+      if (dup) { showCodeDropdown([dup], code); toast('⚠️ "' + code + '" already exists — select it below to restock.', 'err'); }
+      else       toast('⚠️ Duplicate code "' + code + '". Use a different code.', 'err');
+    } else {
+      toast('Error: ' + e.message, 'err');
+      console.error('[SAVE]', e);
+    }
   }
 }
-
 function clearForm() {
   document.getElementById('edit-id').value   = '';
   document.getElementById('f-type').value    = '';
@@ -2675,6 +2698,118 @@ function _statBox(val, label, color) {
     '<div style="font-size:10px;color:var(--muted);">' + label + '</div>' +
   '</div>';
 }
+
+// ── CSV EXPORT ────────────────────────────────────────────────────────
+async function exportDayCSV(session) {
+  if (!session) return;
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(s => s.business_date === session.business_date)
+                        .sort((a,b) => new Date(a.date) - new Date(b.date));
+  const headers = ['Date','Time','Item Code','Item Name','Qty','Unit Price','Revenue','Profit','Payment'];
+  const rows = daySales.map(s => [
+    s.business_date || '',
+    s.date ? new Date(s.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '',
+    s.itemCode || '',
+    s.itemName || '',
+    s.qty || 0,
+    s.actualPrice || s.price || 0,
+    s.revenue || 0,
+    s.profit || 0,
+    s.paymentMethod || 'Cash'
+  ]);
+  const csv = [headers, ...rows]
+    .map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(','))
+    .join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = 'MGS_' + session.business_date + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('📤 CSV exported!', 'ok');
+}
+
+// ── VIEW PAST SESSION ─────────────────────────────────────────────────
+async function viewPastSession(sessionId) {
+  const session = await dbGet('business_days', sessionId);
+  if (!session) { toast('Session not found.', 'err'); return; }
+  const content = document.getElementById('past-session-content');
+  if (!content) return;
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(s => s.business_date === session.business_date)
+                        .sort((a,b) => new Date(b.date) - new Date(a.date));
+  const revenue = daySales.reduce((s,x) => s + x.revenue, 0);
+  const profit  = daySales.reduce((s,x) => s + x.profit, 0);
+  content.innerHTML =
+    '<div style="padding:4px 0 16px;">' +
+    '<div style="font-size:18px;font-weight:800;margin-bottom:4px;">' + fmtFullDate(session.business_date) + '</div>' +
+    '<div style="font-size:12px;color:var(--muted);font-family:var(--mono);">' +
+      fmtTime(session.opened_at) + ' → ' + (session.closed_at ? fmtTime(session.closed_at) : 'auto') +
+    '</div></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:var(--r);padding:12px;">' +
+        '<div style="font-size:18px;font-weight:800;color:var(--accent2);font-family:var(--mono);">' + fmt(revenue) + '</div>' +
+        '<div style="font-size:10px;color:var(--muted);">Revenue</div></div>' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:var(--r);padding:12px;">' +
+        '<div style="font-size:18px;font-weight:800;color:var(--green);font-family:var(--mono);">' + fmt(profit) + '</div>' +
+        '<div style="font-size:10px;color:var(--muted);">Profit</div></div>' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:var(--r);padding:12px;">' +
+        '<div style="font-size:18px;font-weight:800;color:var(--accent);font-family:var(--mono);">' + daySales.length + '</div>' +
+        '<div style="font-size:10px;color:var(--muted);">Sales</div></div>' +
+    '</div>' +
+    (session.notes ? '<div style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:12px;">"' + session.notes + '"</div>' : '') +
+    '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Sales</div>' +
+    (daySales.length === 0 ? '<div style="color:var(--muted);font-size:13px;">No sales recorded</div>' :
+      daySales.map(s =>
+        '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">' +
+        '<div><div style="font-size:13px;font-weight:700;">' + (s.itemName||s.itemCode||'Sale') + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + fmtTime(s.date) + ' · ' + (s.itemCode||'') + '</div></div>' +
+        '<div style="text-align:right;"><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue) + '</div>' +
+        '<div style="font-size:11px;color:var(--green);">+' + fmt(s.profit) + '</div></div></div>'
+      ).join('')
+    );
+
+  // Wire export button
+  const exportBtn = document.getElementById('export-day-btn');
+  if (exportBtn) exportBtn.onclick = () => exportDayCSV(session);
+
+  document.getElementById('past-session-sheet').classList.add('open');
+}
+
+function closePastSessionSheet() {
+  document.getElementById('past-session-sheet').classList.remove('open');
+}
+
+// ── VOID SALE ─────────────────────────────────────────────────────────
+// Reverses a sale: removes the record and restores item stock.
+// Only allowed when the business day is OPEN.
+async function voidSale(saleId) {
+  if (!isDayOpen()) { toast('⚠️ Day must be open to void a sale.', 'err'); return; }
+  if (!confirm('Void this sale? The item stock will be restored.')) return;
+  try {
+    const sale = await dbGet('sales', saleId);
+    if (!sale) { toast('Sale not found.', 'err'); return; }
+    // Restore stock
+    const item = await dbGet('items', sale.itemId);
+    if (item) {
+      item.qty += (sale.qty || 1);
+      item.updatedAt = new Date().toISOString();
+      await dbPut('items', item);
+      allItems = await dbAll('items');
+      fbSyncItem(item);
+    }
+    await dbDelete('sales', saleId);
+    renderList(); renderDashboard(); updateHeader();
+    if (activeDay) updateDayLiveStats();
+    scheduleSync();
+    toast('↩ Sale voided — stock restored.', 'ok');
+  } catch(e) {
+    toast('Error voiding sale: ' + e.message, 'err');
+    console.error('[voidSale]', e);
+  }
+}
+
 // ═══════════════════════════════════════════════════════════
 // RESTOCK
 // ═══════════════════════════════════════════════════════════
@@ -3136,6 +3271,19 @@ function checkSession() {
 
 // ===== JQUERY ENHANCEMENTS =====
 
+
+
+// ── GLOBAL ERROR HANDLERS ─────────────────────────────────────────────
+window.addEventListener('unhandledrejection', e => {
+  console.error('[UNHANDLED]', e.reason);
+  // Only show toast for DB errors — not Firebase (they self-report)
+  if (e.reason && e.reason.message && e.reason.message.includes('Database')) {
+    toast('⚠️ ' + e.reason.message, 'err');
+  }
+});
+window.addEventListener('error', e => {
+  console.error('[JS ERROR]', e.message, 'at', e.filename, e.lineno);
+});
 
 // ===== INIT =====
 initDB();
