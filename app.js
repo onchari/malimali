@@ -791,15 +791,9 @@ function showCodeDropdown(items, typedCode) {
     const sc = item.qty <= 0 ? 'var(--red)' : item.qty <= 3 ? '#d97706' : 'var(--green)';
     const sl = item.qty <= 0 ? 'Out of stock' : item.qty + ' in stock';
     return '<div class="code-dd-item' + (isExact ? ' code-dd-exact' : '') + '" onclick="selectExistingItem(' + item.id + ')">' +
-      '<div class="code-dd-left">' +
-        '<span class="code-dd-code">' + escapeHtml(item.code) + '</span>' +
-        (isExact ? '<span class="code-dd-match-badge">exact</span>' : '') +
-        '<span class="code-dd-name">' + escapeHtml(item.name || '') + (item.size && item.size !== 'N/A' ? ' · ' + escapeHtml(item.size) : '') + '</span>' +
-      '</div>' +
-      '<div class="code-dd-right">' +
-        '<span class="code-dd-stock" style="color:' + sc + ';">' + sl + '</span>' +
-        '<span class="code-dd-price">' + fmt(item.sell) + '</span>' +
-      '</div></div>';
+      '<span class="code-dd-code">' + escapeHtml(item.code) + (isExact ? ' <span class="code-dd-match-badge">exact</span>' : '') + '</span>' +
+      '<span class="code-dd-stock" style="color:' + sc + ';">' + sl + '</span>' +
+    '</div>';
   }).join('');
   dd.style.display = 'block';
 }
@@ -852,15 +846,52 @@ async function selectExistingItem(itemId) {
   document.getElementById('f-buy').value  = item.buy  || '';
   document.getElementById('f-sell').value = item.sell || '';
   document.getElementById('f-qty').value  = '';
-  updateProfitPreview();
+
+  // Gray out all fields EXCEPT qty — only qty is editable in restock mode
+  ['f-code','f-name','f-size','f-type','f-buy','f-sell'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = true;
+    el.style.opacity = '0.4';
+    el.style.cursor  = 'not-allowed';
+  });
+  // Also visually dim the buy/sell field wrappers
+  ['f-buy','f-sell'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.closest('.add-field')) el.closest('.add-field').style.opacity = '0.35';
+  });
+  // f-qty stays enabled and fully visible — it is the only input
+  const qtyEl = document.getElementById('f-qty');
+  if (qtyEl) {
+    qtyEl.disabled = false;
+    qtyEl.style.opacity = '1';
+    qtyEl.style.cursor  = '';
+  }
+  // Hide profit pill (not relevant when restocking)
+  const pill = document.getElementById('profit-preview');
+  if (pill) pill.style.display = 'none';
+
   document.getElementById('save-btn').textContent = '📦 Add to Stock';
   document.getElementById('form-mode-label').textContent = '📦 Restock · ' + item.code;
   document.getElementById('cancel-edit-btn').style.display = 'block';
-  setTimeout(() => { const q = document.getElementById('f-qty'); if (q) q.focus(); }, 120);
+  setTimeout(() => { if (qtyEl) qtyEl.focus(); }, 120);
 }
 
 function exitRestockMode() {
   _codeDropdownActive = false;
+  // Re-enable all grayed fields before clearing
+  ['f-code','f-name','f-size','f-type','f-buy','f-sell','f-qty'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = false;
+    el.style.opacity = '';
+    el.style.cursor  = '';
+  });
+  // Restore pricing section opacity
+  ['f-buy','f-sell'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.closest('.add-field')) el.closest('.add-field').style.opacity = '';
+  });
   const banner = document.getElementById('restock-mode-banner');
   if (banner) banner.style.display = 'none';
   clearForm();
@@ -893,12 +924,9 @@ async function saveItem() {
     const newQty = existing.qty + addQty;
     if (newQty > 999999)           { toast('⚠️ Stock would exceed maximum of 999,999 units', 'err'); return; }
 
-    const buyRaw = document.getElementById('f-buy').value;
-    const sellRaw = document.getElementById('f-sell').value;
-    const buy  = buyRaw  ? parseFloat(buyRaw)  : existing.buy;
-    const sell = sellRaw ? parseFloat(sellRaw) : existing.sell;
-    if (buy  <= 0) { toast('⚠️ Buying price must be greater than 0', 'err'); return; }
-    if (sell <= 0) { toast('⚠️ Selling price must be greater than 0', 'err'); return; }
+    // Always use system prices — buy/sell fields are disabled in restock mode
+    const buy  = existing.buy;
+    const sell = existing.sell;
 
     existing.qty       = newQty;
     existing.buy       = buy;
