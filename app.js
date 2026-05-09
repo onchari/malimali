@@ -1,4 +1,5 @@
 // ===== DB =====
+const DB_NAME = 'InventoryApp';
 let db;
 // ── CHECK SESSION IMMEDIATELY (before DB opens) ──────────────────────
 // This prevents the login screen from flashing on refresh.
@@ -19,6 +20,7 @@ function initDB() {
   const req = indexedDB.open(DB_NAME, DB_VER);
   req.onupgradeneeded = e => {
     const d = e.target.result;
+    e.target.transaction.onerror = ev => console.error('[DB] Upgrade error:', ev);
     if (!d.objectStoreNames.contains('items')) {
       const s = d.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
       s.createIndex('code', 'code', { unique: true });
@@ -72,48 +74,77 @@ function initDB() {
         setTimeout(() => toast('⚠️ Business day not open yet', ''), 1000);
       }
 
-      // Restore last page if user has access to it
-      const allowedPage = currentUser && currentUser.tabs.includes(lastPage) ? lastPage : currentUser.tabs[0];
-      _origShowPage(allowedPage);
+      // Restore last page — respect both role and day-state restrictions
+      let allowedPage = currentUser && currentUser.tabs.includes(lastPage) ? lastPage : currentUser.tabs[0];
+      if (DAY_REQUIRED_PAGES.includes(allowedPage) && !dayOpen) {
+        allowedPage = 'day'; // redirect to day if page needs open day
+      }
+      _doShowPage(allowedPage);
     });
   };
-  req.onerror = () => toast('Database error!', 'err');
+  req.onerror = e => { console.error('[DB] Open error:', e); toast('Database error — try refreshing the page.', 'err'); };
+}
+
+// DB ready check — called before every transaction
+function _dbReady(rej) {
+  if (!db) {
+    const err = new Error('Database not ready yet — please wait a moment.');
+    console.error('[DB]', err.message);
+    if (rej) rej(err);
+    return false;
+  }
+  return true;
 }
 
 function dbAll(store) {
   return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readonly');
-    tx.objectStore(store).getAll().onsuccess = e => res(e.target.result);
-    tx.onerror = rej;
+    if (!_dbReady(rej)) return;
+    try {
+      const tx = db.transaction(store, 'readonly');
+      tx.objectStore(store).getAll().onsuccess = e => res(e.target.result);
+      tx.onerror = e => rej(e.target.error);
+    } catch(e) { rej(e); }
   });
 }
 function dbGet(store, id) {
   return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readonly');
-    tx.objectStore(store).get(id).onsuccess = e => res(e.target.result);
-    tx.onerror = rej;
+    if (!_dbReady(rej)) return;
+    try {
+      const tx = db.transaction(store, 'readonly');
+      tx.objectStore(store).get(id).onsuccess = e => res(e.target.result);
+      tx.onerror = e => rej(e.target.error);
+    } catch(e) { rej(e); }
   });
 }
 function dbAdd(store, data) {
   return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readwrite');
-    const req = tx.objectStore(store).add(data);
-    req.onsuccess = e => res(e.target.result);
-    tx.onerror = e => rej(e.target.error);
+    if (!_dbReady(rej)) return;
+    try {
+      const tx = db.transaction(store, 'readwrite');
+      const req = tx.objectStore(store).add(data);
+      req.onsuccess = e => res(e.target.result);
+      tx.onerror = e => rej(e.target.error);
+    } catch(e) { rej(e); }
   });
 }
 function dbPut(store, data) {
   return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readwrite');
-    tx.objectStore(store).put(data).onsuccess = res;
-    tx.onerror = rej;
+    if (!_dbReady(rej)) return;
+    try {
+      const tx = db.transaction(store, 'readwrite');
+      tx.objectStore(store).put(data).onsuccess = res;
+      tx.onerror = e => rej(e.target.error);
+    } catch(e) { rej(e); }
   });
 }
 function dbDelete(store, id) {
   return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readwrite');
-    tx.objectStore(store).delete(id).onsuccess = res;
-    tx.onerror = rej;
+    if (!_dbReady(rej)) return;
+    try {
+      const tx = db.transaction(store, 'readwrite');
+      tx.objectStore(store).delete(id).onsuccess = res;
+      tx.onerror = e => rej(e.target.error);
+    } catch(e) { rej(e); }
   });
 }
 
@@ -142,20 +173,39 @@ function toast(msg, type = '') {
 function getTypeObj(name) { return types.find(t => t.name === name) || { name, emoji: '📦', color: '#334155' }; }
 
 // ===== PAGES =====
+// Pages that require OPEN day to access
+const DAY_REQUIRED_PAGES = ['dash', 'add'];
+
 function showPage(id) {
+  // Role restriction
+  if (currentUser && !currentUser.tabs.includes(id)) {
+    toast('⛔ Access denied', 'err');
+    return;
+  }
+  // Day restriction — redirect to Day tab if page needs open day
+  if (DAY_REQUIRED_PAGES.includes(id) && !isDayOpen()) {
+    _doShowPage('day');
+    return;
+  }
+  _doShowPage(id);
+}
+
+function _doShowPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('page-' + id).classList.add('active');
-  document.getElementById('tab-' + id).classList.add('active');
-  if (id === 'dash') renderDashboard();
-  if (id === 'list') renderList();
-  if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
-  // summary removed
-
-
-  if (id === 'day') { refreshDayTab(); }
+  const page = document.getElementById('page-' + id);
+  const tab  = document.getElementById('tab-' + id);
+  if (page) page.classList.add('active');
+  if (tab)  tab.classList.add('active');
+  if (id === 'dash')     renderDashboard();
+  if (id === 'list')     renderList();
+  if (id === 'sell')     { renderSellPage(); setTimeout(() => { const el = document.getElementById('sell-search'); if (el) el.focus(); }, 150); }
+  if (id === 'day')      refreshDayTab();
   if (id === 'settings') { loadShoeGroupSettings(); renderTypesList(); }
-  if (id === 'add') { onTypeChange(); } // ensure pricing section shows correctly
+  if (id === 'add')      onTypeChange();
+  if (id === 'list' || id === 'day') {}  // always accessible
+  // Save last visited page for session restore
+  if (currentUser) localStorage.setItem('mg_last_page', id);
 }
 
 // ===== TYPES =====
@@ -521,8 +571,6 @@ function resetShoeGroups() {
 }
 
 // Call loadShoeGroupSettings when settings tab is opened
-const _origShowPage_shoe = window._origShowPage || function(){};
-// Hook into showPage to populate settings when navigating there
 
 // When type is footwear, replace single size field with interactive
 // S/M/L group picker → individual size buttons → per-size qty+price
@@ -1540,92 +1588,127 @@ const FIREBASE_CONFIG = {
 async function initFirebase() {
   const config = FIREBASE_CONFIG;
   localStorage.setItem('fb_config', JSON.stringify(config));
-  const cfgInput = document.getElementById('fb-config-input');
-  if (cfgInput) cfgInput.value = JSON.stringify(config, null, 2);
   try {
     setFbStatus('connecting');
-    const { initializeApp, getFirestore, onSnapshot, collection, getApps, getApp } = await waitForFbImports();
+    console.log('[FB] Waiting for Firebase SDK...');
+    const { initializeApp, getApps, getApp, getFirestore, onSnapshot, collection } =
+      await waitForFbImports();
+    console.log('[FB] SDK ready. Initialising app...');
 
-    // Reuse existing app to avoid duplicate app errors
+    // Reuse existing Firebase app instance to avoid "duplicate app" error
     const existingApps = getApps();
-    fbApp = existingApps.find(a => a.name === 'mandela') || initializeApp(config, 'mandela');
-    fbDb = getFirestore(fbApp);
+    const existing = existingApps.find(a => a.name === 'mandela');
+    fbApp = existing ? getApp('mandela') : initializeApp(config, 'mandela');
+    fbDb  = getFirestore(fbApp);
     fbReady = true;
+    console.log('[FB] Firestore ready. Project:', config.projectId);
 
-    // Unsub previous listeners
+    // Tear down old listeners before attaching new ones
     if (fbUnsub) { fbUnsub(); fbUnsub = null; }
     if (window._fbUnsubSales) { window._fbUnsubSales(); window._fbUnsubSales = null; }
 
-    // Live listener: items — processes all changes including initial load
-    const unsubItems = onSnapshot(collection(fbDb, 'items'), async snap => {
-      const changes = snap.docChanges();
-      if (!changes.length) return;
-      let needsRender = false;
-      for (const change of changes) {
-        const data = { ...change.doc.data(), fbId: change.doc.id };
-        if (change.type === 'removed') {
-          const all = await dbAll('items');
-          const local = all.find(i => i.fbId === change.doc.id);
-          if (local) { await dbDelete('items', local.id); needsRender = true; }
-        } else {
-          const all = await dbAll('items');
-          const existing = all.find(i => i.fbId === change.doc.id || i.code === data.code);
-          if (existing) { data.id = existing.id; await dbPut('items', data); }
-          else { try { delete data.id; await dbAdd('items', data); } catch(_) {} }
-          needsRender = true;
+    // ── Live listener: items ──────────────────────────────────────
+    const unsubItems = onSnapshot(
+      collection(fbDb, 'items'),
+      async snap => {
+        const changes = snap.docChanges();
+        if (!changes.length) return;
+        let needsRender = false;
+        for (const change of changes) {
+          const data = { ...change.doc.data(), fbId: change.doc.id };
+          if (change.type === 'removed') {
+            const all = await dbAll('items');
+            const local = all.find(i => i.fbId === change.doc.id);
+            if (local) { await dbDelete('items', local.id); needsRender = true; }
+          } else {
+            const all = await dbAll('items');
+            const existing = all.find(i => i.fbId === change.doc.id || i.code === data.code);
+            if (existing) {
+              data.id = existing.id;
+              await dbPut('items', data);
+            } else {
+              try { delete data.id; await dbAdd('items', data); } catch(_) {}
+            }
+            needsRender = true;
+          }
         }
+        if (needsRender) {
+          allItems = await dbAll('items');
+          renderList(); renderDashboard(); updateHeader();
+          setFbStatus('on');
+        }
+      },
+      err => {
+        console.error('[FB] Items listener error:', err.code, err.message);
+        setFbStatus('error');
+        toast('Firebase sync error: ' + err.message, 'err');
       }
-      if (needsRender) {
-        allItems = await dbAll('items');
-        renderList(); renderDashboard(); updateHeader();
-        setFbStatus('on');
-        toast('🔄 ' + changes.length + ' item(s) synced from cloud', 'ok');
-      }
-    }, err => { setFbStatus('error'); console.error('Items listener error:', err); });
+    );
 
-    // Live listener: sales
-    const unsubSales = onSnapshot(collection(fbDb, 'sales'), async snap => {
-      const changes = snap.docChanges();
-      if (!changes.length) return;
-      for (const change of changes) {
-        const data = { ...change.doc.data(), fbId: change.doc.id };
-        if (change.type === 'removed') {
-          const all = await dbAll('sales');
-          const local = all.find(s => s.fbId === change.doc.id);
-          if (local) await dbDelete('sales', local.id);
-        } else {
-          const all = await dbAll('sales');
-          const existing = all.find(s => s.fbId === change.doc.id);
-          if (existing) { data.id = existing.id; await dbPut('sales', data); }
-          else { try { delete data.id; await dbAdd('sales', data); } catch(_) {} }
+    // ── Live listener: sales ──────────────────────────────────────
+    const unsubSales = onSnapshot(
+      collection(fbDb, 'sales'),
+      async snap => {
+        const changes = snap.docChanges();
+        if (!changes.length) return;
+        for (const change of changes) {
+          const data = { ...change.doc.data(), fbId: change.doc.id };
+          if (change.type === 'removed') {
+            const all = await dbAll('sales');
+            const local = all.find(s => s.fbId === change.doc.id);
+            if (local) await dbDelete('sales', local.id);
+          } else {
+            const all = await dbAll('sales');
+            const existing = all.find(s => s.fbId === change.doc.id);
+            if (existing) { data.id = existing.id; await dbPut('sales', data); }
+            else { try { delete data.id; await dbAdd('sales', data); } catch(_) {} }
+          }
         }
-      }
-      try { renderSellPage(); } catch(_) {}
-      try { renderDashboard(); } catch(_) {}
-    }, err => { console.error('Sales listener error:', err); });
+        try { renderSellPage(); } catch(_) {}
+        try { renderDashboard(); } catch(_) {}
+      },
+      err => { console.error('[FB] Sales listener error:', err.code, err.message); }
+    );
 
     fbUnsub = unsubItems;
     window._fbUnsubSales = unsubSales;
 
     setFbStatus('on');
     toast('☁️ Firebase connected!', 'ok');
+    console.log('[FB] Listeners attached. Running initial sync...');
 
-    // On connect: first push local data, then pull remote data
-    // This ensures both devices are in sync
-    console.log('[SYNC] Firebase connected — running initial push + pull');
+    // Push local → Firebase, then pull Firebase → local
     await forcePushToFirebase(true);
     await pullFromFirebase(true);
+    console.log('[FB] Initial sync complete.');
 
   } catch (e) {
     setFbStatus('error');
+    console.error('[FB] Init error:', e.message, e);
     toast('Firebase error: ' + e.message, 'err');
-    console.error('Firebase init error:', e);
+    fbReady = false;
   }
 }
 
 function waitForFbImports() {
-  return new Promise(res => {
-    const check = () => window._fbImports ? res(window._fbImports) : setTimeout(check, 100);
+  return new Promise((res, rej) => {
+    const start = Date.now();
+    const check = () => {
+      if (window._fbImports === null) {
+        // Module explicitly failed — signal caller
+        rej(new Error('Firebase SDK failed to load. Check your internet connection.'));
+        return;
+      }
+      if (window._fbImports) {
+        res(window._fbImports);
+        return;
+      }
+      if (Date.now() - start > 15000) {
+        rej(new Error('Firebase SDK timed out after 15s. Check your internet connection.'));
+        return;
+      }
+      setTimeout(check, 150);
+    };
     check();
   });
 }
@@ -1879,8 +1962,8 @@ function setDayMode(isOpen) {
     const activePage = document.querySelector('.page.active');
     if (activePage) {
       const pageId = activePage.id.replace('page-', '');
-      if (pageId === 'add') _origShowPage('day');
-      if (pageId === 'dash' && !dashOk) _origShowPage('day');
+      if (pageId === 'add') _doShowPage('day');
+      if (pageId === 'dash' && !dashOk) _doShowPage('day');
       if (pageId === 'list') renderList(); // refresh to show/hide action buttons
     }
   }
@@ -1922,7 +2005,7 @@ function hideDayClosedOverlay() {
 let activeDay      = null;
 let dayCheckTimer  = null;
 let _warned1145    = null;
-let _timerStarted  = false; // guard: timer starts ONCE per session
+let _timerStarted  = false; // guard: timer starts once, resets on date change
 
 // ── LOCAL DATE HELPER (timezone-safe) ────────────────────────────────
 function todayDateStr() {
@@ -2165,7 +2248,7 @@ async function confirmCloseDay() {
   applyDayState();
   renderDaySessionsList();
   renderDashboard();
-  _origShowPage('day');
+  _doShowPage('day');
   toast('🌙 Day closed. Tap Open Day anytime to continue.', 'ok');
   scheduleSync();
 }
@@ -2194,14 +2277,13 @@ function setDayMode(isOpen) {
     listBtn.classList.toggle('disabled', !isOpen);
     if (!isOpen) listBtn.classList.remove('active');
   }
-  // If closing while on a blocked page, go to Day tab
+  // If closing while on a restricted page, redirect to Day tab
   if (!isOpen) {
     const activePage = document.querySelector('.page.active');
     if (activePage) {
       const pageId = activePage.id.replace('page-', '');
-      if (pageId === 'add') _origShowPage('day');
-      if (pageId === 'dash') _origShowPage('day');
-      if (pageId === 'list') renderList();
+      if (pageId === 'add' || pageId === 'dash') _doShowPage('day');
+      if (pageId === 'list') renderList(); // stay but refresh to hide action buttons
     }
   }
 }
@@ -2337,6 +2419,7 @@ function startDayTimer() {
       if (!todayBday) todayBday = await createDayRecord(today);
       _warned1145    = null;
       _lastKnownDate = today;
+      _timerStarted  = false; // allow fresh timer if needed
       activeDay      = todayBday;
       applyDayState();
       renderDaySessionsList();
@@ -2350,12 +2433,13 @@ document.addEventListener('visibilitychange', async () => {
   if (document.hidden) return;
   const today = todayDateStr();
   if (today !== _lastKnownDate) {
-    // Date changed while phone was sleeping — reinit day (rare)
+    // Date changed while phone was sleeping — full reinit for new day
     _lastKnownDate = today;
     _warned1145    = null;
+    _timerStarted  = false; // allow timer to restart for new day
     await loadActiveDay();
   } else {
-    // Same day — just refresh display from DB, don't touch state
+    // Same day — just refresh display from DB, never touch state
     const bday = await getBusinessDay(today);
     if (bday) { activeDay = bday; applyDayState(); }
   }
@@ -2824,24 +2908,9 @@ function logout() {
 
 
 
-// Guard showPage - block access to restricted tabs
-const _origShowPage = showPage;
-showPage = function(id) {
-  if (currentUser && !currentUser.tabs.includes(id)) {
-    toast('⛔ Access denied', 'err');
-    return;
-  }
-  // Block restricted tabs when day is not open (but NOT sheet popups)
-  const dayOpen = activeDay && (activeDay.status === 'OPEN');
-  if (['dash', 'add'].includes(id) && !dayOpen) {
-    _origShowPage('day');
-    setTimeout(() => showDayClosedOverlay(id), 100);
-    return;
-  }
-  hideDayClosedOverlay();
-  if (currentUser) localStorage.setItem('mg_last_page', id);
-  _origShowPage(id);
-};
+// _origShowPage: internal navigation — bypasses day guard, used by timers and state transitions
+const _origShowPage = _doShowPage;
+
 
 function attemptLogin() {
   const username = document.getElementById('login-user').value.trim().toLowerCase();
@@ -2882,10 +2951,10 @@ function attemptLogin() {
   getBusinessDay(todayDateStr()).then(bday => {
     const dayOpen = bday && bday.status === 'OPEN';
     if (!dayOpen && user.tabs.includes('day')) {
-      _origShowPage('day');
+      _doShowPage('day');
       setTimeout(() => toast('⚠️ Please open the business day first.', ''), 500);
     } else {
-      _origShowPage(allowedPage);
+      _doShowPage(allowedPage);
     }
   });
   toast('Welcome, ' + user.name + '! 👋', 'ok');
@@ -2932,7 +3001,20 @@ function checkSession() {
 
 // ===== INIT =====
 initDB();
-setTimeout(initFirebase, 800);
+
+// Wait for IndexedDB to be ready before initialising Firebase.
+// Firebase listeners call dbAll() on first snapshot — DB must be open first.
+function initFirebaseWhenReady() {
+  const wait = () => {
+    if (db) {
+      initFirebase();
+    } else {
+      setTimeout(wait, 100);
+    }
+  };
+  setTimeout(wait, 300); // small initial delay for module scripts
+}
+initFirebaseWhenReady();
 
 // ===== AUTO SYNC =====
 let autoSyncTimer = null;

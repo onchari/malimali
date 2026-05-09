@@ -33,18 +33,24 @@
        Exports all needed symbols to window._fbImports so the
        non-module app.js can access them. -->
   <script type="module">
-    import { initializeApp, getApps }
-      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import {
-      getFirestore, collection, doc, setDoc, deleteDoc,
-      getDocs, onSnapshot, writeBatch, serverTimestamp
-    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    try {
+      const { initializeApp, getApps, getApp } =
+        await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
+      const {
+        getFirestore, collection, doc, setDoc, deleteDoc,
+        getDocs, onSnapshot, writeBatch, serverTimestamp
+      } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
 
-    window._fbImports = {
-      initializeApp, getApps,
-      getFirestore, collection, doc, setDoc, deleteDoc,
-      getDocs, onSnapshot, writeBatch, serverTimestamp
-    };
+      window._fbImports = {
+        initializeApp, getApps, getApp,
+        getFirestore, collection, doc, setDoc, deleteDoc,
+        getDocs, onSnapshot, writeBatch, serverTimestamp
+      };
+      console.log('[Firebase] SDK loaded OK');
+    } catch(e) {
+      console.error('[Firebase] SDK failed to load:', e);
+      window._fbImports = null; // signal failure
+    }
   </script>
 </head>
 <body>
@@ -1636,9 +1642,6 @@
   </div>
 </div><!-- /install-banner -->
 
-
-<!-- ── App JavaScript ──────────────────────────────────────────── -->
-<script src="app.js"></script>
 
 <!-- ==============================================================
      SHEET: SELL MODAL  (id="sell-modal")
