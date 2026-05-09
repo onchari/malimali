@@ -184,15 +184,13 @@ function getTypeObj(name) { return types.find(t => t.name === name) || { name, e
 // Pages that require OPEN day to access
 const DAY_REQUIRED_PAGES = ['dash', 'add'];
 
+// Pages that show a day-closed overlay instead of redirecting
+const DAY_GATED_PAGES = ['dash', 'add'];
+
 function showPage(id) {
   // Role restriction
   if (currentUser && !currentUser.tabs.includes(id)) {
     toast('⛔ Access denied', 'err');
-    return;
-  }
-  // Day restriction — redirect to Day tab if page needs open day
-  if (DAY_REQUIRED_PAGES.includes(id) && !isDayOpen()) {
-    _doShowPage('day');
     return;
   }
   _doShowPage(id);
@@ -211,7 +209,8 @@ function _doShowPage(id) {
   if (id === 'day')      refreshDayTab();
   if (id === 'settings') { loadShoeGroupSettings(); renderTypesList(); }
   if (id === 'add')      onTypeChange();
-  if (id === 'list' || id === 'day') {}  // always accessible
+  // Show day-closed overlay if navigating to Add or Dash while day not open
+  updateDayClosedOverlay(isDayOpen());
   // Save last visited page for session restore
   if (currentUser) localStorage.setItem('mg_last_page', id);
 }
@@ -729,10 +728,136 @@ async function saveShoeItems(baseCode, baseName, type) {
 }
 
 // ===================================================================
-// SAVE ITEM — handles both regular and shoe/footwear items
+// CODE AUTOCOMPLETE — search existing items as user types code
+// Shows a dropdown of matching items. Selecting one pre-fills the
+// form in "restock" mode: adding qty increments existing stock.
+// ===================================================================
+
+let _codeDropdownActive = false; // true when user selected from dropdown
+
+function onCodeInput() {
+  const raw = document.getElementById('f-code').value.trim().toUpperCase();
+  document.getElementById('f-code').value = raw;
+
+  if (!raw || raw.length < 1) {
+    hideCodeDropdown();
+    _codeDropdownActive = false;
+    return;
+  }
+
+  // Search existing items whose code starts with or contains the typed string
+  const matches = allItems.filter(i =>
+    i.code && i.code.toUpperCase().includes(raw)
+  ).slice(0, 8); // cap at 8 suggestions
+
+  if (matches.length === 0) {
+    hideCodeDropdown();
+    return;
+  }
+  showCodeDropdown(matches);
+}
+
+function showCodeDropdown(items) {
+  let dd = document.getElementById('code-dropdown');
+  if (!dd) {
+    dd = document.createElement('div');
+    dd.id = 'code-dropdown';
+    dd.className = 'code-dd';
+    // Insert after the code input field
+    const codeField = document.getElementById('f-code');
+    codeField.parentNode.insertBefore(dd, codeField.nextSibling);
+  }
+
+  dd.innerHTML = items.map(item => {
+    const stockColor = item.qty <= 0 ? 'var(--red)' : item.qty <= 3 ? '#d97706' : 'var(--green)';
+    return `<div class="code-dd-item" onclick="selectExistingItem(${item.id})">
+      <div class="code-dd-main">
+        <span class="code-dd-code">${item.code}</span>
+        <span class="code-dd-name">${item.name || ''}</span>
+      </div>
+      <div class="code-dd-meta">
+        <span style="font-family:var(--mono);font-size:11px;color:${stockColor};font-weight:700;">${item.qty} in stock</span>
+        <span style="font-size:11px;color:var(--muted);font-family:var(--mono);">${fmt(item.sell)}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  dd.style.display = 'block';
+}
+
+function hideCodeDropdown() {
+  const dd = document.getElementById('code-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+
+// Called when user taps an item from the dropdown
+// Pre-fills form in RESTOCK mode — saving will ADD qty to existing item
+async function selectExistingItem(itemId) {
+  const item = await dbGet('items', itemId);
+  if (!item) return;
+
+  hideCodeDropdown();
+  _codeDropdownActive = true;
+
+  // Fill identity fields (read-only in restock mode)
+  document.getElementById('f-code').value = item.code;
+  document.getElementById('f-name').value = item.name || '';
+  document.getElementById('f-size').value = item.size || '';
+
+  // Set type selector
+  const typeEl = document.getElementById('f-type');
+  if (typeEl) typeEl.value = item.type || '';
+  onTypeChange();
+
+  // Store the target item id in edit-id for restock save
+  document.getElementById('edit-id').value = 'restock_' + itemId;
+
+  // Show current stock info banner
+  let banner = document.getElementById('restock-mode-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'restock-mode-banner';
+    banner.className = 'restock-banner';
+    const codeField = document.getElementById('f-code');
+    codeField.closest('.add-field').after(banner);
+  }
+  banner.innerHTML =
+    '<i class="fa-solid fa-boxes-stacked" style="color:var(--accent);"></i>' +
+    '<div style="flex:1;">' +
+      '<div style="font-size:12px;font-weight:800;color:var(--text);">Restock Mode — ' + item.code + '</div>' +
+      '<div style="font-size:11px;color:var(--muted);">Current stock: <strong>' + item.qty + '</strong> units · ' +
+      'Buy: <strong>' + fmt(item.buy) + '</strong> · Sell: <strong>' + fmt(item.sell) + '</strong></div>' +
+    '</div>' +
+    '<button onclick="exitRestockMode()" class="restock-banner-exit">✕</button>';
+  banner.style.display = 'flex';
+
+  // Pre-fill pricing with existing values
+  document.getElementById('f-buy').value  = item.buy  || '';
+  document.getElementById('f-sell').value = item.sell || '';
+  document.getElementById('f-qty').value  = '';  // qty to ADD — user fills this
+  updateProfitPreview();
+
+  // Update save button label and form header
+  document.getElementById('save-btn').textContent = '📦 Add to Stock';
+  document.getElementById('form-mode-label').textContent = 'Restock Item';
+  document.getElementById('cancel-edit-btn').style.display = 'block';
+
+  // Focus qty field
+  setTimeout(() => { const q = document.getElementById('f-qty'); if (q) q.focus(); }, 100);
+}
+
+function exitRestockMode() {
+  _codeDropdownActive = false;
+  clearForm();
+  const banner = document.getElementById('restock-mode-banner');
+  if (banner) banner.style.display = 'none';
+}
+
+// ===================================================================
+// SAVE ITEM — handles regular add, edit, restock, and shoe items
 // ===================================================================
 async function saveItem() {
-  const editId = document.getElementById('edit-id').value;
+  const editIdRaw = document.getElementById('edit-id').value;
   const type   = document.getElementById('f-type').value;
   const code   = document.getElementById('f-code').value.trim().toUpperCase();
   const name   = document.getElementById('f-name').value.trim();
@@ -741,23 +866,53 @@ async function saveItem() {
   if (!type) { toast('⚠️ Select an item type', 'err'); return; }
   if (!code) { toast('⚠️ Enter item code', 'err'); return; }
 
+  // ── RESTOCK MODE (user selected existing item from dropdown) ─────
+  if (editIdRaw.startsWith('restock_')) {
+    const itemId = parseInt(editIdRaw.replace('restock_', ''));
+    const existing = await dbGet('items', itemId);
+    if (!existing) { toast('Item not found', 'err'); return; }
+
+    const qtyRaw = document.getElementById('f-qty').value;
+    const addQty = parseInt(qtyRaw);
+    if (!qtyRaw || isNaN(addQty) || addQty <= 0) {
+      toast('⚠️ Enter quantity to add', 'err'); return;
+    }
+
+    const buy  = parseFloat(document.getElementById('f-buy').value)  || existing.buy;
+    const sell = parseFloat(document.getElementById('f-sell').value) || existing.sell;
+
+    existing.qty  += addQty;
+    existing.buy   = buy;
+    existing.sell  = sell;
+    existing.profit = sell - buy;
+    existing.updatedAt = new Date().toISOString();
+
+    await dbPut('items', existing);
+    fbSyncItem(existing);
+    allItems = await dbAll('items');
+    renderList(); renderDashboard(); updateHeader();
+    if (activeDay) updateDayLiveStats();
+    scheduleSync();
+    exitRestockMode();
+    toast('📦 Restocked! ' + existing.code + ' now has ' + existing.qty + ' units.', 'ok');
+    return;
+  }
+
   // ── SHOE MODE ────────────────────────────────────────────────────
-  if (isFootwearType(type) && !editId) {
+  if (isFootwearType(type) && !editIdRaw) {
     const savedCount = await saveShoeItems(code, name, type);
     if (!savedCount) return;
     clearForm();
     clearAddFormPhoto();
     allItems = await dbAll('items');
-    renderList();
-    renderDashboard();
-    updateHeader();
+    renderList(); renderDashboard(); updateHeader();
     scheduleSync();
     toast('✅ ' + savedCount + ' shoe size(s) added!', 'ok');
     if (activeDay) updateDayLiveStats();
     return;
   }
 
-  // ── STANDARD MODE ────────────────────────────────────────────────
+  // ── STANDARD EDIT MODE ───────────────────────────────────────────
   const size   = document.getElementById('f-size').value.trim();
   const qtyRaw = document.getElementById('f-qty').value;
   const qty    = parseInt(qtyRaw);
@@ -769,13 +924,14 @@ async function saveItem() {
   if (buy <= 0)  { toast('⚠️ Enter buying price', 'err'); return; }
   if (sell <= 0) { toast('⚠️ Enter selling price', 'err'); return; }
 
-  const profit = sell - buy;
+  const profit   = sell - buy;
   const itemName = name || (type + ' ' + code);
   const item = { type, code, name: itemName, size, buy, sell, profit, qty, createdAt: new Date().toISOString() };
 
   try {
-    if (editId) {
-      item.id = parseInt(editId);
+    if (editIdRaw) {
+      // Pure edit — replace the whole item
+      item.id = parseInt(editIdRaw);
       await dbPut('items', item);
       fbSyncItem(item);
       toast('✅ Item updated!', 'ok');
@@ -784,6 +940,7 @@ async function saveItem() {
       renderList(); renderDashboard(); updateHeader();
       showPage('list');
     } else {
+      // Brand new item
       const newId = await dbAdd('items', item);
       item.id = newId;
       if (_addFormPhotoData) setItemPhoto(newId, _addFormPhotoData);
@@ -796,7 +953,7 @@ async function saveItem() {
     }
     scheduleSync();
   } catch (e) {
-    if (e.name === 'ConstraintError') toast('Code "' + code + '" already exists!', 'err');
+    if (e.name === 'ConstraintError') toast('⚠️ Code "' + code + '" already exists — select it from the dropdown to restock.', 'err');
     else toast('Error saving: ' + e.message, 'err');
   }
 }
@@ -1969,61 +2126,8 @@ async function runSyncDebug() {
 // Tabs that require an open day
 const DAY_RESTRICTED_TABS = ['dash', 'add', 'list'];
 
-function setDayMode(isOpen) {
-  const status = activeDay ? activeDay.status : 'PENDING';
-  // Dashboard: accessible when OPEN or PAUSED (progress view), blocked otherwise
-  const dashOk = isOpen || status === 'PAUSED';
-  const dashBtn = document.getElementById('tab-dash');
-  if (dashBtn && dashBtn.style.display !== 'none') {
-    dashBtn.classList.toggle('disabled', !dashOk);
-    if (!dashOk) dashBtn.classList.remove('active');
-  }
 
-  // Add tab: only when OPEN
-  const addBtn = document.getElementById('tab-add');
-  if (addBtn && addBtn.style.display !== 'none') {
-    addBtn.classList.toggle('disabled', !isOpen);
-    if (!isOpen) addBtn.classList.remove('active');
-  }
 
-  // Stock tab: viewable always, but grayed to signal read-only when not OPEN
-  const listBtn = document.getElementById('tab-list');
-  if (listBtn && listBtn.style.display !== 'none') {
-    listBtn.classList.toggle('disabled', !isOpen);
-    if (!isOpen) listBtn.classList.remove('active');
-  }
-
-  // Redirect if on a now-blocked page
-  if (!isOpen) {
-    const activePage = document.querySelector('.page.active');
-    if (activePage) {
-      const pageId = activePage.id.replace('page-', '');
-      if (pageId === 'add') _doShowPage('day');
-      if (pageId === 'dash' && !dashOk) _doShowPage('day');
-      if (pageId === 'list') renderList(); // refresh to show/hide action buttons
-    }
-  }
-}
-
-function showDayClosedOverlay(pageId) {
-  const overlay = document.getElementById('day-closed-overlay');
-  const msg = document.getElementById('day-closed-msg');
-  if (!overlay) return;
-  const status = activeDay ? activeDay.status : 'PENDING';
-  if (status === 'LOCKED') {
-    msg.textContent = 'Open today\'s business day from the Day tab to continue.';
-  } else if (status === 'CLOSED') {
-    msg.textContent = 'The business day is closed. You can reopen it from the Day tab before 11:59 PM.';
-  } else {
-    msg.textContent = 'Please open the business day first to access this section.';
-  }
-  overlay.classList.add('show');
-}
-
-function hideDayClosedOverlay() {
-  const overlay = document.getElementById('day-closed-overlay');
-  if (overlay) overlay.classList.remove('show');
-}
 
 // ===================================================================
 // BUSINESS DAY MANAGEMENT
@@ -2295,33 +2399,28 @@ function cancelCloseDay() {
 
 // ── TAB MODE ─────────────────────────────────────────────────────────
 function setDayMode(isOpen) {
-  // Dashboard: accessible when day is OPEN
-  const dashBtn = document.getElementById('tab-dash');
-  if (dashBtn && dashBtn.style.display !== 'none') {
-    dashBtn.classList.toggle('disabled', !isOpen);
-    if (!isOpen) dashBtn.classList.remove('active');
-  }
-  // Add: only when OPEN
-  const addBtn = document.getElementById('tab-add');
-  if (addBtn && addBtn.style.display !== 'none') {
-    addBtn.classList.toggle('disabled', !isOpen);
-    if (!isOpen) addBtn.classList.remove('active');
-  }
-  // Stock list: grayed but accessible (view-only when closed)
-  const listBtn = document.getElementById('tab-list');
-  if (listBtn && listBtn.style.display !== 'none') {
-    listBtn.classList.toggle('disabled', !isOpen);
-    if (!isOpen) listBtn.classList.remove('active');
-  }
-  // If closing while on a restricted page, redirect to Day tab
-  if (!isOpen) {
-    const activePage = document.querySelector('.page.active');
-    if (activePage) {
-      const pageId = activePage.id.replace('page-', '');
-      if (pageId === 'add' || pageId === 'dash') _doShowPage('day');
-      if (pageId === 'list') renderList(); // stay but refresh to hide action buttons
-    }
-  }
+  // Gray tabs visually when day closed — but ALL tabs remain tappable
+  // Blocking navigation is gone; actions inside each page are guarded instead
+  ['dash', 'add', 'list'].forEach(tab => {
+    const btn = document.getElementById('tab-' + tab);
+    if (!btn || btn.style.display === 'none') return;
+    btn.classList.toggle('disabled', !isOpen);
+  });
+
+  // Show day-closed overlay on Add and Dash when day not open
+  updateDayClosedOverlay(isOpen);
+
+  // Stock list: refresh card action buttons (sell/edit/delete hide when closed)
+  const activePage = document.querySelector('.page.active');
+  if (activePage && activePage.id === 'page-list') renderList();
+}
+
+function updateDayClosedOverlay(isOpen) {
+  const overlay = document.getElementById('day-closed-overlay');
+  if (!overlay) return;
+  const activePage = document.querySelector('.page.active');
+  const pageId = activePage ? activePage.id.replace('page-', '') : '';
+  overlay.style.display = (!isOpen && ['dash', 'add'].includes(pageId)) ? 'flex' : 'none';
 }
 
 // ── DAY BANNER ───────────────────────────────────────────────────────

@@ -398,7 +398,8 @@
         <input class="add-input add-mono" id="f-code" type="text"
                placeholder="e.g. SH001"
                autocomplete="off" spellcheck="false"
-               oninput="this.value=this.value.toUpperCase()">
+               oninput="onCodeInput()"
+               onblur="setTimeout(hideCodeDropdown, 200)">
       </div>
       <div class="add-field">
         <label class="add-label">Name <span class="add-hint">optional</span></label>
@@ -1548,7 +1549,7 @@
      showDayClosedOverlay(attemptedTab) and hideDayClosedOverlay()
      in app.js control visibility.
      ============================================================== -->
-<div id="day-closed-overlay">
+<div id="day-closed-overlay" style="display:none;">
   <div style="font-size:64px;margin-bottom:16px;">🔒</div>
   <div style="font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px;">
     Day Not Open
@@ -2278,13 +2279,7 @@
 <!-- ==============================================================
      OVERLAY: DAY CLOSED
      Full-screen overlay shown on restricted pages (Dash, Add)
-     when the business day is not OPEN.
-     showDayClosedOverlay(attemptedTab) and hideDayClosedOverlay()
-     in app.js control visibility.
-     ============================================================== -->
-<div id="day-closed-overlay">
-  <div style="font-size:64px;margin-bottom:16px;">🔒</div>
-  <div style="font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px;">
+     when the  <div style="font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px;">
     Day Not Open
   </div>
   <div style="font-size:15px;color:var(--muted);margin-bottom:28px;line-height:1.6;"
