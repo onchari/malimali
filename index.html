@@ -632,6 +632,83 @@
     <div id="types-list"></div>
   </div>
 
+  <!-- ── Shoe Size Groups ────────────────────────────────────── -->
+  <div class="sec-label" style="margin-top:16px;">👟 Shoe Size Groups</div>
+  <div class="card" style="padding:14px;">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6;">
+      Customize the size range for each group (S, M, L). These ranges control which sizes appear when adding footwear.
+    </div>
+
+    <!-- S group -->
+    <div style="margin-bottom:12px;">
+      <div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+        <span style="width:28px;height:28px;border-radius:50%;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;">S</span>
+        Small
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="add-field" style="margin-bottom:0;">
+          <label class="add-label">Min Size</label>
+          <input class="add-input add-center" id="sg-s-min" type="number" min="1" max="99" inputmode="numeric" placeholder="20" oninput="previewShoeGroups()">
+        </div>
+        <div class="add-field" style="margin-bottom:0;">
+          <label class="add-label">Max Size</label>
+          <input class="add-input add-center" id="sg-s-max" type="number" min="1" max="99" inputmode="numeric" placeholder="28" oninput="previewShoeGroups()">
+        </div>
+      </div>
+    </div>
+
+    <!-- M group -->
+    <div style="margin-bottom:12px;">
+      <div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+        <span style="width:28px;height:28px;border-radius:50%;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;">M</span>
+        Medium
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="add-field" style="margin-bottom:0;">
+          <label class="add-label">Min Size</label>
+          <input class="add-input add-center" id="sg-m-min" type="number" min="1" max="99" inputmode="numeric" placeholder="29" oninput="previewShoeGroups()">
+        </div>
+        <div class="add-field" style="margin-bottom:0;">
+          <label class="add-label">Max Size</label>
+          <input class="add-input add-center" id="sg-m-max" type="number" min="1" max="99" inputmode="numeric" placeholder="36" oninput="previewShoeGroups()">
+        </div>
+      </div>
+    </div>
+
+    <!-- L group -->
+    <div style="margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+        <span style="width:28px;height:28px;border-radius:50%;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;">L</span>
+        Large
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="add-field" style="margin-bottom:0;">
+          <label class="add-label">Min Size</label>
+          <input class="add-input add-center" id="sg-l-min" type="number" min="1" max="99" inputmode="numeric" placeholder="37" oninput="previewShoeGroups()">
+        </div>
+        <div class="add-field" style="margin-bottom:0;">
+          <label class="add-label">Max Size</label>
+          <input class="add-input add-center" id="sg-l-max" type="number" min="1" max="99" inputmode="numeric" placeholder="45" oninput="previewShoeGroups()">
+        </div>
+      </div>
+    </div>
+
+    <!-- Live preview -->
+    <div id="shoe-group-preview" style="background:var(--surface2);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;font-size:12px;font-family:var(--mono);color:var(--muted);line-height:2;"></div>
+
+    <!-- Save + Reset buttons -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <button onclick="resetShoeGroups()"
+              style="padding:12px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;font-family:var(--sans);">
+        ↺ Reset Defaults
+      </button>
+      <button onclick="saveShoeGroups()"
+              style="padding:12px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:13px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+        💾 Save Groups
+      </button>
+    </div>
+  </div>
+
   <!-- ── Currency ───────────────────────────────────────────── -->
   <div class="sec-label" style="margin-top:16px;">💱 Currency</div>
   <div class="card">

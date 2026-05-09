@@ -46,6 +46,7 @@ function initDB() {
     db = e.target.result;
     loadTypes().then(async () => {
       updateCurrencyUI();
+      loadShoeGroupSettings(); // populate S/M/L range labels in add form
       // 1. Restore session FIRST (before any page rendering)
       const sessionRestored = checkSession();
       if (!sessionRestored) return; // login screen showing, stop here
@@ -153,6 +154,7 @@ function showPage(id) {
 
 
   if (id === 'day') { refreshDayTab(); }
+  if (id === 'settings') { loadShoeGroupSettings(); renderTypesList(); }
 }
 
 // ===== TYPES =====
@@ -395,7 +397,84 @@ function clearAddFormPhoto() {
 
 // ===== SAVE ITEM =====
 // ===================================================================
-// SHOE SIZE SELECTION
+// SHOE SIZE GROUP SETTINGS
+// Stored in localStorage as mgs_shoe_groups: { S, M, L: { min, max } }
+// Loaded into Settings page fields, previewed live, saved on button tap.
+// ===================================================================
+
+const SHOE_GROUP_DEFAULTS = { S:{min:20,max:28}, M:{min:29,max:36}, L:{min:37,max:45} };
+
+function getShoeGroups() {
+  const saved = localStorage.getItem('mgs_shoe_groups');
+  if (!saved) return JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS));
+  try { return JSON.parse(saved); } catch(e) { return JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS)); }
+}
+
+// Populate settings inputs from stored values
+function loadShoeGroupSettings() {
+  const g = getShoeGroups();
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+  set('sg-s-min', g.S.min); set('sg-s-max', g.S.max);
+  set('sg-m-min', g.M.min); set('sg-m-max', g.M.max);
+  set('sg-l-min', g.L.min); set('sg-l-max', g.L.max);
+  previewShoeGroups();
+}
+
+// Live preview: show which sizes each group contains
+function previewShoeGroups() {
+  const get = id => parseInt(document.getElementById(id)?.value) || 0;
+  const groups = {
+    S: { min: get('sg-s-min'), max: get('sg-s-max') },
+    M: { min: get('sg-m-min'), max: get('sg-m-max') },
+    L: { min: get('sg-l-min'), max: get('sg-l-max') },
+  };
+  const el = document.getElementById('shoe-group-preview');
+  if (!el) return;
+  let valid = true;
+  const lines = Object.entries(groups).map(([g, { min, max }]) => {
+    if (!min || !max || min > max) { valid = false; return `${g}: ⚠️ invalid range`; }
+    const count = max - min + 1;
+    const sizes = Array.from({length: Math.min(count, 10)}, (_, i) => min + i);
+    return `${g} (${count} sizes): ${sizes.join(', ')}${count > 10 ? '…' + max : ''}`;
+  });
+  el.innerHTML = lines.join('<br>');
+  el.style.color = valid ? 'var(--text2)' : 'var(--red)';
+}
+
+// Save customized groups to localStorage
+function saveShoeGroups() {
+  const get = id => parseInt(document.getElementById(id)?.value) || 0;
+  const groups = {
+    S: { min: get('sg-s-min'), max: get('sg-s-max') },
+    M: { min: get('sg-m-min'), max: get('sg-m-max') },
+    L: { min: get('sg-l-min'), max: get('sg-l-max') },
+  };
+  // Validate each group
+  for (const [g, { min, max }] of Object.entries(groups)) {
+    if (!min || !max) { toast(`⚠️ Group ${g}: enter both min and max`, 'err'); return; }
+    if (min >= max)   { toast(`⚠️ Group ${g}: min must be less than max`, 'err'); return; }
+    if (max - min > 30){ toast(`⚠️ Group ${g}: range too large (max 30 sizes)`, 'err'); return; }
+  }
+  localStorage.setItem('mgs_shoe_groups', JSON.stringify(groups));
+  // Update the S/M/L button range labels in the add form
+  ['S','M','L'].forEach(g => {
+    const el = document.getElementById('sg-range-' + g);
+    if (el) el.textContent = groups[g].min + '–' + groups[g].max;
+  });
+  toast('👟 Shoe size groups saved!', 'ok');
+}
+
+// Reset to factory defaults
+function resetShoeGroups() {
+  localStorage.removeItem('mgs_shoe_groups');
+  loadShoeGroupSettings();
+  toast('↺ Reset to defaults', '');
+}
+
+// Call loadShoeGroupSettings when settings tab is opened
+const _origShowPage_shoe = window._origShowPage || function(){};
+// Hook into showPage to populate settings when navigating there
+
 // When type is footwear, replace single size field with interactive
 // S/M/L group picker → individual size buttons → per-size qty+price
 // Each selected size saves as a separate inventory item.
