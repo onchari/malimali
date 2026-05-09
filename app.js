@@ -1,6 +1,18 @@
 // ===== DB =====
 let db;
-const DB_NAME = 'InventoryApp';
+// ── CHECK SESSION IMMEDIATELY (before DB opens) ──────────────────────
+// This prevents the login screen from flashing on refresh.
+// We do a quick localStorage check — full validation happens after DB.
+(function() {
+  const saved = localStorage.getItem('mg_session');
+  if (!saved) {
+    // No session at all — show login right away
+    document.getElementById('login-screen').style.display = 'flex';
+  }
+  // If session exists, login screen stays hidden until DB validates it
+})();
+
+
 const DB_VER = 6;
 
 function initDB() {
@@ -456,86 +468,64 @@ function selectSizeGroup(g) {
 }
 
 function toggleShoeSize(s) {
-  if (_shoeSizes.has(s)) {
-    _shoeSizes.delete(s);
-    delete _shoeData[s];
-  } else {
-    _shoeSizes.add(s);
-    if (!_shoeData[s]) _shoeData[s] = { qty: '', buy: '', sell: '' };
-  }
+  if (_shoeSizes.has(s)) _shoeSizes.delete(s);
+  else _shoeSizes.add(s);
+
   // Update button active state
   document.querySelectorAll('.sz-btn').forEach(b => {
     const sz = parseInt(b.textContent);
     b.classList.toggle('sz-active', _shoeSizes.has(sz));
   });
-  renderShoeRows();
-}
 
-function saveShoeFieldData() {
-  // Persist current input values into _shoeData before re-rendering
-  _shoeSizes.forEach(s => {
-    const qEl = document.getElementById('shr-qty-' + s);
-    const bEl = document.getElementById('shr-buy-' + s);
-    const vEl = document.getElementById('shr-sell-' + s);
-    if (qEl) _shoeData[s].qty  = qEl.value;
-    if (bEl) _shoeData[s].buy  = bEl.value;
-    if (vEl) _shoeData[s].sell = vEl.value;
-  });
-}
-
-function renderShoeRows() {
+  // Show/hide shared fields
   const wrap = document.getElementById('shoe-rows-wrap');
-  const rows = document.getElementById('shoe-rows');
-  if (!rows) return;
+  if (wrap) wrap.style.display = _shoeSizes.size > 0 ? 'block' : 'none';
 
-  if (_shoeSizes.size === 0) { wrap.style.display = 'none'; return; }
-  wrap.style.display = 'block';
-
-  const sorted = [..._shoeSizes].sort((a, b) => a - b);
-  rows.innerHTML = sorted.map(s => {
-    const d = _shoeData[s] || { qty:'', buy:'', sell:'' };
-    return `<div class="shoe-row">
-      <span class="shoe-sz-lbl">${s}</span>
-      <input type="number" class="shoe-cell" id="shr-qty-${s}"
-             value="${d.qty}" min="0" inputmode="numeric" placeholder="0">
-      <input type="number" class="shoe-cell" id="shr-buy-${s}"
-             value="${d.buy}" min="0" inputmode="decimal" placeholder="0">
-      <input type="number" class="shoe-cell" id="shr-sell-${s}"
-             value="${d.sell}" min="0" inputmode="decimal" placeholder="0">
-    </div>`;
-  }).join('');
+  // Update selected sizes summary pill
+  renderShoeSummary();
 }
 
-// Save one item per selected shoe size
-async function saveShoeItems(baseCode, baseName, type) {
-  if (!_shoeGroup)          { toast('⚠️ Select a size group (S/M/L)', 'err'); return false; }
-  if (_shoeSizes.size === 0){ toast('⚠️ Select at least one size', 'err'); return false; }
+function renderShoeSummary() {
+  const el = document.getElementById('shoe-selected-summary');
+  if (!el) return;
+  if (_shoeSizes.size === 0) { el.innerHTML = ''; return; }
+  const sorted = [..._shoeSizes].sort((a, b) => a - b);
+  el.innerHTML = '<div class="shoe-pills-row">' +
+    sorted.map(s => `<span class="shoe-pill">${s}</span>`).join('') +
+    `<span style="font-size:11px;color:var(--muted);margin-left:6px;align-self:center;">${sorted.length} size${sorted.length>1?'s':''} selected</span>` +
+    '</div>';
+}
 
-  saveShoeFieldData();
+function saveShoeFieldData() {} // no-op — shared fields read directly in saveShoeItems
+
+// Save one item per selected shoe size, all with same qty/buy/sell
+async function saveShoeItems(baseCode, baseName, type) {
+  if (!_shoeGroup)           { toast('⚠️ Select a size group (S/M/L)', 'err'); return false; }
+  if (_shoeSizes.size === 0) { toast('⚠️ Select at least one size', 'err'); return false; }
+
+  const qty  = parseInt(document.getElementById('shoe-shared-qty').value)   || 0;
+  const buy  = parseFloat(document.getElementById('shoe-shared-buy').value) || 0;
+  const sell = parseFloat(document.getElementById('shoe-shared-sell').value)|| 0;
+
+  if (qty <= 0)  { toast('⚠️ Enter quantity per size', 'err'); return false; }
+  if (buy <= 0)  { toast('⚠️ Enter buying price', 'err'); return false; }
+  if (sell <= 0) { toast('⚠️ Enter selling price', 'err'); return false; }
+
+  const profit = sell - buy;
   const sorted = [..._shoeSizes].sort((a, b) => a - b);
   let savedCount = 0;
-  const errors = [];
 
   for (const size of sorted) {
-    const d    = _shoeData[size] || {};
-    const qty  = parseInt(d.qty)   || 0;
-    const buy  = parseFloat(d.buy) || 0;
-    const sell = parseFloat(d.sell)|| 0;
-
-    if (qty === 0 && sell === 0) continue; // skip empty rows
-
     const item = {
       type,
       code: baseCode + '-' + size,
-      name: baseName || type + ' ' + baseCode,
+      name: (baseName || type + ' ' + baseCode) + ' (Size ' + size + ')',
       size: String(size),
       sizeGroup: _shoeGroup,
-      qty, buy, sell,
-      profit: sell - buy,
+      qty, buy, sell, profit,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-
     try {
       const newId = await dbAdd('items', item);
       item.id = newId;
@@ -543,13 +533,9 @@ async function saveShoeItems(baseCode, baseName, type) {
       fbSyncItem(item);
       savedCount++;
     } catch(e) {
-      errors.push('Size ' + size + ': ' + e.message);
+      toast('⚠️ Size ' + size + ': ' + e.message, 'err');
     }
   }
-
-  if (savedCount === 0) { toast('⚠️ Enter qty or price for at least one size', 'err'); return false; }
-  if (errors.length)    toast('⚠️ ' + errors.join(', '), 'err');
-
   return savedCount;
 }
 
@@ -647,6 +633,19 @@ function clearForm() {
   if (shoePanel)  shoePanel.style.display  = 'none';
   if (stdPricing) stdPricing.style.display = 'block';
   if (sizeField)  sizeField.style.display  = 'block';
+  // Clear shared shoe inputs
+  const sqty  = document.getElementById('shoe-shared-qty');
+  const sbuy  = document.getElementById('shoe-shared-buy');
+  const ssell = document.getElementById('shoe-shared-sell');
+  const ssum  = document.getElementById('shoe-selected-summary');
+  const swrap = document.getElementById('shoe-rows-wrap');
+  const sgrid = document.getElementById('shoe-sizes-grid');
+  if (sqty)  sqty.value  = '';
+  if (sbuy)  sbuy.value  = '';
+  if (ssell) ssell.value = '';
+  if (ssum)  ssum.innerHTML = '';
+  if (swrap) swrap.style.display = 'none';
+  if (sgrid) sgrid.style.display = 'none';
 }
 
 function cancelEdit() { clearForm(); clearAddFormPhoto(); showPage('list'); }
@@ -2695,7 +2694,6 @@ function attemptLogin() {
 function checkSession() {
   const saved = localStorage.getItem('mg_session');
   if (!saved) {
-    // No session — show login screen
     document.getElementById('login-screen').style.display = 'flex';
     return false;
   }
@@ -2711,13 +2709,17 @@ function checkSession() {
         pill.style.display = 'inline-flex';
         pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + user.name;
       }
-      return true; // session valid, let caller handle navigation
+      const wrap = document.getElementById('user-menu-wrap');
+      if (wrap) wrap.style.display = 'block';
+      return true;
     } else {
+      // Invalid credentials in saved session — clear and show login
       localStorage.removeItem('mg_session');
       document.getElementById('login-screen').style.display = 'flex';
       return false;
     }
   } catch(e) {
+    // Corrupted session data — clear and show login
     localStorage.removeItem('mg_session');
     document.getElementById('login-screen').style.display = 'flex';
     return false;
