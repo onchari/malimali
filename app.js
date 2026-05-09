@@ -155,6 +155,7 @@ function showPage(id) {
 
   if (id === 'day') { refreshDayTab(); }
   if (id === 'settings') { loadShoeGroupSettings(); renderTypesList(); }
+  if (id === 'add') { onTypeChange(); } // ensure pricing section shows correctly
 }
 
 // ===== TYPES =====
@@ -449,26 +450,74 @@ function saveShoeGroups() {
     M: { min: get('sg-m-min'), max: get('sg-m-max') },
     L: { min: get('sg-l-min'), max: get('sg-l-max') },
   };
+
   // Validate each group
   for (const [g, { min, max }] of Object.entries(groups)) {
-    if (!min || !max) { toast(`⚠️ Group ${g}: enter both min and max`, 'err'); return; }
-    if (min >= max)   { toast(`⚠️ Group ${g}: min must be less than max`, 'err'); return; }
-    if (max - min > 30){ toast(`⚠️ Group ${g}: range too large (max 30 sizes)`, 'err'); return; }
+    if (!min || !max) { toast('⚠️ Group ' + g + ': enter both min and max', 'err'); return; }
+    if (min >= max)   { toast('⚠️ Group ' + g + ': min must be less than max', 'err'); return; }
+    if (max - min > 30){ toast('⚠️ Group ' + g + ': range too large (max 30 sizes)', 'err'); return; }
   }
+
+  // Save to localStorage
   localStorage.setItem('mgs_shoe_groups', JSON.stringify(groups));
-  // Update the S/M/L button range labels in the add form
+
+  // ── Update Add form immediately ─────────────────────────────────
+
+  // 1. Update S/M/L button range labels
   ['S','M','L'].forEach(g => {
     const el = document.getElementById('sg-range-' + g);
     if (el) el.textContent = groups[g].min + '–' + groups[g].max;
   });
-  toast('👟 Shoe size groups saved!', 'ok');
+
+  // 2. If a group is already selected in the add form, re-render sizes
+  //    and clear any selected sizes that are now out of the new range
+  if (_shoeGroup && groups[_shoeGroup]) {
+    const { min, max } = groups[_shoeGroup];
+
+    // Remove selected sizes that are outside new range
+    _shoeSizes.forEach(s => { if (s < min || s > max) _shoeSizes.delete(s); });
+
+    // Re-render the size buttons grid
+    const grid = document.getElementById('sz-grid');
+    if (grid) {
+      const sizes = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+      grid.innerHTML = sizes.map(s =>
+        '<button type="button" class="sz-btn' + (_shoeSizes.has(s) ? ' sz-active' : '') +
+        '" id="sz-' + s + '" onclick="toggleShoeSize(' + s + ')">' + s + '</button>'
+      ).join('');
+    }
+
+    // Update shared fields visibility
+    const wrap = document.getElementById('shoe-rows-wrap');
+    if (wrap) wrap.style.display = _shoeSizes.size > 0 ? 'block' : 'none';
+    renderShoeSummary();
+  }
+
+  // 3. Update live preview in settings (already shown but refresh)
+  previewShoeGroups();
+
+  toast('✅ Shoe size groups saved!', 'ok');
 }
 
-// Reset to factory defaults
 function resetShoeGroups() {
   localStorage.removeItem('mgs_shoe_groups');
+  // Reset any shoe selection in the add form
+  _shoeGroup = null;
+  _shoeSizes.clear();
+  // Reload settings fields with defaults
   loadShoeGroupSettings();
-  toast('↺ Reset to defaults', '');
+  // Refresh add form group buttons range labels
+  const defaults = JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS));
+  ['S','M','L'].forEach(g => {
+    const el = document.getElementById('sg-range-' + g);
+    if (el) el.textContent = defaults[g].min + '–' + defaults[g].max;
+  });
+  // Hide size grid and shared fields if open
+  const szGrid = document.getElementById('shoe-sizes-grid');
+  const szWrap = document.getElementById('shoe-rows-wrap');
+  if (szGrid) szGrid.style.display = 'none';
+  if (szWrap) szWrap.style.display = 'none';
+  toast('↺ Reset to defaults (S:20–28, M:29–36, L:37–45)', 'ok');
 }
 
 // Call loadShoeGroupSettings when settings tab is opened
@@ -493,25 +542,30 @@ function isFootwearType(typeName) {
                       typeName.toLowerCase().includes('boot'));
 }
 
-// Called when type selector changes
+// Called when type selector changes — switches between standard and shoe mode
 function onTypeChange() {
-  const type = document.getElementById('f-type').value;
-  const shoePanel    = document.getElementById('shoe-size-panel');
-  const stdPricing   = document.getElementById('std-pricing-section');
-  const sizeField    = document.getElementById('f-size-field');
+  const typeEl   = document.getElementById('f-type');
+  const type     = typeEl ? typeEl.value : '';
+  const shoePanel  = document.getElementById('shoe-size-panel');
+  const stdPricing = document.getElementById('std-pricing-section');
+  const sizeField  = document.getElementById('f-size-field');
+  if (!shoePanel || !stdPricing) return;
+
   const isShoe = isFootwearType(type);
 
   shoePanel.style.display  = isShoe ? 'block' : 'none';
   stdPricing.style.display = isShoe ? 'none'  : 'block';
-  sizeField.style.display  = isShoe ? 'none'  : 'block';
+  if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
 
   if (isShoe) {
-    _shoeGroup   = null;
-    _shoeSizes   = new Set();
-    _shoeData    = {};
+    _shoeGroup = null;
+    _shoeSizes.clear();
+    _shoeData  = {};
     renderShoeGroups();
-    document.getElementById('shoe-sizes-grid').style.display  = 'none';
-    document.getElementById('shoe-rows-wrap').style.display   = 'none';
+    const szGrid = document.getElementById('shoe-sizes-grid');
+    const szWrap = document.getElementById('shoe-rows-wrap');
+    if (szGrid) szGrid.style.display = 'none';
+    if (szWrap) szWrap.style.display = 'none';
   }
 }
 

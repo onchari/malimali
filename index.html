@@ -460,7 +460,7 @@
   </div>
 
   <!-- ── SECTION 2: Stock & Pricing (hidden for shoes) ─────────── -->
-  <div id="std-pricing-section">
+  <div id="std-pricing-section" style="display:block;">
     <div class="add-section-title">Stock &amp; Pricing</div>
     <div class="add-section">
 
@@ -474,13 +474,13 @@
         </div>
         <div class="add-field">
           <label class="add-label">Buy Price <span class="add-required">*</span></label>
-          <input class="add-input" id="f-buy" type="number"
+          <input class="add-input add-center" id="f-buy" type="number"
                  placeholder="0" min="0" inputmode="decimal"
                  oninput="updateProfitPreview()">
         </div>
         <div class="add-field">
           <label class="add-label">Sell Price <span class="add-required">*</span></label>
-          <input class="add-input" id="f-sell" type="number"
+          <input class="add-input add-center" id="f-sell" type="number"
                  placeholder="0" min="0" inputmode="decimal"
                  oninput="updateProfitPreview()">
         </div>
