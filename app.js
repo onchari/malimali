@@ -1625,9 +1625,9 @@ async function initFirebase() {
             const existing = all.find(i => i.fbId === change.doc.id || i.code === data.code);
             if (existing) {
               data.id = existing.id;
-              await dbPut('items', data);
+              await dbPut('items', { ...data });
             } else {
-              try { delete data.id; await dbAdd('items', data); } catch(_) {}
+              try { const d2 = { ...data }; delete d2.id; await dbAdd('items', d2); } catch(_) {}
             }
             needsRender = true;
           }
@@ -1730,7 +1730,7 @@ async function fbSyncItem(item) {
       await dbPut('items', item);
     }
     const data = { ...item, updatedAt: new Date().toISOString() };
-    await setDoc(doc(fbDb, 'items', item.fbId), data);
+    await setDoc(doc(fbDb, 'items', item.fbId), sanitiseForFirestore(data));
     console.log('[SYNC] Pushed item:', item.fbId);
   } catch (e) { console.error('[SYNC] fbSyncItem error:', e); }
 }
@@ -1747,9 +1747,31 @@ async function fbSyncSale(sale) {
   if (!fbReady || !fbDb) return;
   try {
     const { doc, setDoc } = await waitForFbImports();
-    const fbId = 'sale_' + sale.date.replace(/[:.]/g, '-') + '_' + (sale.itemCode || '');
-    await setDoc(doc(fbDb, 'sales', fbId), { ...sale, fbId });
-  } catch (e) { console.error('fbSyncSale error', e); }
+    if (!sale.fbId) {
+      sale.fbId = 'sale_' + (sale.date || '').replace(/[:.TZ-]/g,'').slice(0,17) +
+                  '_' + Math.random().toString(36).slice(2,6);
+      if (sale.id) await dbPut('sales', sale); // persist fbId locally
+    }
+    await setDoc(doc(fbDb, 'sales', sale.fbId), sanitiseForFirestore({ ...sale }));
+  } catch (e) { console.error('[SYNC] fbSyncSale error:', e.message); }
+}
+
+
+// ── SANITISE FOR FIRESTORE ─────────────────────────────────────────────
+// Firestore rejects: undefined values, the numeric 'id' IDB key.
+// Convert undefined → null, drop the local 'id' field.
+function sanitiseForFirestore(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (k === 'id') continue;          // IDB auto-increment key — not needed in Firestore
+    if (v === undefined) { out[k] = null; continue; }
+    if (v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)) {
+      out[k] = sanitiseForFirestore(v); // recurse into nested objects
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
 }
 
 async function forcePushToFirebase(silent = false) {
@@ -1763,23 +1785,26 @@ async function forcePushToFirebase(silent = false) {
     let count = 0;
 
     for (const item of items) {
-      // Use stable fbId: prefer existing fbId, else generate from code + createdAt
       if (!item.fbId) {
-        // Stable ID: code + size — same item always maps to same Firestore doc
-        item.fbId = 'itm_' + (item.code || 'x').toLowerCase().replace(/[^a-z0-9]/g,'') + '_' + (item.size || 'ns').toLowerCase().replace(/[^a-z0-9]/g,'');
+        item.fbId = 'itm_' + (item.code || 'x').toLowerCase().replace(/[^a-z0-9]/g,'') +
+                    '_' + (item.size || 'ns').toLowerCase().replace(/[^a-z0-9]/g,'');
         await dbPut('items', item);
       }
-      batch.set(doc(fbDb, 'items', item.fbId), { ...item, updatedAt: new Date().toISOString() });
+      // Strip IDB-only key and sanitise for Firestore (no undefined values)
+      const itemData = sanitiseForFirestore({ ...item, updatedAt: new Date().toISOString() });
+      batch.set(doc(fbDb, 'items', item.fbId), itemData);
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
 
     for (const sale of sales) {
       if (!sale.fbId) {
-        sale.fbId = 'sale_' + (sale.date || '').replace(/[:.TZ-]/g,'').slice(0,17) + '_' + Math.random().toString(36).slice(2,6);
+        sale.fbId = 'sale_' + (sale.date || '').replace(/[:.TZ-]/g,'').slice(0,17) +
+                    '_' + Math.random().toString(36).slice(2,6);
         await dbPut('sales', sale);
       }
-      batch.set(doc(fbDb, 'sales', sale.fbId), { ...sale });
+      const saleData = sanitiseForFirestore({ ...sale });
+      batch.set(doc(fbDb, 'sales', sale.fbId), saleData);
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
@@ -1797,71 +1822,74 @@ async function forcePushToFirebase(silent = false) {
 async function pullFromFirebase(silent = false) {
   if (!fbReady || !fbDb) {
     if (!silent) toast('⚠️ Not connected to Firebase', 'err');
-    console.warn('[SYNC] pullFromFirebase called but not ready. fbReady=', fbReady, 'fbDb=', !!fbDb);
     return;
   }
   if (!silent) setFbStatus('syncing');
   try {
     const { collection, getDocs } = await waitForFbImports();
 
-    // Pull items
-    console.log('[SYNC] Pulling items from Firebase...');
+    // ── Items ─────────────────────────────────────────────────────
     const itemSnap = await getDocs(collection(fbDb, 'items'));
-    console.log('[SYNC] Firebase has', itemSnap.size, 'items');
-
+    // Load local items ONCE before the loop
+    let localItems = await dbAll('items');
     let itemsAdded = 0, itemsUpdated = 0;
+
     for (const d of itemSnap.docs) {
       const data = { ...d.data(), fbId: d.id };
-      // Remove numeric id from Firebase data to avoid IndexedDB key conflicts
-      delete data.id;
-      const all = await dbAll('items');
-      const existing = all.find(i => i.fbId === d.id || i.code === data.code);
+      delete data.id; // remove Firestore numeric key — IDB assigns its own
+      const existing = localItems.find(i => i.fbId === d.id || i.code === data.code);
       if (existing) {
         data.id = existing.id;
         await dbPut('items', data);
+        // Update local cache so subsequent finds are correct
+        const idx = localItems.findIndex(i => i.id === existing.id);
+        if (idx >= 0) localItems[idx] = data;
         itemsUpdated++;
       } else {
-        await dbAdd('items', data);
+        const newId = await dbAdd('items', data);
+        data.id = newId;
+        localItems.push(data);
         itemsAdded++;
       }
     }
-    console.log('[SYNC] Items: added=' + itemsAdded + ' updated=' + itemsUpdated);
+    console.log('[SYNC] Items pulled — added:', itemsAdded, 'updated:', itemsUpdated);
 
-    // Pull sales
-    console.log('[SYNC] Pulling sales from Firebase...');
+    // ── Sales ─────────────────────────────────────────────────────
     const saleSnap = await getDocs(collection(fbDb, 'sales'));
-    console.log('[SYNC] Firebase has', saleSnap.size, 'sales');
-
+    let localSales = await dbAll('sales');
     let salesAdded = 0, salesUpdated = 0;
+
     for (const d of saleSnap.docs) {
       const data = { ...d.data(), fbId: d.id };
       delete data.id;
-      const all = await dbAll('sales');
-      const existing = all.find(s => s.fbId === d.id);
+      const existing = localSales.find(s => s.fbId === d.id);
       if (existing) {
         data.id = existing.id;
         await dbPut('sales', data);
         salesUpdated++;
       } else {
-        await dbAdd('sales', data);
+        const newId = await dbAdd('sales', data);
+        data.id = newId;
+        localSales.push(data);
         salesAdded++;
       }
     }
-    console.log('[SYNC] Sales: added=' + salesAdded + ' updated=' + salesUpdated);
+    console.log('[SYNC] Sales pulled — added:', salesAdded, 'updated:', salesUpdated);
 
+    // ── Re-render ─────────────────────────────────────────────────
     allItems = await dbAll('items');
     renderList(); renderDashboard(); updateHeader();
     try { renderSellPage(); } catch(_) {}
     setFbStatus('on');
 
-    const msg = '⬇️ ' + itemSnap.size + ' items, ' + saleSnap.size + ' sales from Firebase';
-    if (!silent) toast(msg, 'ok');
-    else if (itemSnap.size > 0) toast(msg, 'ok');
-    console.log('[SYNC] Pull complete:', msg);
+    if (!silent || itemSnap.size > 0 || saleSnap.size > 0) {
+      if (!silent) toast('⬇️ Pulled ' + itemSnap.size + ' items, ' + saleSnap.size + ' sales', 'ok');
+    }
+
   } catch (e) {
     setFbStatus('error');
-    console.error('[SYNC] Pull error:', e);
-    if (!silent) toast('Pull failed: ' + e.message, 'err');
+    console.error('[SYNC] Pull error:', e.code || '', e.message, e);
+    if (!silent) toast('Pull failed: ' + (e.message || e), 'err');
   }
 }
 
@@ -1869,7 +1897,7 @@ function disconnectFirebase() {
   if (fbUnsub) { fbUnsub(); fbUnsub = null; }
   fbApp = null; fbDb = null; fbReady = false;
   localStorage.removeItem('fb_config');
-  document.getElementById('fb-config-input').value = '';
+  const cfgEl = document.getElementById('fb-config-input'); if (cfgEl) cfgEl.value = '';
   setFbStatus('off');
   toast('Firebase disconnected', '');
 }
@@ -3021,6 +3049,17 @@ let autoSyncTimer = null;
 let pendingSyncTimer = null;
 
 // Debounced sync — runs 2s after last change, avoids hammering Firebase
+// Retry sync when network comes back online
+window.addEventListener('online', () => {
+  if (fbReady && fbDb) {
+    console.log('[SYNC] Back online — syncing...');
+    scheduleSync();
+  } else if (!fbReady) {
+    // Try to reconnect Firebase if we lost it
+    initFirebase().catch(e => console.warn('[SYNC] Reconnect failed:', e.message));
+  }
+});
+
 function scheduleSync() {
   if (!navigator.onLine || !fbReady || !fbDb) return;
   clearTimeout(pendingSyncTimer);
