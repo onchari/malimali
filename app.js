@@ -811,6 +811,7 @@ async function selectExistingItem(itemId) {
   hideCodeDropdown();
   _codeDropdownActive = true;
 
+  // Fill identity fields
   document.getElementById('f-code').value = item.code;
   document.getElementById('f-name').value = item.name || '';
   document.getElementById('f-size').value = item.size || '';
@@ -819,35 +820,54 @@ async function selectExistingItem(itemId) {
   onTypeChange();
   document.getElementById('edit-id').value = 'restock_' + itemId;
 
-  // Restock banner
+  // ── Restock banner ───────────────────────────────────────────────
   let banner = document.getElementById('restock-mode-banner');
   if (!banner) {
     banner = document.createElement('div');
     banner.id = 'restock-mode-banner';
     banner.className = 'restock-banner';
-    const codeField = document.getElementById('f-code');
-    codeField.closest('.add-field').after(banner);
+    // Insert inside the add-section, before the pricing section
+    const addSection = document.querySelector('#page-add .add-section');
+    if (addSection) addSection.after(banner);
+    else document.getElementById('std-pricing-section').before(banner);
   }
+
   const sc = item.qty <= 0 ? 'var(--red)' : item.qty <= 3 ? '#d97706' : 'var(--green)';
+  const profit = item.sell - item.buy;
+  const margin = item.sell > 0 ? ((profit / item.sell) * 100).toFixed(0) : 0;
+
   banner.innerHTML =
-    '<i class="fa-solid fa-boxes-stacked" style="color:var(--accent);font-size:18px;"></i>' +
-    '<div style="flex:1;min-width:0;">' +
-      '<div style="font-size:13px;font-weight:800;color:var(--text);">Restock Mode</div>' +
-      '<div style="font-size:11px;color:var(--muted);line-height:1.7;">' +
-        '<span style="font-family:var(--mono);font-weight:700;color:var(--text);">' + item.code + '</span>' +
-        (item.name ? ' · ' + item.name : '') +
-        '<br>Stock now: <strong style="color:' + sc + ';">' + item.qty + '</strong>' +
-        ' · Buy: ' + fmt(item.buy) + ' · Sell: ' + fmt(item.sell) +
+    '<div style="width:100%;">' +
+      // Header row
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
+        '<i class="fa-solid fa-boxes-stacked" style="color:var(--accent);font-size:18px;flex-shrink:0;"></i>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:800;color:var(--text);">Restocking · ' + escapeHtml(item.code) + '</div>' +
+          '<div style="font-size:11px;color:var(--muted);">' + escapeHtml(item.name || '') + (item.size && item.size !== 'N/A' ? ' · Size ' + escapeHtml(item.size) : '') + '</div>' +
+        '</div>' +
+        '<button onclick="exitRestockMode()" class="restock-banner-exit" title="Cancel restock">✕</button>' +
       '</div>' +
-    '</div>' +
-    '<button onclick="exitRestockMode()" class="restock-banner-exit" title="Cancel">✕</button>';
+      // Stats row
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">' +
+        '<div class="restock-stat"><div class="restock-stat-val" style="color:' + sc + ';">' + item.qty + '</div><div class="restock-stat-lbl">In Stock</div></div>' +
+        '<div class="restock-stat"><div class="restock-stat-val">' + fmt(item.buy) + '</div><div class="restock-stat-lbl">Buy Price</div></div>' +
+        '<div class="restock-stat"><div class="restock-stat-val" style="color:var(--accent2);">' + fmt(item.sell) + '</div><div class="restock-stat-lbl">Sell Price</div></div>' +
+        '<div class="restock-stat"><div class="restock-stat-val" style="color:var(--green);">' + margin + '%</div><div class="restock-stat-lbl">Margin</div></div>' +
+      '</div>' +
+    '</div>';
   banner.style.display = 'flex';
 
+  // ── Field states ─────────────────────────────────────────────────
+  // Pre-fill prices (display only — taken from system on save)
   document.getElementById('f-buy').value  = item.buy  || '';
   document.getElementById('f-sell').value = item.sell || '';
-  document.getElementById('f-qty').value  = '';
 
-  // Gray out all fields EXCEPT qty — only qty is editable in restock mode
+  // IMPORTANT: Set qty value before the loop, and NEVER put f-qty in the
+  // disabled list — disabled inputs always return '' regardless of value
+  const qtyEl = document.getElementById('f-qty');
+  if (qtyEl) { qtyEl.value = ''; qtyEl.disabled = false; qtyEl.style.opacity = '1'; qtyEl.style.cursor = ''; }
+
+  // Gray out all identity + price fields — user only enters qty
   ['f-code','f-name','f-size','f-type','f-buy','f-sell'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -855,31 +875,28 @@ async function selectExistingItem(itemId) {
     el.style.opacity = '0.4';
     el.style.cursor  = 'not-allowed';
   });
-  // Also visually dim the buy/sell field wrappers
+  // Extra dim on buy/sell wrappers
   ['f-buy','f-sell'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.closest('.add-field')) el.closest('.add-field').style.opacity = '0.35';
   });
-  // f-qty stays enabled and fully visible — it is the only input
-  const qtyEl = document.getElementById('f-qty');
-  if (qtyEl) {
-    qtyEl.disabled = false;
-    qtyEl.style.opacity = '1';
-    qtyEl.style.cursor  = '';
-  }
-  // Hide profit pill (not relevant when restocking)
+
+  // Hide profit pill
   const pill = document.getElementById('profit-preview');
   if (pill) pill.style.display = 'none';
 
+  // Update label + buttons
   document.getElementById('save-btn').textContent = '📦 Add to Stock';
-  document.getElementById('form-mode-label').textContent = '📦 Restock · ' + item.code;
+  document.getElementById('form-mode-label').textContent = '📦 Restock';
   document.getElementById('cancel-edit-btn').style.display = 'block';
-  setTimeout(() => { if (qtyEl) qtyEl.focus(); }, 120);
+
+  // Focus qty last, after all DOM changes
+  setTimeout(() => { if (qtyEl) { qtyEl.focus(); qtyEl.select(); } }, 150);
 }
 
 function exitRestockMode() {
   _codeDropdownActive = false;
-  // Re-enable all grayed fields before clearing
+  // Re-enable all fields
   ['f-code','f-name','f-size','f-type','f-buy','f-sell','f-qty'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -887,7 +904,6 @@ function exitRestockMode() {
     el.style.opacity = '';
     el.style.cursor  = '';
   });
-  // Restore pricing section opacity
   ['f-buy','f-sell'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.closest('.add-field')) el.closest('.add-field').style.opacity = '';
@@ -902,36 +918,30 @@ function exitRestockMode() {
 // ===================================================================
 async function saveItem() {
   const editIdRaw = document.getElementById('edit-id').value;
-  const type      = document.getElementById('f-type').value;
-  const code      = sanitiseCode(document.getElementById('f-code').value);
-  const name      = document.getElementById('f-name').value.trim();
 
   if (!requireOpenDay()) return;
-  if (!type) { toast('⚠️ Select an item type', 'err'); return; }
-  if (!code) { toast('⚠️ Enter item code', 'err'); return; }
 
-  // ── RESTOCK MODE ─────────────────────────────────────────────────
+  // ── RESTOCK MODE — check FIRST, before reading any disabled fields ─
   if (editIdRaw && editIdRaw.startsWith('restock_')) {
-    const existing = await dbGet('items', parseInt(editIdRaw.replace('restock_', '')));
-    if (!existing) { toast('⚠️ Item no longer exists — it may have been deleted.', 'err'); exitRestockMode(); return; }
+    const itemId  = parseInt(editIdRaw.replace('restock_', ''));
+    // Always re-fetch — don't trust stale form field values
+    const existing = await dbGet('items', itemId);
+    if (!existing) { toast('⚠️ Item no longer exists.', 'err'); exitRestockMode(); return; }
 
-    const qtyRaw = document.getElementById('f-qty').value;
+    // f-qty is the ONLY field the user fills in restock mode
+    const qtyEl  = document.getElementById('f-qty');
+    const qtyRaw = qtyEl ? qtyEl.value.trim() : '';
     const addQty = parseInt(qtyRaw);
-    if (!qtyRaw || isNaN(addQty)) { toast('⚠️ Enter quantity to add', 'err'); return; }
-    if (addQty <= 0)               { toast('⚠️ Quantity must be at least 1', 'err'); return; }
-    if (addQty > CODE_MAX_QTY && !confirm('⚠️ Adding ' + addQty + ' units — is that correct?')) return;
+
+    if (!qtyRaw || isNaN(addQty)) { toast('⚠️ Enter quantity to add', 'err'); if (qtyEl) qtyEl.focus(); return; }
+    if (addQty <= 0)               { toast('⚠️ Quantity must be at least 1', 'err'); if (qtyEl) qtyEl.focus(); return; }
+    if (addQty > CODE_MAX_QTY && !confirm('⚠️ Adding ' + addQty + ' units — confirm?')) return;
 
     const newQty = existing.qty + addQty;
-    if (newQty > 999999)           { toast('⚠️ Stock would exceed maximum of 999,999 units', 'err'); return; }
-
-    // Always use system prices — buy/sell fields are disabled in restock mode
-    const buy  = existing.buy;
-    const sell = existing.sell;
+    if (newQty > 999999) { toast('⚠️ Exceeds maximum stock of 999,999 units', 'err'); return; }
 
     existing.qty       = newQty;
-    existing.buy       = buy;
-    existing.sell      = sell;
-    existing.profit    = sell - buy;
+    existing.profit    = existing.sell - existing.buy;
     existing.updatedAt = new Date().toISOString();
 
     await dbPut('items', existing);
@@ -941,7 +951,7 @@ async function saveItem() {
     if (activeDay) updateDayLiveStats();
     scheduleSync();
     exitRestockMode();
-    toast('📦 ' + existing.code + ' restocked → now ' + newQty + ' units.', 'ok');
+    toast('📦 ' + existing.code + ': ' + (newQty - addQty) + ' + ' + addQty + ' = ' + newQty + ' units', 'ok');
     return;
   }
 

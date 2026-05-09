@@ -1376,3 +1376,25 @@ body {
   flex-shrink: 0;
   font-family: var(--sans);
 }
+
+/* Restock banner stat boxes */
+.restock-stat {
+  background: var(--surface);
+  border-radius: var(--r);
+  padding: 6px 8px;
+  text-align: center;
+}
+.restock-stat-val {
+  font-size: 13px;
+  font-weight: 800;
+  font-family: var(--mono);
+  color: var(--text);
+}
+.restock-stat-lbl {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  margin-top: 2px;
+}
