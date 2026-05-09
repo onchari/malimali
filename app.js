@@ -78,8 +78,8 @@ function initDB() {
       if (!currentUser.tabs.includes(lastPage)) {
         // Role doesn't permit this tab
         allowedPage = currentUser.tabs[0];
-      } else if (!alwaysAllowed.includes(lastPage) && !dayOpen) {
-        // Page needs open day — redirect to day with notice
+      } else if (lastPage === 'dash' && !dayOpen) {
+        // Only dashboard needs open day for redirect — add stays as-is
         allowedPage = 'day';
         setTimeout(() => toast('📅 Open the business day to continue.', ''), 800);
       } else {
@@ -195,10 +195,9 @@ function getTypeObj(name) { return types.find(t => t.name === name) || { name, e
 
 // ===== PAGES =====
 // Pages that require OPEN day to access
-const DAY_REQUIRED_PAGES = ['dash', 'add'];
 
 // Pages that show a day-closed overlay instead of redirecting
-const DAY_GATED_PAGES = ['dash', 'add'];
+const DAY_GATED_PAGES = ['dash']; // Add page is always accessible — save button guards
 
 function showPage(id) {
   // Role restriction
@@ -2238,7 +2237,6 @@ function requireOpenDay() {
       LOCKED: '🔒 This is an archived day (read-only).',
     };
     toast(msgs[status] || '📅 Open the business day first.', 'err');
-    showPage('day');
     return false;
   }
   return true;
@@ -2460,13 +2458,15 @@ function cancelCloseDay() {
 
 // ── TAB MODE ─────────────────────────────────────────────────────────
 function setDayMode(isOpen) {
-  // Gray tabs visually when day closed — but ALL tabs remain tappable
-  // Blocking navigation is gone; actions inside each page are guarded instead
-  ['dash', 'add', 'list'].forEach(tab => {
+  // Gray dash and list when day closed; Add is always accessible
+  ['dash', 'list'].forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (!btn || btn.style.display === 'none') return;
     btn.classList.toggle('disabled', !isOpen);
   });
+  // Add tab never grayed — form is always accessible, save action is guarded
+  const addBtn = document.getElementById('tab-add');
+  if (addBtn) addBtn.classList.remove('disabled');
 
   // Show day-closed overlay on Add and Dash when day not open
   updateDayClosedOverlay(isOpen);
@@ -2481,7 +2481,7 @@ function updateDayClosedOverlay(isOpen) {
   if (!overlay) return;
   const activePage = document.querySelector('.page.active');
   const pageId = activePage ? activePage.id.replace('page-', '') : '';
-  overlay.style.display = (!isOpen && ['dash', 'add'].includes(pageId)) ? 'flex' : 'none';
+  overlay.style.display = (!isOpen && pageId === 'dash') ? 'flex' : 'none';
 }
 
 // ── DAY BANNER ───────────────────────────────────────────────────────
@@ -3260,7 +3260,7 @@ function attemptLogin() {
     let target;
     if (!user.tabs.includes(lastPage)) {
       target = user.tabs[0];
-    } else if (!alwaysAllowed.includes(lastPage) && !dayOpen) {
+    } else if (lastPage === 'dash' && !dayOpen) {
       target = 'day';
       setTimeout(() => toast('📅 Open the business day to continue.', ''), 600);
     } else {
