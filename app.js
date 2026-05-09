@@ -382,27 +382,221 @@ function clearAddFormPhoto() {
 }
 
 // ===== SAVE ITEM =====
+// ===================================================================
+// SHOE SIZE SELECTION
+// When type is footwear, replace single size field with interactive
+// S/M/L group picker → individual size buttons → per-size qty+price
+// Each selected size saves as a separate inventory item.
+// ===================================================================
+
+// Default size group ranges (customisable via Settings in future)
+function getShoeGroups() {
+  const saved = localStorage.getItem('mgs_shoe_groups');
+  return saved ? JSON.parse(saved) : { S:{min:20,max:28}, M:{min:29,max:36}, L:{min:37,max:45} };
+}
+
+function isFootwearType(typeName) {
+  return typeName && (typeName.toLowerCase().includes('shoe') ||
+                      typeName.toLowerCase().includes('footwear') ||
+                      typeName.toLowerCase().includes('sandal') ||
+                      typeName.toLowerCase().includes('boot'));
+}
+
+// Called when type selector changes
+function onTypeChange() {
+  const type = document.getElementById('f-type').value;
+  const shoePanel    = document.getElementById('shoe-size-panel');
+  const stdPricing   = document.getElementById('std-pricing-section');
+  const sizeField    = document.getElementById('f-size-field');
+  const isShoe = isFootwearType(type);
+
+  shoePanel.style.display  = isShoe ? 'block' : 'none';
+  stdPricing.style.display = isShoe ? 'none'  : 'block';
+  sizeField.style.display  = isShoe ? 'none'  : 'block';
+
+  if (isShoe) {
+    _shoeGroup   = null;
+    _shoeSizes   = new Set();
+    _shoeData    = {};
+    renderShoeGroups();
+    document.getElementById('shoe-sizes-grid').style.display  = 'none';
+    document.getElementById('shoe-rows-wrap').style.display   = 'none';
+  }
+}
+
+let _shoeGroup = null;       // 'S' | 'M' | 'L'
+let _shoeSizes = new Set();  // Set of selected size numbers
+let _shoeData  = {};         // { size: { qty, buy, sell } }
+
+function renderShoeGroups() {
+  const groups = getShoeGroups();
+  ['S','M','L'].forEach(g => {
+    const rng = document.getElementById('sg-range-' + g);
+    if (rng) rng.textContent = groups[g].min + '–' + groups[g].max;
+    const btn = document.querySelector(`.sg-btn[onclick="selectSizeGroup('${g}')"]`);
+    if (btn) btn.classList.toggle('sg-active', _shoeGroup === g);
+  });
+}
+
+function selectSizeGroup(g) {
+  _shoeGroup = g;
+  _shoeSizes.clear();
+  renderShoeGroups();
+
+  const groups = getShoeGroups();
+  const { min, max } = groups[g];
+  const sizes = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+
+  const grid = document.getElementById('sz-grid');
+  grid.innerHTML = sizes.map(s =>
+    `<button type="button" class="sz-btn" id="sz-${s}" onclick="toggleShoeSize(${s})">${s}</button>`
+  ).join('');
+  document.getElementById('shoe-sizes-grid').style.display = 'block';
+  document.getElementById('shoe-rows-wrap').style.display  = 'none';
+}
+
+function toggleShoeSize(s) {
+  if (_shoeSizes.has(s)) {
+    _shoeSizes.delete(s);
+    delete _shoeData[s];
+  } else {
+    _shoeSizes.add(s);
+    if (!_shoeData[s]) _shoeData[s] = { qty: '', buy: '', sell: '' };
+  }
+  // Update button active state
+  document.querySelectorAll('.sz-btn').forEach(b => {
+    const sz = parseInt(b.textContent);
+    b.classList.toggle('sz-active', _shoeSizes.has(sz));
+  });
+  renderShoeRows();
+}
+
+function saveShoeFieldData() {
+  // Persist current input values into _shoeData before re-rendering
+  _shoeSizes.forEach(s => {
+    const qEl = document.getElementById('shr-qty-' + s);
+    const bEl = document.getElementById('shr-buy-' + s);
+    const vEl = document.getElementById('shr-sell-' + s);
+    if (qEl) _shoeData[s].qty  = qEl.value;
+    if (bEl) _shoeData[s].buy  = bEl.value;
+    if (vEl) _shoeData[s].sell = vEl.value;
+  });
+}
+
+function renderShoeRows() {
+  const wrap = document.getElementById('shoe-rows-wrap');
+  const rows = document.getElementById('shoe-rows');
+  if (!rows) return;
+
+  if (_shoeSizes.size === 0) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+
+  const sorted = [..._shoeSizes].sort((a, b) => a - b);
+  rows.innerHTML = sorted.map(s => {
+    const d = _shoeData[s] || { qty:'', buy:'', sell:'' };
+    return `<div class="shoe-row">
+      <span class="shoe-sz-lbl">${s}</span>
+      <input type="number" class="shoe-cell" id="shr-qty-${s}"
+             value="${d.qty}" min="0" inputmode="numeric" placeholder="0">
+      <input type="number" class="shoe-cell" id="shr-buy-${s}"
+             value="${d.buy}" min="0" inputmode="decimal" placeholder="0">
+      <input type="number" class="shoe-cell" id="shr-sell-${s}"
+             value="${d.sell}" min="0" inputmode="decimal" placeholder="0">
+    </div>`;
+  }).join('');
+}
+
+// Save one item per selected shoe size
+async function saveShoeItems(baseCode, baseName, type) {
+  if (!_shoeGroup)          { toast('⚠️ Select a size group (S/M/L)', 'err'); return false; }
+  if (_shoeSizes.size === 0){ toast('⚠️ Select at least one size', 'err'); return false; }
+
+  saveShoeFieldData();
+  const sorted = [..._shoeSizes].sort((a, b) => a - b);
+  let savedCount = 0;
+  const errors = [];
+
+  for (const size of sorted) {
+    const d    = _shoeData[size] || {};
+    const qty  = parseInt(d.qty)   || 0;
+    const buy  = parseFloat(d.buy) || 0;
+    const sell = parseFloat(d.sell)|| 0;
+
+    if (qty === 0 && sell === 0) continue; // skip empty rows
+
+    const item = {
+      type,
+      code: baseCode + '-' + size,
+      name: baseName || type + ' ' + baseCode,
+      size: String(size),
+      sizeGroup: _shoeGroup,
+      qty, buy, sell,
+      profit: sell - buy,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      const newId = await dbAdd('items', item);
+      item.id = newId;
+      if (_addFormPhotoData) setItemPhoto(newId, _addFormPhotoData);
+      fbSyncItem(item);
+      savedCount++;
+    } catch(e) {
+      errors.push('Size ' + size + ': ' + e.message);
+    }
+  }
+
+  if (savedCount === 0) { toast('⚠️ Enter qty or price for at least one size', 'err'); return false; }
+  if (errors.length)    toast('⚠️ ' + errors.join(', '), 'err');
+
+  return savedCount;
+}
+
+// ===================================================================
+// SAVE ITEM — handles both regular and shoe/footwear items
+// ===================================================================
 async function saveItem() {
   const editId = document.getElementById('edit-id').value;
-  const type = document.getElementById('f-type').value;
-  const code = document.getElementById('f-code').value.trim().toUpperCase();
-  const size = document.getElementById('f-size').value.trim();
-  const name = document.getElementById('f-name').value.trim() || (type + ' ' + code);
-  const qtyRaw = document.getElementById('f-qty').value;
-  const qty = parseInt(qtyRaw);
-  const buy = parseFloat(document.getElementById('f-buy').value) || 0;
-  const sell = parseFloat(document.getElementById('f-sell').value) || 0;
+  const type   = document.getElementById('f-type').value;
+  const code   = document.getElementById('f-code').value.trim().toUpperCase();
+  const name   = document.getElementById('f-name').value.trim();
 
   if (!requireOpenDay()) return;
-  if (!type)  { toast('⚠️ Select an item type', 'err'); return; }
-  if (!code)  { toast('⚠️ Enter item code', 'err'); return; }
-  if (!size)  { toast('⚠️ Enter a size (or type N/A)', 'err'); return; }
+  if (!type) { toast('⚠️ Select an item type', 'err'); return; }
+  if (!code) { toast('⚠️ Enter item code', 'err'); return; }
+
+  // ── SHOE MODE ────────────────────────────────────────────────────
+  if (isFootwearType(type) && !editId) {
+    const savedCount = await saveShoeItems(code, name, type);
+    if (!savedCount) return;
+    clearForm();
+    clearAddFormPhoto();
+    allItems = await dbAll('items');
+    renderList();
+    renderDashboard();
+    updateHeader();
+    scheduleSync();
+    toast('✅ ' + savedCount + ' shoe size(s) added!', 'ok');
+    if (activeDay) updateDayLiveStats();
+    return;
+  }
+
+  // ── STANDARD MODE ────────────────────────────────────────────────
+  const size   = document.getElementById('f-size').value.trim();
+  const qtyRaw = document.getElementById('f-qty').value;
+  const qty    = parseInt(qtyRaw);
+  const buy    = parseFloat(document.getElementById('f-buy').value) || 0;
+  const sell   = parseFloat(document.getElementById('f-sell').value) || 0;
+
+  if (!size)   { toast('⚠️ Enter a size (or type N/A)', 'err'); return; }
   if (qtyRaw === '' || isNaN(qty) || qty < 0) { toast('⚠️ Enter quantity stocked', 'err'); return; }
   if (buy <= 0)  { toast('⚠️ Enter buying price', 'err'); return; }
   if (sell <= 0) { toast('⚠️ Enter selling price', 'err'); return; }
 
   const profit = sell - buy;
-  const item = { type, code, name, size, buy, sell, profit, qty, createdAt: new Date().toISOString() };
+  const itemName = name || (type + ' ' + code);
+  const item = { type, code, name: itemName, size, buy, sell, profit, qty, createdAt: new Date().toISOString() };
 
   try {
     if (editId) {
@@ -412,25 +606,20 @@ async function saveItem() {
       toast('✅ Item updated!', 'ok');
       clearForm();
       allItems = await dbAll('items');
-      renderList();
-      renderDashboard();
-      updateHeader();
+      renderList(); renderDashboard(); updateHeader();
       showPage('list');
     } else {
       const newId = await dbAdd('items', item);
       item.id = newId;
-      // Save photo if one was selected
-      if (_addFormPhotoData) { setItemPhoto(newId, _addFormPhotoData); }
+      if (_addFormPhotoData) setItemPhoto(newId, _addFormPhotoData);
       fbSyncItem(item);
-      clearForm();
-      clearAddFormPhoto();
+      clearForm(); clearAddFormPhoto();
       allItems = await dbAll('items');
-      renderList();
-      renderDashboard();
-      updateHeader();
-      showSplash(name, sell, profit);
+      renderList(); renderDashboard(); updateHeader();
+      showSplash(itemName, sell, profit);
       if (activeDay) updateDayLiveStats();
     }
+    scheduleSync();
   } catch (e) {
     if (e.name === 'ConstraintError') toast('Code "' + code + '" already exists!', 'err');
     else toast('Error saving: ' + e.message, 'err');
@@ -438,18 +627,26 @@ async function saveItem() {
 }
 
 function clearForm() {
-  document.getElementById('edit-id').value = '';
-  document.getElementById('f-type').value = '';
-  document.getElementById('f-code').value = '';
-  document.getElementById('f-name').value = '';
-  document.getElementById('f-size').value = '';
-  document.getElementById('f-qty').value = '';
-  document.getElementById('f-buy').value = '';
-  document.getElementById('f-sell').value = '';
+  document.getElementById('edit-id').value   = '';
+  document.getElementById('f-type').value    = '';
+  document.getElementById('f-code').value    = '';
+  document.getElementById('f-name').value    = '';
+  document.getElementById('f-size').value    = '';
+  document.getElementById('f-qty').value     = '';
+  document.getElementById('f-buy').value     = '';
+  document.getElementById('f-sell').value    = '';
   document.getElementById('profit-preview').style.display = 'none';
   document.getElementById('save-btn').textContent = '+ Add to Inventory';
-  document.getElementById('form-mode-label').textContent = 'New Item';
+  document.getElementById('form-mode-label').textContent  = 'New Item';
   document.getElementById('cancel-edit-btn').style.display = 'none';
+  // Reset shoe state
+  _shoeGroup = null; _shoeSizes.clear(); _shoeData = {};
+  const shoePanel  = document.getElementById('shoe-size-panel');
+  const stdPricing = document.getElementById('std-pricing-section');
+  const sizeField  = document.getElementById('f-size-field');
+  if (shoePanel)  shoePanel.style.display  = 'none';
+  if (stdPricing) stdPricing.style.display = 'block';
+  if (sizeField)  sizeField.style.display  = 'block';
 }
 
 function cancelEdit() { clearForm(); clearAddFormPhoto(); showPage('list'); }

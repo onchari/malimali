@@ -1140,3 +1140,142 @@ body {
   color: var(--text);
   outline: none;
 }
+
+/* ================================================================
+   ADD FORM — Stock & Pricing: compact 3-column grid
+   ================================================================ */
+.add-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.add-center {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 700;
+}
+/* Remove old oversized num input */
+.add-num { font-size: 15px !important; padding: 12px 14px !important; text-align: left !important; }
+/* Remove currency prefix layout (no longer used) */
+.add-price-wrap { display: block !important; }
+.add-price-cur  { display: none !important; }
+.add-price-input { width: 100%; border: 1.5px solid var(--border); border-radius: var(--r);
+  padding: 12px 14px; font-size: 15px; font-weight: 700; font-family: var(--mono);
+  color: var(--text); background: var(--bg); outline: none; box-sizing: border-box; }
+.add-price-input:focus { border-color: var(--accent); }
+
+/* ================================================================
+   SHOE SIZE SELECTION UI
+   ================================================================ */
+
+/* S / M / L group buttons */
+.sg-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.sg-btn {
+  padding: 14px 8px 10px;
+  border: 2px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface2);
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--text2);
+  line-height: 1;
+  transition: all .15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.sg-btn.sg-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.sg-range {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--mono);
+  opacity: .75;
+}
+
+/* Individual size number buttons */
+.sz-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 6px;
+}
+.sz-btn {
+  width: 46px;
+  height: 46px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface2);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--text2);
+  cursor: pointer;
+  transition: all .12s;
+}
+.sz-btn.sz-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* Per-size entry rows */
+.shoe-row-hdr {
+  display: grid;
+  grid-template-columns: 44px 1fr 1fr 1fr;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r) var(--r) 0 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+}
+.shoe-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 1fr 1fr;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-top: none;
+  align-items: center;
+  background: var(--surface);
+}
+.shoe-row:last-child { border-radius: 0 0 var(--r) var(--r); }
+.shoe-sz-lbl {
+  font-size: 16px;
+  font-weight: 900;
+  font-family: var(--mono);
+  color: var(--accent);
+  text-align: center;
+}
+.shoe-cell {
+  width: 100%;
+  padding: 9px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--text);
+  background: var(--bg);
+  outline: none;
+  box-sizing: border-box;
+  text-align: center;
+}
+.shoe-cell:focus { border-color: var(--accent); background: white; }
