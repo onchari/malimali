@@ -61,24 +61,32 @@ function initDB() {
       renderSellPage();
       updateLowStockBadge();
 
-      // 3. Restore last visited page (or go to day if day not open)
+      // 3. Restore last visited page exactly as it was before refresh
       const lastPage = localStorage.getItem('mg_last_page') || 'dash';
-      const today = todayDateStr();
 
-      // Check if day needs opening
-      const bday = await getBusinessDay(today);
+      // Check day state for access control only
+      const bday = await getBusinessDay(todayDateStr());
       const dayOpen = bday && bday.status === 'OPEN';
 
-      if (!dayOpen && lastPage !== 'day' && lastPage !== 'settings') {
-        // Show a gentle reminder but stay on last page
-        setTimeout(() => toast('⚠️ Business day not open yet', ''), 1000);
+      // Determine which page to restore:
+      // - Always allow: list, day, settings, sell
+      // - Only allow if day open: dash, add
+      // - If role doesn't allow the page: fall back to first allowed tab
+      const alwaysAllowed = ['list', 'day', 'settings', 'sell'];
+      let allowedPage;
+
+      if (!currentUser.tabs.includes(lastPage)) {
+        // Role doesn't permit this tab
+        allowedPage = currentUser.tabs[0];
+      } else if (!alwaysAllowed.includes(lastPage) && !dayOpen) {
+        // Page needs open day — redirect to day with notice
+        allowedPage = 'day';
+        setTimeout(() => toast('📅 Open the business day to continue.', ''), 800);
+      } else {
+        // All good — restore exactly where user was
+        allowedPage = lastPage;
       }
 
-      // Restore last page — respect both role and day-state restrictions
-      let allowedPage = currentUser && currentUser.tabs.includes(lastPage) ? lastPage : currentUser.tabs[0];
-      if (DAY_REQUIRED_PAGES.includes(allowedPage) && !dayOpen) {
-        allowedPage = 'day'; // redirect to day if page needs open day
-      }
       _doShowPage(allowedPage);
     });
   };
@@ -2971,19 +2979,22 @@ function attemptLogin() {
     pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + user.name;
   }
 
-  // Go to day page if day not open, otherwise last visited page
-  const lastPage = localStorage.getItem('mg_last_page') || 'dash';
-  const allowedPage = user.tabs.includes(lastPage) ? lastPage : user.tabs[0];
+  // Restore last visited page with same rules as refresh
+  const lastPage = localStorage.getItem('mg_last_page') || 'day';
+  const alwaysAllowed = ['list', 'day', 'settings', 'sell'];
 
-  // Check day status
   getBusinessDay(todayDateStr()).then(bday => {
     const dayOpen = bday && bday.status === 'OPEN';
-    if (!dayOpen && user.tabs.includes('day')) {
-      _doShowPage('day');
-      setTimeout(() => toast('⚠️ Please open the business day first.', ''), 500);
+    let target;
+    if (!user.tabs.includes(lastPage)) {
+      target = user.tabs[0];
+    } else if (!alwaysAllowed.includes(lastPage) && !dayOpen) {
+      target = 'day';
+      setTimeout(() => toast('📅 Open the business day to continue.', ''), 600);
     } else {
-      _doShowPage(allowedPage);
+      target = lastPage;
     }
+    _doShowPage(target);
   });
   toast('Welcome, ' + user.name + '! 👋', 'ok');
 }
