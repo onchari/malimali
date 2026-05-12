@@ -2463,6 +2463,7 @@ let deferredInstallPrompt = null;
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').then(reg => {
     swRegistration = reg;
+
     // Listen for messages from SW (background sync trigger)
     navigator.serviceWorker.addEventListener('message', e => {
       if (e.data && e.data.type === 'BACKGROUND_SYNC') {
@@ -2471,16 +2472,36 @@ if ('serviceWorker' in navigator) {
         }
       }
     });
-    // Check for SW updates
+
+    // Auto-activate new SW and reload as soon as it installs
     reg.addEventListener('updatefound', () => {
       const newWorker = reg.installing;
       newWorker.addEventListener('statechange', () => {
-        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-          toast('🔄 App updated — reload to get latest version', '');
+        if (newWorker.state === 'installed') {
+          if (navigator.serviceWorker.controller) {
+            // New version ready — skip waiting and reload
+            newWorker.postMessage({ type: 'SKIP_WAITING' });
+          }
+        }
+        if (newWorker.state === 'activated') {
+          // Fresh SW is active — reload to get new files
+          window.location.reload();
         }
       });
     });
+
+    // Also handle case where SW already waiting (e.g. user had old tab open)
+    if (reg.waiting) {
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+
   }).catch(() => {});
+
+  // Reload when a new SW takes control (after skipWaiting)
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) { refreshing = true; window.location.reload(); }
+  });
 }
 
 // Register background sync when going offline
