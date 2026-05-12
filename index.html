@@ -378,98 +378,157 @@
   <!-- ── SECTION 1: Identity ──────────────────────────────────── -->
   <div class="add-section">
 
-    <!-- Type selector full-width -->
+    <!-- Type selector -->
     <div class="add-field">
       <label class="add-label">Category <span class="add-required">*</span></label>
-      <select class="add-select" id="f-type">
+      <select class="add-select" id="f-type" onchange="onTypeChange()">
         <option value="">Choose a type…</option>
       </select>
     </div>
 
-    <!-- Code + Size side by side -->
+    <!-- Code + Name -->
     <div class="add-row-2">
-      <div class="add-field">
+      <div class="add-field" style="position:relative;">
         <label class="add-label">Code <span class="add-required">*</span></label>
         <input class="add-input add-mono" id="f-code" type="text"
                placeholder="e.g. SH001"
                autocomplete="off" spellcheck="false"
-               oninput="this.value=this.value.toUpperCase()">
+               oninput="onCodeInput()"
+               onblur="setTimeout(hideCodeDropdown,200)">
       </div>
       <div class="add-field">
-        <label class="add-label">Size / Variant</label>
-        <input class="add-input" id="f-size" type="text"
-               placeholder="e.g. 42 · L · 250ml"
+        <label class="add-label">Name</label>
+        <input class="add-input" id="f-name" type="text"
+               placeholder="e.g. School Shoes"
                autocomplete="off" spellcheck="false">
       </div>
     </div>
 
-    <!-- Name full-width -->
-    <div class="add-field">
-      <label class="add-label">Name <span class="add-hint">(optional)</span></label>
-      <input class="add-input" id="f-name" type="text"
-             placeholder="e.g. Nike Air Max · Omo Washing Powder"
+    <!-- Size/Variant — hidden for shoes -->
+    <div class="add-field" id="f-size-field">
+      <label class="add-label">Size / Variant</label>
+      <input class="add-input" id="f-size" type="text"
+             placeholder="e.g. 250ml · L · N/A"
              autocomplete="off" spellcheck="false">
     </div>
 
   </div>
 
-  <!-- ── SECTION 2: Stock & Pricing ──────────────────────────── -->
-  <div class="add-section-title">Stock &amp; Pricing</div>
-  <div class="add-section">
+  <!-- ══ SHOE SIZE PANEL — shown when type is footwear ═══════════ -->
+  <div id="shoe-size-panel" style="display:none;">
 
-    <!-- Qty full-width, large number input -->
-    <div class="add-field">
-      <label class="add-label">Quantity in Stock <span class="add-required">*</span></label>
-      <input class="add-input add-num" id="f-qty" type="number"
-             placeholder="0"
-             min="0" inputmode="numeric"
-             oninput="updateProfitPreview()">
+    <div class="add-section-title">Shoe Sizes <span class="add-required">*</span></div>
+    <div class="add-section" style="padding-bottom:8px;">
+
+      <!-- Step 1: Size Group -->
+      <div class="add-field" style="margin-bottom:4px;">
+        <label class="add-label">Size Group</label>
+        <div class="sg-row">
+          <button type="button" class="sg-btn" id="sg-btn-S" onclick="selectSizeGroup('S')">
+            S<span class="sg-range" id="sg-range-S">20–28</span>
+            <span class="sg-group-label">Children</span>
+          </button>
+          <button type="button" class="sg-btn" id="sg-btn-M" onclick="selectSizeGroup('M')">
+            M<span class="sg-range" id="sg-range-M">29–36</span>
+            <span class="sg-group-label">Teens</span>
+          </button>
+          <button type="button" class="sg-btn" id="sg-btn-L" onclick="selectSizeGroup('L')">
+            L<span class="sg-range" id="sg-range-L">37–45</span>
+            <span class="sg-group-label">Adults</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 2: Individual sizes -->
+      <div id="shoe-sizes-grid" style="display:none;">
+        <label class="add-label" style="margin-bottom:8px;">Select Sizes</label>
+        <div class="sz-grid" id="sz-grid"></div>
+      </div>
+
+      <!-- Step 3: Pricing mode toggle + fields -->
+      <div id="shoe-rows-wrap" style="display:none;margin-top:14px;">
+
+        <!-- Info + per-size toggle -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div class="shoe-shared-lbl" style="flex:1;margin-bottom:0;">
+            <i class="fa-solid fa-circle-info" style="color:var(--accent);margin-right:5px;"></i>
+            Applies to all selected sizes
+          </div>
+          <button type="button" id="per-size-toggle" onclick="togglePerSizeMode()"
+                  style="font-size:11px;padding:5px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;font-family:var(--sans);font-weight:700;color:var(--text2);margin-left:8px;white-space:nowrap;">
+            🎯 Per-Size Price
+          </button>
+        </div>
+
+        <!-- Shared Qty/Buy/Sell -->
+        <div id="shoe-shared-wrap">
+          <div class="add-row-3">
+            <div class="add-field">
+              <label class="add-label">Qty/Size <span class="add-required">*</span></label>
+              <input class="add-input add-center" id="shoe-shared-qty"
+                     type="number" min="0" inputmode="numeric" placeholder="0">
+            </div>
+            <div class="add-field">
+              <label class="add-label">Buy Price <span class="add-required">*</span></label>
+              <input class="add-input add-center" id="shoe-shared-buy"
+                     type="number" min="0" inputmode="decimal" placeholder="0">
+            </div>
+            <div class="add-field">
+              <label class="add-label">Sell Price <span class="add-required">*</span></label>
+              <input class="add-input add-center" id="shoe-shared-sell"
+                     type="number" min="0" inputmode="decimal" placeholder="0">
+            </div>
+          </div>
+        </div>
+
+        <!-- Per-size rows (hidden until toggled) -->
+        <div id="shoe-per-size-wrap" style="display:none;">
+          <div class="shoe-row-hdr">
+            <span>Size</span><span>Qty</span><span>Buy</span><span>Sell</span>
+          </div>
+          <div id="shoe-rows"></div>
+        </div>
+
+        <!-- Selected sizes summary -->
+        <div id="shoe-selected-summary"></div>
+
+      </div>
     </div>
+  </div>
 
-    <!-- Buy + Sell side by side with currency prefix -->
-    <div class="add-row-2">
-      <div class="add-field">
-        <label class="add-label">Buying Price <span class="add-required">*</span></label>
-        <div class="add-price-wrap">
-          <span class="add-price-cur" id="bp-cur">KES</span>
-          <input class="add-price-input" id="f-buy" type="number"
-                 placeholder="0"
-                 min="0" inputmode="decimal"
+  <!-- ── SECTION 2: Stock & Pricing (hidden for shoes) ─────────── -->
+  <div id="std-pricing-section">
+    <div class="add-section-title">Stock &amp; Pricing</div>
+    <div class="add-section">
+      <div class="add-row-3">
+        <div class="add-field">
+          <label class="add-label">Qty <span class="add-required">*</span></label>
+          <input class="add-input add-center add-mono" id="f-qty" type="number"
+                 placeholder="0" min="0" inputmode="numeric"
+                 oninput="updateProfitPreview()">
+        </div>
+        <div class="add-field">
+          <label class="add-label">Buy Price <span class="add-required">*</span></label>
+          <input class="add-input add-center" id="f-buy" type="number"
+                 placeholder="0" min="0" inputmode="decimal"
+                 oninput="updateProfitPreview()">
+        </div>
+        <div class="add-field">
+          <label class="add-label">Sell Price <span class="add-required">*</span></label>
+          <input class="add-input add-center" id="f-sell" type="number"
+                 placeholder="0" min="0" inputmode="decimal"
                  oninput="updateProfitPreview()">
         </div>
       </div>
-      <div class="add-field">
-        <label class="add-label">Selling Price <span class="add-required">*</span></label>
-        <div class="add-price-wrap">
-          <span class="add-price-cur" id="sp-cur">KES</span>
-          <input class="add-price-input" id="f-sell" type="number"
-                 placeholder="0"
-                 min="0" inputmode="decimal"
-                 oninput="updateProfitPreview()">
-        </div>
+      <div class="add-profit-pill" id="profit-preview" style="display:none;">
+        <div class="app-pill-row"><span class="app-pill-label">Profit / item</span><span class="app-pill-val" id="pp-profit"></span></div>
+        <div class="app-pill-row"><span class="app-pill-label">Margin</span><span class="app-pill-val" id="pp-margin"></span></div>
+        <div class="app-pill-row" id="pp-total-row" style="display:none;"><span class="app-pill-label">Total profit</span><span class="app-pill-val" id="pp-total"></span></div>
+        <span id="pp-buy" style="display:none;"></span>
+        <span id="pp-sell" style="display:none;"></span>
+        <span id="pp-qty-lbl" style="display:none;"></span>
       </div>
     </div>
-
-    <!-- Live profit pill — compact, appears once prices are entered -->
-    <div class="add-profit-pill" id="profit-preview" style="display:none;">
-      <div class="app-pill-row">
-        <span class="app-pill-label">Profit / item</span>
-        <span class="app-pill-val" id="pp-profit"></span>
-      </div>
-      <div class="app-pill-row">
-        <span class="app-pill-label">Margin</span>
-        <span class="app-pill-val" id="pp-margin"></span>
-      </div>
-      <div class="app-pill-row" id="pp-total-row" style="display:none;">
-        <span class="app-pill-label">Total profit (all stock)</span>
-        <span class="app-pill-val" id="pp-total"></span>
-      </div>
-      <!-- Hidden IDs kept for compatibility with updateProfitPreview() -->
-      <span id="pp-buy"    style="display:none;"></span>
-      <span id="pp-sell"   style="display:none;"></span>
-      <span id="pp-qty-lbl" style="display:none;"></span>
-    </div>
-
   </div>
 
   <!-- ── SECTION 3: Photo ─────────────────────────────────────── -->
@@ -1149,6 +1208,7 @@
 
     </div><!-- /info-panel -->
   </div>
+  <div id="sh-shoe-sizes" style="display:none;margin-top:12px;"></div>
 </div><!-- /detail-sheet -->
 
 
@@ -1887,6 +1947,7 @@
 
     </div><!-- /info-panel -->
   </div>
+  <div id="sh-shoe-sizes" style="display:none;margin-top:12px;"></div>
 </div><!-- /detail-sheet -->
 
 
@@ -2279,6 +2340,13 @@
   </div>
 </div>
 
+
+<!-- SHEET: SHOE SIZE PICKER -->
+<div class="sheet-overlay" id="shoe-picker-sheet">
+  <div class="sheet" id="shoe-size-picker">
+    <div class="sheet-handle"></div>
+  </div>
+</div>
 
 </body>
 </html>

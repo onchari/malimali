@@ -1,7 +1,7 @@
 // ===== DB =====
 let db;
 const DB_NAME = 'InventoryApp';
-const DB_VER  = 6;
+const DB_VER  = 7;
 
 // ── APP CONSTANTS ────────────────────────────────────────────────────
 const KEY_SESSION     = 'mg_session';     // localStorage key for auth session
@@ -29,7 +29,13 @@ function initDB() {
       ss.createIndex('itemId', 'itemId', { unique: false });
       ss.createIndex('date', 'date', { unique: false });
     }
-    if (!d.objectStoreNames.contains('day_sessions')) {
+    if (!d.objectStoreNames.contains('shoe_sizes')) {
+      const ss = d.createObjectStore('shoe_sizes', { keyPath: 'id', autoIncrement: true });
+      ss.createIndex('itemCode',  'itemCode',  { unique: false });
+      ss.createIndex('codeSize',  'codeSize',  { unique: true });  // code+size compound key
+      ss.createIndex('sizeGroup', 'sizeGroup', { unique: false });
+    }
+        if (!d.objectStoreNames.contains('day_sessions')) {
       d.createObjectStore('day_sessions', { keyPath: 'id', autoIncrement: true });
     }
     if (!d.objectStoreNames.contains('business_days')) {
@@ -522,7 +528,11 @@ async function renderList() {
     const stockLabel = item.qty === 0 ? '✕ Out' : item.qty + ' pcs';
     const itemSales = salesByItem[item.id] || { profit: 0, qty: 0 };
     const soldQty = itemSales.qty;
-    return `<div class="item-card" data-item-id="${item.id}" onclick="openSheet(${item.id})">
+    // For shoe items, show size summary chips
+  const shoeSizeChips = item.isShoe && item._sizeSummary
+    ? '<div class="shoe-sizes-badge">' + item._sizeSummary + '</div>'
+    : '';
+  return `<div class="item-card" data-item-id="${item.id}" onclick="openSheet(${item.id})">
       <div class="item-top">
         <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
         <div class="item-body">
@@ -668,6 +678,34 @@ async function openSheet(id) {
   set('sh-profit-made', fmt(profitMade));
 
   document.getElementById('detail-sheet').classList.add('open');
+  // If this is a shoe item, load and display size breakdown
+  if (item.isShoe) {
+    getShoeSizes(item.code).then(sizes => {
+      const sizeSection = document.getElementById('sh-shoe-sizes');
+      if (!sizeSection) return;
+      if (!sizes.length) { sizeSection.style.display = 'none'; return; }
+      sizeSection.style.display = 'block';
+      const totalQty = sizes.reduce((t,s) => t + s.qty, 0);
+      sizeSection.innerHTML =
+        '<div class="sh-section-title">Sizes &amp; Stock</div>' +
+        '<div class="sh-sizes-grid">' +
+        sizes.map(s => {
+          const sc = s.qty <= 0 ? 'out' : s.qty <= LOW_STOCK_LEVEL ? 'low' : '';
+          return '<div class="sh-size-row' + (sc ? ' ' + sc : '') + '">' +
+            '<span class="sh-size-num">' + s.size + '</span>' +
+            '<div class="sh-size-meta">' +
+              '<span class="sh-size-qty">' + s.qty + ' pairs</span>' +
+              '<span class="sh-size-price">' + fmt(s.sellPrice || item.defaultSell || 0) + '</span>' +
+            '</div>' +
+            '<div class="sh-size-actions">' +
+              (isDayOpen() ? '<button onclick="openSellShoeModal(' + item.id + ',' + s.size + ')" class="sh-sell-size-btn">Sell</button>' : '') +
+            '</div>' +
+          '</div>';
+        }).join('') +
+        '</div>';
+    });
+  }
+
 
   // Show/hide action buttons based on day state
   const dayOpen = isDayOpen();
@@ -723,6 +761,7 @@ async function deleteItem() {
   if (toDelete.fbId) fbDeleteItem(toDelete.fbId);
   closeSheet();
   allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
   renderList();
   renderDashboard();
   renderSummary();
@@ -1117,7 +1156,18 @@ async function confirmSale() {
     date: new Date().toISOString()
   };
 
-  item.qty -= qty;
+  if (_isShoeSale && _sellShoeSize) {
+    // Shoe sale: decrement specific size qty
+    _sellShoeSize.qty -= qty;
+    _sellShoeSize.updatedAt = new Date().toISOString();
+    await dbPut('shoe_sizes', _sellShoeSize);
+    // Update parent item total qty
+    const allSz = await getShoeSizes(item.code);
+    item.qty = allSz.reduce((t,s) => t + s.qty, 0);
+    _isShoeSale = false; _sellShoeSize = null;
+  } else {
+    item.qty -= qty;
+  }
   await dbPut('items', item);
   await dbAdd('sales', sale);
   fbSyncItem(item);
@@ -2254,6 +2304,23 @@ async function confirmRestock() {
 // ═══════════════════════════════════════════════════════════
 // LOW STOCK BADGE IN HEADER
 // ═══════════════════════════════════════════════════════════
+// Enrich shoe items with computed total qty and size summary
+async function enrichShoeItems(items) {
+  const shoeCodes = items.filter(i => i.isShoe).map(i => i.code);
+  if (!shoeCodes.length) return;
+  const allSizes = await dbAll('shoe_sizes');
+  for (const item of items) {
+    if (!item.isShoe) continue;
+    const sizes = allSizes.filter(s => s.itemCode === item.code)
+                          .sort((a,b) => a.size - b.size);
+    item.qty = sizes.reduce((t,s) => t + s.qty, 0);
+    item._sizeSummary = sizes.filter(s=>s.qty>0).map(s => {
+      const sc = s.qty <= 0 ? 'out' : s.qty <= LOW_STOCK_LEVEL ? 'low' : '';
+      return '<span class="shoe-size-chip' + (sc?' '+sc:'') + '">' + s.size + '×' + s.qty + '</span>';
+    }).join('');
+  }
+}
+
 async function updateLowStockBadge() {
   const badge = document.getElementById('low-stock-badge');
   if (!badge) return;
@@ -2804,4 +2871,74 @@ const _origInitFirebase = initFirebase;
 initFirebase = async function() {
   await _origInitFirebase();
   if (fbReady) startAutoSync();
+}
+// ===================================================================
+// SHOE INVENTORY SYSTEM
+//
+// Design:
+//   items store     → one record per shoe code (the product)
+//   shoe_sizes store → one record per code+size (size variants)
+//
+// Groups: S=Small/Children (20-28), M=Medium/Teens (29-36), L=Large/Adults (37-45)
+// Each size can have its own price, barcode, reorder level and qty.
+// Stock list shows ONE row per code; detail shows all sizes.
+// ===================================================================
+
+const SHOE_GROUP_DEFAULTS = {
+  S: { min: 20, max: 28, label: 'Small (Children)'  },
+  M: { min: 29, max: 36, label: 'Medium (Teens)'    },
+  L: { min: 37, max: 45, label: 'Large (Adults)'    },
 };
+
+function getShoeGroups() {
+  const saved = localStorage.getItem(KEY_SHOE_GROUPS);
+  if (!saved) return JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS));
+  try { return JSON.parse(saved); } catch(e) { return JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS)); }
+}
+
+function isFootwearType(typeName) {
+  return typeName && (
+    typeName.toLowerCase().includes('shoe') ||
+    typeName.toLowerCase().includes('footwear') ||
+    typeName.toLowerCase().includes('sandal') ||
+    typeName.toLowerCase().includes('boot')  ||
+    typeName.toLowerCase().includes('sneaker')
+  );
+}
+
+// Get all size records for a shoe code
+async function getShoeSizes(itemCode) {
+  const all = await dbAll('shoe_sizes');
+  return all.filter(s => s.itemCode === itemCode)
+            .sort((a,b) => a.size - b.size);
+}
+
+// Get total stock for a shoe code (sum of all sizes)
+async function getShoeTotal(itemCode) {
+  const sizes = await getShoeSizes(itemCode);
+  return sizes.reduce((t, s) => t + (s.qty || 0), 0);
+}
+
+// Get sizes summary string e.g. "34(3), 35(4), 36(3)"
+function buildSizesSummary(sizes) {
+  return sizes.filter(s => s.qty > 0)
+              .map(s => s.size + '(' + s.qty + ')')
+              .join(', ') || 'No stock';
+}
+
+// Upsert a shoe size record (update if code+size exists, insert if new)
+async function upsertShoeSize(sizeRecord) {
+  const all = await dbAll('shoe_sizes');
+  const existing = all.find(s => s.itemCode === sizeRecord.itemCode && s.size === sizeRecord.size);
+  if (existing) {
+    const updated = { ...existing, ...sizeRecord, id: existing.id };
+    await dbPut('shoe_sizes', updated);
+    return updated;
+  } else {
+    sizeRecord.codeSize = sizeRecord.itemCode + '_' + sizeRecord.size; // unique compound key
+    const id = await dbAdd('shoe_sizes', sizeRecord);
+    sizeRecord.id = id;
+    return sizeRecord;
+  }
+}
+;

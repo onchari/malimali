@@ -1140,3 +1140,105 @@ body {
   color: var(--text);
   outline: none;
 }
+
+/* ================================================================
+   SHOE SIZE SELECTION — Full Redesign
+   ================================================================ */
+
+/* Group buttons S / M / L */
+.sg-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:4px; }
+.sg-btn {
+  padding:12px 6px 10px;
+  border:2px solid var(--border);
+  border-radius:var(--r-lg);
+  background:var(--surface2);
+  cursor:pointer; font-family:var(--sans);
+  font-size:22px; font-weight:900; color:var(--text2);
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  transition:all .15s; line-height:1;
+}
+.sg-btn.sg-active { background:var(--accent); border-color:var(--accent); color:white; }
+.sg-range       { font-size:10px; font-weight:700; font-family:var(--mono); opacity:.8; }
+.sg-group-label { font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; opacity:.7; }
+
+/* Individual size number grid */
+.sz-grid { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:8px; }
+.sz-btn {
+  width:46px; height:46px;
+  border:1.5px solid var(--border); border-radius:var(--r);
+  background:var(--surface2); font-size:13px; font-weight:700;
+  font-family:var(--mono); color:var(--text2); cursor:pointer; transition:all .12s;
+}
+.sz-btn.sz-active { background:var(--accent); border-color:var(--accent); color:white; }
+
+/* Per-size rows */
+.shoe-row-hdr {
+  display:grid; grid-template-columns:44px 1fr 1fr 1fr; gap:6px;
+  padding:7px 10px; background:var(--surface2);
+  border:1px solid var(--border); border-radius:var(--r) var(--r) 0 0;
+  font-size:10px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.5px; color:var(--muted);
+}
+.shoe-row {
+  display:grid; grid-template-columns:44px 1fr 1fr 1fr; gap:6px;
+  padding:8px 10px; border:1px solid var(--border); border-top:none;
+  align-items:center; background:var(--surface);
+}
+.shoe-row:last-child { border-radius:0 0 var(--r) var(--r); }
+.shoe-sz-lbl { font-size:16px; font-weight:900; font-family:var(--mono); color:var(--accent); text-align:center; }
+.shoe-cell {
+  width:100%; padding:9px 6px; border:1.5px solid var(--border);
+  border-radius:var(--r); font-size:13px; font-weight:700;
+  font-family:var(--mono); color:var(--text); background:var(--bg);
+  outline:none; box-sizing:border-box; text-align:center;
+}
+.shoe-cell:focus { border-color:var(--accent); }
+
+/* Shared info label */
+.shoe-shared-lbl {
+  font-size:12px; font-weight:600; color:var(--text2);
+  background:var(--accent-light); border:1px solid #a8d8b5;
+  border-radius:var(--r); padding:7px 12px; margin-bottom:10px;
+}
+
+/* Selected sizes pills */
+.shoe-pills-row { display:flex; flex-wrap:wrap; align-items:center; gap:5px;
+  margin-top:10px; padding:10px 12px; background:var(--surface2);
+  border-radius:var(--r); border:1px solid var(--border); }
+.shoe-pill { font-size:13px; font-weight:800; font-family:var(--mono);
+  padding:4px 10px; border-radius:20px; background:var(--accent); color:white; }
+
+/* Stock list shoe badge */
+.shoe-sizes-badge {
+  display:inline-flex; gap:4px; flex-wrap:wrap; margin-top:3px;
+}
+.shoe-size-chip {
+  font-size:10px; font-weight:700; font-family:var(--mono);
+  padding:2px 6px; border-radius:4px;
+  background:var(--accent-light); color:var(--accent);
+}
+.shoe-size-chip.low  { background:var(--amber-light); color:#92400e; }
+.shoe-size-chip.out  { background:var(--red-light);   color:var(--red); }
+
+/* Detail sheet shoe size grid */
+.sh-section-title { font-size:11px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.7px; color:var(--muted); margin-bottom:8px; }
+.sh-sizes-grid { display:flex; flex-direction:column; gap:6px; }
+.sh-size-row {
+  display:flex; align-items:center; gap:10px; padding:10px 12px;
+  background:var(--surface2); border-radius:var(--r);
+  border:1px solid var(--border);
+}
+.sh-size-row.low { background:#fef9c3; border-color:#f5d9a0; }
+.sh-size-row.out { background:var(--red-light); border-color:#fca5a5; opacity:.7; }
+.sh-size-num  { font-size:18px; font-weight:900; font-family:var(--mono);
+  color:var(--accent); width:36px; flex-shrink:0; }
+.sh-size-meta { flex:1; display:flex; flex-direction:column; gap:1px; }
+.sh-size-qty  { font-size:13px; font-weight:700; color:var(--text); font-family:var(--mono); }
+.sh-size-price{ font-size:11px; color:var(--muted); font-family:var(--mono); }
+.sh-size-actions { flex-shrink:0; }
+.sh-sell-size-btn {
+  padding:6px 12px; background:var(--accent); color:white;
+  border:none; border-radius:var(--r); font-size:12px; font-weight:700;
+  cursor:pointer; font-family:var(--sans);
+}
