@@ -1242,3 +1242,25 @@ body {
   border:none; border-radius:var(--r); font-size:12px; font-weight:700;
   cursor:pointer; font-family:var(--sans);
 }
+
+/* Shoe size grid group dividers */
+.sz-group-divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  margin: 10px 0 6px;
+}
+.sz-group-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: var(--surface2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.sz-group-S { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
+.sz-group-M { background: #dcfce7; color: #16a34a; border-color: #86efac; }
+.sz-group-L { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
