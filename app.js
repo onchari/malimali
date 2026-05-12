@@ -3113,6 +3113,39 @@ async function upsertShoeSize(sizeRecord) {
 // SHOE UI FUNCTIONS
 // ─────────────────────────────────────────────────────
 
+// Called when type dropdown changes — shows/hides shoe panel
+function onTypeChange() {
+  const typeEl     = document.getElementById('f-type');
+  const type       = typeEl ? typeEl.value : '';
+  const shoePanel  = document.getElementById('shoe-size-panel');
+  const stdPricing = document.getElementById('std-pricing-section');
+  const sizeField  = document.getElementById('f-size-field');
+  if (!shoePanel || !stdPricing) return;
+
+  const isShoe = isFootwearType(type);
+  shoePanel.style.display  = isShoe ? 'block' : 'none';
+  stdPricing.style.display = isShoe ? 'none'  : 'block';
+  if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
+
+  if (isShoe) {
+    // Reset shoe state on type change
+    _shoeGroup   = null;
+    _shoeSizes   = new Set();
+    _perSizeMode = false;
+    if (typeof _shownGroups !== 'undefined') _shownGroups = new Set();
+    renderShoeGroupButtons();
+    const szGrid      = document.getElementById('shoe-sizes-grid');
+    const szWrap      = document.getElementById('shoe-rows-wrap');
+    const szGridInner = document.getElementById('sz-grid');
+    if (szGrid)      szGrid.style.display = 'none';
+    if (szWrap)      szWrap.style.display = 'none';
+    if (szGridInner) szGridInner.innerHTML = '';
+    const sum = document.getElementById('shoe-selected-summary');
+    if (sum) sum.innerHTML = '';
+  }
+}
+
+
 let _shoeGroup     = null;
 let _shoeSizes     = new Set();
 let _perSizeMode   = false;
