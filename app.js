@@ -1,7 +1,16 @@
 // ===== DB =====
 let db;
 const DB_NAME = 'InventoryApp';
-const DB_VER = 6;
+const DB_VER  = 6;
+
+// ── APP CONSTANTS ────────────────────────────────────────────────────
+const KEY_SESSION     = 'mg_session';     // localStorage key for auth session
+const KEY_LAST_PAGE   = 'mg_last_page';   // localStorage key for last visited page
+const KEY_SHOE_GROUPS = 'mgs_shoe_groups';// localStorage key for shoe size config
+const KEY_CURRENCY    = 'mgs_currency';   // localStorage key for currency preference
+const CODE_MAX_QTY    = 9999;             // warn when adding qty above this
+const LOW_STOCK_LEVEL = 1;                // items at/below this qty shown as low stock
+const OUT_STOCK_LEVEL = 0;                // items at this qty shown as out of stock
 
 function initDB() {
   const req = indexedDB.open(DB_NAME, DB_VER);
@@ -414,6 +423,7 @@ async function saveItem() {
       item.id        = parseInt(editId);
       item.createdAt = original ? (original.createdAt || new Date().toISOString()) : new Date().toISOString();
       item.updatedAt = new Date().toISOString();
+      item.updatedBy = currentUser ? currentUser.username : 'system';
       item.fbId      = original ? original.fbId : undefined;
       await dbPut('items', item);
       if (_addFormPhotoData) setItemPhoto(item.id, _addFormPhotoData);
@@ -1102,6 +1112,7 @@ async function confirmSale() {
     revenue: qty * priceUsed,
     profit: qty * (priceUsed - item.buy),
     overridden: !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== item.sell,
+    soldBy: currentUser ? currentUser.username : 'system',
     business_date: activeDay ? activeDay.business_date : todayDateStr(),
     date: new Date().toISOString()
   };
@@ -2244,9 +2255,19 @@ async function confirmRestock() {
 // LOW STOCK BADGE IN HEADER
 // ═══════════════════════════════════════════════════════════
 async function updateLowStockBadge() {
-  const items = await dbAll('items');
   const badge = document.getElementById('low-stock-badge');
-  // low stock badge removed from header
+  if (!badge) return;
+  const items = await dbAll('items');
+  const low  = items.filter(i => i.qty > OUT_STOCK_LEVEL && i.qty <= LOW_STOCK_LEVEL).length;
+  const out  = items.filter(i => i.qty <= OUT_STOCK_LEVEL).length;
+  const total = low + out;
+  if (total > 0) {
+    badge.textContent = total + (out > 0 ? ' ⚠' : ' low');
+    badge.style.display = 'inline-block';
+    badge.title = out + ' out of stock · ' + low + ' low stock (≤' + LOW_STOCK_LEVEL + ')';
+  } else {
+    badge.style.display = 'none';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2499,32 +2520,45 @@ document.addEventListener('DOMContentLoaded', () => {
 const USERS = [
   {
     username: 'onchari',
-    pin: '1234',
+    pin: '1234',                                                          // fallback (HTTP)
+    pinHash: '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4', // SHA-256 (HTTPS)
     name: 'Onchari',
     role: 'super',
     roleLabel: 'Super User',
-    // Super: access to everything
     tabs: ['dash','list','add','day','settings']
   },
   {
     username: 'vanice',
     pin: '2345',
+    pinHash: '38083c7ee9121e17401883566a148aa5c2e2d55dc53bc4a94a026517dbff3c6b',
     name: 'Vanice',
     role: 'user',
     roleLabel: 'User',
-    // User: everything except Settings
     tabs: ['dash','list','add','day']
   },
   {
     username: 'trevor',
     pin: '3456',
+    pinHash: 'ceaa28bba4caba687dc31b1bbe79eca3c70c33f871f1ce8f528cf9ab5cfd76dd',
     name: 'Trevor',
     role: 'clerk',
     roleLabel: 'Clerk',
-    // Clerk: view stock + add stock
-    tabs: ['list', 'add']
+    tabs: ['list','add']
   }
 ];
+
+// Hash a PIN using SHA-256. Returns null if crypto.subtle unavailable.
+async function hashPin(pin) {
+  try {
+    if (window.crypto && crypto.subtle) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(pin)));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    }
+  } catch(e) {
+    console.warn('[AUTH] crypto.subtle failed:', e.message);
+  }
+  return null; // caller will fall back to plain comparison
+}
 
 let currentUser = null;
 
@@ -2559,7 +2593,7 @@ function logout() {
   localStorage.removeItem(KEY_SESSION);
   localStorage.removeItem('mg_last_page');
   // Reset nav tabs visibility
-  ['dash','list','add','sell','day','types','settings'].forEach(tab => {
+  ['dash','list','add','day','settings'].forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) btn.style.display = '';
   });
@@ -2571,77 +2605,93 @@ function logout() {
   // Clear inputs and show login
   document.getElementById('login-user').value = '';
   document.getElementById('login-pin').value = '';
+  // Clear any sensitive data from memory
+  currentUser = null;
   document.getElementById('login-error').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
 }
 
 
 
-// Guard showPage - block access to restricted tabs
-const _origShowPage = showPage;
-showPage = function(id) {
-  if (currentUser && !currentUser.tabs.includes(id)) {
-    toast('⛔ Access denied', 'err');
-    return;
-  }
-  // Block restricted tabs when day is not open (but NOT sheet popups)
-  const dayOpen = activeDay && (activeDay.status === 'OPEN');
-  if (['dash', 'add'].includes(id) && !dayOpen) {
-    _origShowPage('day');
-    setTimeout(() => showDayClosedOverlay(id), 100);
-    return;
-  }
-  hideDayClosedOverlay();
-  if (currentUser) localStorage.setItem(KEY_LAST_PAGE, id);
-  _origShowPage(id);
-};
+// _origShowPage: direct page navigation (bypasses day-guard)
 
-function attemptLogin() {
+let _loginAttempts    = 0;
+let _loginLockedUntil = 0;
+
+async function attemptLogin() {
+  try {
+  // Rate limiting — lock for 30s after 5 failed attempts
+  if (Date.now() < _loginLockedUntil) {
+    const secs = Math.ceil((_loginLockedUntil - Date.now()) / 1000);
+    toast('⏳ Too many attempts. Try again in ' + secs + 's', 'err');
+    return;
+  }
+
   const username = document.getElementById('login-user').value.trim().toLowerCase();
-  const pin = document.getElementById('login-pin').value.trim();
-  const err = document.getElementById('login-error');
+  const pin      = document.getElementById('login-pin').value.trim();
+  const err      = document.getElementById('login-error');
 
-  const user = USERS.find(u => u.username === username && u.pin === pin);
+  if (!username || !pin) { err.style.display = 'block'; return; }
+
+  // Try SHA-256 hash comparison first (HTTPS), fall back to plain PIN (HTTP)
+  const enteredHash = await hashPin(pin);
+  let user;
+  if (enteredHash) {
+    // HTTPS context — compare hashes
+    user = USERS.find(u => u.username === username && u.pinHash === enteredHash);
+  } else {
+    // HTTP context (e.g. local dev) — compare plain PIN
+    user = USERS.find(u => u.username === username && u.pin === pin);
+  }
+
   if (!user) {
+    _loginAttempts++;
+    if (_loginAttempts >= 5) {
+      _loginLockedUntil = Date.now() + 30000; // 30 second lockout
+      _loginAttempts = 0;
+      toast('⏳ Too many failed attempts. Locked for 30s', 'err');
+    }
     err.style.display = 'block';
     document.getElementById('login-pin').value = '';
     document.getElementById('login-pin').focus();
-    if (typeof shakeLogin !== 'undefined') shakeLogin();
     return;
   }
 
+  // Successful login — reset counters
+  _loginAttempts = 0;
   err.style.display = 'none';
-  currentUser = user; // SET BEFORE showPage is called
-  localStorage.setItem(KEY_SESSION, JSON.stringify({ username: user.username, pin: user.pin }));
+  currentUser = user;
+  // Store session with timestamp (not PIN) — session expires after 12h of inactivity
+  localStorage.setItem(KEY_SESSION, JSON.stringify({ username: user.username, ts: Date.now() }));
 
-  // Hide login screen
   document.getElementById('login-screen').style.display = 'none';
-
-  // Apply role restrictions
   applyRoleRestrictions(user);
 
-  // Update user pill
   const pill = document.getElementById('user-pill');
   if (pill) {
     pill.style.display = 'inline-flex';
-    pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + user.name;
+    pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + escapeHtml(user.name);
   }
+  const wrap = document.getElementById('user-menu-wrap');
+  if (wrap) wrap.style.display = 'block';
 
-  // Go to day page if day not open, otherwise last visited page
-  const lastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
+  // Restore last page
+  const lastPage    = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
   const allowedPage = user.tabs.includes(lastPage) ? lastPage : user.tabs[0];
-
-  // Check day status
   getBusinessDay(todayDateStr()).then(bday => {
     const dayOpen = bday && bday.status === 'OPEN';
-    if (!dayOpen && user.tabs.includes('day')) {
+    if (!dayOpen && allowedPage === 'dash' && user.tabs.includes('day')) {
       _origShowPage('day');
-      setTimeout(() => toast('⚠️ Please open the business day first.', ''), 500);
     } else {
       _origShowPage(allowedPage);
     }
   });
-  toast('Welcome, ' + user.name + '! 👋', 'ok');
+  toast('Welcome, ' + escapeHtml(user.name) + '! 👋', 'ok');
+
+  } catch(e) {
+    console.error('[LOGIN]', e);
+    toast('Login error: ' + e.message, 'err');
+  }
 }
 
 function checkSession() {
@@ -2652,8 +2702,14 @@ function checkSession() {
     return false;
   }
   try {
-    const { username, pin } = JSON.parse(saved);
-    const user = USERS.find(u => u.username === username && u.pin === pin);
+    const { username, ts } = JSON.parse(saved);
+    // Session expires after 12 hours of inactivity
+    if (ts && Date.now() - ts > 12 * 60 * 60 * 1000) {
+      localStorage.removeItem(KEY_SESSION);
+      document.getElementById('login-screen').style.display = 'flex';
+      return false;
+    }
+    const user = USERS.find(u => u.username === username);
     if (user) {
       currentUser = user;
       document.getElementById('login-screen').style.display = 'none';
