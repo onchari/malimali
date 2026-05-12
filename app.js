@@ -1,26 +1,12 @@
 // ===== DB =====
-const DB_NAME = 'InventoryApp';
 let db;
-// ── CHECK SESSION IMMEDIATELY (before DB opens) ──────────────────────
-// This prevents the login screen from flashing on refresh.
-// We do a quick localStorage check — full validation happens after DB.
-(function() {
-  const saved = localStorage.getItem('mg_session');
-  if (!saved) {
-    // No session at all — show login right away
-    document.getElementById('login-screen').style.display = 'flex';
-  }
-  // If session exists, login screen stays hidden until DB validates it
-})();
-
-
+const DB_NAME = 'InventoryApp';
 const DB_VER = 6;
 
 function initDB() {
   const req = indexedDB.open(DB_NAME, DB_VER);
   req.onupgradeneeded = e => {
     const d = e.target.result;
-    e.target.transaction.onerror = ev => console.error('[DB] Upgrade error:', ev);
     if (!d.objectStoreNames.contains('items')) {
       const s = d.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
       s.createIndex('code', 'code', { unique: true });
@@ -48,7 +34,6 @@ function initDB() {
     db = e.target.result;
     loadTypes().then(async () => {
       updateCurrencyUI();
-      loadShoeGroupSettings(); // populate S/M/L range labels in add form
       // 1. Restore session FIRST (before any page rendering)
       const sessionRestored = checkSession();
       if (!sessionRestored) return; // login screen showing, stop here
@@ -61,112 +46,66 @@ function initDB() {
       renderSellPage();
       updateLowStockBadge();
 
-      // 3. Restore last visited page exactly as it was before refresh
+      // 3. Restore last visited page (or go to day if day not open)
       const lastPage = localStorage.getItem('mg_last_page') || 'dash';
+      const today = todayDateStr();
 
-      // Check day state for access control only
-      const bday = await getBusinessDay(todayDateStr());
+      // Check if day needs opening
+      const bday = await getBusinessDay(today);
       const dayOpen = bday && bday.status === 'OPEN';
 
-      // Determine which page to restore:
-      // - Always allow: list, day, settings, sell
-      // - Only allow if day open: dash, add
-      // - If role doesn't allow the page: fall back to first allowed tab
-      const alwaysAllowed = ['list', 'day', 'settings', 'sell'];
-      let allowedPage;
-
-      if (!currentUser.tabs.includes(lastPage)) {
-        // Role doesn't permit this tab
-        allowedPage = currentUser.tabs[0];
-      } else if (lastPage === 'dash' && !dayOpen) {
-        // Only dashboard needs open day for redirect — add stays as-is
-        allowedPage = 'day';
-        setTimeout(() => toast('📅 Open the business day to continue.', ''), 800);
-      } else {
-        // All good — restore exactly where user was
-        allowedPage = lastPage;
+      if (!dayOpen && lastPage !== 'day' && lastPage !== 'settings') {
+        // Show a gentle reminder but stay on last page
+        setTimeout(() => toast('⚠️ Business day not open yet', ''), 1000);
       }
 
-      _doShowPage(allowedPage);
+      // Restore last page if user has access to it
+      const allowedPage = currentUser && currentUser.tabs.includes(lastPage) ? lastPage : currentUser.tabs[0];
+      _origShowPage(allowedPage);
     });
   };
-  req.onerror = e => { console.error('[DB] Open error:', e); toast('Database error — try refreshing the page.', 'err'); };
+  req.onerror = () => toast('Database error!', 'err');
 }
 
-// DB ready check — called before every transaction
 function _dbReady(rej) {
-  if (!db) {
-    const err = new Error('Database not ready yet — please wait a moment.');
-    console.error('[DB]', err.message);
-    if (rej) rej(err);
-    return false;
-  }
-  return true;
+  if (!db) { const e = new Error('Database not ready yet.'); if (rej) rej(e); return false; } return true;
 }
-
 function dbAll(store) {
   return new Promise((res, rej) => {
     if (!_dbReady(rej)) return;
-    try {
-      const tx = db.transaction(store, 'readonly');
-      tx.objectStore(store).getAll().onsuccess = e => res(e.target.result);
-      tx.onerror = e => rej(e.target.error);
-    } catch(e) { rej(e); }
+    try { const tx = db.transaction(store,'readonly'); tx.objectStore(store).getAll().onsuccess = e => res(e.target.result); tx.onerror = e => rej(e.target.error); } catch(e){rej(e);}
   });
 }
 function dbGet(store, id) {
   return new Promise((res, rej) => {
     if (!_dbReady(rej)) return;
-    try {
-      const tx = db.transaction(store, 'readonly');
-      tx.objectStore(store).get(id).onsuccess = e => res(e.target.result);
-      tx.onerror = e => rej(e.target.error);
-    } catch(e) { rej(e); }
+    try { const tx = db.transaction(store,'readonly'); tx.objectStore(store).get(id).onsuccess = e => res(e.target.result); tx.onerror = e => rej(e.target.error); } catch(e){rej(e);}
   });
 }
 function dbAdd(store, data) {
   return new Promise((res, rej) => {
     if (!_dbReady(rej)) return;
-    try {
-      const tx = db.transaction(store, 'readwrite');
-      const req = tx.objectStore(store).add(data);
-      req.onsuccess = e => res(e.target.result);
-      tx.onerror = e => rej(e.target.error);
-    } catch(e) { rej(e); }
+    try { const tx = db.transaction(store,'readwrite'); const r = tx.objectStore(store).add(data); r.onsuccess = e => res(e.target.result); tx.onerror = e => rej(e.target.error); } catch(e){rej(e);}
   });
 }
 function dbPut(store, data) {
   return new Promise((res, rej) => {
     if (!_dbReady(rej)) return;
-    try {
-      const tx = db.transaction(store, 'readwrite');
-      tx.objectStore(store).put(data).onsuccess = res;
-      tx.onerror = e => rej(e.target.error);
-    } catch(e) { rej(e); }
+    try { const tx = db.transaction(store,'readwrite'); tx.objectStore(store).put(data).onsuccess = res; tx.onerror = e => rej(e.target.error); } catch(e){rej(e);}
   });
 }
 function dbDelete(store, id) {
   return new Promise((res, rej) => {
     if (!_dbReady(rej)) return;
-    try {
-      const tx = db.transaction(store, 'readwrite');
-      tx.objectStore(store).delete(id).onsuccess = res;
-      tx.onerror = e => rej(e.target.error);
-    } catch(e) { rej(e); }
+    try { const tx = db.transaction(store,'readwrite'); tx.objectStore(store).delete(id).onsuccess = res; tx.onerror = e => rej(e.target.error); } catch(e){rej(e);}
   });
 }
 
+function sanitiseCode(raw) { return (raw||'').trim().toUpperCase().replace(/[^A-Z0-9\-.]/g,''); }
 
-// ── HTML ESCAPE ───────────────────────────────────────────────────────
-// Prevent XSS when injecting user-supplied data (item names, codes) into innerHTML.
-function escapeHtml(str) {
-  if (str == null) return '';
-  return String(str)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#39;');
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ===== STATE =====
@@ -194,44 +133,18 @@ function toast(msg, type = '') {
 function getTypeObj(name) { return types.find(t => t.name === name) || { name, emoji: '📦', color: '#334155' }; }
 
 // ===== PAGES =====
-// Pages that require OPEN day to access
-
-// Pages that show a day-closed overlay instead of redirecting
-const DAY_GATED_PAGES = ['dash']; // Add page is always accessible — save button guards
-
 function showPage(id) {
-  // Role restriction
-  if (currentUser && !currentUser.tabs.includes(id)) {
-    toast('⛔ Access denied', 'err');
-    return;
-  }
-  // Warn if edit is in progress and user is navigating away
-  const editId = document.getElementById('edit-id');
-  if (editId && editId.value && !editId.value.startsWith('restock_') && id !== 'add') {
-    if (!confirm('You have unsaved edits. Leave without saving?')) return;
-    clearForm(); clearAddFormPhoto();
-    _editOriginItemId = null;
-  }
-  _doShowPage(id);
-}
-
-function _doShowPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  const page = document.getElementById('page-' + id);
-  const tab  = document.getElementById('tab-' + id);
-  if (page) page.classList.add('active');
-  if (tab)  tab.classList.add('active');
-  if (id === 'dash')     renderDashboard();
-  if (id === 'list')     renderList();
-  if (id === 'sell')     { renderSellPage(); setTimeout(() => { const el = document.getElementById('sell-search'); if (el) el.focus(); }, 150); }
-  if (id === 'day')      refreshDayTab();
-  if (id === 'settings') { loadShoeGroupSettings(); renderTypesList(); }
-  if (id === 'add')      onTypeChange();
-  // Show day-closed overlay if navigating to Add or Dash while day not open
-  updateDayClosedOverlay(isDayOpen());
-  // Save last visited page for session restore
-  if (currentUser) localStorage.setItem('mg_last_page', id);
+  document.getElementById('page-' + id).classList.add('active');
+  document.getElementById('tab-' + id).classList.add('active');
+  if (id === 'dash') renderDashboard();
+  if (id === 'list') renderList();
+  if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
+  // summary removed
+
+
+  if (id === 'day') { refreshDayTab(); }
 }
 
 // ===== TYPES =====
@@ -473,543 +386,35 @@ function clearAddFormPhoto() {
 }
 
 // ===== SAVE ITEM =====
-// ===================================================================
-// SHOE SIZE GROUP SETTINGS
-// Stored in localStorage as mgs_shoe_groups: { S, M, L: { min, max } }
-// Loaded into Settings page fields, previewed live, saved on button tap.
-// ===================================================================
-
-const SHOE_GROUP_DEFAULTS = { S:{min:20,max:28}, M:{min:29,max:36}, L:{min:37,max:45} };
-
-function getShoeGroups() {
-  const saved = localStorage.getItem('mgs_shoe_groups');
-  if (!saved) return JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS));
-  try { return JSON.parse(saved); } catch(e) { return JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS)); }
-}
-
-// Populate settings inputs from stored values
-function loadShoeGroupSettings() {
-  const g = getShoeGroups();
-  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-  set('sg-s-min', g.S.min); set('sg-s-max', g.S.max);
-  set('sg-m-min', g.M.min); set('sg-m-max', g.M.max);
-  set('sg-l-min', g.L.min); set('sg-l-max', g.L.max);
-  previewShoeGroups();
-}
-
-// Live preview: show which sizes each group contains
-function previewShoeGroups() {
-  const get = id => parseInt(document.getElementById(id)?.value) || 0;
-  const groups = {
-    S: { min: get('sg-s-min'), max: get('sg-s-max') },
-    M: { min: get('sg-m-min'), max: get('sg-m-max') },
-    L: { min: get('sg-l-min'), max: get('sg-l-max') },
-  };
-  const el = document.getElementById('shoe-group-preview');
-  if (!el) return;
-  let valid = true;
-  const lines = Object.entries(groups).map(([g, { min, max }]) => {
-    if (!min || !max || min > max) { valid = false; return `${g}: ⚠️ invalid range`; }
-    const count = max - min + 1;
-    const sizes = Array.from({length: Math.min(count, 10)}, (_, i) => min + i);
-    return `${g} (${count} sizes): ${sizes.join(', ')}${count > 10 ? '…' + max : ''}`;
-  });
-  el.innerHTML = lines.join('<br>');
-  el.style.color = valid ? 'var(--text2)' : 'var(--red)';
-}
-
-// Save customized groups to localStorage
-function saveShoeGroups() {
-  const get = id => parseInt(document.getElementById(id)?.value) || 0;
-  const groups = {
-    S: { min: get('sg-s-min'), max: get('sg-s-max') },
-    M: { min: get('sg-m-min'), max: get('sg-m-max') },
-    L: { min: get('sg-l-min'), max: get('sg-l-max') },
-  };
-
-  // Validate each group
-  for (const [g, { min, max }] of Object.entries(groups)) {
-    if (!min || !max) { toast('⚠️ Group ' + g + ': enter both min and max', 'err'); return; }
-    if (min >= max)   { toast('⚠️ Group ' + g + ': min must be less than max', 'err'); return; }
-    if (max - min > 30){ toast('⚠️ Group ' + g + ': range too large (max 30 sizes)', 'err'); return; }
-  }
-
-  // Save to localStorage
-  localStorage.setItem('mgs_shoe_groups', JSON.stringify(groups));
-
-  // ── Update Add form immediately ─────────────────────────────────
-
-  // 1. Update S/M/L button range labels
-  ['S','M','L'].forEach(g => {
-    const el = document.getElementById('sg-range-' + g);
-    if (el) el.textContent = groups[g].min + '–' + groups[g].max;
-  });
-
-  // 2. If a group is already selected in the add form, re-render sizes
-  //    and clear any selected sizes that are now out of the new range
-  if (_shoeGroup && groups[_shoeGroup]) {
-    const { min, max } = groups[_shoeGroup];
-
-    // Remove selected sizes that are outside new range
-    _shoeSizes.forEach(s => { if (s < min || s > max) _shoeSizes.delete(s); });
-
-    // Re-render the size buttons grid
-    const grid = document.getElementById('sz-grid');
-    if (grid) {
-      const sizes = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-      grid.innerHTML = sizes.map(s =>
-        '<button type="button" class="sz-btn' + (_shoeSizes.has(s) ? ' sz-active' : '') +
-        '" id="sz-' + s + '" onclick="toggleShoeSize(' + s + ')">' + s + '</button>'
-      ).join('');
-    }
-
-    // Update shared fields visibility
-    const wrap = document.getElementById('shoe-rows-wrap');
-    if (wrap) wrap.style.display = _shoeSizes.size > 0 ? 'block' : 'none';
-    renderShoeSummary();
-  }
-
-  // 3. Update live preview in settings (already shown but refresh)
-  previewShoeGroups();
-
-  toast('✅ Shoe size groups saved!', 'ok');
-}
-
-function resetShoeGroups() {
-  localStorage.removeItem('mgs_shoe_groups');
-  // Reset any shoe selection in the add form
-  _shoeGroup = null;
-  _shoeSizes.clear();
-  // Reload settings fields with defaults
-  loadShoeGroupSettings();
-  // Refresh add form group buttons range labels
-  const defaults = JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS));
-  ['S','M','L'].forEach(g => {
-    const el = document.getElementById('sg-range-' + g);
-    if (el) el.textContent = defaults[g].min + '–' + defaults[g].max;
-  });
-  // Hide size grid and shared fields if open
-  const szGrid = document.getElementById('shoe-sizes-grid');
-  const szWrap = document.getElementById('shoe-rows-wrap');
-  if (szGrid) szGrid.style.display = 'none';
-  if (szWrap) szWrap.style.display = 'none';
-  toast('↺ Reset to defaults (S:20–28, M:29–36, L:37–45)', 'ok');
-}
-
-// Call loadShoeGroupSettings when settings tab is opened
-
-// When type is footwear, replace single size field with interactive
-// S/M/L group picker → individual size buttons → per-size qty+price
-// Each selected size saves as a separate inventory item.
-// ===================================================================
-
-// Default size group ranges (customisable via Settings in future)
-function getShoeGroups() {
-  const saved = localStorage.getItem('mgs_shoe_groups');
-  return saved ? JSON.parse(saved) : { S:{min:20,max:28}, M:{min:29,max:36}, L:{min:37,max:45} };
-}
-
-function isFootwearType(typeName) {
-  return typeName && (typeName.toLowerCase().includes('shoe') ||
-                      typeName.toLowerCase().includes('footwear') ||
-                      typeName.toLowerCase().includes('sandal') ||
-                      typeName.toLowerCase().includes('boot'));
-}
-
-// Called when type selector changes — switches between standard and shoe mode
-function onTypeChange() {
-  const typeEl   = document.getElementById('f-type');
-  const type     = typeEl ? typeEl.value : '';
-  const shoePanel  = document.getElementById('shoe-size-panel');
-  const stdPricing = document.getElementById('std-pricing-section');
-  const sizeField  = document.getElementById('f-size-field');
-  if (!shoePanel || !stdPricing) return;
-
-  const isShoe = isFootwearType(type);
-
-  shoePanel.style.display  = isShoe ? 'block' : 'none';
-  stdPricing.style.display = isShoe ? 'none'  : 'block';
-  if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
-
-  if (isShoe) {
-    _shoeGroup = null;
-    _shoeSizes.clear();
-    _shoeData  = {};
-    renderShoeGroups();
-    const szGrid = document.getElementById('shoe-sizes-grid');
-    const szWrap = document.getElementById('shoe-rows-wrap');
-    if (szGrid) szGrid.style.display = 'none';
-    if (szWrap) szWrap.style.display = 'none';
-  }
-}
-
-let _shoeGroup = null;       // 'S' | 'M' | 'L'
-let _shoeSizes = new Set();  // Set of selected size numbers
-let _shoeData  = {};         // { size: { qty, buy, sell } }
-
-function renderShoeGroups() {
-  const groups = getShoeGroups();
-  ['S','M','L'].forEach(g => {
-    const rng = document.getElementById('sg-range-' + g);
-    if (rng) rng.textContent = groups[g].min + '–' + groups[g].max;
-    const btn = document.querySelector(`.sg-btn[onclick="selectSizeGroup('${g}')"]`);
-    if (btn) btn.classList.toggle('sg-active', _shoeGroup === g);
-  });
-}
-
-function selectSizeGroup(g) {
-  _shoeGroup = g;
-  _shoeSizes.clear();
-  renderShoeGroups();
-
-  const groups = getShoeGroups();
-  const { min, max } = groups[g];
-  const sizes = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-
-  const grid = document.getElementById('sz-grid');
-  grid.innerHTML = sizes.map(s =>
-    `<button type="button" class="sz-btn" id="sz-${s}" onclick="toggleShoeSize(${s})">${s}</button>`
-  ).join('');
-  document.getElementById('shoe-sizes-grid').style.display = 'block';
-  document.getElementById('shoe-rows-wrap').style.display  = 'none';
-}
-
-function toggleShoeSize(s) {
-  if (_shoeSizes.has(s)) _shoeSizes.delete(s);
-  else _shoeSizes.add(s);
-
-  // Update button active state
-  document.querySelectorAll('.sz-btn').forEach(b => {
-    const sz = parseInt(b.textContent);
-    b.classList.toggle('sz-active', _shoeSizes.has(sz));
-  });
-
-  // Show/hide shared fields
-  const wrap = document.getElementById('shoe-rows-wrap');
-  if (wrap) wrap.style.display = _shoeSizes.size > 0 ? 'block' : 'none';
-
-  // Update selected sizes summary pill
-  renderShoeSummary();
-}
-
-function renderShoeSummary() {
-  const el = document.getElementById('shoe-selected-summary');
-  if (!el) return;
-  if (_shoeSizes.size === 0) { el.innerHTML = ''; return; }
-  const sorted = [..._shoeSizes].sort((a, b) => a - b);
-  el.innerHTML = '<div class="shoe-pills-row">' +
-    sorted.map(s => `<span class="shoe-pill">${s}</span>`).join('') +
-    `<span style="font-size:11px;color:var(--muted);margin-left:6px;align-self:center;">${sorted.length} size${sorted.length>1?'s':''} selected</span>` +
-    '</div>';
-}
-
-function saveShoeFieldData() {} // no-op — shared fields read directly in saveShoeItems
-
-// Save one item per selected shoe size, all with same qty/buy/sell
-async function saveShoeItems(baseCode, baseName, type) {
-  if (!_shoeGroup)           { toast('⚠️ Select a size group (S/M/L)', 'err'); return false; }
-  if (_shoeSizes.size === 0) { toast('⚠️ Select at least one size', 'err'); return false; }
-
-  const qty  = parseInt(document.getElementById('shoe-shared-qty').value)   || 0;
-  const buy  = parseFloat(document.getElementById('shoe-shared-buy').value) || 0;
-  const sell = parseFloat(document.getElementById('shoe-shared-sell').value)|| 0;
-
-  if (qty <= 0)  { toast('⚠️ Enter quantity per size', 'err'); return false; }
-  if (buy <= 0)  { toast('⚠️ Enter buying price', 'err'); return false; }
-  if (sell <= 0) { toast('⚠️ Enter selling price', 'err'); return false; }
-
-  const profit = sell - buy;
-  const sorted = [..._shoeSizes].sort((a, b) => a - b);
-  let savedCount = 0;
-
-  for (const size of sorted) {
-    const item = {
-      type,
-      code: baseCode + '-' + size,
-      name: (baseName || type + ' ' + baseCode) + ' (Size ' + size + ')',
-      size: String(size),
-      sizeGroup: _shoeGroup,
-      qty, buy, sell, profit,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    try {
-      const newId = await dbAdd('items', item);
-      item.id = newId;
-      if (_addFormPhotoData) setItemPhoto(newId, _addFormPhotoData);
-      fbSyncItem(item);
-      savedCount++;
-    } catch(e) {
-      toast('⚠️ Size ' + size + ': ' + e.message, 'err');
-    }
-  }
-  return savedCount;
-}
-
-// ===================================================================
-// ===================================================================
-// CODE AUTOCOMPLETE + STOCK UPDATE
-// Req: type code → see existing items → select → restock (qty added)
-// If code not found → new item flow.
-//
-// Edge cases:
-//   • Zero/negative qty rejected
-//   • Large qty (>9999) confirmation required
-//   • Code sanitised (uppercase, strip invalid chars)
-//   • Item deleted between search and save → graceful error
-//   • Exact match shown first in dropdown
-//   • ConstraintError (duplicate insert) → offer restock
-//   • Concurrent update → re-fetch before save
-// ===================================================================
-
-const CODE_MAX_QTY = 9999;
-let _codeDropdownActive = false;
-let _editOriginItemId   = null; // item being edited (for cancel scroll-back)
-
-function sanitiseCode(raw) {
-  return (raw || '').trim().toUpperCase().replace(/[^A-Z0-9\-.]/g, '');
-}
-
-function onCodeInput() {
-  const clean = sanitiseCode(document.getElementById('f-code').value);
-  document.getElementById('f-code').value = clean;
-  if (!clean) { hideCodeDropdown(); return; }
-
-  const exact      = allItems.filter(i => i.code === clean);
-  const startsWith = allItems.filter(i => i.code && i.code !== clean && i.code.startsWith(clean));
-  const contains   = allItems.filter(i => i.code && i.code !== clean && !i.code.startsWith(clean) && i.code.includes(clean));
-  const matches    = [...exact, ...startsWith, ...contains].slice(0, 8);
-
-  if (!matches.length) { hideCodeDropdown(); return; }
-  showCodeDropdown(matches, clean);
-}
-
-function showCodeDropdown(items, typedCode) {
-  let dd = document.getElementById('code-dropdown');
-  if (!dd) {
-    dd = document.createElement('div');
-    dd.id = 'code-dropdown';
-    dd.className = 'code-dd';
-    const codeField = document.getElementById('f-code');
-    codeField.parentNode.insertBefore(dd, codeField.nextSibling);
-  }
-  dd.innerHTML = items.map(item => {
-    const isExact = item.code === typedCode;
-    const sc = item.qty <= 0 ? 'var(--red)' : item.qty <= 3 ? '#d97706' : 'var(--green)';
-    const sl = item.qty <= 0 ? 'Out of stock' : item.qty + ' in stock';
-    return '<div class="code-dd-item' + (isExact ? ' code-dd-exact' : '') + '" onclick="selectExistingItem(' + item.id + ')">' +
-      '<span class="code-dd-code">' + escapeHtml(item.code) + (isExact ? ' <span class="code-dd-match-badge">exact</span>' : '') + '</span>' +
-      '<span class="code-dd-stock" style="color:' + sc + ';">' + sl + '</span>' +
-    '</div>';
-  }).join('');
-  dd.style.display = 'block';
-}
-
-function hideCodeDropdown() {
-  const dd = document.getElementById('code-dropdown');
-  if (dd) dd.style.display = 'none';
-}
-
-async function selectExistingItem(itemId) {
-  // Re-fetch from DB — handles concurrent delete between search and tap
-  const item = await dbGet('items', itemId);
-  if (!item) { toast('⚠️ Item no longer exists — it may have been deleted.', 'err'); hideCodeDropdown(); return; }
-
-  hideCodeDropdown();
-  _codeDropdownActive = true;
-
-  // Fill identity fields
-  document.getElementById('f-code').value = item.code;
-  document.getElementById('f-name').value = item.name || '';
-  document.getElementById('f-size').value = item.size || '';
-  const typeEl = document.getElementById('f-type');
-  if (typeEl) typeEl.value = item.type || '';
-  onTypeChange();
-  document.getElementById('edit-id').value = 'restock_' + itemId;
-
-  // ── Restock banner ───────────────────────────────────────────────
-  let banner = document.getElementById('restock-mode-banner');
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.id = 'restock-mode-banner';
-    banner.className = 'restock-banner';
-    // Insert inside the add-section, before the pricing section
-    const addSection = document.querySelector('#page-add .add-section');
-    if (addSection) addSection.after(banner);
-    else document.getElementById('std-pricing-section').before(banner);
-  }
-
-  const sc = item.qty <= 0 ? 'var(--red)' : item.qty <= 3 ? '#d97706' : 'var(--green)';
-  const profit = item.sell - item.buy;
-  const margin = item.sell > 0 ? ((profit / item.sell) * 100).toFixed(0) : 0;
-
-  banner.innerHTML =
-    '<div style="width:100%;">' +
-      // Header row
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
-        '<i class="fa-solid fa-boxes-stacked" style="color:var(--accent);font-size:18px;flex-shrink:0;"></i>' +
-        '<div style="flex:1;min-width:0;">' +
-          '<div style="font-size:13px;font-weight:800;color:var(--text);">Restocking · ' + escapeHtml(item.code) + '</div>' +
-          '<div style="font-size:11px;color:var(--muted);">' + escapeHtml(item.name || '') + (item.size && item.size !== 'N/A' ? ' · Size ' + escapeHtml(item.size) : '') + '</div>' +
-        '</div>' +
-        '<button onclick="exitRestockMode()" class="restock-banner-exit" title="Cancel restock">✕</button>' +
-      '</div>' +
-      // Stats row
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">' +
-        '<div class="restock-stat"><div class="restock-stat-val" style="color:' + sc + ';">' + item.qty + '</div><div class="restock-stat-lbl">In Stock</div></div>' +
-        '<div class="restock-stat"><div class="restock-stat-val">' + fmt(item.buy) + '</div><div class="restock-stat-lbl">Buy Price</div></div>' +
-        '<div class="restock-stat"><div class="restock-stat-val" style="color:var(--accent2);">' + fmt(item.sell) + '</div><div class="restock-stat-lbl">Sell Price</div></div>' +
-        '<div class="restock-stat"><div class="restock-stat-val" style="color:var(--green);">' + margin + '%</div><div class="restock-stat-lbl">Margin</div></div>' +
-      '</div>' +
-    '</div>';
-  banner.style.display = 'flex';
-
-  // ── Field states ─────────────────────────────────────────────────
-  // Pre-fill prices (display only — taken from system on save)
-  document.getElementById('f-buy').value  = item.buy  || '';
-  document.getElementById('f-sell').value = item.sell || '';
-
-  // IMPORTANT: Set qty value before the loop, and NEVER put f-qty in the
-  // disabled list — disabled inputs always return '' regardless of value
-  const qtyEl = document.getElementById('f-qty');
-  if (qtyEl) { qtyEl.value = ''; qtyEl.disabled = false; qtyEl.style.opacity = '1'; qtyEl.style.cursor = ''; }
-
-  // Gray out all identity + price fields — user only enters qty
-  ['f-code','f-name','f-size','f-type','f-buy','f-sell'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.disabled = true;
-    el.style.opacity = '0.4';
-    el.style.cursor  = 'not-allowed';
-  });
-  // Extra dim on buy/sell wrappers
-  ['f-buy','f-sell'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el && el.closest('.add-field')) el.closest('.add-field').style.opacity = '0.35';
-  });
-
-  // Hide profit pill
-  const pill = document.getElementById('profit-preview');
-  if (pill) pill.style.display = 'none';
-
-  // Update label + buttons
-  document.getElementById('save-btn').textContent = '📦 Add to Stock';
-  document.getElementById('form-mode-label').textContent = '📦 Restock';
-  document.getElementById('cancel-edit-btn').style.display = 'block';
-
-  // Focus qty last, after all DOM changes
-  setTimeout(() => { if (qtyEl) { qtyEl.focus(); qtyEl.select(); } }, 150);
-}
-
-function exitRestockMode() {
-  _codeDropdownActive = false;
-  // Re-enable all fields
-  ['f-code','f-name','f-size','f-type','f-buy','f-sell','f-qty'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.disabled = false;
-    el.style.opacity = '';
-    el.style.cursor  = '';
-  });
-  ['f-buy','f-sell'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el && el.closest('.add-field')) el.closest('.add-field').style.opacity = '';
-  });
-  const banner = document.getElementById('restock-mode-banner');
-  if (banner) banner.style.display = 'none';
-  clearForm();
-}
-
-// ===================================================================
-// SAVE ITEM
-// ===================================================================
 async function saveItem() {
-  const editIdRaw = document.getElementById('edit-id').value;
+  const editId = document.getElementById('edit-id').value;
+  const type = document.getElementById('f-type').value;
+  const code = document.getElementById('f-code').value.trim().toUpperCase();
+  const size = document.getElementById('f-size').value.trim();
+  const name = document.getElementById('f-name').value.trim() || (type + ' ' + code);
+  const qtyRaw = document.getElementById('f-qty').value;
+  const qty = parseInt(qtyRaw);
+  const buy = parseFloat(document.getElementById('f-buy').value) || 0;
+  const sell = parseFloat(document.getElementById('f-sell').value) || 0;
 
   if (!requireOpenDay()) return;
+  if (!type)  { toast('⚠️ Select an item type', 'err'); return; }
+  if (!code)  { toast('⚠️ Enter item code', 'err'); return; }
+  if (!size)  { toast('⚠️ Enter a size (or type N/A)', 'err'); return; }
+  if (qtyRaw === '' || isNaN(qty) || qty < 0) { toast('⚠️ Enter quantity stocked', 'err'); return; }
+  if (buy <= 0)  { toast('⚠️ Enter buying price', 'err'); return; }
+  if (sell <= 0) { toast('⚠️ Enter selling price', 'err'); return; }
 
-  // ── RESTOCK MODE — check FIRST, before reading any disabled fields ─
-  if (editIdRaw && editIdRaw.startsWith('restock_')) {
-    const itemId  = parseInt(editIdRaw.replace('restock_', ''));
-    // Always re-fetch — don't trust stale form field values
-    const existing = await dbGet('items', itemId);
-    if (!existing) { toast('⚠️ Item no longer exists.', 'err'); exitRestockMode(); return; }
-
-    // f-qty is the ONLY field the user fills in restock mode
-    const qtyEl  = document.getElementById('f-qty');
-    const qtyRaw = qtyEl ? qtyEl.value.trim() : '';
-    const addQty = parseInt(qtyRaw);
-
-    if (!qtyRaw || isNaN(addQty)) { toast('⚠️ Enter quantity to add', 'err'); if (qtyEl) qtyEl.focus(); return; }
-    if (addQty <= 0)               { toast('⚠️ Quantity must be at least 1', 'err'); if (qtyEl) qtyEl.focus(); return; }
-    if (addQty > CODE_MAX_QTY && !confirm('⚠️ Adding ' + addQty + ' units — confirm?')) return;
-
-    const newQty = existing.qty + addQty;
-    if (newQty > 999999) { toast('⚠️ Exceeds maximum stock of 999,999 units', 'err'); return; }
-
-    existing.qty       = newQty;
-    existing.profit    = existing.sell - existing.buy;
-    existing.updatedAt = new Date().toISOString();
-
-    await dbPut('items', existing);
-    fbSyncItem(existing);
-    allItems = await dbAll('items');
-    renderList(); renderDashboard(); updateHeader();
-    if (activeDay) updateDayLiveStats();
-    scheduleSync();
-    exitRestockMode();
-    toast('📦 ' + existing.code + ': ' + (newQty - addQty) + ' + ' + addQty + ' = ' + newQty + ' units', 'ok');
-    return;
-  }
-
-  // ── SHOE MODE ────────────────────────────────────────────────────
-  if (isFootwearType(type) && !editIdRaw) {
-    const savedCount = await saveShoeItems(code, name, type);
-    if (!savedCount) return;
-    clearForm(); clearAddFormPhoto();
-    allItems = await dbAll('items');
-    renderList(); renderDashboard(); updateHeader();
-    scheduleSync();
-    if (activeDay) updateDayLiveStats();
-    toast('✅ ' + savedCount + ' shoe size(s) added!', 'ok');
-    return;
-  }
-
-  // ── STANDARD ADD / EDIT ──────────────────────────────────────────
-  const size   = document.getElementById('f-size').value.trim();
-  const qtyRaw = document.getElementById('f-qty').value;
-  const qty    = parseInt(qtyRaw);
-  const buy    = parseFloat(document.getElementById('f-buy').value)  || 0;
-  const sell   = parseFloat(document.getElementById('f-sell').value) || 0;
-
-  // Focused validation — highlight the field with the problem
-  const focusField = (id, msg) => {
-    toast(msg, 'err');
-    const el = document.getElementById(id);
-    if (el) { el.focus(); el.style.borderColor = 'var(--red)'; setTimeout(() => el.style.borderColor = '', 2000); }
-  };
-  if (!size)                                  { focusField('f-size', '⚠️ Enter a size (or N/A)'); return; }
-  if (qtyRaw === '' || isNaN(qty) || qty < 0) { focusField('f-qty',  '⚠️ Enter quantity in stock'); return; }
-  if (qty > CODE_MAX_QTY && !confirm('⚠️ Adding ' + qty + ' units — confirm?')) return;
-  if (buy  <= 0) { focusField('f-buy',  '⚠️ Enter buying price');  return; }
-  if (sell <= 0) { focusField('f-sell', '⚠️ Enter selling price'); return; }
-
-  const profit   = sell - buy;
-  const itemName = name || (type + ' ' + code);
+  const profit = sell - buy;
+  const item = { type, code, name, size, buy, sell, profit, qty, createdAt: new Date().toISOString() };
 
   try {
-    if (editIdRaw) {
-      // EDIT: fetch original to preserve createdAt and fbId
-      const original = await dbGet('items', parseInt(editIdRaw));
-      const item = {
-        id: parseInt(editIdRaw),
-        type, code,
-        name: itemName,
-        size, buy, sell, profit, qty,
-        createdAt:  original ? (original.createdAt  || new Date().toISOString()) : new Date().toISOString(),
-        updatedAt:  new Date().toISOString(),
-        fbId:       original ? original.fbId : undefined,
-      };
+    if (editId) {
+      const original = await dbGet('items', parseInt(editId));
+      item.id        = parseInt(editId);
+      item.createdAt = original ? (original.createdAt || new Date().toISOString()) : new Date().toISOString();
+      item.updatedAt = new Date().toISOString();
+      item.fbId      = original ? original.fbId : undefined;
       await dbPut('items', item);
       if (_addFormPhotoData) setItemPhoto(item.id, _addFormPhotoData);
       fbSyncItem(item);
@@ -1017,86 +422,51 @@ async function saveItem() {
       allItems = await dbAll('items');
       renderList(); renderDashboard(); updateHeader();
       scheduleSync();
-      // Build a short diff message of what changed
-      const changes = [];
-      if (original) {
-        if (original.qty   !== qty)  changes.push('qty '   + original.qty   + '→' + qty);
-        if (original.buy   !== buy)  changes.push('buy '   + fmt(original.buy)  + '→' + fmt(buy));
-        if (original.sell  !== sell) changes.push('sell '  + fmt(original.sell) + '→' + fmt(sell));
-        if (original.name  !== itemName) changes.push('name updated');
-        if ((original.size ||'') !== size) changes.push('size updated');
-      }
-      const diffMsg = changes.length ? ' (' + changes.join(', ') + ')' : '';
-      toast('✅ Item updated' + diffMsg, 'ok');
+      toast('✅ Item updated!', 'ok');
       showPage('list');
     } else {
       const newId = await dbAdd('items', item);
       item.id = newId;
-      if (_addFormPhotoData) setItemPhoto(newId, _addFormPhotoData);
+      // Save photo if one was selected
+      if (_addFormPhotoData) { setItemPhoto(newId, _addFormPhotoData); }
       fbSyncItem(item);
-      clearForm(); clearAddFormPhoto();
+      clearForm();
+      clearAddFormPhoto();
       allItems = await dbAll('items');
-      renderList(); renderDashboard(); updateHeader();
-      scheduleSync();
-      showSplash(itemName, sell, profit);
+      renderList();
+      renderDashboard();
+      updateHeader();
+      showSplash(name, sell, profit);
       if (activeDay) updateDayLiveStats();
     }
   } catch (e) {
-    if (e.name === 'ConstraintError') {
-      const dup = allItems.find(i => i.code === code && i.id !== parseInt(editIdRaw));
-      if (dup && !editIdRaw) { showCodeDropdown([dup], code); toast('⚠️ "' + code + '" already exists — select it below to restock.', 'err'); }
-      else toast('⚠️ Duplicate code "' + code + '". Use a different code.', 'err');
-    } else {
-      toast('Error: ' + e.message, 'err');
-      console.error('[SAVE]', e);
-    }
+    if (e.name === 'ConstraintError') toast('Code "' + code + '" already exists!', 'err');
+    else toast('Error saving: ' + e.message, 'err');
   }
 }
+
 function clearForm() {
-  document.getElementById('edit-id').value   = '';
-  document.getElementById('f-type').value    = '';
-  document.getElementById('f-code').value    = '';
-  document.getElementById('f-name').value    = '';
-  document.getElementById('f-size').value    = '';
-  document.getElementById('f-qty').value     = '';
-  document.getElementById('f-buy').value     = '';
-  document.getElementById('f-sell').value    = '';
+  document.getElementById('edit-id').value = '';
+  document.getElementById('f-type').value = '';
+  document.getElementById('f-code').value = '';
+  document.getElementById('f-name').value = '';
+  document.getElementById('f-size').value = '';
+  document.getElementById('f-qty').value = '';
+  document.getElementById('f-buy').value = '';
+  document.getElementById('f-sell').value = '';
   document.getElementById('profit-preview').style.display = 'none';
   document.getElementById('save-btn').textContent = '+ Add to Inventory';
-  document.getElementById('form-mode-label').textContent  = 'New Item';
+  document.getElementById('form-mode-label').textContent = 'New Item';
   document.getElementById('cancel-edit-btn').style.display = 'none';
-  // Reset shoe state
-  _shoeGroup = null; _shoeSizes.clear(); _shoeData = {};
-  const shoePanel  = document.getElementById('shoe-size-panel');
-  const stdPricing = document.getElementById('std-pricing-section');
-  const sizeField  = document.getElementById('f-size-field');
-  if (shoePanel)  shoePanel.style.display  = 'none';
-  if (stdPricing) stdPricing.style.display = 'block';
-  if (sizeField)  sizeField.style.display  = 'block';
-  // Clear shared shoe inputs
-  const sqty  = document.getElementById('shoe-shared-qty');
-  const sbuy  = document.getElementById('shoe-shared-buy');
-  const ssell = document.getElementById('shoe-shared-sell');
-  const ssum  = document.getElementById('shoe-selected-summary');
-  const swrap = document.getElementById('shoe-rows-wrap');
-  const sgrid = document.getElementById('shoe-sizes-grid');
-  if (sqty)  sqty.value  = '';
-  if (sbuy)  sbuy.value  = '';
-  if (ssell) ssell.value = '';
-  if (ssum)  ssum.innerHTML = '';
-  if (swrap) swrap.style.display = 'none';
-  if (sgrid) sgrid.style.display = 'none';
 }
 
 function cancelEdit() {
-  clearForm();
-  clearAddFormPhoto();
+  clearForm(); clearAddFormPhoto();
   showPage('list');
-  // Scroll back to item if we came from one
   if (_editOriginItemId) {
     setTimeout(() => {
       const card = document.querySelector('[data-item-id="' + _editOriginItemId + '"]');
-      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (card) card.scrollIntoView({ behavior:'smooth', block:'center' });
       _editOriginItemId = null;
     }, 200);
   }
@@ -1352,38 +722,30 @@ async function deleteItem() {
 async function editItem() {
   if (!isDayOpen()) { toast('⚠️ Open the business day to edit items.', 'err'); return; }
   const item = await dbGet('items', currentDetailId);
-  if (!item) { toast('Item not found.', 'err'); return; }
   closeSheet();
-
-  // Set ALL form fields BEFORE showPage so onTypeChange() sees the correct type
-  _editOriginItemId = item.id;
-  document.getElementById('edit-id').value = item.id;
-  document.getElementById('f-type').value  = item.type  || '';
-  document.getElementById('f-code').value  = item.code  || '';
-  document.getElementById('f-name').value  = item.name  || '';
-  document.getElementById('f-size').value  = item.size  || '';
-  document.getElementById('f-qty').value   = item.qty   ?? '';
-  document.getElementById('f-buy').value   = item.buy   || '';
-  document.getElementById('f-sell').value  = item.sell  || '';
-
-  // Now navigate — onTypeChange() will fire and see the correct type
   showPage('add');
-
+  document.getElementById('edit-id').value = item.id;
+  document.getElementById('f-type').value = item.type;
+  document.getElementById('f-code').value = item.code;
+  document.getElementById('f-name').value = item.name;
+  document.getElementById('f-size').value = item.size || '';
+  document.getElementById('f-qty').value = item.qty;
+  document.getElementById('f-buy').value = item.buy;
+  document.getElementById('f-sell').value = item.sell;
   document.getElementById('save-btn').textContent = '💾 Save Changes';
-  document.getElementById('form-mode-label').textContent = '✏️ Edit Item';
+  document.getElementById('form-mode-label').textContent = 'Edit Item';
   document.getElementById('cancel-edit-btn').style.display = 'block';
   updateProfitPreview();
-
-  // Load existing photo
+  // Load existing photo if any
   const existingPhoto = getItemPhoto(item.id);
   if (existingPhoto) {
     _addFormPhotoData = existingPhoto;
-    const photoImg    = document.getElementById('add-photo-img');
+    const photoImg = document.getElementById('add-photo-img');
     const placeholder = document.getElementById('add-photo-placeholder');
-    const removeBtn   = document.getElementById('add-photo-remove');
-    if (photoImg)    { photoImg.src = existingPhoto; photoImg.style.display = 'block'; }
+    const removeBtn = document.getElementById('add-photo-remove');
+    if (photoImg) { photoImg.src = existingPhoto; photoImg.style.display = 'block'; }
     if (placeholder) placeholder.style.display = 'none';
-    if (removeBtn)   removeBtn.style.display = 'block';
+    if (removeBtn) removeBtn.style.display = 'block';
   }
 }
 
@@ -1810,6 +1172,31 @@ document.getElementById('sell-modal').addEventListener('click', function(e) {
 
 function addSyncLog() {} // bell removed
 
+// ── NOTIFICATION PANEL ──────────────────────────────────────────
+function toggleNotifPanel() {
+  const panel   = document.getElementById('notif-panel');
+  const backdrop = document.getElementById('notif-backdrop');
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display    = isOpen ? 'none' : 'block';
+  if (backdrop) backdrop.style.display = isOpen ? 'none' : 'block';
+}
+function clearNotifs() {
+  const list = document.getElementById('notif-list');
+  if (list) list.innerHTML = '<div class="notif-empty">No sync events yet</div>';
+}
+function addNotif(msg, type) {
+  const list = document.getElementById('notif-list');
+  if (!list) return;
+  const empty = list.querySelector('.notif-empty');
+  if (empty) empty.remove();
+  const item = document.createElement('div');
+  item.style.cssText = 'padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;';
+  item.innerHTML = '<span style="color:var(--muted);font-size:11px;font-family:var(--mono);">' +
+    new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) + '</span> ' + escapeHtml(msg);
+  list.insertBefore(item, list.firstChild);
+}
+
 // ===== FIREBASE SYNC =====
 let fbApp = null, fbDb = null, fbUnsub = null;
 let fbReady = false;
@@ -1867,105 +1254,86 @@ const FIREBASE_CONFIG = {
 async function initFirebase() {
   const config = FIREBASE_CONFIG;
   localStorage.setItem('fb_config', JSON.stringify(config));
+  const cfgInput = document.getElementById('fb-config-input');
+  if (cfgInput) cfgInput.value = JSON.stringify(config, null, 2);
   try {
     setFbStatus('connecting');
-    console.log('[FB] Waiting for Firebase SDK...');
-    const { initializeApp, getApps, getApp, getFirestore, onSnapshot, collection } =
-      await waitForFbImports();
-    console.log('[FB] SDK ready. Initialising app...');
+    const { initializeApp, getFirestore, onSnapshot, collection, getApps, getApp } = await waitForFbImports();
 
-    // Reuse existing Firebase app instance to avoid "duplicate app" error
+    // Reuse existing app to avoid duplicate app errors
     const existingApps = getApps();
-    const existing = existingApps.find(a => a.name === 'mandela');
-    fbApp = existing ? getApp('mandela') : initializeApp(config, 'mandela');
-    fbDb  = getFirestore(fbApp);
+    fbApp = existingApps.find(a => a.name === 'mandela') || initializeApp(config, 'mandela');
+    fbDb = getFirestore(fbApp);
     fbReady = true;
-    console.log('[FB] Firestore ready. Project:', config.projectId);
 
-    // Tear down old listeners before attaching new ones
+    // Unsub previous listeners
     if (fbUnsub) { fbUnsub(); fbUnsub = null; }
     if (window._fbUnsubSales) { window._fbUnsubSales(); window._fbUnsubSales = null; }
 
-    // ── Live listener: items ──────────────────────────────────────
-    const unsubItems = onSnapshot(
-      collection(fbDb, 'items'),
-      async snap => {
-        const changes = snap.docChanges();
-        if (!changes.length) return;
-        let needsRender = false;
-        for (const change of changes) {
-          const data = { ...change.doc.data(), fbId: change.doc.id };
-          if (change.type === 'removed') {
-            const all = await dbAll('items');
-            const local = all.find(i => i.fbId === change.doc.id);
-            if (local) { await dbDelete('items', local.id); needsRender = true; }
-          } else {
-            const all = await dbAll('items');
-            const existing = all.find(i => i.fbId === change.doc.id || i.code === data.code);
-            if (existing) {
-              data.id = existing.id;
-              await dbPut('items', { ...data });
-            } else {
-              try { const d2 = { ...data }; delete d2.id; await dbAdd('items', d2); } catch(_) {}
-            }
-            needsRender = true;
-          }
+    // Live listener: items — processes all changes including initial load
+    const unsubItems = onSnapshot(collection(fbDb, 'items'), async snap => {
+      const changes = snap.docChanges();
+      if (!changes.length) return;
+      let needsRender = false;
+      for (const change of changes) {
+        const data = { ...change.doc.data(), fbId: change.doc.id };
+        if (change.type === 'removed') {
+          const all = await dbAll('items');
+          const local = all.find(i => i.fbId === change.doc.id);
+          if (local) { await dbDelete('items', local.id); needsRender = true; }
+        } else {
+          const all = await dbAll('items');
+          const existing = all.find(i => i.fbId === change.doc.id || i.code === data.code);
+          if (existing) { data.id = existing.id; await dbPut('items', data); }
+          else { try { delete data.id; await dbAdd('items', data); } catch(_) {} }
+          needsRender = true;
         }
-        if (needsRender) {
-          allItems = await dbAll('items');
-          renderList(); renderDashboard(); updateHeader();
-          setFbStatus('on');
-        }
-      },
-      err => {
-        console.error('[FB] Items listener error:', err.code, err.message);
-        setFbStatus('error');
-        toast('Firebase sync error: ' + err.message, 'err');
       }
-    );
+      if (needsRender) {
+        allItems = await dbAll('items');
+        renderList(); renderDashboard(); updateHeader();
+        setFbStatus('on');
+        toast('🔄 ' + changes.length + ' item(s) synced from cloud', 'ok');
+      }
+    }, err => { setFbStatus('error'); console.error('Items listener error:', err); });
 
-    // ── Live listener: sales ──────────────────────────────────────
-    const unsubSales = onSnapshot(
-      collection(fbDb, 'sales'),
-      async snap => {
-        const changes = snap.docChanges();
-        if (!changes.length) return;
-        for (const change of changes) {
-          const data = { ...change.doc.data(), fbId: change.doc.id };
-          if (change.type === 'removed') {
-            const all = await dbAll('sales');
-            const local = all.find(s => s.fbId === change.doc.id);
-            if (local) await dbDelete('sales', local.id);
-          } else {
-            const all = await dbAll('sales');
-            const existing = all.find(s => s.fbId === change.doc.id);
-            if (existing) { data.id = existing.id; await dbPut('sales', data); }
-            else { try { delete data.id; await dbAdd('sales', data); } catch(_) {} }
-          }
+    // Live listener: sales
+    const unsubSales = onSnapshot(collection(fbDb, 'sales'), async snap => {
+      const changes = snap.docChanges();
+      if (!changes.length) return;
+      for (const change of changes) {
+        const data = { ...change.doc.data(), fbId: change.doc.id };
+        if (change.type === 'removed') {
+          const all = await dbAll('sales');
+          const local = all.find(s => s.fbId === change.doc.id);
+          if (local) await dbDelete('sales', local.id);
+        } else {
+          const all = await dbAll('sales');
+          const existing = all.find(s => s.fbId === change.doc.id);
+          if (existing) { data.id = existing.id; await dbPut('sales', data); }
+          else { try { delete data.id; await dbAdd('sales', data); } catch(_) {} }
         }
-        try { renderSellPage(); } catch(_) {}
-        try { renderDashboard(); } catch(_) {}
-      },
-      err => { console.error('[FB] Sales listener error:', err.code, err.message); }
-    );
+      }
+      try { renderSellPage(); } catch(_) {}
+      try { renderDashboard(); } catch(_) {}
+    }, err => { console.error('Sales listener error:', err); });
 
     fbUnsub = unsubItems;
     window._fbUnsubSales = unsubSales;
 
     setFbStatus('on');
     toast('☁️ Firebase connected!', 'ok');
-    console.log('[FB] Listeners attached. Running initial sync...');
 
-    // Push local → Firebase, then pull Firebase → local
+    // On connect: first push local data, then pull remote data
+    // This ensures both devices are in sync
+    console.log('[SYNC] Firebase connected — running initial push + pull');
     await forcePushToFirebase(true);
     await pullFromFirebase(true);
-    console.log('[FB] Initial sync complete.');
 
   } catch (e) {
     setFbStatus('error');
-    console.error('[FB] Init error:', e.message, e);
     toast('Firebase error: ' + e.message, 'err');
-    fbReady = false;
+    console.error('Firebase init error:', e);
   }
 }
 
@@ -1973,19 +1341,9 @@ function waitForFbImports() {
   return new Promise((res, rej) => {
     const start = Date.now();
     const check = () => {
-      if (window._fbImports === null) {
-        // Module explicitly failed — signal caller
-        rej(new Error('Firebase SDK failed to load. Check your internet connection.'));
-        return;
-      }
-      if (window._fbImports) {
-        res(window._fbImports);
-        return;
-      }
-      if (Date.now() - start > 15000) {
-        rej(new Error('Firebase SDK timed out after 15s. Check your internet connection.'));
-        return;
-      }
+      if (window._fbImports === null) { rej(new Error('Firebase SDK failed to load.')); return; }
+      if (window._fbImports) { res(window._fbImports); return; }
+      if (Date.now() - start > 15000) { rej(new Error('Firebase SDK timed out.')); return; }
       setTimeout(check, 150);
     };
     check();
@@ -2026,29 +1384,20 @@ async function fbSyncSale(sale) {
   if (!fbReady || !fbDb) return;
   try {
     const { doc, setDoc } = await waitForFbImports();
-    if (!sale.fbId) {
-      sale.fbId = 'sale_' + (sale.date || '').replace(/[:.TZ-]/g,'').slice(0,17) +
-                  '_' + Math.random().toString(36).slice(2,6);
-      if (sale.id) await dbPut('sales', sale); // persist fbId locally
-    }
-    await setDoc(doc(fbDb, 'sales', sale.fbId), sanitiseForFirestore({ ...sale }));
-  } catch (e) { console.error('[SYNC] fbSyncSale error:', e.message); }
+    const fbId = 'sale_' + sale.date.replace(/[:.]/g, '-') + '_' + (sale.itemCode || '');
+    await setDoc(doc(fbDb, 'sales', fbId), { ...sale, fbId });
+  } catch (e) { console.error('fbSyncSale error', e); }
 }
 
 
-// ── SANITISE FOR FIRESTORE ─────────────────────────────────────────────
-// Firestore rejects: undefined values, the numeric 'id' IDB key.
-// Convert undefined → null, drop the local 'id' field.
 function sanitiseForFirestore(obj) {
   const out = {};
   for (const [k, v] of Object.entries(obj)) {
-    if (k === 'id') continue;          // IDB auto-increment key — not needed in Firestore
+    if (k === 'id') continue;
     if (v === undefined) { out[k] = null; continue; }
     if (v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)) {
-      out[k] = sanitiseForFirestore(v); // recurse into nested objects
-    } else {
-      out[k] = v;
-    }
+      out[k] = sanitiseForFirestore(v);
+    } else { out[k] = v; }
   }
   return out;
 }
@@ -2064,26 +1413,23 @@ async function forcePushToFirebase(silent = false) {
     let count = 0;
 
     for (const item of items) {
+      // Use stable fbId: prefer existing fbId, else generate from code + createdAt
       if (!item.fbId) {
-        item.fbId = 'itm_' + (item.code || 'x').toLowerCase().replace(/[^a-z0-9]/g,'') +
-                    '_' + (item.size || 'ns').toLowerCase().replace(/[^a-z0-9]/g,'');
+        // Stable ID: code + size — same item always maps to same Firestore doc
+        item.fbId = 'itm_' + (item.code || 'x').toLowerCase().replace(/[^a-z0-9]/g,'') + '_' + (item.size || 'ns').toLowerCase().replace(/[^a-z0-9]/g,'');
         await dbPut('items', item);
       }
-      // Strip IDB-only key and sanitise for Firestore (no undefined values)
-      const itemData = sanitiseForFirestore({ ...item, updatedAt: new Date().toISOString() });
-      batch.set(doc(fbDb, 'items', item.fbId), itemData);
+      batch.set(doc(fbDb, 'items', item.fbId), sanitiseForFirestore({ ...item, updatedAt: new Date().toISOString() }));
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
 
     for (const sale of sales) {
       if (!sale.fbId) {
-        sale.fbId = 'sale_' + (sale.date || '').replace(/[:.TZ-]/g,'').slice(0,17) +
-                    '_' + Math.random().toString(36).slice(2,6);
+        sale.fbId = 'sale_' + (sale.date || '').replace(/[:.TZ-]/g,'').slice(0,17) + '_' + Math.random().toString(36).slice(2,6);
         await dbPut('sales', sale);
       }
-      const saleData = sanitiseForFirestore({ ...sale });
-      batch.set(doc(fbDb, 'sales', sale.fbId), saleData);
+      batch.set(doc(fbDb, 'sales', sale.fbId), sanitiseForFirestore({ ...sale }));
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
@@ -2101,43 +1447,43 @@ async function forcePushToFirebase(silent = false) {
 async function pullFromFirebase(silent = false) {
   if (!fbReady || !fbDb) {
     if (!silent) toast('⚠️ Not connected to Firebase', 'err');
+    console.warn('[SYNC] pullFromFirebase called but not ready. fbReady=', fbReady, 'fbDb=', !!fbDb);
     return;
   }
   if (!silent) setFbStatus('syncing');
   try {
     const { collection, getDocs } = await waitForFbImports();
 
-    // ── Items ─────────────────────────────────────────────────────
+    // Pull items
+    console.log('[SYNC] Pulling items from Firebase...');
     const itemSnap = await getDocs(collection(fbDb, 'items'));
-    // Load local items ONCE before the loop
-    let localItems = await dbAll('items');
-    let itemsAdded = 0, itemsUpdated = 0;
+    console.log('[SYNC] Firebase has', itemSnap.size, 'items');
 
+    let itemsAdded = 0, itemsUpdated = 0;
     for (const d of itemSnap.docs) {
       const data = { ...d.data(), fbId: d.id };
-      delete data.id; // remove Firestore numeric key — IDB assigns its own
-      const existing = localItems.find(i => i.fbId === d.id || i.code === data.code);
+      // Remove numeric id from Firebase data to avoid IndexedDB key conflicts
+      delete data.id;
+      const all = await dbAll('items');
+      const existing = all.find(i => i.fbId === d.id || i.code === data.code);
       if (existing) {
         data.id = existing.id;
         await dbPut('items', data);
-        // Update local cache so subsequent finds are correct
-        const idx = localItems.findIndex(i => i.id === existing.id);
-        if (idx >= 0) localItems[idx] = data;
         itemsUpdated++;
       } else {
-        const newId = await dbAdd('items', data);
-        data.id = newId;
-        localItems.push(data);
+        await dbAdd('items', data);
         itemsAdded++;
       }
     }
-    console.log('[SYNC] Items pulled — added:', itemsAdded, 'updated:', itemsUpdated);
+    console.log('[SYNC] Items: added=' + itemsAdded + ' updated=' + itemsUpdated);
 
-    // ── Sales ─────────────────────────────────────────────────────
+    // Pull sales
+    console.log('[SYNC] Pulling sales from Firebase...');
     const saleSnap = await getDocs(collection(fbDb, 'sales'));
+    console.log('[SYNC] Firebase has', saleSnap.size, 'sales');
+
     let localSales = await dbAll('sales');
     let salesAdded = 0, salesUpdated = 0;
-
     for (const d of saleSnap.docs) {
       const data = { ...d.data(), fbId: d.id };
       delete data.id;
@@ -2147,28 +1493,25 @@ async function pullFromFirebase(silent = false) {
         await dbPut('sales', data);
         salesUpdated++;
       } else {
-        const newId = await dbAdd('sales', data);
-        data.id = newId;
-        localSales.push(data);
+        await dbAdd('sales', data);
         salesAdded++;
       }
     }
-    console.log('[SYNC] Sales pulled — added:', salesAdded, 'updated:', salesUpdated);
+    console.log('[SYNC] Sales: added=' + salesAdded + ' updated=' + salesUpdated);
 
-    // ── Re-render ─────────────────────────────────────────────────
     allItems = await dbAll('items');
     renderList(); renderDashboard(); updateHeader();
     try { renderSellPage(); } catch(_) {}
     setFbStatus('on');
 
-    if (!silent || itemSnap.size > 0 || saleSnap.size > 0) {
-      if (!silent) toast('⬇️ Pulled ' + itemSnap.size + ' items, ' + saleSnap.size + ' sales', 'ok');
-    }
-
+    const msg = '⬇️ ' + itemSnap.size + ' items, ' + saleSnap.size + ' sales from Firebase';
+    if (!silent) toast(msg, 'ok');
+    else if (itemSnap.size > 0) toast(msg, 'ok');
+    console.log('[SYNC] Pull complete:', msg);
   } catch (e) {
     setFbStatus('error');
-    console.error('[SYNC] Pull error:', e.code || '', e.message, e);
-    if (!silent) toast('Pull failed: ' + (e.message || e), 'err');
+    console.error('[SYNC] Pull error:', e);
+    if (!silent) toast('Pull failed: ' + e.message, 'err');
   }
 }
 
@@ -2176,7 +1519,7 @@ function disconnectFirebase() {
   if (fbUnsub) { fbUnsub(); fbUnsub = null; }
   fbApp = null; fbDb = null; fbReady = false;
   localStorage.removeItem('fb_config');
-  const cfgEl = document.getElementById('fb-config-input'); if (cfgEl) cfgEl.value = '';
+  document.getElementById('fb-config-input').value = '';
   setFbStatus('off');
   toast('Firebase disconnected', '');
 }
@@ -2240,41 +1583,96 @@ async function runSyncDebug() {
 // Tabs that require an open day
 const DAY_RESTRICTED_TABS = ['dash', 'add', 'list'];
 
+function setDayMode(isOpen) {
+  const status = activeDay ? activeDay.status : 'PENDING';
+  // Dashboard: accessible when OPEN or PAUSED (progress view), blocked otherwise
+  const dashOk = isOpen || status === 'PAUSED';
+  const dashBtn = document.getElementById('tab-dash');
+  if (dashBtn && dashBtn.style.display !== 'none') {
+    dashBtn.classList.toggle('disabled', !dashOk);
+    if (!dashOk) dashBtn.classList.remove('active');
+  }
 
+  // Add tab: only when OPEN
+  const addBtn = document.getElementById('tab-add');
+  if (addBtn && addBtn.style.display !== 'none') {
+    addBtn.classList.toggle('disabled', !isOpen);
+    if (!isOpen) addBtn.classList.remove('active');
+  }
 
+  // Stock tab: viewable always, but grayed to signal read-only when not OPEN
+  const listBtn = document.getElementById('tab-list');
+  if (listBtn && listBtn.style.display !== 'none') {
+    listBtn.classList.toggle('disabled', !isOpen);
+    if (!isOpen) listBtn.classList.remove('active');
+  }
+
+  // Redirect if on a now-blocked page
+  if (!isOpen) {
+    const activePage = document.querySelector('.page.active');
+    if (activePage) {
+      const pageId = activePage.id.replace('page-', '');
+      if (pageId === 'dash' && !dashOk) _origShowPage('day');
+      if (pageId === 'list') renderList(); // refresh to show/hide action buttons
+    }
+  }
+}
+
+function showDayClosedOverlay(pageId) {
+  const overlay = document.getElementById('day-closed-overlay');
+  const msg = document.getElementById('day-closed-msg');
+  if (!overlay) return;
+  const status = activeDay ? activeDay.status : 'PENDING';
+  if (status === 'LOCKED') {
+    msg.textContent = 'Open today\'s business day from the Day tab to continue.';
+  } else if (status === 'CLOSED') {
+    msg.textContent = 'The business day is closed. You can reopen it from the Day tab before 11:59 PM.';
+  } else {
+    msg.textContent = 'Please open the business day first to access this section.';
+  }
+  overlay.classList.add('show');
+}
+
+function hideDayClosedOverlay() {
+  const overlay = document.getElementById('day-closed-overlay');
+  if (overlay) overlay.classList.remove('show');
+}
 
 // ===================================================================
 // BUSINESS DAY MANAGEMENT
 //
-// States: CLOSED → OPEN → CLOSED (cycle freely same day)
-//         Past days → LOCKED at midnight (read-only)
+// Simple two-state model:
+//   OPEN   → day is active, all operations allowed
+//   CLOSED → day is closed, operations blocked
 //
 // Rules:
-//   • User can open/close freely within same calendar date
-//   • Page refresh does NOT affect day state
-//   • Timer runs once — not restarted on refresh/tab-switch
-//   • Past days locked automatically at midnight
+//   • User can open and close the day as many times as needed
+//     within the same calendar date
+//   • On date change, the system auto-creates and opens a new day
+//   • At midnight, current day closes automatically
+//   • Past days are LOCKED (read-only archive)
 // ===================================================================
 
-let activeDay      = null;
-let dayCheckTimer  = null;
-let _warned1145    = null;
-let _timerStarted  = false; // guard: timer starts once, resets on date change
+let activeDay = null;
+let dayCheckTimer = null;
+let _warned1145 = null; // date string of the last 11:45 PM warning shown
 
-// ── LOCAL DATE HELPER (timezone-safe) ────────────────────────────────
+// ── DATE / TIME HELPERS ──────────────────────────────────────────────
 function todayDateStr() {
+  // Use local date, not UTC — important for UTC+3 (Nairobi) where
+  // new Date().toISOString() returns UTC which drifts 3 hours behind local time
   const d = new Date();
-  return d.getFullYear() + '-' +
-    String(d.getMonth() + 1).padStart(2,'0') + '-' +
-    String(d.getDate()).padStart(2,'0');
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
 }
 function fmtTime(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 function fmtFullDate(dateStr) {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB', {
-    weekday:'long', day:'2-digit', month:'long', year:'numeric'
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
   });
 }
 
@@ -2286,88 +1684,75 @@ function isDayOpen() {
 function requireOpenDay() {
   if (!isDayOpen()) {
     const status = activeDay ? activeDay.status : 'NONE';
-    const msgs = {
-      CLOSED: '🌙 Day is closed — tap Open Day to continue.',
-      LOCKED: '🔒 This is an archived day (read-only).',
-    };
-    toast(msgs[status] || '📅 Open the business day first.', 'err');
+    const msg = status === 'CLOSED'
+      ? '🌙 Day is closed — tap Open Day to continue.'
+      : status === 'LOCKED'
+        ? '🔒 This day is archived and cannot be modified.'
+        : '📅 Open the business day to record transactions.';
+    toast(msg, 'err');
+    showPage('day');
     return false;
   }
   return true;
 }
 
-// ── DB HELPERS ───────────────────────────────────────────────────────
-async function getBusinessDay(dateStr) {
-  const all = await dbAll('business_days');
-  return all.find(d => d.business_date === dateStr) || null;
-}
-
-async function createDayRecord(dateStr) {
-  const id = await dbAdd('business_days', {
-    business_date: dateStr,
-    status: 'CLOSED',
-    opened_at: null, closed_at: null,
-    last_opened_at: null,
-    reopened_count: 0,
-    auto_closed: false,
-    final_locked_at: null,
-    salesCount: 0, revenue: 0, profit: 0, itemsSold: 0,
-    openingStockCost: 0, openingStockRetail: 0,
-    closingStockCost: 0,
-    notes: ''
-  });
-  return await dbGet('business_days', id);
-}
-
-// ── LOAD DAY ON APP START ─────────────────────────────────────────────
-// Called ONCE at startup. Does NOT restart on refresh if day is intact.
+// ── LOAD ACTIVE DAY ON APP START ─────────────────────────────────────
+// Called once at startup. Finds or creates today's day record.
+// Also locks any past days that were left OPEN or CLOSED overnight.
 async function loadActiveDay() {
   const today = todayDateStr();
 
-  // Lock any past days that weren't locked (e.g. app offline overnight)
+  // Lock any past days left open (e.g. app not opened since yesterday)
   const all = await dbAll('business_days');
   for (const d of all) {
-    if (d.business_date < today && d.status !== 'LOCKED') {
+    if (d.business_date !== today && d.status !== 'LOCKED') {
       d.status = 'LOCKED';
       d.final_locked_at = new Date().toISOString();
       await dbPut('business_days', d);
     }
   }
 
-  // Get or create today's record
+  // Find or create today's record
   let bday = await getBusinessDay(today);
   if (!bday) bday = await createDayRecord(today);
 
-  // If app was left open and day was OPEN — keep it OPEN (do not reset)
   activeDay = bday;
-  applyDayState(); // update UI without touching state
-  if (_timerStarted === false) {
-    _timerStarted = true;
-    startDayTimer();
-    startBannerClock();
-  }
+  updateDayBanner();
+  if (isDayOpen()) updateDayLiveStats();
+  if (!_timerStarted) { _timerStarted = true; startDayTimer(); startBannerClock(); }
 }
 
-// ── REFRESH DAY TAB ───────────────────────────────────────────────────
-// Called when user navigates to Day tab. Reads current state from DB.
-// Does NOT restart timers or modify state.
+// ── REFRESH DAY TAB (no re-init) ─────────────────────────────────────
 async function refreshDayTab() {
   const today = todayDateStr();
   const bday = await getBusinessDay(today);
-  if (bday) activeDay = bday;
-  applyDayState();
+  if (bday) {
+    activeDay = bday;
+    updateDayBanner();
+    if (isDayOpen()) updateDayLiveStats();
+  }
   renderDaySessionsList();
 }
 
-// ── APPLY STATE TO UI ─────────────────────────────────────────────────
-// Single function that syncs UI to current activeDay.status.
-// Never modifies state — only reads it.
-function applyDayState() {
-  if (!activeDay) return;
-  const isOpen = activeDay.status === 'OPEN';
-  setDayMode(isOpen);
-  updateDayBanner();
-  if (isOpen) updateDayLiveStats();
+// ── CREATE A NEW DAY RECORD ──────────────────────────────────────────
+async function createDayRecord(dateStr) {
+  const id = await dbAdd('business_days', {
+    business_date: dateStr,
+    status: 'CLOSED',          // starts CLOSED, user opens it
+    opened_at: null,
+    closed_at: null,
+    reopened_count: 0,
+    final_locked_at: null,
+    salesCount: 0, revenue: 0, profit: 0, itemsSold: 0,
+    notes: ''
+  });
+  return await dbGet('business_days', id);
+}
+
+// ── GET BUSINESS DAY ─────────────────────────────────────────────────
+async function getBusinessDay(dateStr) {
+  const all = await dbAll('business_days');
+  return all.find(d => d.business_date === dateStr) || null;
 }
 
 // ── OPEN DAY ─────────────────────────────────────────────────────────
@@ -2377,69 +1762,67 @@ async function openDay() {
   if (!bday) bday = await createDayRecord(today);
 
   if (bday.status === 'OPEN')   { toast('Day is already open!', 'err'); return; }
-  if (bday.status === 'LOCKED') { toast('🔒 This day is archived — cannot reopen.', 'err'); return; }
+  if (bday.status === 'LOCKED') { toast('🔒 This day is archived.', 'err'); return; }
 
-  const isFirstOpen = !bday.opened_at;
-  const isReopen    = !isFirstOpen;
+  const isReopen = bday.status === 'CLOSED' && !!bday.opened_at;
 
-  if (isFirstOpen) {
-    // Snapshot opening stock on first open only
+  if (!bday.opened_at) {
+    // First open of the day — snapshot opening stock value
     const items = await dbAll('items');
-    bday.openingStockCost   = items.reduce((s, i) => s + (i.buy  || 0) * (i.qty || 0), 0);
-    bday.openingStockRetail = items.reduce((s, i) => s + (i.sell || 0) * (i.qty || 0), 0);
+    bday.openingStockCost   = items.reduce((s, i) => s + i.buy * i.qty, 0);
+    bday.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
   }
 
-  bday.status         = 'OPEN';
-  bday.opened_at      = bday.opened_at || new Date().toISOString();
-  bday.last_opened_at = new Date().toISOString();
+  bday.status          = 'OPEN';
+  bday.opened_at       = bday.opened_at || new Date().toISOString();
+  bday.last_opened_at  = new Date().toISOString();
   if (isReopen) bday.reopened_count = (bday.reopened_count || 0) + 1;
 
   await dbPut('business_days', bday);
   activeDay = bday;
-  applyDayState();
+  setDayMode(true);
+  updateDayBanner();
+  updateDayLiveStats();
   renderDaySessionsList();
-  toast(isReopen ? '🔓 Day reopened — continue recording.' : '🌅 Business day opened!', 'ok');
-  scheduleSync();
+  toast(isReopen ? '🔓 Day reopened! Continue recording.' : '🌅 Business day opened!', 'ok');
 }
 
-// ── CLOSE DAY (shows summary sheet) ──────────────────────────────────
+// ── CLOSE DAY ────────────────────────────────────────────────────────
 async function closeDay() {
   if (!isDayOpen()) { toast('No open day to close.', 'err'); return; }
-  await _buildAndShowSummary();
-}
 
-// ── BUILD SUMMARY SHEET ───────────────────────────────────────────────
-async function _buildAndShowSummary() {
-  const todayStr   = activeDay.business_date;
-  const sales      = await dbAll('sales');
-  const daySales   = sales.filter(s => s.business_date === todayStr);
-  const items      = await dbAll('items');
-  const todayStart = todayStr + 'T00:00:00';
-  const purchases  = items.filter(i => i.createdAt && i.createdAt >= todayStart);
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(s => s.business_date === activeDay.business_date);
+  const revenue   = daySales.reduce((s, x) => s + x.revenue, 0);
+  const profit    = daySales.reduce((s, x) => s + x.profit, 0);
+  const itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
+  // Note: tracks NEW items added today (by createdAt).
+  // Restocks to existing items are not separately tracked — a future
+  // 'stock_events' log store would capture this properly.
+  const todayStart = today + 'T00:00:00';
+  const items     = await dbAll('items');
+  const purchases = items.filter(i => i.createdAt && i.createdAt >= todayStart);
+  const closingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
+  const margin = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : 0;
+  const avgSale = daySales.length > 0 ? (revenue / daySales.length) : 0;
+  const openT = activeDay.opened_at ? fmtTime(activeDay.opened_at) : '?';
+  const nowT  = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
 
-  const revenue    = daySales.reduce((s, x) => s + x.revenue, 0);
-  const profit     = daySales.reduce((s, x) => s + x.profit, 0);
-  const itemsSold  = daySales.reduce((s, x) => s + x.qty, 0);
-  const closingStockCost = items.reduce((s, i) => s + (i.buy||0) * (i.qty||0), 0);
-  const margin     = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : 0;
-  const avgSale    = daySales.length > 0 ? revenue / daySales.length : 0;
-  const openT      = fmtTime(activeDay.opened_at);
-  const nowT       = fmtTime(new Date().toISOString());
-
+  // Populate summary sheet
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set('ds-date',          fmtFullDate(todayStr));
-  set('ds-time-range',    openT + ' → ' + nowT);
-  set('ds-revenue',       fmt(revenue));
-  set('ds-profit',        fmt(profit));
-  set('ds-margin',        margin + '%');
-  set('ds-avg-sale',      fmt(avgSale));
-  set('ds-sales',         daySales.length);
-  set('ds-items-sold',    itemsSold);
-  set('ds-custom-price',  daySales.filter(s => s.overridden).length);
+  set('ds-date',       fmtFullDate(activeDay.business_date));
+  set('ds-time-range', openT + ' → ' + nowT);
+  set('ds-revenue',    fmt(revenue));
+  set('ds-profit',     fmt(profit));
+  set('ds-margin',     margin + '%');
+  set('ds-avg-sale',   fmt(avgSale));
+  set('ds-sales',      daySales.length);
+  set('ds-items-sold', itemsSold);
+  set('ds-custom-price', daySales.filter(s => s.overridden).length);
   set('ds-opening-stock', fmt(activeDay.openingStockCost || 0));
   set('ds-closing-stock', fmt(closingStockCost));
   set('ds-purchases',     purchases.length);
-  set('ds-purchases-val', fmt(purchases.reduce((s, i) => s + (i.buy||0) * (i.qty||0), 0)));
+  set('ds-purchases-val', fmt(purchases.reduce((s, i) => s + i.buy * i.qty, 0)));
 
   // Stock movement bar
   const opening = activeDay.openingStockCost || 0;
@@ -2449,24 +1832,26 @@ async function _buildAndShowSummary() {
   if (bar) bar.style.width = pct + '%';
   if (lbl) lbl.textContent = pct + '%';
 
-  // Performance verdict
+  // Verdict
   const verdictEl = document.getElementById('ds-verdict');
   if (verdictEl) {
-    let verdict = '😴 Quiet day — ' + daySales.length + ' sales.';
+    let verdict = '😴 Quiet day. ' + daySales.length + ' sales.';
     let vBg = 'var(--surface2)', vColor = 'var(--muted)';
     if (daySales.length > 0) {
       const m = parseFloat(margin);
-      if      (m >= 30) { verdict = '🔥 Excellent day! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
-      else if (m >= 15) { verdict = '✅ Good day! '       + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
-      else              { verdict = '👍 Decent day. '     + margin + '% margin.'; vBg = '#fef9c3'; vColor = '#92400e'; }
+      if (m >= 30) { verdict = '🔥 Excellent! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
+      else if (m >= 15) { verdict = '✅ Good day! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
+      else { verdict = '👍 Decent. ' + margin + '% margin.'; vBg = 'var(--amber-light)'; vColor = 'var(--amber)'; }
     }
     verdictEl.style.cssText = 'background:' + vBg + ';color:' + vColor + ';border:1px solid ' + vColor + ';border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;';
     verdictEl.innerHTML = '<div style="font-size:16px;font-weight:800;">' + verdict + '</div>';
   }
 
+  // Notes reset
   const notes = document.getElementById('ds-notes');
-  if (notes) notes.value = activeDay.notes || '';
+  if (notes) notes.value = '';
 
+  // Show confirm button, hide pause button
   const confirmBtn = document.getElementById('ds-confirm-btn');
   const pauseBtn   = document.getElementById('ds-pause-btn');
   if (confirmBtn) { confirmBtn.style.display = 'block'; confirmBtn.textContent = '🌙 Confirm Close Day'; }
@@ -2475,34 +1860,36 @@ async function _buildAndShowSummary() {
   document.getElementById('day-summary-sheet').classList.add('open');
 }
 
-// ── CONFIRM CLOSE ─────────────────────────────────────────────────────
+// ── CONFIRM CLOSE ────────────────────────────────────────────────────
 async function confirmCloseDay() {
   const notes    = (document.getElementById('ds-notes') || {}).value || '';
-  const todayStr = activeDay.business_date;
+  const now      = new Date();
+  const todayStr = activeDay.business_date; // use activeDay date not todayDateStr() to avoid midnight edge cases
   const sales    = await dbAll('sales');
   const daySales = sales.filter(s => s.business_date === todayStr);
-  const items    = await dbAll('items');
-  const todayStart = todayStr + 'T00:00:00';
-  const purchases  = items.filter(i => i.createdAt && i.createdAt >= todayStart);
+  const items = await dbAll('items');
+  const todayStart2 = activeDay.business_date + 'T00:00:00';
+  const purchases = items.filter(i => i.createdAt && i.createdAt >= todayStart2);
 
-  activeDay.status           = 'CLOSED';
-  activeDay.closed_at        = new Date().toISOString();
-  activeDay.notes            = notes;
-  activeDay.salesCount       = daySales.length;
-  activeDay.revenue          = daySales.reduce((s, x) => s + x.revenue, 0);
-  activeDay.profit           = daySales.reduce((s, x) => s + x.profit, 0);
-  activeDay.itemsSold        = daySales.reduce((s, x) => s + x.qty, 0);
-  activeDay.purchasesCount   = purchases.length;
-  activeDay.purchaseCost     = purchases.reduce((s, i) => s + (i.buy||0)*(i.qty||0), 0);
-  activeDay.closingStockCost = items.reduce((s, i) => s + (i.buy||0)*(i.qty||0), 0);
+  activeDay.status       = 'CLOSED';
+  activeDay.closed_at    = now.toISOString();
+  activeDay.notes        = notes;
+  activeDay.salesCount   = daySales.length;
+  activeDay.revenue      = daySales.reduce((s, x) => s + x.revenue, 0);
+  activeDay.profit       = daySales.reduce((s, x) => s + x.profit, 0);
+  activeDay.itemsSold    = daySales.reduce((s, x) => s + x.qty, 0);
+  activeDay.purchasesCount = purchases.length;
+  activeDay.purchaseCost   = purchases.reduce((s, i) => s + i.buy * i.qty, 0);
+  activeDay.closingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
 
   await dbPut('business_days', activeDay);
   document.getElementById('day-summary-sheet').classList.remove('open');
-  applyDayState();
+  setDayMode(false);
+  updateDayBanner();
   renderDaySessionsList();
   renderDashboard();
-  _doShowPage('day');
-  toast('🌙 Day closed. Tap Open Day anytime to continue.', 'ok');
+  _origShowPage('day');
+  toast('🌙 Day closed. Tap Open Day to continue anytime.', 'ok');
   scheduleSync();
 }
 
@@ -2510,32 +1897,158 @@ function cancelCloseDay() {
   document.getElementById('day-summary-sheet').classList.remove('open');
 }
 
-// ── TAB MODE ─────────────────────────────────────────────────────────
-function setDayMode(isOpen) {
-  // Gray dash and list when day closed; Add is always accessible
-  ['dash', 'list'].forEach(tab => {
-    const btn = document.getElementById('tab-' + tab);
-    if (!btn || btn.style.display === 'none') return;
-    btn.classList.toggle('disabled', !isOpen);
-  });
-  // Add tab never grayed — form is always accessible, save action is guarded
-  const addBtn = document.getElementById('tab-add');
-  if (addBtn) addBtn.classList.remove('disabled');
-
-  // Show day-closed overlay on Add and Dash when day not open
-  updateDayClosedOverlay(isOpen);
-
-  // Stock list: refresh card action buttons (sell/edit/delete hide when closed)
-  const activePage = document.querySelector('.page.active');
-  if (activePage && activePage.id === 'page-list') renderList();
+async function viewPastSession(sessionId) {
+  const session = await dbGet('business_days', sessionId);
+  if (!session) { toast('Session not found.', 'err'); return; }
+  const content = document.getElementById('past-session-content');
+  if (!content) return;
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(s => s.business_date === session.business_date)
+                        .sort((a,b) => new Date(b.date) - new Date(a.date));
+  const rev    = daySales.reduce((s,x) => s + x.revenue, 0);
+  const profit = daySales.reduce((s,x) => s + x.profit, 0);
+  content.innerHTML =
+    '<div style="padding:4px 0 14px;">' +
+    '<div style="font-size:18px;font-weight:800;margin-bottom:4px;">' + fmtFullDate(session.business_date) + '</div>' +
+    '<div style="font-size:12px;color:var(--muted);font-family:var(--mono);">' +
+      fmtTime(session.opened_at) + ' → ' + (session.closed_at ? fmtTime(session.closed_at) : 'auto') +
+      (session.reopened_count > 0 ? ' · Reopened ' + session.reopened_count + 'x' : '') +
+    '</div></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">' +
+      _statBox(fmt(rev), 'Revenue', 'var(--accent2)') +
+      _statBox(fmt(profit), 'Profit', profit>=0?'var(--green)':'var(--red)') +
+      _statBox(daySales.length, 'Sales', 'var(--accent)') +
+    '</div>' +
+    (session.notes ? '<div style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:12px;">"' + escapeHtml(session.notes) + '"</div>' : '') +
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Sales</div>' +
+    (daySales.length === 0 ? '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales recorded</div>' :
+      daySales.map(s =>
+        '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);">' +
+        '<div><div style="font-size:13px;font-weight:700;">' + escapeHtml(s.itemName||s.itemCode||'Sale') + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + fmtTime(s.date) + ' · ' + escapeHtml(s.itemCode||'') + '</div></div>' +
+        '<div style="text-align:right;"><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue) + '</div>' +
+        '<div style="font-size:11px;color:var(--green);font-family:var(--mono);">+' + fmt(s.profit) + '</div></div></div>'
+      ).join('')
+    );
+  const exportBtn = document.getElementById('export-day-btn');
+  if (exportBtn) exportBtn.onclick = () => exportDayCSV(session);
+  document.getElementById('past-session-sheet').classList.add('open');
 }
 
-function updateDayClosedOverlay(isOpen) {
-  const overlay = document.getElementById('day-closed-overlay');
-  if (!overlay) return;
-  const activePage = document.querySelector('.page.active');
-  const pageId = activePage ? activePage.id.replace('page-', '') : '';
-  overlay.style.display = (!isOpen && pageId === 'dash') ? 'flex' : 'none';
+function closePastSessionSheet() {
+  document.getElementById('past-session-sheet').classList.remove('open');
+}
+
+async function exportDayCSV(session) {
+  if (!session) return;
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(s => s.business_date === session.business_date)
+                        .sort((a,b) => new Date(a.date) - new Date(b.date));
+  const headers = ['Date','Time','Code','Name','Qty','Unit Price','Revenue','Profit','Payment'];
+  const rows = daySales.map(s => [
+    s.business_date||'',
+    s.date ? new Date(s.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '',
+    s.itemCode||'', s.itemName||'',
+    s.qty||0, s.actualPrice||0, s.revenue||0, s.profit||0,
+    s.paymentMethod||'Cash'
+  ]);
+  const csv = [headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='MGS_'+session.business_date+'.csv'; a.click();
+  URL.revokeObjectURL(url);
+  toast('📤 CSV exported!', 'ok');
+}
+
+// ── BANNER LIVE CLOCK — refresh duration display every minute ────────
+let _bannerClockTimer = null;
+function startBannerClock() {
+  if (_bannerClockTimer) clearInterval(_bannerClockTimer);
+  _bannerClockTimer = setInterval(() => {
+    if (isDayOpen()) updateDayBanner(); // refreshes the "Xh Ym running" text
+  }, 60000);
+}
+
+// ── AUTO SCHEDULER ───────────────────────────────────────────────────
+// Checks every 30s for time-triggered actions
+function startDayTimer() {
+  if (dayCheckTimer) clearInterval(dayCheckTimer);
+  dayCheckTimer = setInterval(async () => {
+    const now   = new Date();
+    const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+    const today = todayDateStr();
+    const bday  = await getBusinessDay(today);
+    if (!bday) return;
+
+    // 11:45 PM — warn once that auto-close is coming
+    if (bday.status === 'OPEN' && h === 23 && m === 45 && s < 30 && _warned1145 !== today) {
+      _warned1145 = today;
+      toast('⏰ 15 minutes left — day auto-closes at midnight!', 'err');
+    }
+
+    // 11:59:55 PM — auto-close the open day
+    if (bday.status === 'OPEN' && h === 23 && m === 59 && s >= 55) {
+      const sales = await dbAll('sales');
+      const ds = sales.filter(s => s.business_date === today);
+      bday.status     = 'CLOSED';
+      bday.closed_at  = now.toISOString();
+      bday.auto_closed = true;
+      bday.salesCount = ds.length;
+      bday.revenue    = ds.reduce((a, s) => a + s.revenue, 0);
+      bday.profit     = ds.reduce((a, s) => a + s.profit, 0);
+      bday.itemsSold  = ds.reduce((a, s) => a + s.qty, 0);
+      await dbPut('business_days', bday);
+      activeDay = bday;
+      setDayMode(false);
+      updateDayBanner();
+      renderDaySessionsList();
+      toast('🌙 Day auto-closed at midnight.', '');
+    }
+
+    // 00:00 — lock yesterday, create today fresh
+    if (h === 0 && m === 0 && s < 30) {
+      const yesterday = new Date(now - 864e5).toISOString().split('T')[0];
+      const yBday = await getBusinessDay(yesterday);
+      if (yBday && yBday.status !== 'LOCKED') {
+        yBday.status = 'LOCKED';
+        yBday.final_locked_at = now.toISOString();
+        await dbPut('business_days', yBday);
+      }
+      // Ensure today's record exists
+      let todayBday = await getBusinessDay(today);
+      if (!todayBday) todayBday = await createDayRecord(today);
+      _warned1145 = null; // reset warning for new day
+      _lastKnownDate = today;
+      activeDay = todayBday;
+      setDayMode(false);
+      updateDayBanner();
+      renderDaySessionsList();
+      // Restart banner clock for new day
+      startBannerClock();
+    }
+  }, 30000);
+}
+
+// ── VISIBILITY CHANGE — handle phone wake ────────────────────────────
+let _lastKnownDate = todayDateStr();
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden) return;
+  const today = todayDateStr();
+  if (today !== _lastKnownDate) {
+    _lastKnownDate = today;
+    _warned1145 = null;
+    await loadActiveDay(); // date changed overnight — full reinit
+  } else {
+    await refreshDayTab(); // same day — just refresh display
+  }
+});
+
+// ── LOCK OLD DAY ─────────────────────────────────────────────────────
+async function lockBusinessDay(bday) {
+  bday.status = 'LOCKED';
+  bday.final_locked_at = new Date().toISOString();
+  await dbPut('business_days', bday);
 }
 
 // ── DAY BANNER ───────────────────────────────────────────────────────
@@ -2551,355 +2064,141 @@ function updateDayBanner() {
   const liveSection = document.getElementById('day-live');
   if (!banner) return;
 
-  const BTN = 'width:100%;padding:16px;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-top:6px;';
+  const BTN = 'width:100%;padding:16px;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);';
 
   if (status === 'OPEN') {
     const mins = opened_at ? Math.floor((Date.now() - new Date(opened_at)) / 60000) : 0;
     const dur  = mins < 60 ? mins + 'm' : Math.floor(mins/60) + 'h ' + (mins%60) + 'm';
     banner.style.cssText = 'background:var(--green-light);border:2px solid #a8d8b5;border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
-    icon.textContent    = '🌅';
-    badge.textContent   = 'OPEN';
-    badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 14px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:#dcfce7;color:#16a34a;';
-    title.textContent   = 'Business Day Open';
-    title.style.color   = 'var(--green)';
-    sub.textContent     = 'Opened ' + fmtTime(opened_at)
+    icon.textContent  = '🌅';
+    badge.textContent = 'OPEN';
+    badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:#dcfce7;color:#16a34a;';
+    title.textContent = 'Business Day Open';
+    title.style.color = 'var(--green)';
+    sub.textContent   = 'Opened ' + fmtTime(opened_at)
       + ' · ' + dur + ' running'
       + (reopened_count > 0 ? ' · Reopened ' + reopened_count + 'x' : '');
-    actionArea.innerHTML =
-      '<button onclick="closeDay()" style="' + BTN + 'background:var(--red);color:white;">' +
-      '<i class="fa-solid fa-moon"></i> Close Day</button>';
+    actionArea.innerHTML = '<button onclick="closeDay()" style="' + BTN + 'background:var(--red);color:white;"><i class="fa-solid fa-moon"></i> Close Day</button>';
     if (liveSection) liveSection.style.display = 'block';
-
+    setDayMode(true);
   } else if (status === 'CLOSED') {
     banner.style.cssText = 'background:#fef3c7;border:2px solid #f5d9a0;border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
-    icon.textContent    = '🌙';
-    badge.textContent   = 'CLOSED';
-    badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 14px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:#fef3c7;color:#92400e;';
-    title.textContent   = 'Business Day Closed';
-    title.style.color   = '#d97706';
-    sub.textContent     = closed_at
-      ? 'Closed ' + fmtTime(closed_at) + (auto_closed ? ' (auto)' : '')
-        + (reopened_count > 0 ? ' · Opened ' + (reopened_count + 1) + 'x today' : '')
-        + ' · Tap to reopen'
-      : 'No session yet today — tap to open';
-    actionArea.innerHTML =
-      '<button onclick="openDay()" style="' + BTN + 'background:var(--accent);color:white;">' +
-      '<i class="fa-solid fa-sun"></i> Open Day</button>';
+    icon.textContent  = '🌙';
+    badge.textContent = 'CLOSED';
+    badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:#fef3c7;color:#92400e;';
+    title.textContent = 'Business Day Closed';
+    title.style.color = '#d97706';
+    sub.textContent   = closed_at
+      ? 'Closed at ' + fmtTime(closed_at) + (auto_closed ? ' · auto' : '') + (reopened_count > 0 ? ' · Opened ' + (reopened_count + 1) + 'x today' : '') + ' · Tap to reopen'
+      : 'Tap Open Day to begin — ' + fmtFullDate(todayDateStr());
+    actionArea.innerHTML = '<button onclick="openDay()" style="' + BTN + 'background:var(--accent);color:white;"><i class="fa-solid fa-sun"></i> Open Day</button>';
     if (liveSection) liveSection.style.display = 'none';
-
+    setDayMode(false);
   } else if (status === 'LOCKED') {
     banner.style.cssText = 'background:var(--surface2);border:2px solid var(--border);border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
-    icon.textContent    = '🔒';
-    badge.textContent   = 'LOCKED';
-    badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 14px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:var(--surface2);color:var(--muted);';
-    title.textContent   = 'Previous Day — Archived';
-    title.style.color   = 'var(--muted)';
-    sub.textContent     = fmtFullDate(activeDay.business_date) + ' · Read only';
-    actionArea.innerHTML =
-      '<button onclick="openDay()" style="' + BTN + 'background:var(--accent);color:white;">' +
-      '<i class="fa-solid fa-sun"></i> Open Today</button>';
+    icon.textContent  = '🔒';
+    badge.textContent = 'LOCKED';
+    badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:var(--surface2);color:var(--muted);';
+    title.textContent = 'Archived Day';
+    title.style.color = 'var(--muted)';
+    sub.textContent   = fmtFullDate(activeDay.business_date) + ' — read only';
+    actionArea.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:10px 0;">This day is read-only. A new day will appear automatically tomorrow.</div>';
     if (liveSection) liveSection.style.display = 'none';
+    setDayMode(false);
   }
 }
 
-// ── BANNER LIVE CLOCK ─────────────────────────────────────────────────
-let _bannerClockTimer = null;
-function startBannerClock() {
-  if (_bannerClockTimer) clearInterval(_bannerClockTimer);
-  _bannerClockTimer = setInterval(() => {
-    if (isDayOpen()) updateDayBanner();
-  }, 60000); // update every minute to keep duration fresh
-}
-
-// ── AUTO SCHEDULER ───────────────────────────────────────────────────
-// Runs every 30s. Handles auto-close at midnight and new-day creation.
-function startDayTimer() {
-  if (dayCheckTimer) clearInterval(dayCheckTimer);
-  dayCheckTimer = setInterval(async () => {
-    const now = new Date();
-    const h   = now.getHours();
-    const m   = now.getMinutes();
-    const s   = now.getSeconds();
-    const today = todayDateStr();
-    const bday  = await getBusinessDay(today);
-    if (!bday) return;
-
-    // 11:45 PM — one-time warning
-    if (bday.status === 'OPEN' && h === 23 && m === 45 && s < 30 && _warned1145 !== today) {
-      _warned1145 = today;
-      toast('⏰ 15 minutes to midnight — day will auto-close!', 'err');
-    }
-
-    // 11:59:55 PM — auto-close
-    if (bday.status === 'OPEN' && h === 23 && m === 59 && s >= 55) {
-      const sales   = await dbAll('sales');
-      const ds      = sales.filter(s => s.business_date === today);
-      const items   = await dbAll('items');
-      bday.status          = 'CLOSED';
-      bday.closed_at       = now.toISOString();
-      bday.auto_closed     = true;
-      bday.salesCount      = ds.length;
-      bday.revenue         = ds.reduce((a, s) => a + s.revenue, 0);
-      bday.profit          = ds.reduce((a, s) => a + s.profit, 0);
-      bday.itemsSold       = ds.reduce((a, s) => a + s.qty, 0);
-      bday.closingStockCost = items.reduce((a, i) => a + (i.buy||0)*(i.qty||0), 0);
-      await dbPut('business_days', bday);
-      activeDay = bday;
-      applyDayState();
-      renderDaySessionsList();
-      toast('🌙 Day auto-closed at midnight.', '');
-      scheduleSync();
-    }
-
-    // 00:00 — lock yesterday, create fresh CLOSED record for today
-    if (h === 0 && m === 0 && s < 30) {
-      // Lock yesterday
-      const yDate  = new Date(now.getTime() - 864e5);
-      const yDateStr = yDate.getFullYear() + '-' +
-        String(yDate.getMonth()+1).padStart(2,'0') + '-' +
-        String(yDate.getDate()).padStart(2,'0');
-      const yBday  = await getBusinessDay(yDateStr);
-      if (yBday && yBday.status !== 'LOCKED') {
-        yBday.status = 'LOCKED';
-        yBday.final_locked_at = now.toISOString();
-        await dbPut('business_days', yBday);
-      }
-      // Ensure today record exists
-      let todayBday = await getBusinessDay(today);
-      if (!todayBday) todayBday = await createDayRecord(today);
-      _warned1145    = null;
-      _lastKnownDate = today;
-      _timerStarted  = false; // allow fresh timer if needed
-      activeDay      = todayBday;
-      applyDayState();
-      renderDaySessionsList();
-    }
-  }, 30000);
-}
-
-// ── VISIBILITY CHANGE (phone wake) ───────────────────────────────────
-let _lastKnownDate = todayDateStr();
-document.addEventListener('visibilitychange', async () => {
-  if (document.hidden) return;
-  const today = todayDateStr();
-  if (today !== _lastKnownDate) {
-    // Date changed while phone was sleeping — full reinit for new day
-    _lastKnownDate = today;
-    _warned1145    = null;
-    _timerStarted  = false; // allow timer to restart for new day
-    await loadActiveDay();
-  } else {
-    // Same day — just refresh display from DB, never touch state
-    const bday = await getBusinessDay(today);
-    if (bday) { activeDay = bday; applyDayState(); }
-  }
-});
-
-// ── LIVE STATS ────────────────────────────────────────────────────────
+// ── LIVE STATS ───────────────────────────────────────────────────────
 async function updateDayLiveStats() {
   if (!activeDay) return;
-  const sales    = await dbAll('sales');
+  const sales = await dbAll('sales');
   const daySales = sales.filter(s => s.business_date === activeDay.business_date);
-  const rev    = daySales.reduce((a, s) => a + s.revenue, 0);
+  const rev   = daySales.reduce((a, s) => a + s.revenue, 0);
   const profit = daySales.reduce((a, s) => a + s.profit, 0);
-  const items  = await dbAll('items');
-  const todayStart = activeDay.business_date + 'T00:00:00';
-  const newItems   = items.filter(i => i.createdAt && i.createdAt >= todayStart);
+  const count = daySales.length;
+  const items = await dbAll('items');
+  const purchases = items.filter(i => activeDay.opened_at && i.createdAt >= activeDay.opened_at);
 
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set('day-sales-count', daySales.length);
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('day-sales-count', count);
   set('day-revenue',     fmt(rev));
   set('day-profit',      fmt(profit));
-  set('day-purchases',   newItems.length);
+  set('day-purchases',   purchases.length);
 
+  // Today's sales list
   const sl = document.getElementById('day-sales-list');
-  if (!sl) return;
-  sl.innerHTML = daySales.length
-    ? daySales.slice().reverse().slice(0, 20).map(s =>
-        '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">' +
-        '<div style="flex:1;">' +
-          '<div style="font-size:13px;font-weight:700;">' + (s.itemName||s.itemCode||'Sale') + '</div>' +
-          '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' +
-            fmtTime(s.date) + ' · ' + (s.itemCode||'') +
-            (s.paymentMethod && s.paymentMethod !== 'Cash' ? ' · ' + s.paymentMethod : '') +
-          '</div>' +
-        '</div>' +
-        '<div style="text-align:right;flex-shrink:0;">' +
-          '<div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue) + '</div>' +
-          '<div style="font-size:11px;color:var(--green);font-family:var(--mono);">+' + fmt(s.profit) + '</div>' +
-        '</div>' +
-        (isDayOpen()
-          ? '<button onclick="voidSale(' + s.id + ')" ' +
-            'style="font-size:10px;padding:3px 9px;background:var(--red-light);color:var(--red);' +
-            'border:1px solid var(--red);border-radius:4px;cursor:pointer;font-weight:700;flex-shrink:0;">Void</button>'
-          : '') +
-        '</div>'
-      ).join('')
-    : '<div style="color:var(--muted);font-size:13px;padding:10px 0;">No sales recorded today</div>';
+  if (sl) {
+    sl.innerHTML = daySales.length
+      ? daySales.slice().reverse().slice(0, 20).map(s =>
+          '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">' +
+          '<div style="flex:1;"><div style="font-size:13px;font-weight:700;">' + (s.itemName||'') + '</div>' +
+          '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + fmtTime(s.date) + ' · ' + (s.itemCode||'') + ' · ' + (s.paymentMethod||'Cash') + '</div></div>' +
+          '<div style="text-align:right;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue) + '</div>' +
+          '<div style="font-size:11px;color:var(--green);">+' + fmt(s.profit) + '</div></div>' +
+          (isDayOpen() ? '<button onclick="voidSale(' + s.id + ')" style="font-size:10px;padding:2px 8px;background:var(--red-light);color:var(--red);border:1px solid var(--red);border-radius:4px;cursor:pointer;font-weight:700;flex-shrink:0;">Void</button>' : '') +
+          '</div>'
+        ).join('')
+      : '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales yet today</div>';
+  }
 }
 
 // ── PAST SESSIONS LIST ────────────────────────────────────────────────
 async function renderDaySessionsList() {
-  const all   = await dbAll('business_days');
+  const all = await dbAll('business_days');
   const today = todayDateStr();
-  const past  = all
-    .filter(d => d.business_date < today)
+  const past = all
+    .filter(d => d.business_date !== today && (d.status === 'CLOSED' || d.status === 'LOCKED'))
     .sort((a, b) => b.business_date.localeCompare(a.business_date));
 
   const list = document.getElementById('day-sessions-list');
   if (!list) return;
 
   if (!past.length) {
-    list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px 0;">No past sessions yet</div>';
+    list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No past sessions yet</div>';
     return;
   }
 
   list.innerHTML = past.map(s => {
     const profitColor = (s.profit||0) >= 0 ? 'var(--green)' : 'var(--red)';
-    const isLocked    = s.status === 'LOCKED';
-    const badge = isLocked
-      ? '<span style="font-size:10px;background:var(--surface2);color:var(--muted);padding:2px 8px;border-radius:20px;font-weight:700;">' +
-        '<i class="fa-solid fa-lock" style="margin-right:3px;font-size:9px;"></i>Locked</span>'
-      : '<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:20px;font-weight:700;">' +
-        '<i class="fa-solid fa-moon" style="margin-right:3px;font-size:9px;"></i>Closed</span>';
-
+    const locked = s.status === 'LOCKED';
     return '<div class="card" style="margin-bottom:8px;padding:14px;cursor:pointer;" onclick="viewPastSession(' + s.id + ')">' +
-      '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">' +
-      '<div style="flex:1;min-width:0;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
+      '<div>' +
         '<div style="font-size:14px;font-weight:800;color:var(--text);">' + fmtFullDate(s.business_date) + '</div>' +
         '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">' +
-          fmtTime(s.opened_at) + ' → ' + (s.closed_at ? fmtTime(s.closed_at) : 'auto') +
+          (s.opened_at ? fmtTime(s.opened_at) : '—') + ' → ' +
+          (s.closed_at ? fmtTime(s.closed_at) : 'auto') +
           (s.reopened_count > 0 ? ' · Reopened ' + s.reopened_count + 'x' : '') +
-          (s.auto_closed ? ' · auto-closed' : '') +
         '</div>' +
-      '</div>' + badge +
+      '</div>' +
+      (locked
+        ? '<span style="font-size:10px;background:var(--surface2);color:var(--muted);padding:2px 8px;border-radius:20px;font-weight:700;"><i class="fa-solid fa-lock" style="margin-right:3px;"></i>Locked</span>'
+        : '<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:20px;font-weight:700;"><i class="fa-solid fa-moon" style="margin-right:3px;"></i>Closed</span>'
+      ) +
       '</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">' +
-        _statBox(fmt(s.revenue||0),  'Revenue',  'var(--accent2)') +
-        _statBox(fmt(s.profit||0),   'Profit',   profitColor)      +
-        _statBox(s.salesCount||0,    'Sales',    'var(--accent)')  +
+      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue||0) + '</div><div style="font-size:10px;color:var(--muted);">Revenue</div></div>' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:' + profitColor + ';">' + fmt(s.profit||0) + '</div><div style="font-size:10px;color:var(--muted);">Profit</div></div>' +
+      '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent);">' + (s.salesCount||0) + '</div><div style="font-size:10px;color:var(--muted);">Sales</div></div>' +
       '</div>' +
       (s.notes ? '<div style="margin-top:8px;font-size:12px;color:var(--muted);font-style:italic;">"' + s.notes + '"</div>' : '') +
-    '</div>';
+      '</div>';
   }).join('');
 }
-
-function _statBox(val, label, color) {
-  return '<div style="text-align:center;background:var(--surface2);border-radius:8px;padding:8px 4px;">' +
-    '<div style="font-size:14px;font-weight:800;font-family:var(--mono);color:' + color + ';">' + val + '</div>' +
-    '<div style="font-size:10px;color:var(--muted);">' + label + '</div>' +
-  '</div>';
-}
-
-// ── CSV EXPORT ────────────────────────────────────────────────────────
-async function exportDayCSV(session) {
-  if (!session) return;
-  const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.business_date === session.business_date)
-                        .sort((a,b) => new Date(a.date) - new Date(b.date));
-  const headers = ['Date','Time','Item Code','Item Name','Qty','Unit Price','Revenue','Profit','Payment'];
-  const rows = daySales.map(s => [
-    s.business_date || '',
-    s.date ? new Date(s.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '',
-    s.itemCode || '',
-    s.itemName || '',
-    s.qty || 0,
-    s.actualPrice || s.price || 0,
-    s.revenue || 0,
-    s.profit || 0,
-    s.paymentMethod || 'Cash'
-  ]);
-  const csv = [headers, ...rows]
-    .map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(','))
-    .join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url;
-  a.download = 'MGS_' + session.business_date + '.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-  toast('📤 CSV exported!', 'ok');
-}
-
-// ── VIEW PAST SESSION ─────────────────────────────────────────────────
-async function viewPastSession(sessionId) {
-  const session = await dbGet('business_days', sessionId);
-  if (!session) { toast('Session not found.', 'err'); return; }
-  const content = document.getElementById('past-session-content');
-  if (!content) return;
-  const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.business_date === session.business_date)
-                        .sort((a,b) => new Date(b.date) - new Date(a.date));
-  const revenue = daySales.reduce((s,x) => s + x.revenue, 0);
-  const profit  = daySales.reduce((s,x) => s + x.profit, 0);
-  content.innerHTML =
-    '<div style="padding:4px 0 16px;">' +
-    '<div style="font-size:18px;font-weight:800;margin-bottom:4px;">' + fmtFullDate(session.business_date) + '</div>' +
-    '<div style="font-size:12px;color:var(--muted);font-family:var(--mono);">' +
-      fmtTime(session.opened_at) + ' → ' + (session.closed_at ? fmtTime(session.closed_at) : 'auto') +
-    '</div></div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">' +
-      '<div style="text-align:center;background:var(--surface2);border-radius:var(--r);padding:12px;">' +
-        '<div style="font-size:18px;font-weight:800;color:var(--accent2);font-family:var(--mono);">' + fmt(revenue) + '</div>' +
-        '<div style="font-size:10px;color:var(--muted);">Revenue</div></div>' +
-      '<div style="text-align:center;background:var(--surface2);border-radius:var(--r);padding:12px;">' +
-        '<div style="font-size:18px;font-weight:800;color:var(--green);font-family:var(--mono);">' + fmt(profit) + '</div>' +
-        '<div style="font-size:10px;color:var(--muted);">Profit</div></div>' +
-      '<div style="text-align:center;background:var(--surface2);border-radius:var(--r);padding:12px;">' +
-        '<div style="font-size:18px;font-weight:800;color:var(--accent);font-family:var(--mono);">' + daySales.length + '</div>' +
-        '<div style="font-size:10px;color:var(--muted);">Sales</div></div>' +
-    '</div>' +
-    (session.notes ? '<div style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:12px;">"' + session.notes + '"</div>' : '') +
-    '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Sales</div>' +
-    (daySales.length === 0 ? '<div style="color:var(--muted);font-size:13px;">No sales recorded</div>' :
-      daySales.map(s =>
-        '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">' +
-        '<div><div style="font-size:13px;font-weight:700;">' + (s.itemName||s.itemCode||'Sale') + '</div>' +
-        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + fmtTime(s.date) + ' · ' + (s.itemCode||'') + '</div></div>' +
-        '<div style="text-align:right;"><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue) + '</div>' +
-        '<div style="font-size:11px;color:var(--green);">+' + fmt(s.profit) + '</div></div></div>'
-      ).join('')
-    );
-
-  // Wire export button
-  const exportBtn = document.getElementById('export-day-btn');
-  if (exportBtn) exportBtn.onclick = () => exportDayCSV(session);
-
-  document.getElementById('past-session-sheet').classList.add('open');
-}
-
-function closePastSessionSheet() {
-  document.getElementById('past-session-sheet').classList.remove('open');
-}
-
-// ── VOID SALE ─────────────────────────────────────────────────────────
-// Reverses a sale: removes the record and restores item stock.
-// Only allowed when the business day is OPEN.
 async function voidSale(saleId) {
   if (!isDayOpen()) { toast('⚠️ Day must be open to void a sale.', 'err'); return; }
-  if (!confirm('Void this sale? The item stock will be restored.')) return;
+  if (!confirm('Void this sale? Item stock will be restored.')) return;
   try {
     const sale = await dbGet('sales', saleId);
     if (!sale) { toast('Sale not found.', 'err'); return; }
-    // Restore stock
     const item = await dbGet('items', sale.itemId);
-    if (item) {
-      item.qty += (sale.qty || 1);
-      item.updatedAt = new Date().toISOString();
-      await dbPut('items', item);
-      allItems = await dbAll('items');
-      fbSyncItem(item);
-    }
+    if (item) { item.qty += (sale.qty || 1); item.updatedAt = new Date().toISOString(); await dbPut('items', item); allItems = await dbAll('items'); fbSyncItem(item); }
     await dbDelete('sales', saleId);
     renderList(); renderDashboard(); updateHeader();
     if (activeDay) updateDayLiveStats();
     scheduleSync();
     toast('↩ Sale voided — stock restored.', 'ok');
-  } catch(e) {
-    toast('Error voiding sale: ' + e.message, 'err');
-    console.error('[voidSale]', e);
-  }
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3270,9 +2569,24 @@ function logout() {
 
 
 
-// _origShowPage: internal navigation — bypasses day guard, used by timers and state transitions
-const _origShowPage = _doShowPage;
-
+// Guard showPage - block access to restricted tabs
+const _origShowPage = showPage;
+showPage = function(id) {
+  if (currentUser && !currentUser.tabs.includes(id)) {
+    toast('⛔ Access denied', 'err');
+    return;
+  }
+  // Block restricted tabs when day is not open (but NOT sheet popups)
+  const dayOpen = activeDay && (activeDay.status === 'OPEN');
+  if (['dash', 'add'].includes(id) && !dayOpen) {
+    _origShowPage('day');
+    setTimeout(() => showDayClosedOverlay(id), 100);
+    return;
+  }
+  hideDayClosedOverlay();
+  if (currentUser) localStorage.setItem('mg_last_page', id);
+  _origShowPage(id);
+};
 
 function attemptLogin() {
   const username = document.getElementById('login-user').value.trim().toLowerCase();
@@ -3305,22 +2619,19 @@ function attemptLogin() {
     pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + user.name;
   }
 
-  // Restore last visited page with same rules as refresh
-  const lastPage = localStorage.getItem('mg_last_page') || 'day';
-  const alwaysAllowed = ['list', 'day', 'settings', 'sell'];
+  // Go to day page if day not open, otherwise last visited page
+  const lastPage = localStorage.getItem('mg_last_page') || 'dash';
+  const allowedPage = user.tabs.includes(lastPage) ? lastPage : user.tabs[0];
 
+  // Check day status
   getBusinessDay(todayDateStr()).then(bday => {
     const dayOpen = bday && bday.status === 'OPEN';
-    let target;
-    if (!user.tabs.includes(lastPage)) {
-      target = user.tabs[0];
-    } else if (lastPage === 'dash' && !dayOpen) {
-      target = 'day';
-      setTimeout(() => toast('📅 Open the business day to continue.', ''), 600);
+    if (!dayOpen && user.tabs.includes('day')) {
+      _origShowPage('day');
+      setTimeout(() => toast('⚠️ Please open the business day first.', ''), 500);
     } else {
-      target = lastPage;
+      _origShowPage(allowedPage);
     }
-    _doShowPage(target);
   });
   toast('Welcome, ' + user.name + '! 👋', 'ok');
 }
@@ -3328,6 +2639,7 @@ function attemptLogin() {
 function checkSession() {
   const saved = localStorage.getItem('mg_session');
   if (!saved) {
+    // No session — show login screen
     document.getElementById('login-screen').style.display = 'flex';
     return false;
   }
@@ -3343,17 +2655,13 @@ function checkSession() {
         pill.style.display = 'inline-flex';
         pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + user.name;
       }
-      const wrap = document.getElementById('user-menu-wrap');
-      if (wrap) wrap.style.display = 'block';
-      return true;
+      return true; // session valid, let caller handle navigation
     } else {
-      // Invalid credentials in saved session — clear and show login
       localStorage.removeItem('mg_session');
       document.getElementById('login-screen').style.display = 'flex';
       return false;
     }
   } catch(e) {
-    // Corrupted session data — clear and show login
     localStorage.removeItem('mg_session');
     document.getElementById('login-screen').style.display = 'flex';
     return false;
@@ -3364,52 +2672,24 @@ function checkSession() {
 // ===== JQUERY ENHANCEMENTS =====
 
 
-
-// ── GLOBAL ERROR HANDLERS ─────────────────────────────────────────────
 window.addEventListener('unhandledrejection', e => {
   console.error('[UNHANDLED]', e.reason);
-  // Only show toast for DB errors — not Firebase (they self-report)
-  if (e.reason && e.reason.message && e.reason.message.includes('Database')) {
-    toast('⚠️ ' + e.reason.message, 'err');
-  }
-});
-window.addEventListener('error', e => {
-  console.error('[JS ERROR]', e.message, 'at', e.filename, e.lineno);
+  if (e.reason && e.reason.message && e.reason.message.includes('Database')) toast('⚠️ ' + e.reason.message, 'err');
 });
 
 // ===== INIT =====
 initDB();
-
-// Wait for IndexedDB to be ready before initialising Firebase.
-// Firebase listeners call dbAll() on first snapshot — DB must be open first.
+// Wait for IndexedDB before connecting Firebase
 function initFirebaseWhenReady() {
-  const wait = () => {
-    if (db) {
-      initFirebase();
-    } else {
-      setTimeout(wait, 100);
-    }
-  };
-  setTimeout(wait, 300); // small initial delay for module scripts
+  if (db) { initFirebase(); } else { setTimeout(initFirebaseWhenReady, 100); }
 }
-initFirebaseWhenReady();
+setTimeout(initFirebaseWhenReady, 300);
 
 // ===== AUTO SYNC =====
 let autoSyncTimer = null;
 let pendingSyncTimer = null;
 
 // Debounced sync — runs 2s after last change, avoids hammering Firebase
-// Retry sync when network comes back online
-window.addEventListener('online', () => {
-  if (fbReady && fbDb) {
-    console.log('[SYNC] Back online — syncing...');
-    scheduleSync();
-  } else if (!fbReady) {
-    // Try to reconnect Firebase if we lost it
-    initFirebase().catch(e => console.warn('[SYNC] Reconnect failed:', e.message));
-  }
-});
-
 function scheduleSync() {
   if (!navigator.onLine || !fbReady || !fbDb) return;
   clearTimeout(pendingSyncTimer);

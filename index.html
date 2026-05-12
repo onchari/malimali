@@ -33,24 +33,18 @@
        Exports all needed symbols to window._fbImports so the
        non-module app.js can access them. -->
   <script type="module">
-    try {
-      const { initializeApp, getApps, getApp } =
-        await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
-      const {
-        getFirestore, collection, doc, setDoc, deleteDoc,
-        getDocs, onSnapshot, writeBatch, serverTimestamp
-      } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    import { initializeApp, getApps }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import {
+      getFirestore, collection, doc, setDoc, deleteDoc,
+      getDocs, onSnapshot, writeBatch, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-      window._fbImports = {
-        initializeApp, getApps, getApp,
-        getFirestore, collection, doc, setDoc, deleteDoc,
-        getDocs, onSnapshot, writeBatch, serverTimestamp
-      };
-      console.log('[Firebase] SDK loaded OK');
-    } catch(e) {
-      console.error('[Firebase] SDK failed to load:', e);
-      window._fbImports = null; // signal failure
-    }
+    window._fbImports = {
+      initializeApp, getApps,
+      getFirestore, collection, doc, setDoc, deleteDoc,
+      getDocs, onSnapshot, writeBatch, serverTimestamp
+    };
   </script>
 </head>
 <body>
@@ -74,6 +68,7 @@
   </div>
 
   <!-- User menu (hidden until login) -->
+  <span id="low-stock-badge" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;margin-right:6px;cursor:pointer;" onclick="showPage('list')"></span>
   <div style="position:relative;flex-shrink:0;" id="user-menu-wrap" style="display:none;">
 
     <!-- Pill button shows username; click opens dropdown -->
@@ -208,7 +203,7 @@
      Shown on app load if no session in localStorage (key: mg_session).
      attemptLogin() in app.js validates username + PIN.
      ============================================================== -->
-<div id="login-screen" style="display:none;">
+<div id="login-screen">
 
   <img src="data:image/jpeg;base64,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"
        alt="Mandela General Stores"
@@ -386,133 +381,95 @@
     <!-- Type selector full-width -->
     <div class="add-field">
       <label class="add-label">Category <span class="add-required">*</span></label>
-      <select class="add-select" id="f-type" onchange="onTypeChange()">
+      <select class="add-select" id="f-type">
         <option value="">Choose a type…</option>
       </select>
     </div>
 
-    <!-- Code + Name side by side -->
+    <!-- Code + Size side by side -->
     <div class="add-row-2">
       <div class="add-field">
         <label class="add-label">Code <span class="add-required">*</span></label>
         <input class="add-input add-mono" id="f-code" type="text"
                placeholder="e.g. SH001"
                autocomplete="off" spellcheck="false"
-               oninput="onCodeInput()"
-               onblur="setTimeout(hideCodeDropdown, 200)">
+               oninput="this.value=this.value.toUpperCase()">
       </div>
       <div class="add-field">
-        <label class="add-label">Name <span class="add-hint">optional</span></label>
-        <input class="add-input" id="f-name" type="text"
-               placeholder="e.g. Nike Air Max"
+        <label class="add-label">Size / Variant</label>
+        <input class="add-input" id="f-size" type="text"
+               placeholder="e.g. 42 · L · 250ml"
                autocomplete="off" spellcheck="false">
       </div>
     </div>
 
-    <!-- Standard size field (hidden for shoes) -->
-    <div class="add-field" id="f-size-field">
-      <label class="add-label">Size / Variant</label>
-      <input class="add-input" id="f-size" type="text"
-             placeholder="e.g. L · 250ml · N/A"
+    <!-- Name full-width -->
+    <div class="add-field">
+      <label class="add-label">Name <span class="add-hint">(optional)</span></label>
+      <input class="add-input" id="f-name" type="text"
+             placeholder="e.g. Nike Air Max · Omo Washing Powder"
              autocomplete="off" spellcheck="false">
     </div>
 
   </div>
 
-  <!-- ── SHOE SIZE PANEL (shown only when type is footwear) ────── -->
-  <div id="shoe-size-panel" style="display:none;">
-    <div class="add-section-title">Shoe Sizes <span class="add-required">*</span></div>
-    <div class="add-section" style="padding-bottom:8px;">
-      <!-- S / M / L group buttons -->
-      <div class="add-field" style="margin-bottom:4px;">
-        <label class="add-label">Size Group</label>
-        <div class="sg-row" id="sg-row">
-          <button type="button" class="sg-btn" onclick="selectSizeGroup('S')">S<span class="sg-range" id="sg-range-S"></span></button>
-          <button type="button" class="sg-btn" onclick="selectSizeGroup('M')">M<span class="sg-range" id="sg-range-M"></span></button>
-          <button type="button" class="sg-btn" onclick="selectSizeGroup('L')">L<span class="sg-range" id="sg-range-L"></span></button>
+  <!-- ── SECTION 2: Stock & Pricing ──────────────────────────── -->
+  <div class="add-section-title">Stock &amp; Pricing</div>
+  <div class="add-section">
+
+    <!-- Qty full-width, large number input -->
+    <div class="add-field">
+      <label class="add-label">Quantity in Stock <span class="add-required">*</span></label>
+      <input class="add-input add-num" id="f-qty" type="number"
+             placeholder="0"
+             min="0" inputmode="numeric"
+             oninput="updateProfitPreview()">
+    </div>
+
+    <!-- Buy + Sell side by side with currency prefix -->
+    <div class="add-row-2">
+      <div class="add-field">
+        <label class="add-label">Buying Price <span class="add-required">*</span></label>
+        <div class="add-price-wrap">
+          <span class="add-price-cur" id="bp-cur">KES</span>
+          <input class="add-price-input" id="f-buy" type="number"
+                 placeholder="0"
+                 min="0" inputmode="decimal"
+                 oninput="updateProfitPreview()">
         </div>
       </div>
-      <!-- Individual size buttons (rendered by JS) -->
-      <div id="shoe-sizes-grid" style="display:none;">
-        <label class="add-label" style="margin-bottom:8px;">Select Sizes</label>
-        <div class="sz-grid" id="sz-grid"></div>
-      </div>
-      <!-- Single qty/buy/sell shared across all selected sizes -->
-      <div id="shoe-rows-wrap" style="display:none;margin-top:14px;">
-        <div class="shoe-shared-lbl">
-          <i class="fa-solid fa-circle-info" style="color:var(--accent);margin-right:5px;"></i>
-          One price &amp; qty applied to each selected size
+      <div class="add-field">
+        <label class="add-label">Selling Price <span class="add-required">*</span></label>
+        <div class="add-price-wrap">
+          <span class="add-price-cur" id="sp-cur">KES</span>
+          <input class="add-price-input" id="f-sell" type="number"
+                 placeholder="0"
+                 min="0" inputmode="decimal"
+                 oninput="updateProfitPreview()">
         </div>
-        <div class="add-row-3">
-          <div class="add-field">
-            <label class="add-label">Qty / Size <span class="add-required">*</span></label>
-            <input class="add-input add-center" id="shoe-shared-qty"
-                   type="number" min="0" inputmode="numeric" placeholder="0">
-          </div>
-          <div class="add-field">
-            <label class="add-label">Buy Price <span class="add-required">*</span></label>
-            <input class="add-input add-center" id="shoe-shared-buy"
-                   type="number" min="0" inputmode="decimal" placeholder="0">
-          </div>
-          <div class="add-field">
-            <label class="add-label">Sell Price <span class="add-required">*</span></label>
-            <input class="add-input add-center" id="shoe-shared-sell"
-                   type="number" min="0" inputmode="decimal" placeholder="0">
-          </div>
-        </div>
-        <!-- Selected sizes summary -->
-        <div class="shoe-selected-summary" id="shoe-selected-summary"></div>
       </div>
     </div>
-  </div>
 
-  <!-- ── SECTION 2: Stock & Pricing (hidden for shoes) ─────────── -->
-  <div id="std-pricing-section" style="display:block;">
-    <div class="add-section-title">Stock &amp; Pricing</div>
-    <div class="add-section">
-
-      <!-- Qty + Buy + Sell in compact 3-column grid -->
-      <div class="add-row-3">
-        <div class="add-field">
-          <label class="add-label">Qty <span class="add-required">*</span></label>
-          <input class="add-input add-center" id="f-qty" type="number"
-                 placeholder="0" min="0" inputmode="numeric"
-                 oninput="updateProfitPreview()">
-        </div>
-        <div class="add-field">
-          <label class="add-label">Buy Price <span class="add-required">*</span></label>
-          <input class="add-input add-center" id="f-buy" type="number"
-                 placeholder="0" min="0" inputmode="decimal"
-                 oninput="updateProfitPreview()">
-        </div>
-        <div class="add-field">
-          <label class="add-label">Sell Price <span class="add-required">*</span></label>
-          <input class="add-input add-center" id="f-sell" type="number"
-                 placeholder="0" min="0" inputmode="decimal"
-                 oninput="updateProfitPreview()">
-        </div>
+    <!-- Live profit pill — compact, appears once prices are entered -->
+    <div class="add-profit-pill" id="profit-preview" style="display:none;">
+      <div class="app-pill-row">
+        <span class="app-pill-label">Profit / item</span>
+        <span class="app-pill-val" id="pp-profit"></span>
       </div>
-
-      <!-- Compact profit pill -->
-      <div class="add-profit-pill" id="profit-preview" style="display:none;">
-        <div class="app-pill-row">
-          <span class="app-pill-label">Profit / item</span>
-          <span class="app-pill-val" id="pp-profit"></span>
-        </div>
-        <div class="app-pill-row">
-          <span class="app-pill-label">Margin</span>
-          <span class="app-pill-val" id="pp-margin"></span>
-        </div>
-        <div class="app-pill-row" id="pp-total-row" style="display:none;">
-          <span class="app-pill-label">Total profit (all stock)</span>
-          <span class="app-pill-val" id="pp-total"></span>
-        </div>
-        <span id="pp-buy" style="display:none;"></span>
-        <span id="pp-sell" style="display:none;"></span>
-        <span id="pp-qty-lbl" style="display:none;"></span>
+      <div class="app-pill-row">
+        <span class="app-pill-label">Margin</span>
+        <span class="app-pill-val" id="pp-margin"></span>
       </div>
-
+      <div class="app-pill-row" id="pp-total-row" style="display:none;">
+        <span class="app-pill-label">Total profit (all stock)</span>
+        <span class="app-pill-val" id="pp-total"></span>
+      </div>
+      <!-- Hidden IDs kept for compatibility with updateProfitPreview() -->
+      <span id="pp-buy"    style="display:none;"></span>
+      <span id="pp-sell"   style="display:none;"></span>
+      <span id="pp-qty-lbl" style="display:none;"></span>
     </div>
+
   </div>
 
   <!-- ── SECTION 3: Photo ─────────────────────────────────────── -->
@@ -637,83 +594,6 @@
   <!-- Existing types list — populated by renderTypes() -->
   <div class="card" style="margin-bottom:4px;">
     <div id="types-list"></div>
-  </div>
-
-  <!-- ── Shoe Size Groups ────────────────────────────────────── -->
-  <div class="sec-label" style="margin-top:16px;">👟 Shoe Size Groups</div>
-  <div class="card" style="padding:14px;">
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6;">
-      Customize the size range for each group (S, M, L). These ranges control which sizes appear when adding footwear.
-    </div>
-
-    <!-- S group -->
-    <div style="margin-bottom:12px;">
-      <div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
-        <span style="width:28px;height:28px;border-radius:50%;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;">S</span>
-        Small
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div class="add-field" style="margin-bottom:0;">
-          <label class="add-label">Min Size</label>
-          <input class="add-input add-center" id="sg-s-min" type="number" min="1" max="99" inputmode="numeric" placeholder="20" oninput="previewShoeGroups()">
-        </div>
-        <div class="add-field" style="margin-bottom:0;">
-          <label class="add-label">Max Size</label>
-          <input class="add-input add-center" id="sg-s-max" type="number" min="1" max="99" inputmode="numeric" placeholder="28" oninput="previewShoeGroups()">
-        </div>
-      </div>
-    </div>
-
-    <!-- M group -->
-    <div style="margin-bottom:12px;">
-      <div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
-        <span style="width:28px;height:28px;border-radius:50%;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;">M</span>
-        Medium
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div class="add-field" style="margin-bottom:0;">
-          <label class="add-label">Min Size</label>
-          <input class="add-input add-center" id="sg-m-min" type="number" min="1" max="99" inputmode="numeric" placeholder="29" oninput="previewShoeGroups()">
-        </div>
-        <div class="add-field" style="margin-bottom:0;">
-          <label class="add-label">Max Size</label>
-          <input class="add-input add-center" id="sg-m-max" type="number" min="1" max="99" inputmode="numeric" placeholder="36" oninput="previewShoeGroups()">
-        </div>
-      </div>
-    </div>
-
-    <!-- L group -->
-    <div style="margin-bottom:14px;">
-      <div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
-        <span style="width:28px;height:28px;border-radius:50%;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;">L</span>
-        Large
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div class="add-field" style="margin-bottom:0;">
-          <label class="add-label">Min Size</label>
-          <input class="add-input add-center" id="sg-l-min" type="number" min="1" max="99" inputmode="numeric" placeholder="37" oninput="previewShoeGroups()">
-        </div>
-        <div class="add-field" style="margin-bottom:0;">
-          <label class="add-label">Max Size</label>
-          <input class="add-input add-center" id="sg-l-max" type="number" min="1" max="99" inputmode="numeric" placeholder="45" oninput="previewShoeGroups()">
-        </div>
-      </div>
-    </div>
-
-    <!-- Live preview -->
-    <div id="shoe-group-preview" style="background:var(--surface2);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;font-size:12px;font-family:var(--mono);color:var(--muted);line-height:2;"></div>
-
-    <!-- Save + Reset buttons -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-      <button onclick="resetShoeGroups()"
-              style="padding:12px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;font-family:var(--sans);">
-        ↺ Reset Defaults
-      </button>
-      <button onclick="saveShoeGroups()"
-              style="padding:12px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:13px;font-weight:800;cursor:pointer;font-family:var(--sans);">
-        💾 Save Groups
-      </button>
-    </div>
   </div>
 
   <!-- ── Currency ───────────────────────────────────────────── -->
@@ -1406,7 +1286,8 @@
     </div>
 
     <!-- Confirm / Cancel -->
-    <button onclick="confirmCloseDay()"
+    <button id="ds-pause-btn" onclick="confirmCloseDay()" style="display:none;width:100%;padding:14px;background:#d97706;color:white;border:none;border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">⏸ Pause Day</button>
+    <button id="ds-confirm-btn" onclick="confirmCloseDay()"
             style="width:100%;padding:16px;background:var(--accent);color:white;
                    border:none;border-radius:var(--r);font-size:16px;font-weight:800;
                    cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
@@ -1549,7 +1430,7 @@
      showDayClosedOverlay(attemptedTab) and hideDayClosedOverlay()
      in app.js control visibility.
      ============================================================== -->
-<div id="day-closed-overlay" style="display:none;">
+<div id="day-closed-overlay">
   <div style="font-size:64px;margin-bottom:16px;">🔒</div>
   <div style="font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px;">
     Day Not Open
@@ -1643,6 +1524,9 @@
   </div>
 </div><!-- /install-banner -->
 
+
+<!-- ── App JavaScript ──────────────────────────────────────────── -->
+<script src="app.js"></script>
 
 <!-- ==============================================================
      SHEET: SELL MODAL  (id="sell-modal")
@@ -2279,7 +2163,13 @@
 <!-- ==============================================================
      OVERLAY: DAY CLOSED
      Full-screen overlay shown on restricted pages (Dash, Add)
-     when the  <div style="font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px;">
+     when the business day is not OPEN.
+     showDayClosedOverlay(attemptedTab) and hideDayClosedOverlay()
+     in app.js control visibility.
+     ============================================================== -->
+<div id="day-closed-overlay">
+  <div style="font-size:64px;margin-bottom:16px;">🔒</div>
+  <div style="font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px;">
     Day Not Open
   </div>
   <div style="font-size:15px;color:var(--muted);margin-bottom:28px;line-height:1.6;"
