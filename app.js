@@ -47,7 +47,7 @@ function initDB() {
       updateLowStockBadge();
 
       // 3. Restore last visited page (or go to day if day not open)
-      const lastPage = localStorage.getItem('mg_last_page') || 'dash';
+      const lastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
       const today = todayDateStr();
 
       // Check if day needs opening
@@ -708,8 +708,9 @@ function closeSheet() { document.getElementById('detail-sheet').classList.remove
 async function deleteItem() {
   if (!confirm('Delete this item?')) return;
   const toDelete = await dbGet('items', currentDetailId);
+  if (!toDelete) { toast('Item not found.', 'err'); return; }
   await dbDelete('items', currentDetailId);
-  if (toDelete && toDelete.fbId) fbDeleteItem(toDelete.fbId);
+  if (toDelete.fbId) fbDeleteItem(toDelete.fbId);
   closeSheet();
   allItems = await dbAll('items');
   renderList();
@@ -722,16 +723,18 @@ async function deleteItem() {
 async function editItem() {
   if (!isDayOpen()) { toast('⚠️ Open the business day to edit items.', 'err'); return; }
   const item = await dbGet('items', currentDetailId);
+  if (!item) { toast('Item not found.', 'err'); return; }
   closeSheet();
-  showPage('add');
+  // Set ALL form fields BEFORE showPage so onTypeChange() sees the correct type
   document.getElementById('edit-id').value = item.id;
-  document.getElementById('f-type').value = item.type;
-  document.getElementById('f-code').value = item.code;
-  document.getElementById('f-name').value = item.name;
-  document.getElementById('f-size').value = item.size || '';
-  document.getElementById('f-qty').value = item.qty;
-  document.getElementById('f-buy').value = item.buy;
-  document.getElementById('f-sell').value = item.sell;
+  document.getElementById('f-type').value  = item.type  || '';
+  document.getElementById('f-code').value  = item.code  || '';
+  document.getElementById('f-name').value  = item.name  || '';
+  document.getElementById('f-size').value  = item.size  || '';
+  document.getElementById('f-qty').value   = item.qty   ?? '';
+  document.getElementById('f-buy').value   = item.buy   || '';
+  document.getElementById('f-sell').value  = item.sell  || '';
+  showPage('add');
   document.getElementById('save-btn').textContent = '💾 Save Changes';
   document.getElementById('form-mode-label').textContent = 'Edit Item';
   document.getElementById('cancel-edit-btn').style.display = 'block';
@@ -974,7 +977,9 @@ function showSplash(name, sell, profit) {
 
 
 // ===== MAKE A SALE =====
-let currentSellItemId = null;
+let currentSellItemId  = null;
+let _codeDropdownActive = false;
+let _editOriginItemId   = null;
 let _selectedPayment = 'Cash'; // Cash | M-Pesa | Credit
 
 async function searchSell() {
@@ -1029,6 +1034,7 @@ function selectPayment(method) {
 
 async function openSellModal(itemId) {
   const item = await dbGet('items', itemId);
+  if (!item) { toast('Item not found.', 'err'); return; }
   currentSellItemId = itemId;
   const t = getTypeObj(item.type);
   document.getElementById('sm-icon').textContent = t.emoji;
@@ -1055,6 +1061,7 @@ function closeSellModal() {
 async function updateSellModal() {
   if (!currentSellItemId) return;
   const item = await dbGet('items', currentSellItemId);
+  if (!item) { toast('Item no longer exists.', 'err'); closeSellModal(); return; }
   const qty = Math.max(1, parseInt(document.getElementById('sm-qty').value) || 1);
   const actualRaw = parseFloat(document.getElementById('sm-actual').value);
   const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : item.sell;
@@ -1081,6 +1088,7 @@ async function confirmSale() {
   if (!currentSellItemId) return;
   if (!requireOpenDay()) return;
   const item = await dbGet('items', currentSellItemId);
+  if (!item) { toast('Item no longer exists.', 'err'); closeSellModal(); return; }
   const qty = Math.max(1, parseInt(document.getElementById('sm-qty').value) || 1);
   if (qty > item.qty) { toast('⚠️ Not enough stock!', 'err'); return; }
   const actualRaw = parseFloat(document.getElementById('sm-actual').value);
@@ -2548,7 +2556,7 @@ function confirmLogout() {
 
 function logout() {
   currentUser = null;
-  localStorage.removeItem('mg_session');
+  localStorage.removeItem(KEY_SESSION);
   localStorage.removeItem('mg_last_page');
   // Reset nav tabs visibility
   ['dash','list','add','sell','day','types','settings'].forEach(tab => {
@@ -2584,7 +2592,7 @@ showPage = function(id) {
     return;
   }
   hideDayClosedOverlay();
-  if (currentUser) localStorage.setItem('mg_last_page', id);
+  if (currentUser) localStorage.setItem(KEY_LAST_PAGE, id);
   _origShowPage(id);
 };
 
@@ -2604,7 +2612,7 @@ function attemptLogin() {
 
   err.style.display = 'none';
   currentUser = user; // SET BEFORE showPage is called
-  localStorage.setItem('mg_session', JSON.stringify({ username: user.username, pin: user.pin }));
+  localStorage.setItem(KEY_SESSION, JSON.stringify({ username: user.username, pin: user.pin }));
 
   // Hide login screen
   document.getElementById('login-screen').style.display = 'none';
@@ -2620,7 +2628,7 @@ function attemptLogin() {
   }
 
   // Go to day page if day not open, otherwise last visited page
-  const lastPage = localStorage.getItem('mg_last_page') || 'dash';
+  const lastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
   const allowedPage = user.tabs.includes(lastPage) ? lastPage : user.tabs[0];
 
   // Check day status
@@ -2637,7 +2645,7 @@ function attemptLogin() {
 }
 
 function checkSession() {
-  const saved = localStorage.getItem('mg_session');
+  const saved = localStorage.getItem(KEY_SESSION);
   if (!saved) {
     // No session — show login screen
     document.getElementById('login-screen').style.display = 'flex';
@@ -2657,12 +2665,12 @@ function checkSession() {
       }
       return true; // session valid, let caller handle navigation
     } else {
-      localStorage.removeItem('mg_session');
+      localStorage.removeItem(KEY_SESSION);
       document.getElementById('login-screen').style.display = 'flex';
       return false;
     }
   } catch(e) {
-    localStorage.removeItem('mg_session');
+    localStorage.removeItem(KEY_SESSION);
     document.getElementById('login-screen').style.display = 'flex';
     return false;
   }
