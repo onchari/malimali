@@ -705,8 +705,66 @@
     </div>
   </div>
 
+  <!-- ── App Update ─────────────────────────────────────────── -->
+  <div class="sec-label" style="margin-top:16px;">🔄 App Update</div>
+  <div class="card" id="update-card" style="padding:16px;">
+
+    <!-- State: up to date (default) -->
+    <div id="update-state-current" style="display:flex;align-items:center;gap:12px;">
+      <div style="width:36px;height:36px;border-radius:50%;background:var(--green-light);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <i class="fa-solid fa-circle-check" style="color:var(--green);font-size:16px;"></i>
+      </div>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);">App is up to date</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;" id="update-last-check">Checking…</div>
+      </div>
+    </div>
+
+    <!-- State: update available (hidden until SW detects new version) -->
+    <div id="update-state-available" style="display:none;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+        <div style="width:36px;height:36px;border-radius:50%;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i class="fa-solid fa-arrow-up-from-bracket" style="color:#d97706;font-size:16px;"></i>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text);">Update available!</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">New version ready to install</div>
+        </div>
+      </div>
+      <button id="update-install-btn" onclick="installAppUpdate()"
+              style="width:100%;padding:14px;background:var(--accent);color:white;border:none;
+                     border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;
+                     font-family:var(--sans);">
+        <i class="fa-solid fa-download"></i> Install Update
+      </button>
+    </div>
+
+    <!-- State: installing (hidden until button clicked) -->
+    <div id="update-state-installing" style="display:none;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+        <div style="width:36px;height:36px;border-radius:50%;background:var(--accent-light);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i class="fa-solid fa-spinner fa-spin" style="color:var(--accent);font-size:16px;"></i>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text);">Installing update…</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;" id="update-progress-label">Starting…</div>
+        </div>
+      </div>
+      <!-- Progress bar -->
+      <div style="background:var(--surface2);border-radius:20px;height:8px;overflow:hidden;margin-bottom:8px;">
+        <div id="update-progress-bar"
+             style="height:100%;background:var(--accent);border-radius:20px;width:0%;transition:width .4s ease;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-family:var(--mono);">
+        <span id="update-progress-pct">0%</span>
+        <span>100%</span>
+      </div>
+    </div>
+
+  </div>
+
   <!-- ── About ──────────────────────────────────────────────── -->
-  <div class="sec-label" style="margin-top:4px;">ℹ️ About</div>
+  <div class="sec-label" style="margin-top:16px;">ℹ️ About</div>
   <div class="card" style="text-align:center;padding:20px;">
     <div style="font-size:32px;margin-bottom:8px;">📦</div>
     <div style="font-size:17px;font-weight:800;color:var(--text);">Mandela General Stores</div>

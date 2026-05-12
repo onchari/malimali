@@ -2460,11 +2460,63 @@ let swRegistration = null;
 let deferredInstallPrompt = null;
 
 // Register service worker
+// ── APP UPDATE SYSTEM ─────────────────────────────────────────────────
+// Detects new SW versions and shows update UI in Settings.
+// Progress bar runs from 0→100 while new SW installs + files reload.
+
+let _pendingWorker = null; // holds the new SW waiting to activate
+
+function _showUpdateState(state) {
+  ['current','available','installing'].forEach(s => {
+    const el = document.getElementById('update-state-' + s);
+    if (el) el.style.display = s === state ? '' : 'none';
+  });
+}
+
+function _setUpdateLastCheck() {
+  const el = document.getElementById('update-last-check');
+  if (el) el.textContent = 'Last checked: ' + new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+}
+
+function installAppUpdate() {
+  if (!_pendingWorker) return;
+  _showUpdateState('installing');
+
+  // Animate progress bar 0 → 90 while waiting for SW to activate
+  let pct = 0;
+  const steps = [
+    { target: 20, label: 'Downloading new version…', delay: 300 },
+    { target: 45, label: 'Installing files…',         delay: 600 },
+    { target: 70, label: 'Clearing old cache…',       delay: 500 },
+    { target: 90, label: 'Finalising…',               delay: 400 },
+  ];
+
+  function runStep(i) {
+    if (i >= steps.length) return;
+    const { target, label, delay } = steps[i];
+    setTimeout(() => {
+      pct = target;
+      const bar = document.getElementById('update-progress-bar');
+      const pctEl = document.getElementById('update-progress-pct');
+      const lblEl = document.getElementById('update-progress-label');
+      if (bar)   bar.style.width = pct + '%';
+      if (pctEl) pctEl.textContent = pct + '%';
+      if (lblEl) lblEl.textContent = label;
+      runStep(i + 1);
+    }, delay);
+  }
+  runStep(0);
+
+  // Tell SW to skip waiting — controllerchange fires → reload
+  _pendingWorker.postMessage({ type: 'SKIP_WAITING' });
+}
+
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').then(reg => {
     swRegistration = reg;
+    _setUpdateLastCheck();
 
-    // Listen for messages from SW (background sync trigger)
+    // Message listener for background sync
     navigator.serviceWorker.addEventListener('message', e => {
       if (e.data && e.data.type === 'BACKGROUND_SYNC') {
         if (fbReady && fbDb && navigator.onLine) {
@@ -2473,34 +2525,58 @@ if ('serviceWorker' in navigator) {
       }
     });
 
-    // Auto-activate new SW and reload as soon as it installs
+    // Helper: a new SW is waiting — show the update button
+    function onNewWorkerWaiting(worker) {
+      _pendingWorker = worker;
+      _showUpdateState('available');
+      // If not on settings page, badge the settings tab
+      const settingsTab = document.getElementById('tab-settings');
+      if (settingsTab) {
+        settingsTab.style.position = 'relative';
+        if (!document.getElementById('update-dot')) {
+          const dot = document.createElement('span');
+          dot.id = 'update-dot';
+          dot.style.cssText = 'position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;';
+          settingsTab.appendChild(dot);
+        }
+      }
+    }
+
+    // New SW found during this session
     reg.addEventListener('updatefound', () => {
       const newWorker = reg.installing;
       newWorker.addEventListener('statechange', () => {
-        if (newWorker.state === 'installed') {
-          if (navigator.serviceWorker.controller) {
-            // New version ready — skip waiting and reload
-            newWorker.postMessage({ type: 'SKIP_WAITING' });
-          }
-        }
-        if (newWorker.state === 'activated') {
-          // Fresh SW is active — reload to get new files
-          window.location.reload();
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          onNewWorkerWaiting(newWorker);
         }
       });
     });
 
-    // Also handle case where SW already waiting (e.g. user had old tab open)
-    if (reg.waiting) {
-      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    // SW was already waiting before page loaded (e.g. user refreshed)
+    if (reg.waiting && navigator.serviceWorker.controller) {
+      onNewWorkerWaiting(reg.waiting);
     }
+
+    // Periodically check for updates (every 30 mins)
+    setInterval(() => {
+      reg.update().then(() => _setUpdateLastCheck()).catch(() => {});
+    }, 30 * 60 * 1000);
 
   }).catch(() => {});
 
-  // Reload when a new SW takes control (after skipWaiting)
-  let refreshing = false;
+  // When new SW takes control → complete progress bar then reload
+  let _reloading = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!refreshing) { refreshing = true; window.location.reload(); }
+    if (_reloading) return;
+    _reloading = true;
+    // Jump to 100%
+    const bar   = document.getElementById('update-progress-bar');
+    const pctEl = document.getElementById('update-progress-pct');
+    const lblEl = document.getElementById('update-progress-label');
+    if (bar)   bar.style.width = '100%';
+    if (pctEl) pctEl.textContent = '100%';
+    if (lblEl) lblEl.textContent = 'Update complete! Reloading…';
+    setTimeout(() => window.location.reload(), 800);
   });
 }
 
