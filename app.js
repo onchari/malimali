@@ -982,12 +982,22 @@ async function saveItem() {
 
   const profit   = sell - buy;
   const itemName = name || (type + ' ' + code);
-  const item     = { type, code, name: itemName, size, buy, sell, profit, qty, createdAt: new Date().toISOString() };
 
   try {
     if (editIdRaw) {
-      item.id = parseInt(editIdRaw);
+      // EDIT: fetch original to preserve createdAt and fbId
+      const original = await dbGet('items', parseInt(editIdRaw));
+      const item = {
+        id: parseInt(editIdRaw),
+        type, code,
+        name: itemName,
+        size, buy, sell, profit, qty,
+        createdAt:  original ? (original.createdAt  || new Date().toISOString()) : new Date().toISOString(),
+        updatedAt:  new Date().toISOString(),
+        fbId:       original ? original.fbId : undefined,
+      };
       await dbPut('items', item);
+      if (_addFormPhotoData) setItemPhoto(item.id, _addFormPhotoData);
       fbSyncItem(item);
       clearForm();
       allItems = await dbAll('items');
@@ -1306,30 +1316,37 @@ async function deleteItem() {
 async function editItem() {
   if (!isDayOpen()) { toast('⚠️ Open the business day to edit items.', 'err'); return; }
   const item = await dbGet('items', currentDetailId);
+  if (!item) { toast('Item not found.', 'err'); return; }
   closeSheet();
-  showPage('add');
+
+  // Set ALL form fields BEFORE showPage so onTypeChange() sees the correct type
   document.getElementById('edit-id').value = item.id;
-  document.getElementById('f-type').value = item.type;
-  document.getElementById('f-code').value = item.code;
-  document.getElementById('f-name').value = item.name;
-  document.getElementById('f-size').value = item.size || '';
-  document.getElementById('f-qty').value = item.qty;
-  document.getElementById('f-buy').value = item.buy;
-  document.getElementById('f-sell').value = item.sell;
+  document.getElementById('f-type').value  = item.type  || '';
+  document.getElementById('f-code').value  = item.code  || '';
+  document.getElementById('f-name').value  = item.name  || '';
+  document.getElementById('f-size').value  = item.size  || '';
+  document.getElementById('f-qty').value   = item.qty   ?? '';
+  document.getElementById('f-buy').value   = item.buy   || '';
+  document.getElementById('f-sell').value  = item.sell  || '';
+
+  // Now navigate — onTypeChange() will fire and see the correct type
+  showPage('add');
+
   document.getElementById('save-btn').textContent = '💾 Save Changes';
-  document.getElementById('form-mode-label').textContent = 'Edit Item';
+  document.getElementById('form-mode-label').textContent = '✏️ Edit Item';
   document.getElementById('cancel-edit-btn').style.display = 'block';
   updateProfitPreview();
-  // Load existing photo if any
+
+  // Load existing photo
   const existingPhoto = getItemPhoto(item.id);
   if (existingPhoto) {
     _addFormPhotoData = existingPhoto;
-    const photoImg = document.getElementById('add-photo-img');
+    const photoImg    = document.getElementById('add-photo-img');
     const placeholder = document.getElementById('add-photo-placeholder');
-    const removeBtn = document.getElementById('add-photo-remove');
-    if (photoImg) { photoImg.src = existingPhoto; photoImg.style.display = 'block'; }
+    const removeBtn   = document.getElementById('add-photo-remove');
+    if (photoImg)    { photoImg.src = existingPhoto; photoImg.style.display = 'block'; }
     if (placeholder) placeholder.style.display = 'none';
-    if (removeBtn) removeBtn.style.display = 'block';
+    if (removeBtn)   removeBtn.style.display = 'block';
   }
 }
 
