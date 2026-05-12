@@ -417,83 +417,86 @@
   <!-- ══ SHOE SIZE PANEL — shown when type is footwear ═══════════ -->
   <div id="shoe-size-panel" style="display:none;">
 
-    <div class="add-section-title">Shoe Sizes <span class="add-required">*</span></div>
-    <div class="add-section" style="padding-bottom:8px;">
-
-      <!-- Step 1: Size Group -->
-      <div class="add-field" style="margin-bottom:4px;">
-        <label class="add-label">Size Group</label>
-        <div class="sg-row">
-          <button type="button" class="sg-btn" id="sg-btn-S" onclick="selectSizeGroup('S')">
-            S<span class="sg-range" id="sg-range-S">20–28</span>
-            <span class="sg-group-label">Children</span>
-          </button>
-          <button type="button" class="sg-btn" id="sg-btn-M" onclick="selectSizeGroup('M')">
-            M<span class="sg-range" id="sg-range-M">29–36</span>
-            <span class="sg-group-label">Teens</span>
-          </button>
-          <button type="button" class="sg-btn" id="sg-btn-L" onclick="selectSizeGroup('L')">
-            L<span class="sg-range" id="sg-range-L">37–45</span>
-            <span class="sg-group-label">Adults</span>
-          </button>
-        </div>
+    <!-- Size Group buttons -->
+    <div class="add-section-title" style="margin-top:4px;">Size Group</div>
+    <div class="add-section" style="padding-bottom:10px;">
+      <div class="sg-row">
+        <button type="button" class="sg-btn" id="sg-btn-S" onclick="selectSizeGroup('S')">
+          <span class="sg-ltr">S</span>
+          <span class="sg-range" id="sg-range-S">20–28</span>
+          <span class="sg-name">Children</span>
+        </button>
+        <button type="button" class="sg-btn" id="sg-btn-M" onclick="selectSizeGroup('M')">
+          <span class="sg-ltr">M</span>
+          <span class="sg-range" id="sg-range-M">29–36</span>
+          <span class="sg-name">Teens</span>
+        </button>
+        <button type="button" class="sg-btn" id="sg-btn-L" onclick="selectSizeGroup('L')">
+          <span class="sg-ltr">L</span>
+          <span class="sg-range" id="sg-range-L">37–45</span>
+          <span class="sg-name">Adults</span>
+        </button>
       </div>
+    </div>
 
-      <!-- Step 2: Individual sizes -->
-      <div id="shoe-sizes-grid" style="display:none;">
-        <label class="add-label" style="margin-bottom:8px;">Select Sizes</label>
-        <div class="sz-grid" id="sz-grid"></div>
+    <!-- Sizes grid — additive, groups append below each other -->
+    <div id="shoe-sizes-grid" style="display:none;">
+      <div class="add-section-title">Select Sizes</div>
+      <div class="add-section" style="padding-bottom:10px;">
+        <div id="sz-grid"></div>
+
+        <!-- Selected sizes summary pills -->
+        <div id="shoe-selected-summary"></div>
       </div>
+    </div>
 
-      <!-- Step 3: Pricing mode toggle + fields -->
-      <div id="shoe-rows-wrap" style="display:none;margin-top:14px;">
+    <!-- Shared pricing — shown once ≥1 size selected -->
+    <div id="shoe-rows-wrap" style="display:none;">
+      <div class="add-section-title">Qty &amp; Pricing</div>
+      <div class="add-section">
 
-        <!-- Info + per-size toggle -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <div class="shoe-shared-lbl" style="flex:1;margin-bottom:0;">
-            <i class="fa-solid fa-circle-info" style="color:var(--accent);margin-right:5px;"></i>
-            Applies to all selected sizes
-          </div>
-          <button type="button" id="per-size-toggle" onclick="togglePerSizeMode()"
-                  style="font-size:11px;padding:5px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;font-family:var(--sans);font-weight:700;color:var(--text2);margin-left:8px;white-space:nowrap;">
-            🎯 Per-Size Price
-          </button>
+        <!-- Info bar -->
+        <div class="shoe-info-bar">
+          <i class="fa-solid fa-circle-info"></i>
+          Same qty &amp; price applied to all selected sizes
         </div>
 
-        <!-- Shared Qty/Buy/Sell -->
-        <div id="shoe-shared-wrap">
-          <div class="add-row-3">
-            <div class="add-field">
-              <label class="add-label">Qty/Size <span class="add-required">*</span></label>
-              <input class="add-input add-center" id="shoe-shared-qty"
-                     type="number" min="0" inputmode="numeric" placeholder="0">
-            </div>
-            <div class="add-field">
-              <label class="add-label">Buy Price <span class="add-required">*</span></label>
-              <input class="add-input add-center" id="shoe-shared-buy"
-                     type="number" min="0" inputmode="decimal" placeholder="0">
-            </div>
-            <div class="add-field">
-              <label class="add-label">Sell Price <span class="add-required">*</span></label>
-              <input class="add-input add-center" id="shoe-shared-sell"
-                     type="number" min="0" inputmode="decimal" placeholder="0">
-            </div>
+        <!-- 3-column shared fields -->
+        <div class="add-row-3">
+          <div class="add-field">
+            <label class="add-label">Qty / size <span class="add-required">*</span></label>
+            <input class="add-input add-center" id="shoe-shared-qty"
+                   type="number" min="0" inputmode="numeric" placeholder="0">
+          </div>
+          <div class="add-field">
+            <label class="add-label">Buy price <span class="add-required">*</span></label>
+            <input class="add-input add-center" id="shoe-shared-buy"
+                   type="number" min="0" inputmode="decimal" placeholder="0">
+          </div>
+          <div class="add-field">
+            <label class="add-label">Sell price <span class="add-required">*</span></label>
+            <input class="add-input add-center" id="shoe-shared-sell"
+                   type="number" min="0" inputmode="decimal" placeholder="0">
           </div>
         </div>
 
-        <!-- Per-size rows (hidden until toggled) -->
-        <div id="shoe-per-size-wrap" style="display:none;">
+        <!-- Per-size price toggle -->
+        <button type="button" id="per-size-toggle" onclick="togglePerSizeMode()"
+                class="shoe-per-size-toggle">
+          <i class="fa-solid fa-sliders"></i> Per-Size Pricing
+        </button>
+
+        <!-- Per-size rows (shown when toggle active) -->
+        <div id="shoe-per-size-wrap" style="display:none;margin-top:10px;">
           <div class="shoe-row-hdr">
             <span>Size</span><span>Qty</span><span>Buy</span><span>Sell</span>
           </div>
           <div id="shoe-rows"></div>
         </div>
 
-        <!-- Selected sizes summary -->
-        <div id="shoe-selected-summary"></div>
-
       </div>
     </div>
+
   </div>
 
   <!-- ── SECTION 2: Stock & Pricing (hidden for shoes) ─────────── -->

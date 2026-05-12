@@ -3028,12 +3028,10 @@ function renderShoeGroupButtons() {
   ['S','M','L'].forEach(g => {
     const btn = document.getElementById('sg-btn-' + g);
     const rng = document.getElementById('sg-range-' + g);
-    // A group button is "active" if any of its sizes are currently selected
-    const groupSizes = btn ? _getGroupSizes(g) : [];
+    const groupSizes = _getGroupSizes(g);
     const hasSelected = groupSizes.some(s => _shoeSizes.has(s));
     if (btn) {
-      btn.classList.toggle('sg-active', hasSelected || _shoeGroup === g);
-      btn.style.opacity = _shownGroups.has(g) ? '1' : '0.6';
+      btn.classList.toggle('sg-active', hasSelected || _shownGroups.has(g));
     }
     if (rng && groups[g]) rng.textContent = groups[g].min + '–' + groups[g].max;
   });
@@ -3114,8 +3112,14 @@ function renderShoeSummary() {
   const sorted = [..._shoeSizes].sort((a,b)=>a-b);
   el.innerHTML = '<div class="shoe-pills-row">' +
     sorted.map(s => '<span class="shoe-pill">' + s + '</span>').join('') +
-    '<span style="font-size:11px;color:var(--muted);margin-left:6px;align-self:center;">' +
+    '<span style="font-size:11px;color:var(--muted);margin-left:4px;align-self:center;">' +
     sorted.length + ' size' + (sorted.length>1?'s':'') + ' selected</span></div>';
+  // Update save button to show count
+  const saveBtn = document.getElementById('save-btn');
+  const panel = document.getElementById('shoe-size-panel');
+  if (saveBtn && panel && panel.style.display !== 'none') {
+    saveBtn.textContent = '+ Save ' + sorted.length + ' shoe size' + (sorted.length>1?'s':'');
+  }
 }
 
 function renderShoeRows() {
@@ -3138,7 +3142,12 @@ function togglePerSizeMode() {
   const btn = document.getElementById('per-size-toggle');
   const sharedWrap  = document.getElementById('shoe-shared-wrap');
   const perSizeWrap = document.getElementById('shoe-per-size-wrap');
-  if (btn) btn.textContent = _perSizeMode ? '📋 Shared Pricing' : '🎯 Per-Size Price';
+  if (btn) {
+    btn.classList.toggle('active', _perSizeMode);
+    btn.innerHTML = _perSizeMode
+      ? '<i class="fa-solid fa-sliders"></i> Shared Pricing'
+      : '<i class="fa-solid fa-sliders"></i> Per-Size Pricing';
+  }
   if (sharedWrap)  sharedWrap.style.display  = _perSizeMode ? 'none'  : 'block';
   if (perSizeWrap) perSizeWrap.style.display = _perSizeMode ? 'block' : 'none';
   renderShoeRows();
