@@ -205,6 +205,13 @@ function showPage(id) {
     toast('⛔ Access denied', 'err');
     return;
   }
+  // Warn if edit is in progress and user is navigating away
+  const editId = document.getElementById('edit-id');
+  if (editId && editId.value && !editId.value.startsWith('restock_') && id !== 'add') {
+    if (!confirm('You have unsaved edits. Leave without saving?')) return;
+    clearForm(); clearAddFormPhoto();
+    _editOriginItemId = null;
+  }
   _doShowPage(id);
 }
 
@@ -757,6 +764,7 @@ async function saveShoeItems(baseCode, baseName, type) {
 
 const CODE_MAX_QTY = 9999;
 let _codeDropdownActive = false;
+let _editOriginItemId   = null; // item being edited (for cancel scroll-back)
 
 function sanitiseCode(raw) {
   return (raw || '').trim().toUpperCase().replace(/[^A-Z0-9\-.]/g, '');
@@ -974,11 +982,17 @@ async function saveItem() {
   const buy    = parseFloat(document.getElementById('f-buy').value)  || 0;
   const sell   = parseFloat(document.getElementById('f-sell').value) || 0;
 
-  if (!size)                                  { toast('⚠️ Enter a size (or N/A)', 'err'); return; }
-  if (qtyRaw === '' || isNaN(qty) || qty < 0) { toast('⚠️ Enter quantity in stock', 'err'); return; }
+  // Focused validation — highlight the field with the problem
+  const focusField = (id, msg) => {
+    toast(msg, 'err');
+    const el = document.getElementById(id);
+    if (el) { el.focus(); el.style.borderColor = 'var(--red)'; setTimeout(() => el.style.borderColor = '', 2000); }
+  };
+  if (!size)                                  { focusField('f-size', '⚠️ Enter a size (or N/A)'); return; }
+  if (qtyRaw === '' || isNaN(qty) || qty < 0) { focusField('f-qty',  '⚠️ Enter quantity in stock'); return; }
   if (qty > CODE_MAX_QTY && !confirm('⚠️ Adding ' + qty + ' units — confirm?')) return;
-  if (buy  <= 0) { toast('⚠️ Enter buying price',  'err'); return; }
-  if (sell <= 0) { toast('⚠️ Enter selling price', 'err'); return; }
+  if (buy  <= 0) { focusField('f-buy',  '⚠️ Enter buying price');  return; }
+  if (sell <= 0) { focusField('f-sell', '⚠️ Enter selling price'); return; }
 
   const profit   = sell - buy;
   const itemName = name || (type + ' ' + code);
@@ -1003,7 +1017,17 @@ async function saveItem() {
       allItems = await dbAll('items');
       renderList(); renderDashboard(); updateHeader();
       scheduleSync();
-      toast('✅ Item updated!', 'ok');
+      // Build a short diff message of what changed
+      const changes = [];
+      if (original) {
+        if (original.qty   !== qty)  changes.push('qty '   + original.qty   + '→' + qty);
+        if (original.buy   !== buy)  changes.push('buy '   + fmt(original.buy)  + '→' + fmt(buy));
+        if (original.sell  !== sell) changes.push('sell '  + fmt(original.sell) + '→' + fmt(sell));
+        if (original.name  !== itemName) changes.push('name updated');
+        if ((original.size ||'') !== size) changes.push('size updated');
+      }
+      const diffMsg = changes.length ? ' (' + changes.join(', ') + ')' : '';
+      toast('✅ Item updated' + diffMsg, 'ok');
       showPage('list');
     } else {
       const newId = await dbAdd('items', item);
@@ -1019,9 +1043,9 @@ async function saveItem() {
     }
   } catch (e) {
     if (e.name === 'ConstraintError') {
-      const dup = allItems.find(i => i.code === code);
-      if (dup) { showCodeDropdown([dup], code); toast('⚠️ "' + code + '" already exists — select it below to restock.', 'err'); }
-      else       toast('⚠️ Duplicate code "' + code + '". Use a different code.', 'err');
+      const dup = allItems.find(i => i.code === code && i.id !== parseInt(editIdRaw));
+      if (dup && !editIdRaw) { showCodeDropdown([dup], code); toast('⚠️ "' + code + '" already exists — select it below to restock.', 'err'); }
+      else toast('⚠️ Duplicate code "' + code + '". Use a different code.', 'err');
     } else {
       toast('Error: ' + e.message, 'err');
       console.error('[SAVE]', e);
@@ -1064,7 +1088,19 @@ function clearForm() {
   if (sgrid) sgrid.style.display = 'none';
 }
 
-function cancelEdit() { clearForm(); clearAddFormPhoto(); showPage('list'); }
+function cancelEdit() {
+  clearForm();
+  clearAddFormPhoto();
+  showPage('list');
+  // Scroll back to item if we came from one
+  if (_editOriginItemId) {
+    setTimeout(() => {
+      const card = document.querySelector('[data-item-id="' + _editOriginItemId + '"]');
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      _editOriginItemId = null;
+    }, 200);
+  }
+}
 
 // ===== RENDER LIST =====
 async function renderList() {
@@ -1106,7 +1142,7 @@ async function renderList() {
     const stockLabel = item.qty === 0 ? '✕ Out' : item.qty + ' pcs';
     const itemSales = salesByItem[item.id] || { profit: 0, qty: 0 };
     const soldQty = itemSales.qty;
-    return `<div class="item-card" onclick="openSheet(${item.id})">
+    return `<div class="item-card" data-item-id="${item.id}" onclick="openSheet(${item.id})">
       <div class="item-top">
         <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
         <div class="item-body">
@@ -1320,6 +1356,7 @@ async function editItem() {
   closeSheet();
 
   // Set ALL form fields BEFORE showPage so onTypeChange() sees the correct type
+  _editOriginItemId = item.id;
   document.getElementById('edit-id').value = item.id;
   document.getElementById('f-type').value  = item.type  || '';
   document.getElementById('f-code').value  = item.code  || '';
