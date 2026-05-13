@@ -1534,3 +1534,14 @@ body {
   cursor: pointer;
   font-family: var(--sans);
 }
+
+/* ── Add form utility classes (missing) ───────────────────────── */
+.add-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.add-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.add-center { text-align: center; }
+
+/* Ensure sz-btn flows horizontally (fix for vertical stacking) */
+#sz-grid { display: block; }
+#sz-grid .sz-group-divider { display: block; width: 100%; }
+.sz-group-divider + div,
+.sz-group-divider ~ div { display: flex !important; flex-wrap: wrap; gap: 6px; }

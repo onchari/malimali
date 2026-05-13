@@ -1172,8 +1172,8 @@
               style="font-size:11px;padding:3px 9px;flex-shrink:0;"></span>
       </div>
 
-      <!-- Buying price / Selling price (full, no abbreviation) -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <!-- Buying price / Selling price -->
+      <div id="sh-price-cols" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
         <div style="padding:12px;border:1px solid var(--border);
                     border-radius:var(--r);text-align:center;">
           <div style="font-size:9px;font-weight:700;color:var(--muted);
@@ -1197,7 +1197,7 @@
       </div>
 
       <!-- In store qty + Units sold -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div id="sh-qty-cols" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
         <div style="padding:12px;background:var(--surface2);
                     border-radius:var(--r);text-align:center;">
           <div style="font-size:9px;font-weight:700;color:var(--muted);
@@ -1220,6 +1220,9 @@
           </div>
         </div>
       </div>
+
+      <!-- Shoe sizes grid -->
+      <div id="sh-shoe-sizes" style="display:none;margin-bottom:12px;"></div>
 
       <!-- Restock panel (toggled by toggleRestock()) -->
       <div id="restock-panel"
@@ -1269,7 +1272,6 @@
 
     </div><!-- /info-panel -->
   </div>
-  <div id="sh-shoe-sizes" style="display:none;margin-top:12px;"></div>
 </div><!-- /detail-sheet -->
 
 
@@ -1800,216 +1802,7 @@
      Top: 400px photo area (pannable with touch, pinch-to-zoom).
      Bottom: prices, stock counts, restock, edit, delete, CLOSE.
      ============================================================== -->
-<div class="sheet-overlay" id="detail-sheet">
-  <div class="sheet" style="padding:0;overflow:hidden;border-radius:16px;">
-    <!-- Handle -->
-    <div class="sheet-handle"
-         style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:3;"></div>
 
-    <!-- ── Photo area (400px tall) ─────────────────────────── -->
-    <div id="sh-photo-area"
-         style="width:100%;height:400px;display:flex;align-items:center;
-                justify-content:center;position:relative;
-                background:var(--surface2);border-radius:16px 16px 0 0;overflow:hidden;">
-
-      <!-- Pannable/zoomable photo wrapper (visible when photo exists) -->
-      <div id="sh-photo-pan"
-           style="display:none;width:100%;height:100%;overflow:hidden;
-                  touch-action:none;position:absolute;inset:0;cursor:grab;">
-        <img id="sh-photo-img" src="" alt=""
-             style="width:100%;height:100%;object-fit:cover;
-                    transform-origin:center center;
-                    user-select:none;-webkit-user-drag:none;">
-      </div>
-
-      <!-- Emoji fallback circle (shown when no photo) -->
-      <div id="sh-photo-fallback"
-           style="width:110px;height:110px;border-radius:50%;
-                  display:flex;align-items:center;justify-content:center;
-                  font-size:52px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-        <span id="sh-icon"></span>
-      </div>
-
-      <!-- Diagonal OUT OF STOCK banner (shown when qty = 0) -->
-      <div id="sh-out-badge"
-           style="display:none;position:absolute;inset:0;
-                  pointer-events:none;overflow:hidden;">
-        <div style="position:absolute;top:50%;left:50%;
-                    transform:translate(-50%,-50%) rotate(-35deg);
-                    white-space:nowrap;font-size:36px;font-weight:900;
-                    color:rgba(255,255,255,0.92);letter-spacing:2px;
-                    text-shadow:0 2px 12px rgba(0,0,0,0.7);text-transform:uppercase;
-                    background:rgba(192,57,43,0.7);padding:10px 40px;border-radius:8px;">
-          OUT OF STOCK
-        </div>
-      </div>
-
-      <!-- Item type badge — top-left -->
-      <div id="sh-type-badge"
-           style="position:absolute;top:14px;left:14px;
-                  background:rgba(0,0,0,0.45);color:white;font-size:11px;
-                  font-weight:700;padding:5px 11px;border-radius:20px;
-                  font-family:var(--sans);backdrop-filter:blur(4px);
-                  letter-spacing:0.3px;z-index:2;">
-      </div>
-
-      <!-- Photo add/change button — top-right -->
-      <button id="sh-photo-btn"
-              onclick="triggerSheetPhotoUpload(event)"
-              style="position:absolute;top:14px;right:14px;
-                     background:rgba(0,0,0,0.4);color:white;
-                     border:1px solid rgba(255,255,255,0.3);border-radius:6px;
-                     font-size:11px;font-weight:700;padding:5px 10px;
-                     cursor:pointer;font-family:var(--sans);
-                     backdrop-filter:blur(4px);z-index:2;">
-        📷 Photo
-      </button>
-
-      <!-- Bottom gradient overlay: code + name + SELL button -->
-      <div style="position:absolute;bottom:0;left:0;right:0;
-                  background:linear-gradient(to top,rgba(0,0,0,0.82),transparent);
-                  padding:16px 16px 14px;z-index:2;">
-        <!-- Item code (large monospace) -->
-        <div id="sh-code"
-             style="font-size:22px;font-weight:900;color:white;
-                    font-family:var(--mono);letter-spacing:0.5px;">
-        </div>
-        <!-- Item name -->
-        <div id="sh-name"
-             style="font-size:13px;color:rgba(255,255,255,0.75);
-                    margin-top:2px;margin-bottom:12px;">
-        </div>
-        <!-- SELL button — disabled when out of stock -->
-        <button id="sh-sell-btn"
-                onclick="openSellFromSheet()"
-                style="width:100%;padding:16px;background:#1e7a3e;color:white;
-                       border:none;border-radius:14px;font-size:20px;font-weight:900;
-                       cursor:pointer;font-family:var(--sans);letter-spacing:1px;
-                       box-shadow:0 4px 16px rgba(30,122,62,0.5);">
-          SELL
-        </button>
-      </div>
-    </div><!-- /sh-photo-area -->
-
-    <!-- ── Info panel (scrollable) ─────────────────────────── -->
-    <div style="padding:14px 16px 20px;overflow-y:auto;max-height:55vh;">
-
-      <!-- Type tag + large Item Code + size tag -->
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <span class="tag tag-cyan" id="sh-type"
-              style="font-size:11px;padding:3px 9px;flex-shrink:0;"></span>
-        <div style="flex:1;">
-          <div style="font-size:10px;font-weight:700;color:var(--muted);
-                      text-transform:uppercase;letter-spacing:0.3px;">
-            Item Code
-          </div>
-          <div style="font-size:20px;font-weight:900;font-family:var(--mono);color:var(--text);"
-               id="sh-code-large">
-          </div>
-        </div>
-        <span class="tag tag-purple" id="sh-size"
-              style="font-size:11px;padding:3px 9px;flex-shrink:0;"></span>
-      </div>
-
-      <!-- Buying price / Selling price (full, no abbreviation) -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-        <div style="padding:12px;border:1px solid var(--border);
-                    border-radius:var(--r);text-align:center;">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);
-                      text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">
-            Buying Price
-          </div>
-          <div id="sh-buy"
-               style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--muted);">
-          </div>
-        </div>
-        <div style="padding:12px;border:1px solid var(--border);
-                    border-radius:var(--r);text-align:center;">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);
-                      text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">
-            Selling Price
-          </div>
-          <div id="sh-sell"
-               style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent2);">
-          </div>
-        </div>
-      </div>
-
-      <!-- In store qty + Units sold -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-        <div style="padding:12px;background:var(--surface2);
-                    border-radius:var(--r);text-align:center;">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);
-                      text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">
-            In Store
-          </div>
-          <div id="sh-qty"
-               style="font-size:22px;font-weight:900;font-family:var(--mono);color:var(--accent);">
-          </div>
-        </div>
-        <div style="padding:12px;background:var(--surface2);
-                    border-radius:var(--r);text-align:center;">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);
-                      text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">
-            Units Sold
-          </div>
-          <div id="sh-sold"
-               style="font-size:22px;font-weight:900;font-family:var(--mono);color:var(--green);">
-            0
-          </div>
-        </div>
-      </div>
-
-      <!-- Restock panel (toggled by toggleRestock()) -->
-      <div id="restock-panel"
-           style="display:none;margin-bottom:10px;background:var(--accent-light);
-                  border:1.5px solid #a8d8b5;border-radius:var(--r);padding:12px;">
-        <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">
-          📦 Add Stock
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <input id="restock-qty" type="number" min="1"
-                 placeholder="Qty to add" inputmode="numeric"
-                 style="flex:1;padding:10px 12px;border:1.5px solid var(--border);
-                        border-radius:var(--r);font-size:15px;font-weight:700;
-                        font-family:var(--mono);background:white;outline:none;">
-          <button onclick="confirmRestock()"
-                  style="padding:10px 16px;background:var(--accent);color:white;
-                         border:none;border-radius:var(--r);font-size:13px;font-weight:800;
-                         cursor:pointer;font-family:var(--sans);">
-            Add ✓
-          </button>
-        </div>
-      </div>
-
-      <!-- Action buttons row: Delete · Restock · Edit -->
-      <div id="sh-action-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:10px;">
-        <button class="btn-del" onclick="deleteItem()" style="padding:10px;font-size:12px;">
-          🗑 Delete
-        </button>
-        <button onclick="toggleRestock()"
-                style="padding:10px;background:#dbeafe;color:#1d4ed8;
-                       border:1px solid #93c5fd;border-radius:var(--r);font-size:12px;
-                       font-weight:700;cursor:pointer;font-family:var(--sans);">
-          📦 Restock
-        </button>
-        <button class="btn-edit" onclick="editItem()" style="padding:10px;font-size:12px;">
-          ✏️ Edit
-        </button>
-      </div>
-
-      <!-- CLOSE button — big blue -->
-      <button onclick="closeSheet()"
-              style="width:100%;padding:16px;background:#1d4ed8;color:white;
-                     border:none;border-radius:var(--r);font-size:18px;font-weight:800;
-                     cursor:pointer;font-family:var(--sans);letter-spacing:0.3px;">
-        CLOSE
-      </button>
-
-    </div><!-- /info-panel -->
-  </div>
-  <div id="sh-shoe-sizes" style="display:none;margin-top:12px;"></div>
-</div><!-- /detail-sheet -->
 
 
 <!-- ==============================================================

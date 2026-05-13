@@ -749,30 +749,62 @@ async function openSheet(id) {
   document.getElementById('detail-sheet').classList.add('open');
   // If this is a shoe item, load and display size breakdown
   if (item.isShoe) {
+    // For shoes: hide generic sell button + price fields, show size grid
+    const shSellBtnShoe = document.getElementById('sh-sell-btn');
+    if (shSellBtnShoe) {
+      shSellBtnShoe.textContent = '👟 Select Size & Sell';
+      shSellBtnShoe.onclick = () => openSellShoeModal(item.id);
+      shSellBtnShoe.disabled = false;
+      shSellBtnShoe.style.opacity = '1';
+    }
+    // Hide generic buy/sell/qty stats — replaced by size grid
+    const priceCols = document.getElementById('sh-price-cols');
+    const qtyCols   = document.getElementById('sh-qty-cols');
+    if (priceCols) priceCols.style.display = 'none';
+    if (qtyCols)   qtyCols.style.display   = 'none';
+
     getShoeSizes(item.code).then(sizes => {
       const sizeSection = document.getElementById('sh-shoe-sizes');
       if (!sizeSection) return;
       if (!sizes.length) { sizeSection.style.display = 'none'; return; }
       sizeSection.style.display = 'block';
-      const totalQty = sizes.reduce((t,s) => t + s.qty, 0);
+      const totalStock = sizes.reduce((t,s) => t + s.qty, 0);
       sizeSection.innerHTML =
-        '<div class="sh-section-title">Sizes &amp; Stock</div>' +
+        // Summary row
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+          '<div class="sh-section-title" style="margin:0;">Sizes &amp; Stock</div>' +
+          '<div style="font-size:12px;font-family:var(--mono);font-weight:700;color:var(--text2);">' +
+            totalStock + ' pairs total</div>' +
+        '</div>' +
         '<div class="sh-sizes-grid">' +
         sizes.map(s => {
           const sc = s.qty <= 0 ? 'out' : s.qty <= LOW_STOCK_LEVEL ? 'low' : '';
+          const profitPerPair = (s.sellPrice || item.defaultSell || 0) - (s.buyPrice || item.defaultBuy || 0);
           return '<div class="sh-size-row' + (sc ? ' ' + sc : '') + '">' +
             '<span class="sh-size-num">' + s.size + '</span>' +
             '<div class="sh-size-meta">' +
-              '<span class="sh-size-qty">' + s.qty + ' pairs</span>' +
-              '<span class="sh-size-price">' + fmt(s.sellPrice || item.defaultSell || 0) + '</span>' +
+              '<span class="sh-size-qty">' + (s.qty > 0 ? s.qty + ' pairs' : 'Out of stock') + '</span>' +
+              '<span class="sh-size-price">' + fmt(s.sellPrice || item.defaultSell || 0) +
+                (profitPerPair > 0 ? ' <span style="color:var(--green);font-size:10px;">+' + fmt(profitPerPair) + '</span>' : '') +
+              '</span>' +
             '</div>' +
             '<div class="sh-size-actions">' +
-              (isDayOpen() ? '<button onclick="openSellShoeModal(' + item.id + ',' + s.size + ')" class="sh-sell-size-btn">Sell</button>' : '') +
+              (isDayOpen() && s.qty > 0
+                ? '<button onclick="openSellShoeModal(' + item.id + ',' + s.size + ')" class="sh-sell-size-btn">Sell</button>'
+                : s.qty <= 0 ? '<span style="font-size:10px;color:var(--muted);">No stock</span>' : '') +
             '</div>' +
           '</div>';
         }).join('') +
         '</div>';
     });
+  } else {
+    // Non-shoe: restore generic stats visibility
+    const priceCols = document.getElementById('sh-price-cols');
+    const qtyCols   = document.getElementById('sh-qty-cols');
+    if (priceCols) priceCols.style.display = '';
+    if (qtyCols)   qtyCols.style.display   = '';
+    const sizeSection = document.getElementById('sh-shoe-sizes');
+    if (sizeSection) sizeSection.style.display = 'none';
   }
 
 
@@ -3184,33 +3216,48 @@ function selectSizeGroup(g) {
   const sizes = Array.from({ length: max - min + 1 }, (_, i) => min + i);
 
   const grid = document.getElementById('sz-grid');
-  if (grid) {
-    if (!_shownGroups.has(g)) {
-      // First time showing this group — append its buttons
-      _shownGroups.add(g);
-      // Add a group label divider
-      const divider = document.createElement('div');
-      divider.className = 'sz-group-divider';
-      divider.innerHTML =
-        '<span class="sz-group-tag sz-group-' + g + '">' +
-          (g === 'S' ? 'Small / Children' : g === 'M' ? 'Medium / Teens' : 'Large / Adults') +
-          ' (' + min + '–' + max + ')' +
-        '</span>';
-      grid.appendChild(divider);
-      // Add size buttons for this group
-      sizes.forEach(s => {
-        const btn = document.createElement('button');
-        btn.type      = 'button';
-        btn.className = 'sz-btn' + (_shoeSizes.has(s) ? ' sz-active' : '');
-        btn.id        = 'sz-' + s;
-        btn.textContent = s;
-        btn.onclick   = () => toggleShoeSize(s);
-        grid.appendChild(btn);
-      });
-    } else {
-      // Group already shown — just scroll to its first button
-      const first = document.getElementById('sz-' + min);
-      if (first) first.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (!grid) return;
+
+  if (!_shownGroups.has(g)) {
+    _shownGroups.add(g);
+
+    // Create a self-contained group block
+    const block = document.createElement('div');
+    block.id = 'sz-group-block-' + g;
+    block.style.cssText = 'margin-bottom:10px;';
+
+    // Label row
+    const label = document.createElement('div');
+    label.className = 'sz-group-divider';
+    label.innerHTML = '<span class="sz-group-tag sz-group-' + g + '">' +
+      (g === 'S' ? 'Small / Children' : g === 'M' ? 'Medium / Teens' : 'Large / Adults') +
+      ' (' + min + '–' + max + ')</span>';
+    block.appendChild(label);
+
+    // Buttons row — flex-wrap so they flow LEFT→RIGHT across the screen
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
+    sizes.forEach(s => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sz-btn' + (_shoeSizes.has(s) ? ' sz-active' : '');
+      btn.id = 'sz-' + s;
+      btn.textContent = s;
+      btn.onclick = () => toggleShoeSize(s);
+      row.appendChild(btn);
+    });
+    block.appendChild(row);
+    grid.appendChild(block);
+
+  } else {
+    // Already shown — toggle collapse/expand
+    const block = document.getElementById('sz-group-block-' + g);
+    if (block) {
+      const row = block.querySelector('div[style*="flex-wrap"]');
+      if (row) {
+        const isHidden = row.style.display === 'none';
+        row.style.display = isHidden ? 'flex' : 'none';
+      }
     }
   }
 
@@ -3218,7 +3265,6 @@ function selectSizeGroup(g) {
   if (szGrid) szGrid.style.display = 'block';
 
   renderShoeGroupButtons();
-  // Keep shoe-rows-wrap visible if sizes already selected
   const szWrap = document.getElementById('shoe-rows-wrap');
   if (szWrap && _shoeSizes.size > 0) szWrap.style.display = 'block';
 }
