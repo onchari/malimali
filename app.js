@@ -780,14 +780,19 @@ async function openSheet(id) {
         // 4-column size card grid
         '<div class="sh-sz-grid">' +
         sizes.map(s => {
-          const price     = s.sellPrice || item.defaultSell || 0;
-          const buyPrice  = s.buyPrice  || item.defaultBuy  || 0;
-          const isOut     = s.qty <= 0;
-          const isLow     = !isOut && s.qty <= LOW_STOCK_LEVEL;
+          const price    = s.sellPrice || item.defaultSell || 0;
+          const isOut    = s.qty <= 0;
+          const isLow    = !isOut && s.qty <= LOW_STOCK_LEVEL;
           const cardClass = isOut ? 'sh-sz-card out' : isLow ? 'sh-sz-card low' : 'sh-sz-card';
+          // Tap = sell directly (if in stock); out of stock tap = restock
+          const tapAction = isOut
+            ? 'openShoeSizeActions(' + item.id + ',' + s.size + ')'
+            : 'openSellShoeModal(' + item.id + ',' + s.size + ')';
           return (
-            '<div class="' + cardClass + '" onclick="openShoeSizeActions(' + item.id + ',' + s.size + ')">' +
+            '<div class="' + cardClass + '" onclick="' + tapAction + '">' +
               (!isOut ? '<div class="sh-sz-dot"></div>' : '') +
+              // ⋯ menu button — always visible, opens action sheet
+              '<button class="sh-sz-menu" onclick="event.stopPropagation();openShoeSizeActions(' + item.id + ',' + s.size + ')" title="More actions">⋯</button>' +
               '<div class="sh-sz-num">' + s.size + '</div>' +
               '<div class="sh-sz-qty">' + (isOut ? 'Out' : s.qty + (s.qty === 1 ? ' pr' : ' prs')) + '</div>' +
               '<div class="sh-sz-price">' + fmt(price) + '</div>' +
@@ -799,7 +804,7 @@ async function openSheet(id) {
         // Hint
         '<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px;">' +
           '<i class="fa-solid fa-circle-info" style="margin-right:4px;"></i>' +
-          'Tap a size · Sell · Restock · Edit' +
+          'Tap size to sell · ⋯ for Restock / Edit' +
         '</div>';
     });
   } else {
@@ -3474,18 +3479,15 @@ async function openShoeSizeActions(itemId, size) {
     // Action buttons
     '<div style="display:flex;flex-direction:column;gap:8px;">' +
 
-      // Sell
+      // Sell — only show if day open and in stock
       (isDayOpen() && !isOut
-        ? '<button onclick="closeShoeSizeActions();openSellShoeModal(' + itemId + ',' + size + ')" ' +
+        ? '<button onclick="closeShoeSizeActions();setTimeout(()=>openSellShoeModal(' + itemId + ',' + size + '),80)" ' +
           'style="width:100%;padding:16px;background:#1e7a3e;color:white;border:none;border-radius:var(--r);' +
           'font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);display:flex;align-items:center;gap:10px;">' +
           '<i class="fa-solid fa-cash-register" style="font-size:18px;"></i> Sell — Size ' + size +
           '</button>'
-        : isDayOpen() && isOut
-          ? '<button disabled style="width:100%;padding:16px;background:var(--surface2);color:var(--muted);' +
-            'border:1px solid var(--border);border-radius:var(--r);font-size:16px;cursor:not-allowed;' +
-            'font-family:var(--sans);">Out of stock</button>'
-          : '') +
+        : '<div style="padding:10px 0;font-size:13px;color:var(--muted);text-align:center;">' +
+          (isOut ? '⚠️ No stock for size ' + size : '📅 Open day to sell') + '</div>') +
 
       // Restock
       '<button onclick="closeShoeSizeActions();openShoeSizeRestock(' + itemId + ',' + size + ')" ' +

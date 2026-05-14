@@ -1583,3 +1583,16 @@ body {
 .sh-sz-card.low .sh-sz-num { color: #92400e; }
 .sh-sz-qty   { font-size: 9px;  color: var(--muted); font-family: var(--mono); }
 .sh-sz-price { font-size: 9px;  color: var(--muted); font-family: var(--mono); }
+
+/* ⋯ menu button on shoe size cards */
+.sh-sz-menu {
+  position: absolute;
+  bottom: 4px; right: 3px;
+  background: none; border: none;
+  font-size: 12px; font-weight: 900;
+  color: var(--muted); cursor: pointer;
+  padding: 2px 3px; line-height: 1;
+  border-radius: 4px;
+  opacity: .6;
+}
+.sh-sz-menu:active { opacity: 1; }
