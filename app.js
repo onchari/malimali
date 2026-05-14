@@ -1213,6 +1213,10 @@ async function openSellModal(itemId) {
 
 function closeSellModal() {
   document.getElementById('sell-modal').classList.remove('open');
+  const picker  = document.getElementById('shoe-picker-sheet');
+  const actions = document.getElementById('shoe-size-action-sheet');
+  if (picker)  picker.classList.remove('open');
+  if (actions) actions.classList.remove('open');
   currentSellItemId = null;
   _isShoeSale   = false;
   _sellShoeSize = null;
@@ -1288,8 +1292,14 @@ async function confirmSale() {
   scheduleSync();
 
   closeSellModal();
+  closeShoePickerSheet();
+  closeShoeSizeActions();
+  // Also close the detail sheet so user lands back on the stock list
+  closeSheet();
+
   document.getElementById('sell-search').value = '';
-  document.getElementById('sell-results').innerHTML = '';
+  const sellResults = document.getElementById('sell-results');
+  if (sellResults) sellResults.innerHTML = '';
 
   toast('✅ Sale: ' + fmt(sale.revenue) + ' · Profit: ' + fmt(sale.profit), 'ok');
   renderSellPage();
