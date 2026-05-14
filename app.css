@@ -1545,3 +1545,41 @@ body {
 #sz-grid .sz-group-divider { display: block; width: 100%; }
 .sz-group-divider + div,
 .sz-group-divider ~ div { display: flex !important; flex-wrap: wrap; gap: 6px; }
+
+/* ── Shoe size card grid (detail sheet) ───────────────────────── */
+.sh-sz-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.sh-sz-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface2);
+  padding: 10px 4px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  position: relative;
+  transition: transform .1s, background .1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.sh-sz-card:active { transform: scale(.95); }
+.sh-sz-card.has-stock,
+.sh-sz-card:not(.out):not(.low) { border-color: var(--green); background: var(--green-light); }
+.sh-sz-card.low   { border-color: #f59e0b; background: #fef3c7; }
+.sh-sz-card.out   { opacity: .4; cursor: default; }
+.sh-sz-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--green);
+  position: absolute; top: 5px; right: 5px;
+}
+.sh-sz-card.low .sh-sz-dot { background: #d97706; }
+.sh-sz-num   { font-size: 17px; font-weight: 900; font-family: var(--mono); color: var(--text); }
+.sh-sz-card:not(.out):not(.low) .sh-sz-num { color: var(--green); }
+.sh-sz-card.low .sh-sz-num { color: #92400e; }
+.sh-sz-qty   { font-size: 9px;  color: var(--muted); font-family: var(--mono); }
+.sh-sz-price { font-size: 9px;  color: var(--muted); font-family: var(--mono); }
