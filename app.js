@@ -424,6 +424,7 @@ async function saveItem() {
     await dbPut('items', existing);
     fbSyncItem(existing);
     allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
     await enrichShoeItems(allItems);
     renderList(); renderDashboard(); updateHeader();
     scheduleSync();
@@ -445,6 +446,7 @@ async function saveItem() {
     if (!savedCount) return;
     clearForm(); clearAddFormPhoto();
     allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
     await enrichShoeItems(allItems);
     renderList(); renderDashboard(); updateHeader();
     scheduleSync();
@@ -472,6 +474,26 @@ async function saveItem() {
   try {
     if (editIdRaw) {
       const original = await dbGet('items', parseInt(editIdRaw));
+      // For shoe items: only update name/type/defaultBuy/defaultSell
+      // Sizes are managed separately through shoe_sizes store
+      if (original && original.isShoe) {
+        original.name        = item.name;
+        original.type        = item.type;
+        original.updatedAt   = new Date().toISOString();
+        original.updatedBy   = currentUser ? currentUser.username : 'system';
+        if (item.buy)  { original.defaultBuy  = item.buy; }
+        if (item.sell) { original.defaultSell = item.sell; original.profit = item.sell - (item.buy||original.defaultBuy||0); }
+        await dbPut('items', original);
+        fbSyncItem(original);
+        clearForm();
+        allItems = await dbAll('items');
+        await enrichShoeItems(allItems);
+        renderList(); renderDashboard(); updateHeader();
+        scheduleSync();
+        toast('✅ Shoe item updated!', 'ok');
+        showPage('list');
+        return;
+      }
       item.id        = parseInt(editIdRaw);
       item.createdAt = original ? (original.createdAt || new Date().toISOString()) : new Date().toISOString();
       item.updatedAt = new Date().toISOString();
@@ -482,6 +504,7 @@ async function saveItem() {
       fbSyncItem(item);
       clearForm();
       allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
       await enrichShoeItems(allItems);
       renderList(); renderDashboard(); updateHeader();
       scheduleSync();
@@ -494,6 +517,7 @@ async function saveItem() {
       fbSyncItem(item);
       clearForm(); clearAddFormPhoto();
       allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
       await enrichShoeItems(allItems);
       renderList(); renderDashboard(); updateHeader();
       scheduleSync();
@@ -560,6 +584,7 @@ function cancelEdit() {
 // ===== RENDER LIST =====
 async function renderList() {
   allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
   const search = (document.getElementById('search').value || '').toLowerCase();
   renderTypeChips();
 
@@ -626,13 +651,22 @@ async function renderList() {
 // ===== DETAIL SHEET =====
 
 function openSellFromSheet() {
-  if (!isDayOpen()) {
-    toast('⚠️ Open the business day to make sales.', 'err');
-    return;
-  }
   const id = currentDetailId;
   closeSheet();
-  setTimeout(() => openSellModal(id), 150);
+  setTimeout(async () => {
+    const item = await dbGet('items', id);
+    if (!item) { toast('Item not found', 'err'); return; }
+    if (item.isShoe) {
+      if (!_selectedShoeSize) {
+        toast('⚠️ Tap a size first to select it', 'err');
+        openSheet(id); // reopen so user can pick
+        return;
+      }
+      openSellShoeModal(id, _selectedShoeSize);
+    } else {
+      openSellModal(id);
+    }
+  }, 120);
 }
 
 function triggerSheetPhotoUpload(event) {
@@ -737,6 +771,9 @@ async function openSheet(id) {
   const sizebar   = document.getElementById('sh-selected-size-bar');
 
   if (item.isShoe) {
+    // Recompute qty from shoe_sizes (always fresh)
+    const freshSizes = await getShoeSizes(item.code);
+    item.qty = freshSizes.reduce((t,s) => t+s.qty, 0);
     set('sh-qty', item.qty + ' prs');
     if (priceCols) priceCols.style.gridTemplateColumns = '1fr 1fr 1fr 1fr';
     if (sizeSec)   sizeSec.style.display = 'block';
@@ -868,11 +905,30 @@ async function editItem() {
   document.getElementById('f-qty').value   = item.qty   ?? '';
   document.getElementById('f-buy').value   = item.buy   || '';
   document.getElementById('f-sell').value  = item.sell  || '';
-  showPage('add');
+  showPage('add'); // triggers onTypeChange() which shows/hides shoe panel
   document.getElementById('save-btn').textContent = '💾 Save Changes';
-  document.getElementById('form-mode-label').textContent = 'Edit Item';
+  document.getElementById('form-mode-label').textContent = '✏️ Edit · ' + (item.name || item.code);
   document.getElementById('cancel-edit-btn').style.display = 'block';
-  updateProfitPreview();
+
+  if (item.isShoe) {
+    // For shoe items: populate shoe pricing from first size record as defaults
+    getShoeSizes(item.code).then(sizes => {
+      if (!sizes.length) return;
+      const first = sizes[0];
+      const sharedQty  = document.getElementById('shoe-shared-qty');
+      const sharedBuy  = document.getElementById('shoe-shared-buy');
+      const sharedSell = document.getElementById('shoe-shared-sell');
+      if (sharedBuy)  sharedBuy.value  = first.buyPrice  || item.defaultBuy  || '';
+      if (sharedSell) sharedSell.value = first.sellPrice || item.defaultSell || '';
+      // Show currently stocked sizes as pre-selected
+      _shoeGroup = item.category || null;
+      sizes.filter(s=>s.qty>0).forEach(s => _shoeSizes.add(s.size));
+      renderShoeGroupButtons();
+      renderShoeSummary();
+    });
+  } else {
+    updateProfitPreview();
+  }
   // Load existing photo if any
   const existingPhoto = getItemPhoto(item.id);
   if (existingPhoto) {
@@ -1158,30 +1214,46 @@ async function searchSell() {
 
 function selectPayment(method) {
   _selectedPayment = method;
-  ['Cash','M-Pesa','Credit'].forEach(m => {
-    const btn = document.getElementById('pm-' + m);
-    if (btn) btn.classList.toggle('pm-active', m === method);
+  ['cash','mpesa'].forEach(m => {
+    const btn = document.getElementById('pay-' + m);
+    if (btn) btn.classList.toggle('active', m === method);
   });
 }
 
 async function openSellModal(itemId) {
   const item = await dbGet('items', itemId);
   if (!item) { toast('Item not found.', 'err'); return; }
+  if (item.qty <= 0) { toast('⚠️ Item is out of stock', 'err'); return; }
+
   currentSellItemId = itemId;
-  const t = getTypeObj(item.type);
-  document.getElementById('sm-icon').textContent = t.emoji;
-  document.getElementById('sm-icon').style.background = t.color || 'var(--surface2)';
-  document.getElementById('sm-name').textContent = item.name;
-  document.getElementById('sm-meta').textContent = item.code + (item.size ? ' · ' + item.size : '');
-  document.getElementById('sm-stock').textContent = item.qty;
-  document.getElementById('sm-sell').textContent = fmt(item.sell);
-  const _tpel=document.getElementById('sm-total-profit'); if(_tpel) _tpel.textContent = (item.profit >= 0 ? '+' : '') + fmt(item.profit);
-  document.getElementById('sm-cur').textContent = currency;
-  document.getElementById('sm-qty').value = 1;
-  document.getElementById('sm-qty').max = item.qty;
-  document.getElementById('sm-actual').value = '';
+  _isShoeSale   = false;
+  _sellShoeSize = null;
+
+  const set = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=v||''; };
+  const setVal = (id, v) => { const el=document.getElementById(id); if(el) el.value=v; };
+
+  set('sm-item-name',  item.name || item.code);
+  set('sm-item-code',  item.code + (item.size && item.size!=='N/A' ? ' · ' + item.size : ''));
+  set('sm-stock',      item.qty);
+  set('sm-buy-price',  fmt(item.buy || 0));
+  set('sm-sell-price', fmt(item.sell || 0));
+
+  const curEl = document.getElementById('sm-cur');
+  if (curEl) curEl.textContent = currency;
+
+  setVal('sm-qty', 1);
+  const qtyEl = document.getElementById('sm-qty');
+  if (qtyEl) qtyEl.max = item.qty;
+
+  setVal('sm-actual', '');
+
+  // Reset errors
+  ['sm-qty-error','sm-price-error'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.style.display='none';
+  });
+
+  selectPayment('cash');
   updateSellModal();
-  selectPayment('Cash'); // reset payment method
   document.getElementById('sell-modal').classList.add('open');
 }
 
@@ -1490,6 +1562,7 @@ async function initFirebase() {
       }
       if (needsRender) {
         allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
         renderList(); renderDashboard(); updateHeader();
         setFbStatus('on');
         toast('🔄 ' + changes.length + ' item(s) synced from cloud', 'ok');
@@ -1699,6 +1772,7 @@ async function pullFromFirebase(silent = false) {
     console.log('[SYNC] Sales: added=' + salesAdded + ' updated=' + salesUpdated);
 
     allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
     renderList(); renderDashboard(); updateHeader();
     try { renderSellPage(); } catch(_) {}
     setFbStatus('on');
@@ -2424,6 +2498,7 @@ async function confirmRestock() {
   document.getElementById('sh-qty').textContent = item.qty + ' pcs';
   document.getElementById('restock-panel').style.display = 'none';
   allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
   renderList();
   renderDashboard();
   updateHeader();
@@ -3650,17 +3725,24 @@ function _openSellModalForShoeSize(item, sizeRec) {
   _isShoeSale   = true;
   currentSellItemId = item.id;
   const price = sizeRec.sellPrice || item.defaultSell || 0;
+  const buy   = sizeRec.buyPrice  || item.defaultBuy  || 0;
   const setEl = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
   const setVal= (id, v) => { const el=document.getElementById(id); if(el) el.value=v; };
   setEl('sm-item-name',  escapeHtml(item.name) + ' — Size ' + sizeRec.size);
   setEl('sm-item-code',  item.code + '-' + sizeRec.size);
   setEl('sm-sell-price', fmt(price));
+  setEl('sm-buy-price',  fmt(buy));
   setEl('sm-stock',      sizeRec.qty + ' pairs');
   const sa = document.getElementById('sm-actual');
-  if (sa) { sa.value=''; sa.max=sizeRec.qty; sa.placeholder=fmt(price); }
+  if (sa) { sa.value = ''; sa.placeholder = fmt(price); }
   setVal('sm-qty', 1);
   const sqty = document.getElementById('sm-qty');
   if (sqty) sqty.max = sizeRec.qty;
+  // Reset errors
+  ['sm-qty-error','sm-price-error'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.style.display='none';
+  });
+  selectPayment('cash');
   document.getElementById('sell-modal').classList.add('open');
   updateSellModal();
 }
