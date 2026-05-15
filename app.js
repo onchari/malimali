@@ -691,175 +691,149 @@ function _capturePhoto(itemId, source) {
 
 async function openSheet(id) {
   currentDetailId = id;
-  const item = await dbGet('items', id);
-  if (!item) return;
-  const t = getTypeObj(item.type);
-  const sales = await dbAll('sales');
-  const itemSales = sales.filter(s => s.itemId === id);
-  const soldQty = itemSales.reduce((a,s) => a+s.qty, 0);
-  const revenue = itemSales.reduce((a,s) => a+s.revenue, 0);
-  const profitMade = itemSales.reduce((a,s) => a+s.profit, 0);
+  const item  = await dbGet('items', id);
+  if (!item)  { toast('Item not found', 'err'); return; }
+  _selectedShoeSize = null; // reset shoe size selection
 
-  // Photo or emoji fallback
-  const photo = getItemPhoto(id);
-  const photoImg = document.getElementById('sh-photo-img');
-  const photoFallback = document.getElementById('sh-photo-fallback');
-  const photoPan = document.getElementById('sh-photo-pan');
+  // Sales count for this item
+  const allSales = await dbAll('sales');
+  const itemSales = allSales.filter(s => s.itemId === id || s.itemCode === item.code);
+  const unitsSold = itemSales.reduce((t,s) => t + (s.qty||1), 0);
+
+  // Photo
+  const photo     = getItemPhoto(id);
+  const photoArea = document.getElementById('sh-photo-area');
+  const photoPan  = document.getElementById('sh-photo-pan');
+  const photoImg  = document.getElementById('sh-photo-img');
+  const fallback  = document.getElementById('sh-photo-fallback');
   if (photo) {
-    photoImg.src = photo;
-    if (photoPan) photoPan.style.display = 'block';
-    photoFallback.style.display = 'none';
+    photoImg.src = photo; photoPan.style.display = 'block'; fallback.style.display = 'none';
   } else {
-    if (photoPan) photoPan.style.display = 'none';
-    photoFallback.style.display = 'flex';
-    photoFallback.style.background = t.color || 'var(--surface2)';
+    photoPan.style.display = 'none'; fallback.style.display = 'flex';
+    photoArea.style.background = item._color || 'var(--surface2)';
   }
-  // Reset pan/zoom every time sheet opens
-  if (typeof window._resetPhotoPan === 'function') window._resetPhotoPan();
 
-  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('sh-photo-btn', photo ? '📷 Change' : '📷 Add Photo');
-  set('sh-icon', t.emoji);
-  set('sh-name', item.name);
-  set('sh-code', item.code + (item.size ? ' · ' + item.size : ''));
-  set('sh-type', item.type);
-  const tbadge = document.getElementById('sh-type-badge'); if (tbadge) tbadge.textContent = t.emoji + ' ' + item.type;
-  set('sh-size', item.size || '—');
-  set('sh-buy', fmt(item.buy));
-  set('sh-sell', fmt(item.sell));
-  set('sh-profit', fmt(item.profit));
-  set('sh-qty', item.qty + ' pcs');
-  set('sh-code-large', item.code + (item.size ? ' · ' + item.size : ''));
+  // Populate fields
+  const set = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=v||''; };
+  set('sh-icon',        item._emoji || '📦');
+  set('sh-code',        item.code);
+  set('sh-name',        item.name || '');
+  set('sh-type-badge',  item.type || '');
+  set('sh-type',        item.type || '');
+  set('sh-code-large',  item.code);
+  set('sh-size',        item.size && item.size !== 'N/A' ? item.size : '');
+  set('sh-buy',         fmt(item.buy || item.defaultBuy || 0));
+  set('sh-sell',        fmt(item.sell || item.defaultSell || 0));
+  set('sh-sold',        unitsSold);
 
-  // Out of stock
+  // Out of stock badge
   const outBadge = document.getElementById('sh-out-badge');
-  const sellBtn = document.getElementById('sh-sell-btn');
-  if (item.qty <= 0) {
-    if (outBadge) outBadge.style.display = 'block';
-    if (sellBtn) { sellBtn.disabled = true; sellBtn.style.opacity = '0.4'; sellBtn.style.cursor = 'not-allowed'; sellBtn.textContent = 'OUT OF STOCK'; }
+  if (outBadge) outBadge.style.display = item.qty <= 0 ? 'block' : 'none';
+
+  // Shoe items
+  const priceCols = document.getElementById('sh-price-cols');
+  const qtyCols   = document.getElementById('sh-qty-cols');
+  const sizeSec   = document.getElementById('sh-shoe-sizes');
+  const sizebar   = document.getElementById('sh-selected-size-bar');
+
+  if (item.isShoe) {
+    set('sh-qty', item.qty + ' prs');
+    if (priceCols) priceCols.style.gridTemplateColumns = '1fr 1fr 1fr 1fr';
+    if (sizeSec)   sizeSec.style.display = 'block';
+    if (sizebar)   sizebar.style.display = 'none';
+    renderShoeDetailGrid(item);
   } else {
-    if (outBadge) outBadge.style.display = 'none';
-    if (sellBtn) { sellBtn.disabled = false; sellBtn.style.opacity = '1'; sellBtn.style.cursor = 'pointer'; sellBtn.textContent = 'SELL'; }
+    set('sh-qty', item.qty);
+    if (sizeSec) sizeSec.style.display = 'none';
+    if (sizebar) sizebar.style.display = 'none';
   }
-  set('sh-total', fmt(item.buy * item.qty));
-  set('sh-sold', soldQty);
-  set('sh-revenue', fmt(revenue));
-  set('sh-profit-made', fmt(profitMade));
+
+  // Sell button
+  const sellBtn = document.getElementById('sh-sell-btn');
+  if (sellBtn) {
+    if (item.qty <= 0 && !item.isShoe) {
+      sellBtn.disabled = true; sellBtn.style.opacity = '0.4';
+      sellBtn.style.cursor = 'not-allowed';
+    } else {
+      sellBtn.disabled = false; sellBtn.style.opacity = '1';
+      sellBtn.style.cursor = 'pointer';
+    }
+  }
 
   document.getElementById('detail-sheet').classList.add('open');
-  // If this is a shoe item, load and display size breakdown
-  if (item.isShoe) {
-    // For shoes: hide generic sell button + price fields, show size grid
-    const shSellBtnShoe = document.getElementById('sh-sell-btn');
-    if (shSellBtnShoe) {
-      shSellBtnShoe.textContent = '👟 Select Size & Sell';
-      shSellBtnShoe.onclick = () => openSellShoeModal(item.id);
-      shSellBtnShoe.disabled = false;
-      shSellBtnShoe.style.opacity = '1';
-    }
-    // Hide generic buy/sell/qty stats — replaced by size grid
-    const priceCols = document.getElementById('sh-price-cols');
-    const qtyCols   = document.getElementById('sh-qty-cols');
-    if (priceCols) priceCols.style.display = 'none';
-    if (qtyCols)   qtyCols.style.display   = 'none';
+}
 
-    getShoeSizes(item.code).then(sizes => {
-      const sizeSection = document.getElementById('sh-shoe-sizes');
-      if (!sizeSection) return;
-      if (!sizes.length) { sizeSection.style.display = 'none'; return; }
-      sizeSection.style.display = 'block';
+// Render shoe size selector grid in detail sheet
+async function renderShoeDetailGrid(item) {
+  const sizeSection = document.getElementById('sh-shoe-sizes');
+  if (!sizeSection) return;
+  const sizes = await getShoeSizes(item.code);
+  if (!sizes.length) { sizeSection.style.display = 'none'; return; }
 
-      const totalStock = sizes.reduce((t,s) => t + s.qty, 0);
+  const totalStock = sizes.reduce((t,s) => t + s.qty, 0);
+  sizeSection.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
+      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);">Select Size</div>' +
+      '<div style="font-size:12px;font-family:var(--mono);font-weight:700;color:var(--muted);">' + totalStock + ' pairs total</div>' +
+    '</div>' +
+    '<div class="sh-sz-grid">' +
+    sizes.map(s => {
+      const isOut = s.qty <= 0;
+      const isLow = !isOut && s.qty <= LOW_STOCK_LEVEL;
+      const price = s.sellPrice || item.defaultSell || 0;
+      return '<div class="sh-sz-card2 ' + (isOut?'out':isLow?'low':'') + '" ' +
+        'id="shsz-' + s.size + '" ' +
+        'onclick="selectDetailShoeSize(' + item.id + ',' + s.size + ')">' +
+        (isOut ? '' : '<div class="sh-sz-dot"></div>') +
+        '<div class="sh-sz-num">' + s.size + '</div>' +
+        '<div class="sh-sz-qty">' + (isOut ? 'Out' : s.qty + (s.qty===1?' pr':' prs')) + '</div>' +
+        '<div class="sh-sz-price">' + fmt(price) + '</div>' +
+      '</div>';
+    }).join('') +
+    '</div>' +
+    '<div style="font-size:10px;color:var(--muted);text-align:center;margin-top:6px;">' +
+      'Tap a size to select · then use action buttons below' +
+    '</div>';
+}
 
-      sizeSection.innerHTML =
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
-          '<div class="sh-section-title" style="margin:0;">Sizes &amp; Stock</div>' +
-          '<div style="font-size:12px;font-family:var(--mono);font-weight:700;color:var(--muted);">' + totalStock + ' pairs total</div>' +
-        '</div>' +
+let _selectedShoeSize = null; // currently selected size in detail sheet
 
-        // 4-column size card grid
-        '<div class="sh-sz-grid">' +
-        sizes.map(s => {
-          const price    = s.sellPrice || item.defaultSell || 0;
-          const isOut    = s.qty <= 0;
-          const isLow    = !isOut && s.qty <= LOW_STOCK_LEVEL;
-          const cardClass = isOut ? 'sh-sz-card out' : isLow ? 'sh-sz-card low' : 'sh-sz-card';
-          // Tap = sell directly (if in stock); out of stock tap = restock
-          const tapAction = isOut
-            ? 'openShoeSizeActions(' + item.id + ',' + s.size + ')'
-            : 'openSellShoeModal(' + item.id + ',' + s.size + ')';
-          return (
-            '<div class="' + cardClass + '" onclick="' + tapAction + '">' +
-              (!isOut ? '<div class="sh-sz-dot"></div>' : '') +
-              // ⋯ menu button — always visible, opens action sheet
-              '<button class="sh-sz-menu" onclick="event.stopPropagation();openShoeSizeActions(' + item.id + ',' + s.size + ')" title="More actions">⋯</button>' +
-              '<div class="sh-sz-num">' + s.size + '</div>' +
-              '<div class="sh-sz-qty">' + (isOut ? 'Out' : s.qty + (s.qty === 1 ? ' pr' : ' prs')) + '</div>' +
-              '<div class="sh-sz-price">' + fmt(price) + '</div>' +
-            '</div>'
-          );
-        }).join('') +
-        '</div>' +
+function selectDetailShoeSize(itemId, size) {
+  _selectedShoeSize = size;
 
-        // Hint
-        '<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px;">' +
-          '<i class="fa-solid fa-circle-info" style="margin-right:4px;"></i>' +
-          'Tap size to sell · ⋯ for Restock / Edit' +
-        '</div>';
-    });
-  } else {
-    // Non-shoe: restore generic stats visibility
-    const priceCols = document.getElementById('sh-price-cols');
-    const qtyCols   = document.getElementById('sh-qty-cols');
-    if (priceCols) priceCols.style.display = '';
-    if (qtyCols)   qtyCols.style.display   = '';
-    const sizeSection = document.getElementById('sh-shoe-sizes');
-    if (sizeSection) sizeSection.style.display = 'none';
+  // Update card visual — blue = default, green = selected
+  document.querySelectorAll('.sh-sz-card2').forEach(c => {
+    c.classList.remove('selected');
+    c.style.background = '';
+    c.style.borderColor = '';
+    const num = c.querySelector('.sh-sz-num');
+    if (num) num.style.color = '';
+  });
+  const selected = document.getElementById('shsz-' + size);
+  if (selected && !selected.classList.contains('out')) {
+    selected.classList.add('selected');
   }
 
-
-  // Show/hide action buttons based on day state
-  const dayOpen = isDayOpen();
-  const status  = activeDay ? activeDay.status : 'PENDING';
-
-  const shSellBtn  = document.getElementById('sh-sell-btn');
-  const delBtn     = document.querySelector('#detail-sheet .btn-del');
-  const editBtn    = document.querySelector('#detail-sheet .btn-edit');
-  const restockBtn = document.querySelector('[onclick="toggleRestock()"]');
-  const actionRow  = document.getElementById('sh-action-row');
-
-  if (dayOpen) {
-    // OPEN: show all action buttons
-    [shSellBtn, delBtn, editBtn, restockBtn].forEach(b => { if (b) { b.style.display = ''; b.style.opacity = '1'; b.style.pointerEvents = 'auto'; } });
-    if (actionRow) actionRow.style.display = '';
-  } else {
-    // Not OPEN: hide write actions, show read-only notice
-    [shSellBtn, delBtn, editBtn, restockBtn].forEach(b => { if (b) { b.style.display = 'none'; } });
-    if (actionRow) actionRow.style.display = 'none';
+  // Show selected size bar
+  const bar = document.getElementById('sh-selected-size-bar');
+  if (bar) {
+    bar.style.display = 'block';
+    bar.textContent = 'Size ' + size + ' selected · tap an action below';
   }
+}
 
-  // Status-specific notice in the detail sheet
-  let notice = document.getElementById('sh-day-notice');
-  if (!dayOpen) {
-    const noticeText = {
-      PENDING:    '📅 Open the business day to edit or sell items.',
-      PAUSED:     '⏸ Day is paused — resume to make changes.',
-      CLOSED:     '🌙 Day is closed — reopen from the Day tab to make changes.',
-      RECONCILED: '✅ Day is reconciled and permanently archived.',
-      LOCKED:     '🔒 This is an archived day — read only.',
-    };
-    if (!notice) {
-      notice = document.createElement('div');
-      notice.id = 'sh-day-notice';
-      notice.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;margin-bottom:10px;font-size:12px;font-weight:600;color:var(--text2);text-align:center;';
-      const infoArea = document.querySelector('#detail-sheet .sheet > div:last-child');
-      if (infoArea) infoArea.insertBefore(notice, infoArea.firstChild);
-    }
-    notice.textContent = noticeText[status] || '🔒 Actions unavailable.';
-    notice.style.display = 'block';
-  } else {
-    if (notice) notice.style.display = 'none';
-  }
+function showRestockForItem(itemId) {
+  if (!itemId) return;
+  dbGet('items', itemId).then(item => {
+    if (!item) return;
+    // Set code field and trigger restock dropdown
+    showPage('add');
+    setTimeout(() => {
+      document.getElementById('f-code').value = item.code;
+      onCodeInput(); // trigger dropdown
+      setTimeout(() => selectExistingItem(itemId), 150); // auto-select
+    }, 200);
+  });
 }
 
 function closeSheet() { document.getElementById('detail-sheet').classList.remove('open'); }
@@ -1201,7 +1175,7 @@ async function openSellModal(itemId) {
   document.getElementById('sm-meta').textContent = item.code + (item.size ? ' · ' + item.size : '');
   document.getElementById('sm-stock').textContent = item.qty;
   document.getElementById('sm-sell').textContent = fmt(item.sell);
-  document.getElementById('sm-profit').textContent = (item.profit >= 0 ? '+' : '') + fmt(item.profit);
+  const _tpel=document.getElementById('sm-total-profit'); if(_tpel) _tpel.textContent = (item.profit >= 0 ? '+' : '') + fmt(item.profit);
   document.getElementById('sm-cur').textContent = currency;
   document.getElementById('sm-qty').value = 1;
   document.getElementById('sm-qty').max = item.qty;
@@ -1227,13 +1201,39 @@ async function updateSellModal() {
   if (!currentSellItemId) return;
   const item = await dbGet('items', currentSellItemId);
   if (!item) { toast('Item no longer exists.', 'err'); closeSellModal(); return; }
-  const qty = Math.max(1, parseInt(document.getElementById('sm-qty').value) || 1);
-  const actualRaw = parseFloat(document.getElementById('sm-actual').value);
-  const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : item.sell;
-  const totalRev = qty * priceUsed;
-  const totalProfit = qty * (priceUsed - item.buy);
+  const maxQty = _isShoeSale && _sellShoeSize ? _sellShoeSize.qty : item.qty;
+  const buy    = _isShoeSale && _sellShoeSize ? (_sellShoeSize.buyPrice||item.defaultBuy||0) : (item.buy||0);
+  const sell   = _isShoeSale && _sellShoeSize ? (_sellShoeSize.sellPrice||item.defaultSell||0) : (item.sell||0);
+
+  const qtyEl = document.getElementById('sm-qty');
+  const qty   = Math.max(1, parseInt(qtyEl ? qtyEl.value : 1) || 1);
+
+  // Validate qty
+  const qtyErr = document.getElementById('sm-qty-error');
+  if (qty > maxQty) {
+    if (qtyEl)  qtyEl.style.color = 'var(--red)';
+    if (qtyErr) { qtyErr.style.display='block'; qtyErr.textContent='⚠️ Only ' + maxQty + ' in stock'; }
+  } else {
+    if (qtyEl)  qtyEl.style.color = '';
+    if (qtyErr) qtyErr.style.display='none';
+  }
+
+  const actualRaw  = parseFloat((document.getElementById('sm-actual')||{}).value);
+  const priceUsed  = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : sell;
+
+  // Validate actual price >= buy price
+  const priceErr = document.getElementById('sm-price-error');
+  if (!isNaN(actualRaw) && actualRaw > 0 && actualRaw < buy) {
+    if (priceErr) { priceErr.style.display='block'; priceErr.textContent='⚠️ Cannot sell below buying price (' + fmt(buy) + ')'; }
+  } else {
+    if (priceErr) priceErr.style.display='none';
+  }
+
+  const totalRev    = qty * priceUsed;
+  const totalProfit = qty * (priceUsed - buy);
+  const totalRev2   = totalRev; const totalProfit2 = totalProfit;
   const overridden = !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== item.sell;
-  document.getElementById('sm-price-used').textContent = fmt(priceUsed) + (overridden ? ' (custom)' : ' (default)');
+  const _puel=document.getElementById('sm-price-used'); if(_puel) _puel.textContent = fmt(priceUsed) + (overridden ? ' (custom)' : ' (default)');
   document.getElementById('sm-total-rev').textContent = fmt(totalRev);
   document.getElementById('sm-total-profit').textContent = (totalProfit >= 0 ? '+' : '') + fmt(totalProfit);
   document.getElementById('sm-total-profit').style.color = totalProfit >= 0 ? 'var(--green)' : 'var(--red)';
@@ -1254,6 +1254,14 @@ async function confirmSale() {
   if (!requireOpenDay()) return;
   const item = await dbGet('items', currentSellItemId);
   if (!item) { toast('Item no longer exists.', 'err'); closeSellModal(); return; }
+  const maxQtyCheck = _isShoeSale && _sellShoeSize ? _sellShoeSize.qty : item.qty;
+  const qtyCheck = parseInt((document.getElementById('sm-qty')||{}).value) || 1;
+  const buyCheck  = _isShoeSale && _sellShoeSize ? (_sellShoeSize.buyPrice||item.defaultBuy||0) : (item.buy||0);
+  const actCheck  = parseFloat((document.getElementById('sm-actual')||{}).value);
+  if (qtyCheck > maxQtyCheck) { toast('⚠️ Qty exceeds stock (' + maxQtyCheck + ')', 'err'); return; }
+  if (!isNaN(actCheck) && actCheck > 0 && actCheck < buyCheck) {
+    toast('⚠️ Sale price cannot be below buying price (' + fmt(buyCheck) + ')', 'err'); return;
+  }
   const qty = Math.max(1, parseInt(document.getElementById('sm-qty').value) || 1);
   if (qty > item.qty) { toast('⚠️ Not enough stock!', 'err'); return; }
   const actualRaw = parseFloat(document.getElementById('sm-actual').value);
@@ -3628,6 +3636,7 @@ function closeShoePickerSheet() {
 
 function pickShoeSize(size) {
   closeShoePickerSheet();
+  closeShoeSizeActions();
   if (!_sellShoeItem) return;
   getShoeSizes(_sellShoeItem.code).then(sizes => {
     const sr = sizes.find(s => s.size === size);

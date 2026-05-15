@@ -1596,3 +1596,59 @@ body {
   opacity: .6;
 }
 .sh-sz-menu:active { opacity: 1; }
+
+/* ── Detail sheet stat boxes ──────────────────────────────────── */
+.sh-stat-box {
+  padding: 10px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  text-align: center;
+  background: var(--surface2);
+}
+.sh-stat-box.accent-bg { background: var(--accent-light); }
+.sh-stat-lbl { font-size: 8px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; margin-bottom: 3px; }
+.sh-stat-val { font-size: 15px; font-weight: 900; font-family: var(--mono); color: var(--text); }
+.sh-stat-val.muted   { color: var(--muted); }
+.sh-stat-val.accent2 { color: var(--accent2); }
+.sh-stat-val.accent  { color: var(--accent); }
+.sh-stat-val.green   { color: var(--green); }
+
+/* ── Shoe size card v2 (blue default, green selected) ─────────── */
+.sh-sz-card2 {
+  border: 1.5px solid #93c5fd;           /* blue border default */
+  border-radius: var(--r);
+  background: #dbeafe;                    /* blue bg default */
+  padding: 10px 4px 8px;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 2px;
+  cursor: pointer; position: relative;
+  transition: all .12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.sh-sz-card2:active { transform: scale(.94); }
+.sh-sz-card2.selected {
+  border-color: var(--green);
+  background: var(--green-light);         /* green when selected */
+}
+.sh-sz-card2.selected .sh-sz-num { color: var(--green) !important; }
+.sh-sz-card2.low   { border-color: #f59e0b; background: #fef3c7; }
+.sh-sz-card2.out   { border-color: var(--border); background: var(--surface2); opacity: .4; cursor: default; }
+.sh-sz-card2 .sh-sz-num  { color: #1d4ed8; }  /* blue number */
+.sh-sz-card2 .sh-sz-dot  { background: #1d4ed8; }
+.sh-sz-card2.low .sh-sz-num { color: #92400e; }
+
+/* Payment buttons */
+.pay-btn {
+  padding: 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface2);
+  font-size: 14px; font-weight: 700;
+  cursor: pointer; font-family: var(--sans);
+  color: var(--text2); transition: all .12s;
+}
+.pay-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  color: var(--accent);
+}
