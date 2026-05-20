@@ -1150,62 +1150,98 @@ function closePastSessionSheet(){const s=document.getElementById('past-session-s
 // Only accessible to Super User in Settings
 // ═══════════════════════════════════════════════════════════════
 async function resetAllData() {
-  const confirmed1 = confirm('⚠️ RESET ALL DATA\n\nThis will permanently delete ALL:\n• Inventory items\n• Sales records\n• Business days\n• Shoe sizes\n\nThis cannot be undone. Continue?');
-  if (!confirmed1) return;
-  const confirmed2 = confirm('Are you absolutely sure? Type your action cannot be reversed.');
-  if (!confirmed2) return;
+  const confirmed = confirm(
+    '⚠️ RESET ALL DATA\n\n' +
+    'This will permanently delete:\n' +
+    '• All inventory items\n' +
+    '• All sales records\n' +
+    '• All business day records\n' +
+    '• All shoe size records\n\n' +
+    'Firebase will also be cleared if connected.\n\n' +
+    'This CANNOT be undone. Proceed?'
+  );
+  if (!confirmed) return;
 
   try {
-    toast('🗑️ Clearing all data...', '');
+    toast('🗑️ Clearing database…', '');
 
-    // Clear all IndexedDB stores
-    const stores = ['items','sales','types','day_sessions','business_days','shoe_sizes'];
-    for (const store of stores) {
-      try {
-        const all = await dbAll(store);
-        for (const rec of all) await dbDelete(store, rec.id);
-      } catch(e) { console.warn('Clear store', store, e.message); }
-    }
+    // ── 1. Clear IndexedDB using store.clear() ────────────────────
+    // This is atomic and reliable — clears entire store in one op
+    const stores = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes'];
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(
+        stores.filter(s => db.objectStoreNames.contains(s)),
+        'readwrite'
+      );
+      tx.onerror = e => reject(e.target.error);
+      tx.oncomplete = () => resolve();
+      stores.forEach(s => {
+        if (db.objectStoreNames.contains(s)) {
+          tx.objectStore(s).clear();
+        }
+      });
+    });
+    console.log('[RESET] IndexedDB cleared');
 
-    // Clear Firebase if connected
+    // ── 2. Clear Firebase if connected ────────────────────────────
     if (fbReady && fbDb) {
       try {
-        const { collection, getDocs, deleteDoc, doc } = await waitForFbImports();
-        for (const col of ['items','sales','business_days','shoe_sizes']) {
+        const { collection, getDocs, deleteDoc, doc, writeBatch } = await waitForFbImports();
+        for (const col of ['items', 'sales', 'business_days', 'shoe_sizes']) {
           const snap = await getDocs(collection(fbDb, col));
-          for (const d of snap.docs) await deleteDoc(doc(fbDb, col, d.id));
+          if (!snap.empty) {
+            // Use batched deletes (max 500 per batch)
+            let batch = writeBatch(fbDb);
+            let count = 0;
+            for (const d of snap.docs) {
+              batch.delete(doc(fbDb, col, d.id));
+              count++;
+              if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
+            }
+            if (count > 0) await batch.commit();
+          }
         }
-        toast('☁️ Firebase cleared', '');
-      } catch(e) { toast('⚠️ Firebase clear partial: ' + e.message, 'err'); }
+        console.log('[RESET] Firebase cleared');
+      } catch(e) {
+        console.warn('[RESET] Firebase partial:', e.message);
+        toast('⚠️ Firebase may not be fully cleared: ' + e.message, 'err');
+      }
     }
 
-    // Clear localStorage (except session)
-    const session = localStorage.getItem(KEY_SESSION);
-    const currency = localStorage.getItem(KEY_CURRENCY);
-    const shoeGroups = localStorage.getItem(KEY_SHOE_GROUPS);
-    localStorage.clear();
-    if (session)    localStorage.setItem(KEY_SESSION,     session);
-    if (currency)   localStorage.setItem(KEY_CURRENCY,    currency);
-    if (shoeGroups) localStorage.setItem(KEY_SHOE_GROUPS, shoeGroups);
-
-    // Reload default item types
-    await loadTypes();
-
-    // Refresh UI
+    // ── 3. Reset in-memory state ──────────────────────────────────
     allItems = [];
-    renderList(); renderDashboard(); updateHeader();
+    activeDay = null;
+
+    // ── 4. Reset localStorage (keep session + preferences) ───────
+    const keep = {
+      [KEY_SESSION]:     localStorage.getItem(KEY_SESSION),
+      [KEY_CURRENCY]:    localStorage.getItem(KEY_CURRENCY),
+      [KEY_SHOE_GROUPS]: localStorage.getItem(KEY_SHOE_GROUPS),
+    };
+    localStorage.clear();
+    Object.entries(keep).forEach(([k,v]) => { if (v) localStorage.setItem(k, v); });
+
+    // ── 5. Reload default types + refresh UI ─────────────────────
+    await loadTypes();
+    renderList();
+    renderDashboard();
+    updateHeader();
     try { renderSellPage(); } catch(e) {}
+    try { updateLowStockBadge(); } catch(e) {}
 
     toast('✅ All data cleared — fresh start!', 'ok');
+    console.log('[RESET] Complete');
+
   } catch(e) {
     toast('❌ Reset failed: ' + e.message, 'err');
-    console.error('[RESET]', e);
+    console.error('[RESET] Error:', e);
   }
 }
 
 // ===== FIREBASE SYNC =====
 let fbApp = null, fbDb = null, fbUnsub = null;
 let fbReady = false;
+let _localWriting = false; // prevents echo: set true when we write to Firestore
 let syncQueue = [];
 let isSyncing = false;
 
@@ -1278,7 +1314,9 @@ async function initFirebase() {
 
     // Live listener: items — processes all changes including initial load
     const unsubItems = onSnapshot(collection(fbDb, 'items'), async snap => {
-      const changes = snap.docChanges();
+      // Skip if we triggered this snapshot ourselves (echo prevention)
+      if (_localWriting) return;
+      const changes = snap.docChanges().filter(c => c.type !== 'modified' || !c.doc.metadata.hasPendingWrites);
       if (!changes.length) return;
       let needsRender = false;
       for (const change of changes) {
@@ -1299,7 +1337,6 @@ async function initFirebase() {
         allItems = await dbAll('items');
         renderList(); renderDashboard(); updateHeader();
         setFbStatus('on');
-        toast('🔄 ' + changes.length + ' item(s) synced from cloud', 'ok');
       }
     }, err => { setFbStatus('error'); console.error('Items listener error:', err); });
 
@@ -1361,15 +1398,16 @@ async function fbSyncItem(item) {
   if (!fbReady || !fbDb) return;
   try {
     const { doc, setDoc } = await waitForFbImports();
-    // Generate stable fbId if not set
     if (!item.fbId) {
       item.fbId = 'item_' + (item.code || 'x').replace(/[^a-zA-Z0-9_-]/g, '_') + '_' + Date.now();
       await dbPut('items', item);
     }
-    const data = { ...item, updatedAt: new Date().toISOString() };
+    const data = sanitiseForFirestore({ ...item, updatedAt: new Date().toISOString() });
+    _localWriting = true;
     await setDoc(doc(fbDb, 'items', item.fbId), data);
-    console.log('[SYNC] Pushed item:', item.fbId);
-  } catch (e) { console.error('[SYNC] fbSyncItem error:', e); }
+    // Reset write lock after Firestore echo window
+    setTimeout(() => { _localWriting = false; }, 2000);
+  } catch(e) { _localWriting = false; console.error('[SYNC] fbSyncItem error:', e.message); }
 }
 
 async function fbDeleteItem(fbId) {
