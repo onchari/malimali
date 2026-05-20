@@ -192,6 +192,9 @@
   <button class="nav-btn" onclick="showPage('day')" id="tab-day">
     <span class="icon"><i class="fa-solid fa-calendar-day"></i></span>Day
   </button>
+  <button class="nav-btn" onclick="showPage('finance')" id="tab-finance">
+    <span class="icon"><i class="fa-solid fa-wallet"></i></span>Finance
+  </button>
   <button class="nav-btn" onclick="showPage('settings')" id="tab-settings">
     <span class="icon"><i class="fa-solid fa-gear"></i></span>Settings
   </button>
@@ -315,7 +318,13 @@
     </div>
   </div>
 
-  <!-- ── Insights (low stock alerts, best type, turnover, etc.) ─ -->
+  <!-- ── Finance quick view ──────────────────────────────────────── -->
+  <div class="sec-label">💼 Money Flow</div>
+  <div class="card" id="d-finance-summary" style="margin-bottom:12px;">
+    <div style="color:var(--muted);font-size:13px;padding:8px 0;">Loading…</div>
+  </div>
+
+  <!-- ── Insights ────────────────────────────────────────────── -->
   <div class="sec-label">💡 Insights</div>
   <div class="card" id="d-insights" style="margin-bottom:12px;"></div>
 
@@ -367,112 +376,163 @@
      ============================================================== -->
 <div class="page" id="page-add">
 
-  <!-- Hidden: stores item.id when in edit mode -->
   <input type="hidden" id="edit-id">
 
-  <!-- Mode heading — "New Item" or "Edit Item" -->
+  <!-- Header -->
   <div class="add-form-header">
     <span id="form-mode-label">➕ New Item</span>
+    <button id="cancel-edit-btn" class="add-cancel-btn" onclick="cancelEdit()" style="display:none;">✕ Cancel</button>
   </div>
 
-  <!-- ── SECTION 1: Identity ──────────────────────────────────── -->
+  <!-- ── Identity ──────────────────────────────────────────────── -->
   <div class="add-section">
 
-    <!-- Type selector full-width -->
     <div class="add-field">
       <label class="add-label">Category <span class="add-required">*</span></label>
-      <select class="add-select" id="f-type">
-        <option value="">Choose a type…</option>
+      <select class="add-select" id="f-type" onchange="onTypeChange()">
+        <option value="">Select category…</option>
       </select>
     </div>
 
-    <!-- Code + Size side by side -->
     <div class="add-row-2">
-      <div class="add-field">
+      <div class="add-field" style="position:relative;">
         <label class="add-label">Code <span class="add-required">*</span></label>
         <input class="add-input add-mono" id="f-code" type="text"
-               placeholder="e.g. SH001"
+               placeholder="SH001"
                autocomplete="off" spellcheck="false"
+               style="text-transform:uppercase;"
                oninput="this.value=this.value.toUpperCase()">
       </div>
-      <div class="add-field">
+      <div class="add-field" id="f-size-field">
         <label class="add-label">Size / Variant</label>
         <input class="add-input" id="f-size" type="text"
-               placeholder="e.g. 42 · L · 250ml"
+               placeholder="e.g. 42 · L"
                autocomplete="off" spellcheck="false">
       </div>
     </div>
 
-    <!-- Name full-width -->
     <div class="add-field">
       <label class="add-label">Name <span class="add-hint">(optional)</span></label>
       <input class="add-input" id="f-name" type="text"
-             placeholder="e.g. Nike Air Max · Omo Washing Powder"
+             placeholder="e.g. School Shoes · Omo Powder"
              autocomplete="off" spellcheck="false">
     </div>
 
   </div>
 
-  <!-- ── SECTION 2: Stock & Pricing ──────────────────────────── -->
-  <div class="add-section-title">Stock &amp; Pricing</div>
-  <div class="add-section">
-
-    <!-- Qty full-width, large number input -->
-    <div class="add-field">
-      <label class="add-label">Quantity in Stock <span class="add-required">*</span></label>
-      <input class="add-input add-num" id="f-qty" type="number"
-             placeholder="0"
-             min="0" inputmode="numeric"
-             oninput="updateProfitPreview()">
+  <!-- ── Shoe size panel ───────────────────────────────────────── -->
+  <div id="shoe-size-panel" style="display:none;">
+    <div class="add-section-title">Size Group</div>
+    <div class="add-section" style="padding-bottom:10px;">
+      <div class="sg-row">
+        <button type="button" class="sg-btn" id="sg-btn-S" onclick="selectSizeGroup('S')">
+          <span class="sg-ltr">S</span>
+          <span class="sg-range" id="sg-range-S">20–28</span>
+          <span class="sg-name">Children</span>
+        </button>
+        <button type="button" class="sg-btn" id="sg-btn-M" onclick="selectSizeGroup('M')">
+          <span class="sg-ltr">M</span>
+          <span class="sg-range" id="sg-range-M">29–36</span>
+          <span class="sg-name">Teens</span>
+        </button>
+        <button type="button" class="sg-btn" id="sg-btn-L" onclick="selectSizeGroup('L')">
+          <span class="sg-ltr">L</span>
+          <span class="sg-range" id="sg-range-L">37–45</span>
+          <span class="sg-name">Adults</span>
+        </button>
+      </div>
     </div>
 
-    <!-- Buy + Sell side by side with currency prefix -->
-    <div class="add-row-2">
-      <div class="add-field">
-        <label class="add-label">Buying Price <span class="add-required">*</span></label>
-        <div class="add-price-wrap">
-          <span class="add-price-cur" id="bp-cur">KES</span>
-          <input class="add-price-input" id="f-buy" type="number"
-                 placeholder="0"
-                 min="0" inputmode="decimal"
-                 oninput="updateProfitPreview()">
+    <div id="shoe-sizes-grid" style="display:none;">
+      <div class="add-section-title">Sizes</div>
+      <div class="add-section" style="padding-bottom:10px;">
+        <div id="sz-grid"></div>
+        <div id="shoe-selected-summary"></div>
+      </div>
+    </div>
+
+    <div id="shoe-rows-wrap" style="display:none;">
+      <div class="add-section-title">Qty &amp; Pricing</div>
+      <div class="add-section">
+        <div class="shoe-info-bar">
+          <i class="fa-solid fa-circle-info"></i>
+          Applied to all selected sizes
+        </div>
+        <div class="add-row-3">
+          <div class="add-field">
+            <label class="add-label">Qty <span class="add-required">*</span></label>
+            <input class="add-input add-center" id="shoe-shared-qty" type="number" min="0" inputmode="numeric" placeholder="0">
+          </div>
+          <div class="add-field">
+            <label class="add-label">Buy <span class="add-required">*</span></label>
+            <input class="add-input add-center" id="shoe-shared-buy" type="number" min="0" inputmode="decimal" placeholder="0">
+          </div>
+          <div class="add-field">
+            <label class="add-label">Sell <span class="add-required">*</span></label>
+            <input class="add-input add-center" id="shoe-shared-sell" type="number" min="0" inputmode="decimal" placeholder="0">
+          </div>
+        </div>
+        <button type="button" id="per-size-toggle" onclick="togglePerSizeMode()" class="shoe-per-size-toggle">
+          <i class="fa-solid fa-sliders"></i> Per-Size Pricing
+        </button>
+        <div id="shoe-per-size-wrap" style="display:none;margin-top:10px;">
+          <div class="shoe-row-hdr"><span>Size</span><span>Qty</span><span>Buy</span><span>Sell</span></div>
+          <div id="shoe-rows"></div>
         </div>
       </div>
-      <div class="add-field">
-        <label class="add-label">Selling Price <span class="add-required">*</span></label>
-        <div class="add-price-wrap">
-          <span class="add-price-cur" id="sp-cur">KES</span>
-          <input class="add-price-input" id="f-sell" type="number"
-                 placeholder="0"
-                 min="0" inputmode="decimal"
-                 oninput="updateProfitPreview()">
-        </div>
-      </div>
     </div>
-
-    <!-- Live profit pill — compact, appears once prices are entered -->
-    <div class="add-profit-pill" id="profit-preview" style="display:none;">
-      <div class="app-pill-row">
-        <span class="app-pill-label">Profit / item</span>
-        <span class="app-pill-val" id="pp-profit"></span>
-      </div>
-      <div class="app-pill-row">
-        <span class="app-pill-label">Margin</span>
-        <span class="app-pill-val" id="pp-margin"></span>
-      </div>
-      <div class="app-pill-row" id="pp-total-row" style="display:none;">
-        <span class="app-pill-label">Total profit (all stock)</span>
-        <span class="app-pill-val" id="pp-total"></span>
-      </div>
-      <!-- Hidden IDs kept for compatibility with updateProfitPreview() -->
-      <span id="pp-buy"    style="display:none;"></span>
-      <span id="pp-sell"   style="display:none;"></span>
-      <span id="pp-qty-lbl" style="display:none;"></span>
-    </div>
-
   </div>
 
-  <!-- ── SECTION 3: Photo ─────────────────────────────────────── -->
+  <!-- ── Stock & Pricing (standard items) ─────────────────────── -->
+  <div id="std-pricing-section">
+    <div class="add-section-title">Stock &amp; Pricing</div>
+    <div class="add-section">
+
+      <!-- Qty · Buy · Sell in one row -->
+      <div class="add-row-3">
+        <div class="add-field">
+          <label class="add-label">Qty <span class="add-required">*</span></label>
+          <input class="add-input add-center add-mono" id="f-qty" type="number"
+                 placeholder="0" min="0" inputmode="numeric"
+                 oninput="updateProfitPreview()">
+        </div>
+        <div class="add-field">
+          <label class="add-label">Buy (KES) <span class="add-required">*</span></label>
+          <input class="add-input add-center" id="f-buy" type="number"
+                 placeholder="0" min="0" inputmode="decimal"
+                 oninput="updateProfitPreview()">
+        </div>
+        <div class="add-field">
+          <label class="add-label">Sell (KES) <span class="add-required">*</span></label>
+          <input class="add-input add-center" id="f-sell" type="number"
+                 placeholder="0" min="0" inputmode="decimal"
+                 oninput="updateProfitPreview()">
+        </div>
+      </div>
+
+      <!-- Profit preview pill -->
+      <div class="add-profit-pill" id="profit-preview" style="display:none;">
+        <div class="app-pill-row">
+          <span class="app-pill-label">Profit / item</span>
+          <span class="app-pill-val" id="pp-profit"></span>
+        </div>
+        <div class="app-pill-row">
+          <span class="app-pill-label">Margin</span>
+          <span class="app-pill-val" id="pp-margin"></span>
+        </div>
+        <div class="app-pill-row" id="pp-total-row" style="display:none;">
+          <span class="app-pill-label">Total profit</span>
+          <span class="app-pill-val" id="pp-total"></span>
+        </div>
+        <span id="pp-buy" style="display:none;"></span>
+        <span id="pp-sell" style="display:none;"></span>
+        <span id="pp-qty-lbl" style="display:none;"></span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Photo ────────────────────────────────────────────────── -->
   <div class="add-section-title">Photo <span class="add-hint">optional</span></div>
   <div class="add-section">
     <div class="add-photo-box" id="add-photo-preview" onclick="triggerAddPhotoUpload()">
@@ -486,15 +546,101 @@
     </div>
   </div>
 
-  <!-- ── SAVE / CANCEL ────────────────────────────────────────── -->
+  <!-- ── Save ──────────────────────────────────────────────────── -->
   <button class="add-save-btn" id="save-btn" onclick="saveItem()">
     <i class="fa-solid fa-check"></i> Add to Inventory
   </button>
-  <button id="cancel-edit-btn" class="add-cancel-btn" onclick="cancelEdit()" style="display:none;">
-    Cancel Edit
-  </button>
 
 </div><!-- /page-add -->
+
+
+<!-- ==============================================================
+     PAGE: FINANCE  (id="page-finance")
+     Money flow: investments, expenses, withdrawals, net position
+     ============================================================== -->
+<div class="page" id="page-finance">
+
+  <!-- Summary KPIs -->
+  <div class="fin-kpi-row">
+    <div class="fin-kpi green">
+      <div class="fin-kpi-val" id="fin-invested">KES 0</div>
+      <div class="fin-kpi-lbl">Invested</div>
+    </div>
+    <div class="fin-kpi red">
+      <div class="fin-kpi-val" id="fin-expenses">KES 0</div>
+      <div class="fin-kpi-lbl">Expenses</div>
+    </div>
+    <div class="fin-kpi amber">
+      <div class="fin-kpi-val" id="fin-withdrawn">KES 0</div>
+      <div class="fin-kpi-lbl">Withdrawn</div>
+    </div>
+    <div class="fin-kpi cyan">
+      <div class="fin-kpi-val" id="fin-net">KES 0</div>
+      <div class="fin-kpi-lbl">Net Position</div>
+    </div>
+  </div>
+
+  <!-- Revenue from sales -->
+  <div class="card" style="margin:0 12px 10px;padding:12px 14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:13px;font-weight:700;color:var(--text);">💰 Sales Revenue</span>
+      <span style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--green);" id="fin-revenue">KES 0</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:13px;font-weight:700;color:var(--text);">📈 Gross Profit</span>
+      <span style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--accent2);" id="fin-profit">KES 0</span>
+    </div>
+  </div>
+
+  <!-- Record entry -->
+  <div class="sec-label" style="padding:0 16px;margin-bottom:6px;">➕ Record Transaction</div>
+  <div class="card" style="margin:0 12px 12px;padding:14px;">
+    <div class="add-row-2" style="margin-bottom:10px;">
+      <div class="add-field">
+        <label class="add-label">Type <span class="add-required">*</span></label>
+        <select class="add-select" id="fin-type" onchange="updateFinTypeColor()">
+          <option value="">Select…</option>
+          <option value="investment">💵 Investment</option>
+          <option value="expense">💸 Expense</option>
+          <option value="withdrawal">🏧 Withdrawal</option>
+          <option value="other">📝 Other</option>
+        </select>
+      </div>
+      <div class="add-field">
+        <label class="add-label">Amount (KES) <span class="add-required">*</span></label>
+        <input class="add-input add-mono" id="fin-amount" type="number"
+               min="0" inputmode="decimal" placeholder="0">
+      </div>
+    </div>
+    <div class="add-field" style="margin-bottom:10px;">
+      <label class="add-label">Description</label>
+      <input class="add-input" id="fin-desc" type="text"
+             placeholder="e.g. Bought stock from supplier · Rent · Airtime">
+    </div>
+    <div class="add-field" style="margin-bottom:12px;">
+      <label class="add-label">Date</label>
+      <input class="add-input" id="fin-date" type="date">
+    </div>
+    <button onclick="saveFinanceEntry()"
+            style="width:100%;padding:14px;background:var(--accent);color:white;border:none;
+                   border-radius:var(--r-lg);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+      <i class="fa-solid fa-plus"></i> Save Entry
+    </button>
+  </div>
+
+  <!-- Transaction history -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px;margin-bottom:6px;">
+    <span class="sec-label" style="padding:0;margin:0;">📋 Transactions</span>
+    <div style="display:flex;gap:6px;">
+      <button onclick="filterFinance('all')" id="fin-filter-all" class="fin-filter-btn active">All</button>
+      <button onclick="filterFinance('investment')" id="fin-filter-investment" class="fin-filter-btn">Invested</button>
+      <button onclick="filterFinance('expense')" id="fin-filter-expense" class="fin-filter-btn">Expenses</button>
+      <button onclick="filterFinance('withdrawal')" id="fin-filter-withdrawal" class="fin-filter-btn">Withdrawn</button>
+    </div>
+  </div>
+  <div id="fin-list" style="padding:0 12px 80px;"></div>
+
+</div><!-- /page-finance -->
 
 
 <!-- ==============================================================

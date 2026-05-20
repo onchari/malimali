@@ -1,7 +1,9 @@
-// ===== DB =====
+// ===================================================================
+// DATABASE SCHEMA  v8  —  Mandela General Stores
+// ===================================================================
 let db;
 const DB_NAME = 'InventoryApp';
-const DB_VER  = 7;
+const DB_VER  = 8;
 
 // ── APP CONSTANTS ─────────────────────────────────────────────────────
 const KEY_SESSION     = 'mg_session';
@@ -14,46 +16,81 @@ const OUT_STOCK_LEVEL = 0;
 
 function initDB() {
   const req = indexedDB.open(DB_NAME, DB_VER);
+
   req.onupgradeneeded = e => {
     const d = e.target.result;
+
+    // items: one record per product SKU
     if (!d.objectStoreNames.contains('items')) {
       const s = d.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
-      s.createIndex('code', 'code', { unique: true });
-      s.createIndex('type', 'type', { unique: false });
+      s.createIndex('idx_code',     'code',     { unique: true  });
+      s.createIndex('idx_type',     'type',     { unique: false });
+      s.createIndex('idx_category', 'category', { unique: false });
+      s.createIndex('idx_is_shoe',  'isShoe',   { unique: false });
     }
+
+    // shoe_sizes: one record per item_code + size
+    if (!d.objectStoreNames.contains('shoe_sizes')) {
+      const ss = d.createObjectStore('shoe_sizes', { keyPath: 'id', autoIncrement: true });
+      ss.createIndex('idx_item_code',  'itemCode',  { unique: false });
+      ss.createIndex('idx_code_size',  'codeSize',  { unique: true  });
+      ss.createIndex('idx_size_group', 'sizeGroup', { unique: false });
+      ss.createIndex('idx_item_id',    'itemId',    { unique: false });
+    }
+
+    // sales: one record per sale transaction
+    if (!d.objectStoreNames.contains('sales')) {
+      const sa = d.createObjectStore('sales', { keyPath: 'id', autoIncrement: true });
+      sa.createIndex('idx_item_id',       'itemId',       { unique: false });
+      sa.createIndex('idx_item_code',     'itemCode',     { unique: false });
+      sa.createIndex('idx_business_date', 'businessDate', { unique: false });
+      sa.createIndex('idx_date',          'date',         { unique: false });
+      sa.createIndex('idx_sold_by',       'soldBy',       { unique: false });
+      sa.createIndex('idx_payment',       'paymentMethod',{ unique: false });
+    }
+
+    // finances: investments, expenses, withdrawals
+    if (!d.objectStoreNames.contains('finances')) {
+      const fi = d.createObjectStore('finances', { keyPath: 'id', autoIncrement: true });
+      fi.createIndex('idx_type',       'type',      { unique: false });
+      fi.createIndex('idx_date',       'date',      { unique: false });
+      fi.createIndex('idx_category',   'category',  { unique: false });
+      fi.createIndex('idx_created_by', 'createdBy', { unique: false });
+    }
+
+    // business_days: daily open/close sessions
+    if (!d.objectStoreNames.contains('business_days')) {
+      const bd = d.createObjectStore('business_days', { keyPath: 'id', autoIncrement: true });
+      bd.createIndex('idx_business_date', 'business_date', { unique: false });
+      bd.createIndex('idx_status',        'status',        { unique: false });
+    }
+
+    // types: product category definitions
     if (!d.objectStoreNames.contains('types')) {
       d.createObjectStore('types', { keyPath: 'id', autoIncrement: true });
     }
-    if (!d.objectStoreNames.contains('sales')) {
-      const ss = d.createObjectStore('sales', { keyPath: 'id', autoIncrement: true });
-      ss.createIndex('itemId', 'itemId', { unique: false });
-      ss.createIndex('date', 'date', { unique: false });
-    }
-    if (!d.objectStoreNames.contains('shoe_sizes')) {
-      const ss2 = d.createObjectStore('shoe_sizes', { keyPath: 'id', autoIncrement: true });
-      ss2.createIndex('itemCode',  'itemCode',  { unique: false });
-      ss2.createIndex('codeSize',  'codeSize',  { unique: true });
-      ss2.createIndex('sizeGroup', 'sizeGroup', { unique: false });
-    }
+
+    // day_sessions: legacy, kept for backward compat
     if (!d.objectStoreNames.contains('day_sessions')) {
       d.createObjectStore('day_sessions', { keyPath: 'id', autoIncrement: true });
     }
-    if (!d.objectStoreNames.contains('business_days')) {
-      const bds = d.createObjectStore('business_days', { keyPath: 'id', autoIncrement: true });
-      bds.createIndex('business_date', 'business_date', { unique: false }); // non-unique: supports parallel sessions
-      bds.createIndex('status', 'status', { unique: false });
-    }
-
   };
+
+  req.onerror = e => {
+    console.error('[DB] Open error:', e.target.error);
+    toast('Database error — try refreshing', 'err');
+  };
+
   req.onsuccess = e => {
     db = e.target.result;
+    db.onerror = ev => console.error('[DB] Unhandled error:', ev.target.error);
+
     loadTypes().then(async () => {
       updateCurrencyUI();
-      // 1. Restore session FIRST (before any page rendering)
+      await migrateData();
       const sessionRestored = checkSession();
-      if (!sessionRestored) return; // login screen showing, stop here
+      if (!sessionRestored) return;
 
-      // 2. Load all data
       await loadActiveDay();
       renderDashboard();
       renderList();
@@ -61,37 +98,51 @@ function initDB() {
       renderSellPage();
       updateLowStockBadge();
 
-      // 3. Restore last visited page (or go to day if day not open)
       const lastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
-      const today = todayDateStr();
-
-      // Check if day needs opening
-      const bday = await getBusinessDay(today);
-      const dayOpen = bday && bday.status === 'OPEN';
+      const today    = todayDateStr();
+      const bday     = await getBusinessDay(today);
+      const dayOpen  = bday && bday.status === 'OPEN';
 
       if (!dayOpen && lastPage !== 'day' && lastPage !== 'settings') {
-        // Show a gentle reminder but stay on last page
         setTimeout(() => toast('⚠️ Business day not open yet', ''), 1000);
       }
 
-      // Restore last page if user has access to it
-      const allowedPage = currentUser && currentUser.tabs.includes(lastPage) ? lastPage : currentUser.tabs[0];
+      const allowedPage = currentUser && currentUser.tabs.includes(lastPage)
+        ? lastPage : currentUser.tabs[0];
       _origShowPage(allowedPage);
     });
   };
-  req.onerror = () => toast('Database error!', 'err');
 }
 
-function _dbReady(rej){if(!db){const e=new Error('Database not ready.');if(rej)rej(e);return false;}return true;}
-function dbAll(store){return new Promise((res,rej)=>{if(!_dbReady(rej))return;try{const tx=db.transaction(store,'readonly');tx.objectStore(store).getAll().onsuccess=e=>res(e.target.result);tx.onerror=e=>rej(e.target.error);}catch(e){rej(e);}});}
-function dbGet(store,id){return new Promise((res,rej)=>{if(!_dbReady(rej))return;try{const tx=db.transaction(store,'readonly');tx.objectStore(store).get(id).onsuccess=e=>res(e.target.result);tx.onerror=e=>rej(e.target.error);}catch(e){rej(e);}});}
-function dbAdd(store,data){return new Promise((res,rej)=>{if(!_dbReady(rej))return;try{const tx=db.transaction(store,'readwrite');const r=tx.objectStore(store).add(data);r.onsuccess=e=>res(e.target.result);tx.onerror=e=>rej(e.target.error);}catch(e){rej(e);}});}
-function dbPut(store,data){return new Promise((res,rej)=>{if(!_dbReady(rej))return;try{const tx=db.transaction(store,'readwrite');tx.objectStore(store).put(data).onsuccess=res;tx.onerror=e=>rej(e.target.error);}catch(e){rej(e);}});}
-function dbDelete(store,id){return new Promise((res,rej)=>{if(!_dbReady(rej))return;try{const tx=db.transaction(store,'readwrite');tx.objectStore(store).delete(id).onsuccess=res;tx.onerror=e=>rej(e.target.error);}catch(e){rej(e);}});}
+// Migrate old field names → normalized names
+async function migrateData() {
+  try {
+    const sales = await dbAll('sales');
+    let fixed = 0;
+    for (const s of sales) {
+      let changed = false;
+      // Normalize business_date → businessDate
+      if (s.business_date && !s.businessDate) { s.businessDate = s.business_date; delete s.business_date; changed = true; }
+      // Ensure required fields
+      if (!s.paymentMethod) { s.paymentMethod = 'cash';   changed = true; }
+      if (!s.soldBy)         { s.soldBy = 'system';       changed = true; }
+      if (!s.itemCode && s.code) { s.itemCode = s.code;   changed = true; }
+      if (!s.itemName && s.name) { s.itemName = s.name;   changed = true; }
+      if (changed) { await dbPut('sales', s); fixed++; }
+    }
+    // Ensure shoe_sizes codeSize field
+    const sizes = await dbAll('shoe_sizes');
+    for (const sz of sizes) {
+      if (!sz.codeSize && sz.itemCode && sz.size != null) {
+        sz.codeSize = sz.itemCode + '_' + sz.size;
+        await dbPut('shoe_sizes', sz);
+        fixed++;
+      }
+    }
+    if (fixed) console.log(`[MIGRATE v8] Fixed ${fixed} records`);
+  } catch(e) { console.warn('[MIGRATE]', e.message); }
+}
 
-function escapeHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function sanitiseCode(r){return(r||'').trim().toUpperCase().replace(/[^A-Z0-9\-.]/g,'');}
-function fmt(n){const c=typeof currency!=='undefined'?currency:'KES';return c+' '+(parseFloat(n)||0).toLocaleString('en-KE',{minimumFractionDigits:0,maximumFractionDigits:2});}
 
 // ===== STATE =====
 let types = [];
@@ -1054,15 +1105,28 @@ async function confirmSale() {
   const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : item.sell;
   if (priceUsed <= 0) { toast('⚠️ No selling price set on this item', 'err'); return; }
 
+  const paymentMethod = (document.getElementById('pay-mpesa') && document.getElementById('pay-mpesa').classList.contains('active')) ? 'mpesa' : 'cash';
   const sale = {
-    itemId: item.id, itemName: item.name, itemCode: item.code,
-    type: item.type, size: item.size || '',
-    qty, buyPrice: item.buy, sellPrice: item.sell, actualPrice: priceUsed,
-    revenue: qty * priceUsed,
-    profit: qty * (priceUsed - item.buy),
-    overridden: !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== item.sell,
-    business_date: activeDay ? activeDay.business_date : todayDateStr(),
-    date: new Date().toISOString()
+    // Item reference
+    itemId:        item.id,
+    itemCode:      item.code,
+    itemName:      item.name || item.code,
+    itemType:      item.type  || '',
+    itemSize:      item.size  || '',
+    // Transaction
+    qty,
+    buyPrice:      item.buy   || item.defaultBuy  || 0,
+    sellPrice:     item.sell  || item.defaultSell || 0,
+    actualPrice:   priceUsed,
+    revenue:       qty * priceUsed,
+    profit:        qty * (priceUsed - (item.buy || item.defaultBuy || 0)),
+    overridden:    !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== item.sell,
+    // Payment
+    paymentMethod,
+    // Audit
+    soldBy:        currentUser ? currentUser.username : 'system',
+    businessDate:  activeDay ? activeDay.business_date : todayDateStr(),
+    date:          new Date().toISOString(),
   };
 
   item.qty -= qty;
@@ -1167,7 +1231,7 @@ async function resetAllData() {
 
     // ── 1. Clear IndexedDB using store.clear() ────────────────────
     // This is atomic and reliable — clears entire store in one op
-    const stores = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes'];
+    const stores = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances'];
     await new Promise((resolve, reject) => {
       const tx = db.transaction(
         stores.filter(s => db.objectStoreNames.contains(s)),
@@ -2461,7 +2525,7 @@ const USERS = [
     role: 'super',
     roleLabel: 'Super User',
     // Super: access to everything
-    tabs: ['dash','list','add','day','settings']
+    tabs: ['dash','list','add','day','finance','settings']
   },
   {
     username: 'vanice',
@@ -2471,7 +2535,7 @@ const USERS = [
     role: 'user',
     roleLabel: 'User',
     // User: everything except Settings
-    tabs: ['dash','list','add','day']
+    tabs: ['dash','list','add','day','finance']
   },
   {
     username: 'trevor',
@@ -2481,7 +2545,7 @@ const USERS = [
     role: 'clerk',
     roleLabel: 'Clerk',
     // Clerk: view stock + add stock
-    tabs: ['list', 'add']
+    tabs: ['list','add']
   }
 ];
 
@@ -2502,7 +2566,7 @@ let currentUser = null;
 
 function applyRoleRestrictions(user) {
   // Show/hide nav tabs based on role
-  const allTabs = ['dash','list','add','day','settings'];
+  const allTabs = ['dash','list','add','day','finance','settings'];
   allTabs.forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) {
@@ -2667,6 +2731,138 @@ function installAppUpdate(){
   function run(i){if(i>=steps.length)return;const{t,l,d}=steps[i];setTimeout(()=>{pct=t;const bar=document.getElementById('update-progress-bar');const pctEl=document.getElementById('update-progress-pct');const lblEl=document.getElementById('update-progress-label');if(bar)bar.style.width=pct+'%';if(pctEl)pctEl.textContent=pct+'%';if(lblEl)lblEl.textContent=l;run(i+1);},d);}
   run(0);
   _pendingWorker.postMessage({type:'SKIP_WAITING'});
+}
+
+// ===================================================================
+// FINANCE MODULE
+// Tracks: investments, expenses, withdrawals, other money flows
+// ===================================================================
+
+let _finFilter = 'all';
+
+async function renderFinancePage() {
+  // Set today as default date
+  const dateEl = document.getElementById('fin-date');
+  if (dateEl && !dateEl.value) dateEl.value = todayDateStr();
+
+  const entries = await dbAll('finances');
+  const sales   = await dbAll('sales');
+
+  // Compute totals
+  const invested  = entries.filter(e=>e.type==='investment').reduce((s,e)=>s+e.amount,0);
+  const expenses  = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  const withdrawn = entries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+e.amount,0);
+  const revenue   = sales.reduce((s,e)=>s+e.revenue,0);
+  const profit    = sales.reduce((s,e)=>s+e.profit,0);
+  const net       = invested + revenue - expenses - withdrawn;
+
+  const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=fmt(v); };
+  set('fin-invested',  invested);
+  set('fin-expenses',  expenses);
+  set('fin-withdrawn', withdrawn);
+  set('fin-revenue',   revenue);
+  set('fin-profit',    profit);
+
+  // Net position colour
+  const netEl = document.getElementById('fin-net');
+  if (netEl) {
+    netEl.textContent = fmt(net);
+    netEl.style.color = net >= 0 ? 'var(--green)' : 'var(--red)';
+    const kpi = netEl.closest('.fin-kpi');
+    if (kpi) { kpi.classList.remove('green','red','cyan'); kpi.classList.add(net>=0?'green':'red'); }
+  }
+
+  // Filter and render list
+  const filtered = _finFilter === 'all' ? entries : entries.filter(e=>e.type===_finFilter);
+  const sorted   = filtered.sort((a,b)=>new Date(b.date)-new Date(a.date));
+  renderFinList(sorted);
+}
+
+function renderFinList(entries) {
+  const list = document.getElementById('fin-list');
+  if (!list) return;
+  if (!entries.length) {
+    list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);font-size:14px;">No transactions yet.<br><span style="font-size:12px;">Record your first investment, expense or withdrawal above.</span></div>';
+    return;
+  }
+  const typeConfig = {
+    investment: { icon:'💵', color:'var(--green)',  label:'Investment' },
+    expense:    { icon:'💸', color:'var(--red)',    label:'Expense'    },
+    withdrawal: { icon:'🏧', color:'var(--amber)',  label:'Withdrawal' },
+    other:      { icon:'📝', color:'var(--muted)',  label:'Other'      },
+  };
+  list.innerHTML = entries.map(e => {
+    const cfg   = typeConfig[e.type] || typeConfig.other;
+    const fdate = e.date ? new Date(e.date+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '';
+    return '<div class="fin-entry" style="border-left:3px solid ' + cfg.color + ';">' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<span style="font-size:22px;">' + cfg.icon + '</span>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:700;color:var(--text);">' + escapeHtml(e.description||cfg.label) + '</div>' +
+          '<div style="font-size:11px;color:var(--muted);margin-top:1px;">' + cfg.label + ' · ' + fdate + '</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0;">' +
+          '<div style="font-size:15px;font-weight:800;font-family:var(--mono);color:' + cfg.color + ';">' + fmt(e.amount) + '</div>' +
+          '<button onclick="deleteFinanceEntry(' + e.id + ')" ' +
+            'style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px;">✕ delete</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function saveFinanceEntry() {
+  const type   = document.getElementById('fin-type').value;
+  const amount = parseFloat(document.getElementById('fin-amount').value);
+  const desc   = (document.getElementById('fin-desc').value||'').trim();
+  const date   = document.getElementById('fin-date').value || todayDateStr();
+
+  if (!type)              { toast('⚠️ Select a transaction type', 'err'); return; }
+  if (!amount || amount<=0){ toast('⚠️ Enter a valid amount', 'err'); return; }
+
+  const categoryEl = document.getElementById('fin-category');
+  const entry = {
+    type,
+    amount,
+    description: desc,
+    category:    categoryEl ? categoryEl.value : 'other',
+    date,
+    createdAt:   new Date().toISOString(),
+    createdBy:   currentUser ? currentUser.username : 'system',
+  };
+  await dbAdd('finances', entry);
+
+  // Clear form
+  document.getElementById('fin-type').value   = '';
+  document.getElementById('fin-amount').value = '';
+  document.getElementById('fin-desc').value   = '';
+  document.getElementById('fin-date').value   = todayDateStr();
+
+  renderFinancePage();
+  toast('✅ Transaction recorded', 'ok');
+}
+
+async function deleteFinanceEntry(id) {
+  if (!confirm('Delete this transaction?')) return;
+  await dbDelete('finances', id);
+  renderFinancePage();
+  toast('Entry deleted', '');
+}
+
+function filterFinance(type) {
+  _finFilter = type;
+  document.querySelectorAll('.fin-filter-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('fin-filter-' + type);
+  if (btn) btn.classList.add('active');
+  renderFinancePage();
+}
+
+function updateFinTypeColor() {
+  // Visual feedback when type is selected
+  const sel = document.getElementById('fin-type');
+  if (!sel) return;
+  const colors = { investment:'#dcfce7', expense:'#fee2e2', withdrawal:'#fef3c7', other:'var(--surface2)' };
+  sel.style.background = colors[sel.value] || 'var(--bg)';
 }
 
 // ===== INIT =====
