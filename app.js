@@ -3,14 +3,14 @@ let db;
 const DB_NAME = 'InventoryApp';
 const DB_VER  = 7;
 
-// ── APP CONSTANTS ────────────────────────────────────────────────────
-const KEY_SESSION     = 'mg_session';     // localStorage key for auth session
-const KEY_LAST_PAGE   = 'mg_last_page';   // localStorage key for last visited page
-const KEY_SHOE_GROUPS = 'mgs_shoe_groups';// localStorage key for shoe size config
-const KEY_CURRENCY    = 'mgs_currency';   // localStorage key for currency preference
-const CODE_MAX_QTY    = 9999;             // warn when adding qty above this
-const LOW_STOCK_LEVEL = 1;                // items at/below this qty shown as low stock
-const OUT_STOCK_LEVEL = 0;                // items at this qty shown as out of stock
+// ── APP CONSTANTS ─────────────────────────────────────────────────────
+const KEY_SESSION     = 'mg_session';
+const KEY_LAST_PAGE   = 'mg_last_page';
+const KEY_SHOE_GROUPS = 'mgs_shoe_groups';
+const KEY_CURRENCY    = 'mgs_currency';
+const CODE_MAX_QTY    = 9999;
+const LOW_STOCK_LEVEL = 1;
+const OUT_STOCK_LEVEL = 0;
 
 function initDB() {
   const req = indexedDB.open(DB_NAME, DB_VER);
@@ -30,12 +30,12 @@ function initDB() {
       ss.createIndex('date', 'date', { unique: false });
     }
     if (!d.objectStoreNames.contains('shoe_sizes')) {
-      const ss = d.createObjectStore('shoe_sizes', { keyPath: 'id', autoIncrement: true });
-      ss.createIndex('itemCode',  'itemCode',  { unique: false });
-      ss.createIndex('codeSize',  'codeSize',  { unique: true });  // code+size compound key
-      ss.createIndex('sizeGroup', 'sizeGroup', { unique: false });
+      const ss2 = d.createObjectStore('shoe_sizes', { keyPath: 'id', autoIncrement: true });
+      ss2.createIndex('itemCode',  'itemCode',  { unique: false });
+      ss2.createIndex('codeSize',  'codeSize',  { unique: true });
+      ss2.createIndex('sizeGroup', 'sizeGroup', { unique: false });
     }
-        if (!d.objectStoreNames.contains('day_sessions')) {
+    if (!d.objectStoreNames.contains('day_sessions')) {
       d.createObjectStore('day_sessions', { keyPath: 'id', autoIncrement: true });
     }
     if (!d.objectStoreNames.contains('business_days')) {
@@ -82,46 +82,16 @@ function initDB() {
   req.onerror = () => toast('Database error!', 'err');
 }
 
-function _dbReady(rej) {
-  if (!db) { const e = new Error('Database not ready yet.'); if (rej) rej(e); return false; } return true;
-}
-function dbAll(store) {
-  return new Promise((res, rej) => {
-    if (!_dbReady(rej)) return;
-    try { const tx = db.transaction(store,'readonly'); tx.objectStore(store).getAll().onsuccess = e => res(e.target.result); tx.onerror = e => rej(e.target.error); } catch(e){rej(e);}
-  });
-}
-function dbGet(store, id) {
-  return new Promise((res, rej) => {
-    if (!_dbReady(rej)) return;
-    try { const tx = db.transaction(store,'readonly'); tx.objectStore(store).get(id).onsuccess = e => res(e.target.result); tx.onerror = e => rej(e.target.error); } catch(e){rej(e);}
-  });
-}
-function dbAdd(store, data) {
-  return new Promise((res, rej) => {
-    if (!_dbReady(rej)) return;
-    try { const tx = db.transaction(store,'readwrite'); const r = tx.objectStore(store).add(data); r.onsuccess = e => res(e.target.result); tx.onerror = e => rej(e.target.error); } catch(e){rej(e);}
-  });
-}
-function dbPut(store, data) {
-  return new Promise((res, rej) => {
-    if (!_dbReady(rej)) return;
-    try { const tx = db.transaction(store,'readwrite'); tx.objectStore(store).put(data).onsuccess = res; tx.onerror = e => rej(e.target.error); } catch(e){rej(e);}
-  });
-}
-function dbDelete(store, id) {
-  return new Promise((res, rej) => {
-    if (!_dbReady(rej)) return;
-    try { const tx = db.transaction(store,'readwrite'); tx.objectStore(store).delete(id).onsuccess = res; tx.onerror = e => rej(e.target.error); } catch(e){rej(e);}
-  });
-}
+function _dbReady(rej){if(!db){const e=new Error('Database not ready.');if(rej)rej(e);return false;}return true;}
+function dbAll(store){return new Promise((res,rej)=>{if(!_dbReady(rej))return;try{const tx=db.transaction(store,'readonly');tx.objectStore(store).getAll().onsuccess=e=>res(e.target.result);tx.onerror=e=>rej(e.target.error);}catch(e){rej(e);}});}
+function dbGet(store,id){return new Promise((res,rej)=>{if(!_dbReady(rej))return;try{const tx=db.transaction(store,'readonly');tx.objectStore(store).get(id).onsuccess=e=>res(e.target.result);tx.onerror=e=>rej(e.target.error);}catch(e){rej(e);}});}
+function dbAdd(store,data){return new Promise((res,rej)=>{if(!_dbReady(rej))return;try{const tx=db.transaction(store,'readwrite');const r=tx.objectStore(store).add(data);r.onsuccess=e=>res(e.target.result);tx.onerror=e=>rej(e.target.error);}catch(e){rej(e);}});}
+function dbPut(store,data){return new Promise((res,rej)=>{if(!_dbReady(rej))return;try{const tx=db.transaction(store,'readwrite');tx.objectStore(store).put(data).onsuccess=res;tx.onerror=e=>rej(e.target.error);}catch(e){rej(e);}});}
+function dbDelete(store,id){return new Promise((res,rej)=>{if(!_dbReady(rej))return;try{const tx=db.transaction(store,'readwrite');tx.objectStore(store).delete(id).onsuccess=res;tx.onerror=e=>rej(e.target.error);}catch(e){rej(e);}});}
 
-function sanitiseCode(raw) { return (raw||'').trim().toUpperCase().replace(/[^A-Z0-9\-.]/g,''); }
-
-function escapeHtml(s) {
-  if (s == null) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
+function escapeHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function sanitiseCode(r){return(r||'').trim().toUpperCase().replace(/[^A-Z0-9\-.]/g,'');}
+function fmt(n){const c=typeof currency!=='undefined'?currency:'KES';return c+' '+(parseFloat(n)||0).toLocaleString('en-KE',{minimumFractionDigits:0,maximumFractionDigits:2});}
 
 // ===== STATE =====
 let types = [];
@@ -132,10 +102,6 @@ let currency = localStorage.getItem('inv_currency') || 'KES';
 let currentDetailId = null;
 
 // ===== HELPERS =====
-function fmt(n) {
-  const v = Number(n || 0);
-  return currency + ' ' + v.toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
 function fmtN(n) { return Number(n || 0).toLocaleString(); }
 function toast(msg, type = '') {
   const t = document.getElementById('toast');
@@ -402,133 +368,57 @@ function clearAddFormPhoto() {
 
 // ===== SAVE ITEM =====
 async function saveItem() {
-  const editIdRaw = document.getElementById('edit-id').value;
+  const editId = document.getElementById('edit-id').value;
+  const type = document.getElementById('f-type').value;
+  const code = document.getElementById('f-code').value.trim().toUpperCase();
+  const size = document.getElementById('f-size').value.trim();
+  const name = document.getElementById('f-name').value.trim() || (type + ' ' + code);
+  const qtyRaw = document.getElementById('f-qty').value;
+  const qty = parseInt(qtyRaw);
+  const buy = parseFloat(document.getElementById('f-buy').value) || 0;
+  const sell = parseFloat(document.getElementById('f-sell').value) || 0;
 
   if (!requireOpenDay()) return;
-
-  // ── RESTOCK MODE ──────────────────────────────────────────────────
-  if (editIdRaw && editIdRaw.startsWith('restock_')) {
-    const existing = await dbGet('items', parseInt(editIdRaw.replace('restock_', '')));
-    if (!existing) { toast('⚠️ Item no longer exists.', 'err'); exitRestockMode(); return; }
-    const qtyEl  = document.getElementById('f-qty');
-    const qtyRaw = qtyEl ? qtyEl.value.trim() : '';
-    const addQty = parseInt(qtyRaw);
-    if (!qtyRaw || isNaN(addQty)) { toast('⚠️ Enter quantity to add', 'err'); if (qtyEl) qtyEl.focus(); return; }
-    if (addQty <= 0)               { toast('⚠️ Quantity must be at least 1', 'err'); if (qtyEl) qtyEl.focus(); return; }
-    if (addQty > CODE_MAX_QTY && !confirm('⚠️ Adding ' + addQty + ' units — confirm?')) return;
-    const newQty = existing.qty + addQty;
-    if (newQty > 999999) { toast('⚠️ Exceeds max stock of 999,999 units', 'err'); return; }
-    existing.qty = newQty;
-    existing.profit = existing.sell - existing.buy;
-    existing.updatedAt = new Date().toISOString();
-    await dbPut('items', existing);
-    fbSyncItem(existing);
-    allItems = await dbAll('items');
-  await enrichShoeItems(allItems);
-    await enrichShoeItems(allItems);
-    renderList(); renderDashboard(); updateHeader();
-    scheduleSync();
-    exitRestockMode();
-    toast('📦 ' + existing.code + ': ' + (newQty - addQty) + ' + ' + addQty + ' = ' + newQty, 'ok');
-    return;
-  }
-
-  const type = document.getElementById('f-type').value;
-  const code = sanitiseCode(document.getElementById('f-code').value);
-  const name = (document.getElementById('f-name').value || '').trim().replace(/\s+/g,' ');
-
-  if (!type) { toast('⚠️ Select an item type', 'err'); return; }
-  if (!code) { toast('⚠️ Enter item code', 'err'); return; }
-
-  // ── SHOE MODE ─────────────────────────────────────────────────────
-  if (isFootwearType(type) && !editIdRaw) {
-    const savedCount = await saveShoeItems(code, name, type);
-    if (!savedCount) return;
-    clearForm(); clearAddFormPhoto();
-    allItems = await dbAll('items');
-  await enrichShoeItems(allItems);
-    await enrichShoeItems(allItems);
-    renderList(); renderDashboard(); updateHeader();
-    scheduleSync();
-    toast('✅ ' + savedCount + ' shoe size(s) saved!', 'ok');
-    return;
-  }
-
-  // ── STANDARD ADD / EDIT ───────────────────────────────────────────
-  const size   = document.getElementById('f-size').value.trim();
-  const qtyRaw = document.getElementById('f-qty').value;
-  const qty    = parseInt(qtyRaw);
-  const buy    = parseFloat(document.getElementById('f-buy').value)  || 0;
-  const sell   = parseFloat(document.getElementById('f-sell').value) || 0;
-
-  if (!size)                                  { toast('⚠️ Enter a size (or N/A)', 'err'); return; }
-  if (qtyRaw === '' || isNaN(qty) || qty < 0) { toast('⚠️ Enter quantity in stock', 'err'); return; }
-  if (qty > CODE_MAX_QTY && !confirm('⚠️ Adding ' + qty + ' units — confirm?')) return;
-  if (buy  <= 0) { toast('⚠️ Enter buying price',  'err'); return; }
+  if (!type)  { toast('⚠️ Select an item type', 'err'); return; }
+  if (!code)  { toast('⚠️ Enter item code', 'err'); return; }
+  if (!size)  { toast('⚠️ Enter a size (or type N/A)', 'err'); return; }
+  if (qtyRaw === '' || isNaN(qty) || qty < 0) { toast('⚠️ Enter quantity stocked', 'err'); return; }
+  if (buy <= 0)  { toast('⚠️ Enter buying price', 'err'); return; }
   if (sell <= 0) { toast('⚠️ Enter selling price', 'err'); return; }
 
-  const profit   = sell - buy;
-  const itemName = name || (type + ' ' + code);
-  const item = { type, code, name: itemName, size, buy, sell, profit, qty, createdAt: new Date().toISOString() };
+  const profit = sell - buy;
+  const item = { type, code, name, size, buy, sell, profit, qty, createdAt: new Date().toISOString() };
 
   try {
-    if (editIdRaw) {
-      const original = await dbGet('items', parseInt(editIdRaw));
-      // For shoe items: only update name/type/defaultBuy/defaultSell
-      // Sizes are managed separately through shoe_sizes store
-      if (original && original.isShoe) {
-        original.name        = item.name;
-        original.type        = item.type;
-        original.updatedAt   = new Date().toISOString();
-        original.updatedBy   = currentUser ? currentUser.username : 'system';
-        if (item.buy)  { original.defaultBuy  = item.buy; }
-        if (item.sell) { original.defaultSell = item.sell; original.profit = item.sell - (item.buy||original.defaultBuy||0); }
-        await dbPut('items', original);
-        fbSyncItem(original);
-        clearForm();
-        allItems = await dbAll('items');
-        await enrichShoeItems(allItems);
-        renderList(); renderDashboard(); updateHeader();
-        scheduleSync();
-        toast('✅ Shoe item updated!', 'ok');
-        showPage('list');
-        return;
-      }
-      item.id        = parseInt(editIdRaw);
-      item.createdAt = original ? (original.createdAt || new Date().toISOString()) : new Date().toISOString();
-      item.updatedAt = new Date().toISOString();
-      item.updatedBy = currentUser ? currentUser.username : 'system';
-      item.fbId      = original ? original.fbId : undefined;
+    if (editId) {
+      item.id = parseInt(editId);
       await dbPut('items', item);
-      if (_addFormPhotoData) setItemPhoto(item.id, _addFormPhotoData);
       fbSyncItem(item);
+      toast('✅ Item updated!', 'ok');
       clearForm();
       allItems = await dbAll('items');
-  await enrichShoeItems(allItems);
-      await enrichShoeItems(allItems);
-      renderList(); renderDashboard(); updateHeader();
-      scheduleSync();
-      toast('✅ Item updated!', 'ok');
+      renderList();
+      renderDashboard();
+      updateHeader();
       showPage('list');
     } else {
       const newId = await dbAdd('items', item);
       item.id = newId;
-      if (_addFormPhotoData) setItemPhoto(newId, _addFormPhotoData);
+      // Save photo if one was selected
+      if (_addFormPhotoData) { setItemPhoto(newId, _addFormPhotoData); }
       fbSyncItem(item);
-      clearForm(); clearAddFormPhoto();
+      clearForm();
+      clearAddFormPhoto();
       allItems = await dbAll('items');
-  await enrichShoeItems(allItems);
-      await enrichShoeItems(allItems);
-      renderList(); renderDashboard(); updateHeader();
-      scheduleSync();
-      showSplash(itemName, sell, profit);
+      renderList();
+      renderDashboard();
+      updateHeader();
+      showSplash(name, sell, profit);
+      if (activeDay) updateDayLiveStats();
     }
-  } catch(e) {
-    if (e.name === 'ConstraintError') {
-      const dup = allItems.find(i => i.code === code && i.id !== parseInt(editIdRaw));
-      if (dup && !editIdRaw) { showCodeDropdown([dup], code); toast('⚠️ "' + code + '" exists — select below to restock.', 'err'); }
-      else toast('⚠️ Duplicate code. Use a different code.', 'err');
-    } else { toast('⚠️ Save failed: ' + (e.message||'Unknown'), 'err'); console.error('[SAVE]', e); }
+  } catch (e) {
+    if (e.name === 'ConstraintError') toast('Code "' + code + '" already exists!', 'err');
+    else toast('Error saving: ' + e.message, 'err');
   }
 }
 
@@ -545,46 +435,13 @@ function clearForm() {
   document.getElementById('save-btn').textContent = '+ Add to Inventory';
   document.getElementById('form-mode-label').textContent = 'New Item';
   document.getElementById('cancel-edit-btn').style.display = 'none';
-  // Reset shoe selection state
-  _shoeGroup = null;
-  if (typeof _shoeSizes !== 'undefined') _shoeSizes.clear();
-  _perSizeMode = false;
-  if (typeof _shownGroups !== 'undefined') _shownGroups = new Set();
-  const shoePanel  = document.getElementById('shoe-size-panel');
-  const stdPricing = document.getElementById('std-pricing-section');
-  const sizeField  = document.getElementById('f-size-field');
-  if (shoePanel)  shoePanel.style.display  = 'none';
-  if (stdPricing) stdPricing.style.display = 'block';
-  if (sizeField)  sizeField.style.display  = 'block';
-  const szGrid = document.getElementById('shoe-sizes-grid');
-  const szWrap = document.getElementById('shoe-rows-wrap');
-  const szGridInner = document.getElementById('sz-grid');
-  if (szGrid) szGrid.style.display = 'none';
-  if (szWrap) szWrap.style.display = 'none';
-  if (szGridInner) szGridInner.innerHTML = ''; // clear all group buttons
-  const sum = document.getElementById('shoe-selected-summary');
-  if (sum) sum.innerHTML = '';
-  ['shoe-shared-qty','shoe-shared-buy','shoe-shared-sell'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = '';
-  });
 }
 
-function cancelEdit() {
-  clearForm(); clearAddFormPhoto();
-  showPage('list');
-  if (_editOriginItemId) {
-    setTimeout(() => {
-      const card = document.querySelector('[data-item-id="' + _editOriginItemId + '"]');
-      if (card) card.scrollIntoView({ behavior:'smooth', block:'center' });
-      _editOriginItemId = null;
-    }, 200);
-  }
-}
+function cancelEdit() { clearForm(); clearAddFormPhoto(); showPage('list'); }
 
 // ===== RENDER LIST =====
 async function renderList() {
   allItems = await dbAll('items');
-  await enrichShoeItems(allItems);
   const search = (document.getElementById('search').value || '').toLowerCase();
   renderTypeChips();
 
@@ -622,11 +479,7 @@ async function renderList() {
     const stockLabel = item.qty === 0 ? '✕ Out' : item.qty + ' pcs';
     const itemSales = salesByItem[item.id] || { profit: 0, qty: 0 };
     const soldQty = itemSales.qty;
-    // For shoe items, show size summary chips
-  const shoeSizeChips = item.isShoe && item._sizeSummary
-    ? '<div class="shoe-sizes-badge">' + item._sizeSummary + '</div>'
-    : '';
-  return `<div class="item-card" data-item-id="${item.id}" onclick="openSheet(${item.id})">
+    return `<div class="item-card" onclick="openSheet(${item.id})">
       <div class="item-top">
         <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
         <div class="item-body">
@@ -651,22 +504,13 @@ async function renderList() {
 // ===== DETAIL SHEET =====
 
 function openSellFromSheet() {
+  if (!isDayOpen()) {
+    toast('⚠️ Open the business day to make sales.', 'err');
+    return;
+  }
   const id = currentDetailId;
   closeSheet();
-  setTimeout(async () => {
-    const item = await dbGet('items', id);
-    if (!item) { toast('Item not found', 'err'); return; }
-    if (item.isShoe) {
-      if (!_selectedShoeSize) {
-        toast('⚠️ Tap a size first to select it', 'err');
-        openSheet(id); // reopen so user can pick
-        return;
-      }
-      openSellShoeModal(id, _selectedShoeSize);
-    } else {
-      openSellModal(id);
-    }
-  }, 120);
+  setTimeout(() => openSellModal(id), 150);
 }
 
 function triggerSheetPhotoUpload(event) {
@@ -725,152 +569,105 @@ function _capturePhoto(itemId, source) {
 
 async function openSheet(id) {
   currentDetailId = id;
-  const item  = await dbGet('items', id);
-  if (!item)  { toast('Item not found', 'err'); return; }
-  _selectedShoeSize = null; // reset shoe size selection
+  const item = await dbGet('items', id);
+  if (!item) return;
+  const t = getTypeObj(item.type);
+  const sales = await dbAll('sales');
+  const itemSales = sales.filter(s => s.itemId === id);
+  const soldQty = itemSales.reduce((a,s) => a+s.qty, 0);
+  const revenue = itemSales.reduce((a,s) => a+s.revenue, 0);
+  const profitMade = itemSales.reduce((a,s) => a+s.profit, 0);
 
-  // Sales count for this item
-  const allSales = await dbAll('sales');
-  const itemSales = allSales.filter(s => s.itemId === id || s.itemCode === item.code);
-  const unitsSold = itemSales.reduce((t,s) => t + (s.qty||1), 0);
-
-  // Photo
-  const photo     = getItemPhoto(id);
-  const photoArea = document.getElementById('sh-photo-area');
-  const photoPan  = document.getElementById('sh-photo-pan');
-  const photoImg  = document.getElementById('sh-photo-img');
-  const fallback  = document.getElementById('sh-photo-fallback');
+  // Photo or emoji fallback
+  const photo = getItemPhoto(id);
+  const photoImg = document.getElementById('sh-photo-img');
+  const photoFallback = document.getElementById('sh-photo-fallback');
+  const photoPan = document.getElementById('sh-photo-pan');
   if (photo) {
-    photoImg.src = photo; photoPan.style.display = 'block'; fallback.style.display = 'none';
+    photoImg.src = photo;
+    if (photoPan) photoPan.style.display = 'block';
+    photoFallback.style.display = 'none';
   } else {
-    photoPan.style.display = 'none'; fallback.style.display = 'flex';
-    photoArea.style.background = item._color || 'var(--surface2)';
+    if (photoPan) photoPan.style.display = 'none';
+    photoFallback.style.display = 'flex';
+    photoFallback.style.background = t.color || 'var(--surface2)';
   }
+  // Reset pan/zoom every time sheet opens
+  if (typeof window._resetPhotoPan === 'function') window._resetPhotoPan();
 
-  // Populate fields
-  const set = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=v||''; };
-  set('sh-icon',        item._emoji || '📦');
-  set('sh-code',        item.code);
-  set('sh-name',        item.name || '');
-  set('sh-type-badge',  item.type || '');
-  set('sh-type',        item.type || '');
-  set('sh-code-large',  item.code);
-  set('sh-size',        item.size && item.size !== 'N/A' ? item.size : '');
-  set('sh-buy',         fmt(item.buy || item.defaultBuy || 0));
-  set('sh-sell',        fmt(item.sell || item.defaultSell || 0));
-  set('sh-sold',        unitsSold);
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('sh-photo-btn', photo ? '📷 Change' : '📷 Add Photo');
+  set('sh-icon', t.emoji);
+  set('sh-name', item.name);
+  set('sh-code', item.code + (item.size ? ' · ' + item.size : ''));
+  set('sh-type', item.type);
+  const tbadge = document.getElementById('sh-type-badge'); if (tbadge) tbadge.textContent = t.emoji + ' ' + item.type;
+  set('sh-size', item.size || '—');
+  set('sh-buy', fmt(item.buy));
+  set('sh-sell', fmt(item.sell));
+  set('sh-profit', fmt(item.profit));
+  set('sh-qty', item.qty + ' pcs');
+  set('sh-code-large', item.code + (item.size ? ' · ' + item.size : ''));
 
-  // Out of stock badge
+  // Out of stock
   const outBadge = document.getElementById('sh-out-badge');
-  if (outBadge) outBadge.style.display = item.qty <= 0 ? 'block' : 'none';
-
-  // Shoe items
-  const priceCols = document.getElementById('sh-price-cols');
-  const qtyCols   = document.getElementById('sh-qty-cols');
-  const sizeSec   = document.getElementById('sh-shoe-sizes');
-  const sizebar   = document.getElementById('sh-selected-size-bar');
-
-  if (item.isShoe) {
-    // Recompute qty from shoe_sizes (always fresh)
-    const freshSizes = await getShoeSizes(item.code);
-    item.qty = freshSizes.reduce((t,s) => t+s.qty, 0);
-    set('sh-qty', item.qty + ' prs');
-    if (priceCols) priceCols.style.gridTemplateColumns = '1fr 1fr 1fr 1fr';
-    if (sizeSec)   sizeSec.style.display = 'block';
-    if (sizebar)   sizebar.style.display = 'none';
-    renderShoeDetailGrid(item);
-  } else {
-    set('sh-qty', item.qty);
-    if (sizeSec) sizeSec.style.display = 'none';
-    if (sizebar) sizebar.style.display = 'none';
-  }
-
-  // Sell button
   const sellBtn = document.getElementById('sh-sell-btn');
-  if (sellBtn) {
-    if (item.qty <= 0 && !item.isShoe) {
-      sellBtn.disabled = true; sellBtn.style.opacity = '0.4';
-      sellBtn.style.cursor = 'not-allowed';
-    } else {
-      sellBtn.disabled = false; sellBtn.style.opacity = '1';
-      sellBtn.style.cursor = 'pointer';
-    }
+  if (item.qty <= 0) {
+    if (outBadge) outBadge.style.display = 'block';
+    if (sellBtn) { sellBtn.disabled = true; sellBtn.style.opacity = '0.4'; sellBtn.style.cursor = 'not-allowed'; sellBtn.textContent = 'OUT OF STOCK'; }
+  } else {
+    if (outBadge) outBadge.style.display = 'none';
+    if (sellBtn) { sellBtn.disabled = false; sellBtn.style.opacity = '1'; sellBtn.style.cursor = 'pointer'; sellBtn.textContent = 'SELL'; }
   }
+  set('sh-total', fmt(item.buy * item.qty));
+  set('sh-sold', soldQty);
+  set('sh-revenue', fmt(revenue));
+  set('sh-profit-made', fmt(profitMade));
 
   document.getElementById('detail-sheet').classList.add('open');
-}
 
-// Render shoe size selector grid in detail sheet
-async function renderShoeDetailGrid(item) {
-  const sizeSection = document.getElementById('sh-shoe-sizes');
-  if (!sizeSection) return;
-  const sizes = await getShoeSizes(item.code);
-  if (!sizes.length) { sizeSection.style.display = 'none'; return; }
+  // Show/hide action buttons based on day state
+  const dayOpen = isDayOpen();
+  const status  = activeDay ? activeDay.status : 'PENDING';
 
-  const totalStock = sizes.reduce((t,s) => t + s.qty, 0);
-  sizeSection.innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
-      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);">Select Size</div>' +
-      '<div style="font-size:12px;font-family:var(--mono);font-weight:700;color:var(--muted);">' + totalStock + ' pairs total</div>' +
-    '</div>' +
-    '<div class="sh-sz-grid">' +
-    sizes.map(s => {
-      const isOut = s.qty <= 0;
-      const isLow = !isOut && s.qty <= LOW_STOCK_LEVEL;
-      const price = s.sellPrice || item.defaultSell || 0;
-      return '<div class="sh-sz-card2 ' + (isOut?'out':isLow?'low':'') + '" ' +
-        'id="shsz-' + s.size + '" ' +
-        'onclick="selectDetailShoeSize(' + item.id + ',' + s.size + ')">' +
-        (isOut ? '' : '<div class="sh-sz-dot"></div>') +
-        '<div class="sh-sz-num">' + s.size + '</div>' +
-        '<div class="sh-sz-qty">' + (isOut ? 'Out' : s.qty + (s.qty===1?' pr':' prs')) + '</div>' +
-        '<div class="sh-sz-price">' + fmt(price) + '</div>' +
-      '</div>';
-    }).join('') +
-    '</div>' +
-    '<div style="font-size:10px;color:var(--muted);text-align:center;margin-top:6px;">' +
-      'Tap a size to select · then use action buttons below' +
-    '</div>';
-}
+  const shSellBtn  = document.getElementById('sh-sell-btn');
+  const delBtn     = document.querySelector('#detail-sheet .btn-del');
+  const editBtn    = document.querySelector('#detail-sheet .btn-edit');
+  const restockBtn = document.querySelector('[onclick="toggleRestock()"]');
+  const actionRow  = document.getElementById('sh-action-row');
 
-let _selectedShoeSize = null; // currently selected size in detail sheet
-
-function selectDetailShoeSize(itemId, size) {
-  _selectedShoeSize = size;
-
-  // Update card visual — blue = default, green = selected
-  document.querySelectorAll('.sh-sz-card2').forEach(c => {
-    c.classList.remove('selected');
-    c.style.background = '';
-    c.style.borderColor = '';
-    const num = c.querySelector('.sh-sz-num');
-    if (num) num.style.color = '';
-  });
-  const selected = document.getElementById('shsz-' + size);
-  if (selected && !selected.classList.contains('out')) {
-    selected.classList.add('selected');
+  if (dayOpen) {
+    // OPEN: show all action buttons
+    [shSellBtn, delBtn, editBtn, restockBtn].forEach(b => { if (b) { b.style.display = ''; b.style.opacity = '1'; b.style.pointerEvents = 'auto'; } });
+    if (actionRow) actionRow.style.display = '';
+  } else {
+    // Not OPEN: hide write actions, show read-only notice
+    [shSellBtn, delBtn, editBtn, restockBtn].forEach(b => { if (b) { b.style.display = 'none'; } });
+    if (actionRow) actionRow.style.display = 'none';
   }
 
-  // Show selected size bar
-  const bar = document.getElementById('sh-selected-size-bar');
-  if (bar) {
-    bar.style.display = 'block';
-    bar.textContent = 'Size ' + size + ' selected · tap an action below';
+  // Status-specific notice in the detail sheet
+  let notice = document.getElementById('sh-day-notice');
+  if (!dayOpen) {
+    const noticeText = {
+      PENDING:    '📅 Open the business day to edit or sell items.',
+      PAUSED:     '⏸ Day is paused — resume to make changes.',
+      CLOSED:     '🌙 Day is closed — reopen from the Day tab to make changes.',
+      RECONCILED: '✅ Day is reconciled and permanently archived.',
+      LOCKED:     '🔒 This is an archived day — read only.',
+    };
+    if (!notice) {
+      notice = document.createElement('div');
+      notice.id = 'sh-day-notice';
+      notice.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;margin-bottom:10px;font-size:12px;font-weight:600;color:var(--text2);text-align:center;';
+      const infoArea = document.querySelector('#detail-sheet .sheet > div:last-child');
+      if (infoArea) infoArea.insertBefore(notice, infoArea.firstChild);
+    }
+    notice.textContent = noticeText[status] || '🔒 Actions unavailable.';
+    notice.style.display = 'block';
+  } else {
+    if (notice) notice.style.display = 'none';
   }
-}
-
-function showRestockForItem(itemId) {
-  if (!itemId) return;
-  dbGet('items', itemId).then(item => {
-    if (!item) return;
-    // Set code field and trigger restock dropdown
-    showPage('add');
-    setTimeout(() => {
-      document.getElementById('f-code').value = item.code;
-      onCodeInput(); // trigger dropdown
-      setTimeout(() => selectExistingItem(itemId), 150); // auto-select
-    }, 200);
-  });
 }
 
 function closeSheet() { document.getElementById('detail-sheet').classList.remove('open'); }
@@ -878,12 +675,10 @@ function closeSheet() { document.getElementById('detail-sheet').classList.remove
 async function deleteItem() {
   if (!confirm('Delete this item?')) return;
   const toDelete = await dbGet('items', currentDetailId);
-  if (!toDelete) { toast('Item not found.', 'err'); return; }
   await dbDelete('items', currentDetailId);
-  if (toDelete.fbId) fbDeleteItem(toDelete.fbId);
+  if (toDelete && toDelete.fbId) fbDeleteItem(toDelete.fbId);
   closeSheet();
   allItems = await dbAll('items');
-  await enrichShoeItems(allItems);
   renderList();
   renderDashboard();
   renderSummary();
@@ -894,41 +689,20 @@ async function deleteItem() {
 async function editItem() {
   if (!isDayOpen()) { toast('⚠️ Open the business day to edit items.', 'err'); return; }
   const item = await dbGet('items', currentDetailId);
-  if (!item) { toast('Item not found.', 'err'); return; }
   closeSheet();
-  // Set ALL form fields BEFORE showPage so onTypeChange() sees the correct type
+  showPage('add');
   document.getElementById('edit-id').value = item.id;
-  document.getElementById('f-type').value  = item.type  || '';
-  document.getElementById('f-code').value  = item.code  || '';
-  document.getElementById('f-name').value  = item.name  || '';
-  document.getElementById('f-size').value  = item.size  || '';
-  document.getElementById('f-qty').value   = item.qty   ?? '';
-  document.getElementById('f-buy').value   = item.buy   || '';
-  document.getElementById('f-sell').value  = item.sell  || '';
-  showPage('add'); // triggers onTypeChange() which shows/hides shoe panel
+  document.getElementById('f-type').value = item.type;
+  document.getElementById('f-code').value = item.code;
+  document.getElementById('f-name').value = item.name;
+  document.getElementById('f-size').value = item.size || '';
+  document.getElementById('f-qty').value = item.qty;
+  document.getElementById('f-buy').value = item.buy;
+  document.getElementById('f-sell').value = item.sell;
   document.getElementById('save-btn').textContent = '💾 Save Changes';
-  document.getElementById('form-mode-label').textContent = '✏️ Edit · ' + (item.name || item.code);
+  document.getElementById('form-mode-label').textContent = 'Edit Item';
   document.getElementById('cancel-edit-btn').style.display = 'block';
-
-  if (item.isShoe) {
-    // For shoe items: populate shoe pricing from first size record as defaults
-    getShoeSizes(item.code).then(sizes => {
-      if (!sizes.length) return;
-      const first = sizes[0];
-      const sharedQty  = document.getElementById('shoe-shared-qty');
-      const sharedBuy  = document.getElementById('shoe-shared-buy');
-      const sharedSell = document.getElementById('shoe-shared-sell');
-      if (sharedBuy)  sharedBuy.value  = first.buyPrice  || item.defaultBuy  || '';
-      if (sharedSell) sharedSell.value = first.sellPrice || item.defaultSell || '';
-      // Show currently stocked sizes as pre-selected
-      _shoeGroup = item.category || null;
-      sizes.filter(s=>s.qty>0).forEach(s => _shoeSizes.add(s.size));
-      renderShoeGroupButtons();
-      renderShoeSummary();
-    });
-  } else {
-    updateProfitPreview();
-  }
+  updateProfitPreview();
   // Load existing photo if any
   const existingPhoto = getItemPhoto(item.id);
   if (existingPhoto) {
@@ -1108,6 +882,8 @@ function saveCurrency() {
 }
 function updateCurrencyUI() {
   document.getElementById('currency-sel').value = currency;
+  document.getElementById('bp-cur').textContent = currency;
+  document.getElementById('sp-cur').textContent = currency;
   document.getElementById('splash-cur').textContent = currency;
 }
 
@@ -1165,9 +941,7 @@ function showSplash(name, sell, profit) {
 
 
 // ===== MAKE A SALE =====
-let currentSellItemId  = null;
-let _codeDropdownActive = false;
-let _editOriginItemId   = null;
+let currentSellItemId = null;
 let _selectedPayment = 'Cash'; // Cash | M-Pesa | Credit
 
 async function searchSell() {
@@ -1214,98 +988,47 @@ async function searchSell() {
 
 function selectPayment(method) {
   _selectedPayment = method;
-  ['cash','mpesa'].forEach(m => {
-    const btn = document.getElementById('pay-' + m);
-    if (btn) btn.classList.toggle('active', m === method);
+  ['Cash','M-Pesa','Credit'].forEach(m => {
+    const btn = document.getElementById('pm-' + m);
+    if (btn) btn.classList.toggle('pm-active', m === method);
   });
 }
 
 async function openSellModal(itemId) {
   const item = await dbGet('items', itemId);
-  if (!item) { toast('Item not found.', 'err'); return; }
-  if (item.qty <= 0) { toast('⚠️ Item is out of stock', 'err'); return; }
-
   currentSellItemId = itemId;
-  _isShoeSale   = false;
-  _sellShoeSize = null;
-
-  const set = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=v||''; };
-  const setVal = (id, v) => { const el=document.getElementById(id); if(el) el.value=v; };
-
-  set('sm-item-name',  item.name || item.code);
-  set('sm-item-code',  item.code + (item.size && item.size!=='N/A' ? ' · ' + item.size : ''));
-  set('sm-stock',      item.qty);
-  set('sm-buy-price',  fmt(item.buy || 0));
-  set('sm-sell-price', fmt(item.sell || 0));
-
-  const curEl = document.getElementById('sm-cur');
-  if (curEl) curEl.textContent = currency;
-
-  setVal('sm-qty', 1);
-  const qtyEl = document.getElementById('sm-qty');
-  if (qtyEl) qtyEl.max = item.qty;
-
-  setVal('sm-actual', '');
-
-  // Reset errors
-  ['sm-qty-error','sm-price-error'].forEach(id => {
-    const el = document.getElementById(id); if(el) el.style.display='none';
-  });
-
-  selectPayment('cash');
+  const t = getTypeObj(item.type);
+  document.getElementById('sm-icon').textContent = t.emoji;
+  document.getElementById('sm-icon').style.background = t.color || 'var(--surface2)';
+  document.getElementById('sm-name').textContent = item.name;
+  document.getElementById('sm-meta').textContent = item.code + (item.size ? ' · ' + item.size : '');
+  document.getElementById('sm-stock').textContent = item.qty;
+  document.getElementById('sm-sell').textContent = fmt(item.sell);
+  document.getElementById('sm-profit').textContent = (item.profit >= 0 ? '+' : '') + fmt(item.profit);
+  document.getElementById('sm-cur').textContent = currency;
+  document.getElementById('sm-qty').value = 1;
+  document.getElementById('sm-qty').max = item.qty;
+  document.getElementById('sm-actual').value = '';
   updateSellModal();
+  selectPayment('Cash'); // reset payment method
   document.getElementById('sell-modal').classList.add('open');
 }
 
 function closeSellModal() {
   document.getElementById('sell-modal').classList.remove('open');
-  const picker  = document.getElementById('shoe-picker-sheet');
-  const actions = document.getElementById('shoe-size-action-sheet');
-  if (picker)  picker.classList.remove('open');
-  if (actions) actions.classList.remove('open');
   currentSellItemId = null;
-  _isShoeSale   = false;
-  _sellShoeSize = null;
-  _sellShoeItem = null;
 }
 
 async function updateSellModal() {
   if (!currentSellItemId) return;
   const item = await dbGet('items', currentSellItemId);
-  if (!item) { toast('Item no longer exists.', 'err'); closeSellModal(); return; }
-  const maxQty = _isShoeSale && _sellShoeSize ? _sellShoeSize.qty : item.qty;
-  const buy    = _isShoeSale && _sellShoeSize ? (_sellShoeSize.buyPrice||item.defaultBuy||0) : (item.buy||0);
-  const sell   = _isShoeSale && _sellShoeSize ? (_sellShoeSize.sellPrice||item.defaultSell||0) : (item.sell||0);
-
-  const qtyEl = document.getElementById('sm-qty');
-  const qty   = Math.max(1, parseInt(qtyEl ? qtyEl.value : 1) || 1);
-
-  // Validate qty
-  const qtyErr = document.getElementById('sm-qty-error');
-  if (qty > maxQty) {
-    if (qtyEl)  qtyEl.style.color = 'var(--red)';
-    if (qtyErr) { qtyErr.style.display='block'; qtyErr.textContent='⚠️ Only ' + maxQty + ' in stock'; }
-  } else {
-    if (qtyEl)  qtyEl.style.color = '';
-    if (qtyErr) qtyErr.style.display='none';
-  }
-
-  const actualRaw  = parseFloat((document.getElementById('sm-actual')||{}).value);
-  const priceUsed  = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : sell;
-
-  // Validate actual price >= buy price
-  const priceErr = document.getElementById('sm-price-error');
-  if (!isNaN(actualRaw) && actualRaw > 0 && actualRaw < buy) {
-    if (priceErr) { priceErr.style.display='block'; priceErr.textContent='⚠️ Cannot sell below buying price (' + fmt(buy) + ')'; }
-  } else {
-    if (priceErr) priceErr.style.display='none';
-  }
-
-  const totalRev    = qty * priceUsed;
-  const totalProfit = qty * (priceUsed - buy);
-  const totalRev2   = totalRev; const totalProfit2 = totalProfit;
+  const qty = Math.max(1, parseInt(document.getElementById('sm-qty').value) || 1);
+  const actualRaw = parseFloat(document.getElementById('sm-actual').value);
+  const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : item.sell;
+  const totalRev = qty * priceUsed;
+  const totalProfit = qty * (priceUsed - item.buy);
   const overridden = !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== item.sell;
-  const _puel=document.getElementById('sm-price-used'); if(_puel) _puel.textContent = fmt(priceUsed) + (overridden ? ' (custom)' : ' (default)');
+  document.getElementById('sm-price-used').textContent = fmt(priceUsed) + (overridden ? ' (custom)' : ' (default)');
   document.getElementById('sm-total-rev').textContent = fmt(totalRev);
   document.getElementById('sm-total-profit').textContent = (totalProfit >= 0 ? '+' : '') + fmt(totalProfit);
   document.getElementById('sm-total-profit').style.color = totalProfit >= 0 ? 'var(--green)' : 'var(--red)';
@@ -1325,15 +1048,6 @@ async function confirmSale() {
   if (!currentSellItemId) return;
   if (!requireOpenDay()) return;
   const item = await dbGet('items', currentSellItemId);
-  if (!item) { toast('Item no longer exists.', 'err'); closeSellModal(); return; }
-  const maxQtyCheck = _isShoeSale && _sellShoeSize ? _sellShoeSize.qty : item.qty;
-  const qtyCheck = parseInt((document.getElementById('sm-qty')||{}).value) || 1;
-  const buyCheck  = _isShoeSale && _sellShoeSize ? (_sellShoeSize.buyPrice||item.defaultBuy||0) : (item.buy||0);
-  const actCheck  = parseFloat((document.getElementById('sm-actual')||{}).value);
-  if (qtyCheck > maxQtyCheck) { toast('⚠️ Qty exceeds stock (' + maxQtyCheck + ')', 'err'); return; }
-  if (!isNaN(actCheck) && actCheck > 0 && actCheck < buyCheck) {
-    toast('⚠️ Sale price cannot be below buying price (' + fmt(buyCheck) + ')', 'err'); return;
-  }
   const qty = Math.max(1, parseInt(document.getElementById('sm-qty').value) || 1);
   if (qty > item.qty) { toast('⚠️ Not enough stock!', 'err'); return; }
   const actualRaw = parseFloat(document.getElementById('sm-actual').value);
@@ -1347,23 +1061,11 @@ async function confirmSale() {
     revenue: qty * priceUsed,
     profit: qty * (priceUsed - item.buy),
     overridden: !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== item.sell,
-    soldBy: currentUser ? currentUser.username : 'system',
     business_date: activeDay ? activeDay.business_date : todayDateStr(),
     date: new Date().toISOString()
   };
 
-  if (_isShoeSale && _sellShoeSize) {
-    // Shoe sale: decrement specific size qty
-    _sellShoeSize.qty -= qty;
-    _sellShoeSize.updatedAt = new Date().toISOString();
-    await dbPut('shoe_sizes', _sellShoeSize);
-    // Update parent item total qty
-    const allSz = await getShoeSizes(item.code);
-    item.qty = allSz.reduce((t,s) => t + s.qty, 0);
-    _isShoeSale = false; _sellShoeSize = null;
-  } else {
-    item.qty -= qty;
-  }
+  item.qty -= qty;
   await dbPut('items', item);
   await dbAdd('sales', sale);
   fbSyncItem(item);
@@ -1372,14 +1074,8 @@ async function confirmSale() {
   scheduleSync();
 
   closeSellModal();
-  closeShoePickerSheet();
-  closeShoeSizeActions();
-  // Also close the detail sheet so user lands back on the stock list
-  closeSheet();
-
   document.getElementById('sell-search').value = '';
-  const sellResults = document.getElementById('sell-results');
-  if (sellResults) sellResults.innerHTML = '';
+  document.getElementById('sell-results').innerHTML = '';
 
   toast('✅ Sale: ' + fmt(sale.revenue) + ' · Profit: ' + fmt(sale.profit), 'ok');
   renderSellPage();
@@ -1443,29 +1139,68 @@ document.getElementById('sell-modal').addEventListener('click', function(e) {
 
 function addSyncLog() {} // bell removed
 
-// ── NOTIFICATION PANEL ──────────────────────────────────────────
-function toggleNotifPanel() {
-  const panel   = document.getElementById('notif-panel');
-  const backdrop = document.getElementById('notif-backdrop');
-  if (!panel) return;
-  const isOpen = panel.style.display !== 'none';
-  panel.style.display    = isOpen ? 'none' : 'block';
-  if (backdrop) backdrop.style.display = isOpen ? 'none' : 'block';
-}
-function clearNotifs() {
-  const list = document.getElementById('notif-list');
-  if (list) list.innerHTML = '<div class="notif-empty">No sync events yet</div>';
-}
-function addNotif(msg, type) {
-  const list = document.getElementById('notif-list');
-  if (!list) return;
-  const empty = list.querySelector('.notif-empty');
-  if (empty) empty.remove();
-  const item = document.createElement('div');
-  item.style.cssText = 'padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;';
-  item.innerHTML = '<span style="color:var(--muted);font-size:11px;font-family:var(--mono);">' +
-    new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) + '</span> ' + escapeHtml(msg);
-  list.insertBefore(item, list.firstChild);
+
+function toggleNotifPanel(){const p=document.getElementById('notif-panel');const b=document.getElementById('notif-backdrop');if(!p)return;const open=p.style.display!=='none';p.style.display=open?'none':'block';if(b)b.style.display=open?'none':'block';}
+function clearNotifs(){const l=document.getElementById('notif-list');if(l)l.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px;">No events yet</div>';}
+function addNotif(msg){const l=document.getElementById('notif-list');if(!l)return;const e=document.createElement('div');e.style.cssText='padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;';e.textContent=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+' '+msg;l.insertBefore(e,l.firstChild);}
+function closePastSessionSheet(){const s=document.getElementById('past-session-sheet');if(s)s.classList.remove('open');}
+
+// ═══════════════════════════════════════════════════════════════
+// FACTORY RESET — clears ALL local data and Firebase
+// Only accessible to Super User in Settings
+// ═══════════════════════════════════════════════════════════════
+async function resetAllData() {
+  const confirmed1 = confirm('⚠️ RESET ALL DATA\n\nThis will permanently delete ALL:\n• Inventory items\n• Sales records\n• Business days\n• Shoe sizes\n\nThis cannot be undone. Continue?');
+  if (!confirmed1) return;
+  const confirmed2 = confirm('Are you absolutely sure? Type your action cannot be reversed.');
+  if (!confirmed2) return;
+
+  try {
+    toast('🗑️ Clearing all data...', '');
+
+    // Clear all IndexedDB stores
+    const stores = ['items','sales','types','day_sessions','business_days','shoe_sizes'];
+    for (const store of stores) {
+      try {
+        const all = await dbAll(store);
+        for (const rec of all) await dbDelete(store, rec.id);
+      } catch(e) { console.warn('Clear store', store, e.message); }
+    }
+
+    // Clear Firebase if connected
+    if (fbReady && fbDb) {
+      try {
+        const { collection, getDocs, deleteDoc, doc } = await waitForFbImports();
+        for (const col of ['items','sales','business_days','shoe_sizes']) {
+          const snap = await getDocs(collection(fbDb, col));
+          for (const d of snap.docs) await deleteDoc(doc(fbDb, col, d.id));
+        }
+        toast('☁️ Firebase cleared', '');
+      } catch(e) { toast('⚠️ Firebase clear partial: ' + e.message, 'err'); }
+    }
+
+    // Clear localStorage (except session)
+    const session = localStorage.getItem(KEY_SESSION);
+    const currency = localStorage.getItem(KEY_CURRENCY);
+    const shoeGroups = localStorage.getItem(KEY_SHOE_GROUPS);
+    localStorage.clear();
+    if (session)    localStorage.setItem(KEY_SESSION,     session);
+    if (currency)   localStorage.setItem(KEY_CURRENCY,    currency);
+    if (shoeGroups) localStorage.setItem(KEY_SHOE_GROUPS, shoeGroups);
+
+    // Reload default item types
+    await loadTypes();
+
+    // Refresh UI
+    allItems = [];
+    renderList(); renderDashboard(); updateHeader();
+    try { renderSellPage(); } catch(e) {}
+
+    toast('✅ All data cleared — fresh start!', 'ok');
+  } catch(e) {
+    toast('❌ Reset failed: ' + e.message, 'err');
+    console.error('[RESET]', e);
+  }
 }
 
 // ===== FIREBASE SYNC =====
@@ -1562,7 +1297,6 @@ async function initFirebase() {
       }
       if (needsRender) {
         allItems = await dbAll('items');
-  await enrichShoeItems(allItems);
         renderList(); renderDashboard(); updateHeader();
         setFbStatus('on');
         toast('🔄 ' + changes.length + ' item(s) synced from cloud', 'ok');
@@ -1610,14 +1344,8 @@ async function initFirebase() {
 }
 
 function waitForFbImports() {
-  return new Promise((res, rej) => {
-    const start = Date.now();
-    const check = () => {
-      if (window._fbImports === null) { rej(new Error('Firebase SDK failed to load.')); return; }
-      if (window._fbImports) { res(window._fbImports); return; }
-      if (Date.now() - start > 15000) { rej(new Error('Firebase SDK timed out.')); return; }
-      setTimeout(check, 150);
-    };
+  return new Promise(res => {
+    const check = () => window._fbImports ? res(window._fbImports) : setTimeout(check, 100);
     check();
   });
 }
@@ -1639,7 +1367,7 @@ async function fbSyncItem(item) {
       await dbPut('items', item);
     }
     const data = { ...item, updatedAt: new Date().toISOString() };
-    await setDoc(doc(fbDb, 'items', item.fbId), sanitiseForFirestore(data));
+    await setDoc(doc(fbDb, 'items', item.fbId), data);
     console.log('[SYNC] Pushed item:', item.fbId);
   } catch (e) { console.error('[SYNC] fbSyncItem error:', e); }
 }
@@ -1661,15 +1389,13 @@ async function fbSyncSale(sale) {
   } catch (e) { console.error('fbSyncSale error', e); }
 }
 
-
-function sanitiseForFirestore(obj) {
-  const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (k === 'id') continue;
-    if (v === undefined) { out[k] = null; continue; }
-    if (v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)) {
-      out[k] = sanitiseForFirestore(v);
-    } else { out[k] = v; }
+function sanitiseForFirestore(obj){
+  const out={};
+  for(const[k,v]of Object.entries(obj)){
+    if(k==='id')continue;
+    if(v===undefined){out[k]=null;continue;}
+    if(v!==null&&typeof v==='object'&&!Array.isArray(v)&&!(v instanceof Date)){out[k]=sanitiseForFirestore(v);}
+    else out[k]=v;
   }
   return out;
 }
@@ -1691,7 +1417,7 @@ async function forcePushToFirebase(silent = false) {
         item.fbId = 'itm_' + (item.code || 'x').toLowerCase().replace(/[^a-z0-9]/g,'') + '_' + (item.size || 'ns').toLowerCase().replace(/[^a-z0-9]/g,'');
         await dbPut('items', item);
       }
-      batch.set(doc(fbDb, 'items', item.fbId), sanitiseForFirestore({ ...item, updatedAt: new Date().toISOString() }));
+      batch.set(doc(fbDb, 'items', item.fbId), { ...item, updatedAt: new Date().toISOString() });
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
@@ -1701,7 +1427,7 @@ async function forcePushToFirebase(silent = false) {
         sale.fbId = 'sale_' + (sale.date || '').replace(/[:.TZ-]/g,'').slice(0,17) + '_' + Math.random().toString(36).slice(2,6);
         await dbPut('sales', sale);
       }
-      batch.set(doc(fbDb, 'sales', sale.fbId), sanitiseForFirestore({ ...sale }));
+      batch.set(doc(fbDb, 'sales', sale.fbId), { ...sale });
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
@@ -1754,12 +1480,12 @@ async function pullFromFirebase(silent = false) {
     const saleSnap = await getDocs(collection(fbDb, 'sales'));
     console.log('[SYNC] Firebase has', saleSnap.size, 'sales');
 
-    let localSales = await dbAll('sales');
     let salesAdded = 0, salesUpdated = 0;
     for (const d of saleSnap.docs) {
       const data = { ...d.data(), fbId: d.id };
       delete data.id;
-      const existing = localSales.find(s => s.fbId === d.id);
+      const all = await dbAll('sales');
+      const existing = all.find(s => s.fbId === d.id);
       if (existing) {
         data.id = existing.id;
         await dbPut('sales', data);
@@ -1772,7 +1498,6 @@ async function pullFromFirebase(silent = false) {
     console.log('[SYNC] Sales: added=' + salesAdded + ' updated=' + salesUpdated);
 
     allItems = await dbAll('items');
-  await enrichShoeItems(allItems);
     renderList(); renderDashboard(); updateHeader();
     try { renderSellPage(); } catch(_) {}
     setFbStatus('on');
@@ -1885,6 +1610,7 @@ function setDayMode(isOpen) {
     const activePage = document.querySelector('.page.active');
     if (activePage) {
       const pageId = activePage.id.replace('page-', '');
+      if (pageId === 'add') _origShowPage('day');
       if (pageId === 'dash' && !dashOk) _origShowPage('day');
       if (pageId === 'list') renderList(); // refresh to show/hide action buttons
     }
@@ -1992,7 +1718,8 @@ async function loadActiveDay() {
   activeDay = bday;
   updateDayBanner();
   if (isDayOpen()) updateDayLiveStats();
-  if (!_timerStarted) { _timerStarted = true; startDayTimer(); startBannerClock(); }
+  startDayTimer();
+  startBannerClock();
 }
 
 // ── REFRESH DAY TAB (no re-init) ─────────────────────────────────────
@@ -2135,11 +1862,10 @@ async function closeDay() {
 
 // ── CONFIRM CLOSE ────────────────────────────────────────────────────
 async function confirmCloseDay() {
-  const notes    = (document.getElementById('ds-notes') || {}).value || '';
-  const now      = new Date();
-  const todayStr = activeDay.business_date; // use activeDay date not todayDateStr() to avoid midnight edge cases
-  const sales    = await dbAll('sales');
-  const daySales = sales.filter(s => s.business_date === todayStr);
+  const notes = (document.getElementById('ds-notes') || {}).value || '';
+  const now   = new Date();
+  const sales = await dbAll('sales');
+  const daySales = sales.filter(s => s.business_date === activeDay.business_date);
   const items = await dbAll('items');
   const todayStart2 = activeDay.business_date + 'T00:00:00';
   const purchases = items.filter(i => i.createdAt && i.createdAt >= todayStart2);
@@ -2168,70 +1894,6 @@ async function confirmCloseDay() {
 
 function cancelCloseDay() {
   document.getElementById('day-summary-sheet').classList.remove('open');
-}
-
-async function viewPastSession(sessionId) {
-  const session = await dbGet('business_days', sessionId);
-  if (!session) { toast('Session not found.', 'err'); return; }
-  const content = document.getElementById('past-session-content');
-  if (!content) return;
-  const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.business_date === session.business_date)
-                        .sort((a,b) => new Date(b.date) - new Date(a.date));
-  const rev    = daySales.reduce((s,x) => s + x.revenue, 0);
-  const profit = daySales.reduce((s,x) => s + x.profit, 0);
-  content.innerHTML =
-    '<div style="padding:4px 0 14px;">' +
-    '<div style="font-size:18px;font-weight:800;margin-bottom:4px;">' + fmtFullDate(session.business_date) + '</div>' +
-    '<div style="font-size:12px;color:var(--muted);font-family:var(--mono);">' +
-      fmtTime(session.opened_at) + ' → ' + (session.closed_at ? fmtTime(session.closed_at) : 'auto') +
-      (session.reopened_count > 0 ? ' · Reopened ' + session.reopened_count + 'x' : '') +
-    '</div></div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">' +
-      _statBox(fmt(rev), 'Revenue', 'var(--accent2)') +
-      _statBox(fmt(profit), 'Profit', profit>=0?'var(--green)':'var(--red)') +
-      _statBox(daySales.length, 'Sales', 'var(--accent)') +
-    '</div>' +
-    (session.notes ? '<div style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:12px;">"' + escapeHtml(session.notes) + '"</div>' : '') +
-    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Sales</div>' +
-    (daySales.length === 0 ? '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales recorded</div>' :
-      daySales.map(s =>
-        '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);">' +
-        '<div><div style="font-size:13px;font-weight:700;">' + escapeHtml(s.itemName||s.itemCode||'Sale') + '</div>' +
-        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + fmtTime(s.date) + ' · ' + escapeHtml(s.itemCode||'') + '</div></div>' +
-        '<div style="text-align:right;"><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue) + '</div>' +
-        '<div style="font-size:11px;color:var(--green);font-family:var(--mono);">+' + fmt(s.profit) + '</div></div></div>'
-      ).join('')
-    );
-  const exportBtn = document.getElementById('export-day-btn');
-  if (exportBtn) exportBtn.onclick = () => exportDayCSV(session);
-  document.getElementById('past-session-sheet').classList.add('open');
-}
-
-function closePastSessionSheet() {
-  document.getElementById('past-session-sheet').classList.remove('open');
-}
-
-async function exportDayCSV(session) {
-  if (!session) return;
-  const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.business_date === session.business_date)
-                        .sort((a,b) => new Date(a.date) - new Date(b.date));
-  const headers = ['Date','Time','Code','Name','Qty','Unit Price','Revenue','Profit','Payment'];
-  const rows = daySales.map(s => [
-    s.business_date||'',
-    s.date ? new Date(s.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '',
-    s.itemCode||'', s.itemName||'',
-    s.qty||0, s.actualPrice||0, s.revenue||0, s.profit||0,
-    s.paymentMethod||'Cash'
-  ]);
-  const csv = [headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
-  const blob = new Blob([csv],{type:'text/csv'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href=url; a.download='MGS_'+session.business_date+'.csv'; a.click();
-  URL.revokeObjectURL(url);
-  toast('📤 CSV exported!', 'ok');
 }
 
 // ── BANNER LIVE CLOCK — refresh duration display every minute ────────
@@ -2458,22 +2120,6 @@ async function renderDaySessionsList() {
       '</div>';
   }).join('');
 }
-async function voidSale(saleId) {
-  if (!isDayOpen()) { toast('⚠️ Day must be open to void a sale.', 'err'); return; }
-  if (!confirm('Void this sale? Item stock will be restored.')) return;
-  try {
-    const sale = await dbGet('sales', saleId);
-    if (!sale) { toast('Sale not found.', 'err'); return; }
-    const item = await dbGet('items', sale.itemId);
-    if (item) { item.qty += (sale.qty || 1); item.updatedAt = new Date().toISOString(); await dbPut('items', item); allItems = await dbAll('items'); fbSyncItem(item); }
-    await dbDelete('sales', saleId);
-    renderList(); renderDashboard(); updateHeader();
-    if (activeDay) updateDayLiveStats();
-    scheduleSync();
-    toast('↩ Sale voided — stock restored.', 'ok');
-  } catch(e) { toast('Error: ' + e.message, 'err'); }
-}
-
 // ═══════════════════════════════════════════════════════════
 // RESTOCK
 // ═══════════════════════════════════════════════════════════
@@ -2498,7 +2144,6 @@ async function confirmRestock() {
   document.getElementById('sh-qty').textContent = item.qty + ' pcs';
   document.getElementById('restock-panel').style.display = 'none';
   allItems = await dbAll('items');
-  await enrichShoeItems(allItems);
   renderList();
   renderDashboard();
   updateHeader();
@@ -2509,37 +2154,10 @@ async function confirmRestock() {
 // ═══════════════════════════════════════════════════════════
 // LOW STOCK BADGE IN HEADER
 // ═══════════════════════════════════════════════════════════
-// Enrich shoe items with computed total qty and size summary
-async function enrichShoeItems(items) {
-  const shoeCodes = items.filter(i => i.isShoe).map(i => i.code);
-  if (!shoeCodes.length) return;
-  const allSizes = await dbAll('shoe_sizes');
-  for (const item of items) {
-    if (!item.isShoe) continue;
-    const sizes = allSizes.filter(s => s.itemCode === item.code)
-                          .sort((a,b) => a.size - b.size);
-    item.qty = sizes.reduce((t,s) => t + s.qty, 0);
-    item._sizeSummary = sizes.filter(s=>s.qty>0).map(s => {
-      const sc = s.qty <= 0 ? 'out' : s.qty <= LOW_STOCK_LEVEL ? 'low' : '';
-      return '<span class="shoe-size-chip' + (sc?' '+sc:'') + '">' + s.size + '×' + s.qty + '</span>';
-    }).join('');
-  }
-}
-
 async function updateLowStockBadge() {
-  const badge = document.getElementById('low-stock-badge');
-  if (!badge) return;
   const items = await dbAll('items');
-  const low  = items.filter(i => i.qty > OUT_STOCK_LEVEL && i.qty <= LOW_STOCK_LEVEL).length;
-  const out  = items.filter(i => i.qty <= OUT_STOCK_LEVEL).length;
-  const total = low + out;
-  if (total > 0) {
-    badge.textContent = total + (out > 0 ? ' ⚠' : ' low');
-    badge.style.display = 'inline-block';
-    badge.title = out + ' out of stock · ' + low + ' low stock (≤' + LOW_STOCK_LEVEL + ')';
-  } else {
-    badge.style.display = 'none';
-  }
+  const badge = document.getElementById('low-stock-badge');
+  // low stock badge removed from header
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2595,123 +2213,33 @@ let swRegistration = null;
 let deferredInstallPrompt = null;
 
 // Register service worker
-// ── APP UPDATE SYSTEM ─────────────────────────────────────────────────
-// Detects new SW versions and shows update UI in Settings.
-// Progress bar runs from 0→100 while new SW installs + files reload.
-
-let _pendingWorker = null; // holds the new SW waiting to activate
-
-function _showUpdateState(state) {
-  ['current','available','installing'].forEach(s => {
-    const el = document.getElementById('update-state-' + s);
-    if (el) el.style.display = s === state ? '' : 'none';
-  });
-}
-
-function _setUpdateLastCheck() {
-  const el = document.getElementById('update-last-check');
-  if (el) el.textContent = 'Last checked: ' + new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-}
-
-function installAppUpdate() {
-  if (!_pendingWorker) return;
-  _showUpdateState('installing');
-
-  // Animate progress bar 0 → 90 while waiting for SW to activate
-  let pct = 0;
-  const steps = [
-    { target: 20, label: 'Downloading new version…', delay: 300 },
-    { target: 45, label: 'Installing files…',         delay: 600 },
-    { target: 70, label: 'Clearing old cache…',       delay: 500 },
-    { target: 90, label: 'Finalising…',               delay: 400 },
-  ];
-
-  function runStep(i) {
-    if (i >= steps.length) return;
-    const { target, label, delay } = steps[i];
-    setTimeout(() => {
-      pct = target;
-      const bar = document.getElementById('update-progress-bar');
-      const pctEl = document.getElementById('update-progress-pct');
-      const lblEl = document.getElementById('update-progress-label');
-      if (bar)   bar.style.width = pct + '%';
-      if (pctEl) pctEl.textContent = pct + '%';
-      if (lblEl) lblEl.textContent = label;
-      runStep(i + 1);
-    }, delay);
-  }
-  runStep(0);
-
-  // Tell SW to skip waiting — controllerchange fires → reload
-  _pendingWorker.postMessage({ type: 'SKIP_WAITING' });
-}
-
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').then(reg => {
     swRegistration = reg;
     _setUpdateLastCheck();
-
-    // Message listener for background sync
     navigator.serviceWorker.addEventListener('message', e => {
       if (e.data && e.data.type === 'BACKGROUND_SYNC') {
-        if (fbReady && fbDb && navigator.onLine) {
-          forcePushToFirebase(true).then(() => pullFromFirebase(true));
-        }
+        if (fbReady && fbDb && navigator.onLine) forcePushToFirebase(true).then(()=>pullFromFirebase(true));
       }
     });
-
-    // Helper: a new SW is waiting — show the update button
-    function onNewWorkerWaiting(worker) {
+    function onNewWorker(worker) {
       _pendingWorker = worker;
       _showUpdateState('available');
-      // If not on settings page, badge the settings tab
-      const settingsTab = document.getElementById('tab-settings');
-      if (settingsTab) {
-        settingsTab.style.position = 'relative';
-        if (!document.getElementById('update-dot')) {
-          const dot = document.createElement('span');
-          dot.id = 'update-dot';
-          dot.style.cssText = 'position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;';
-          settingsTab.appendChild(dot);
-        }
-      }
+      const t=document.getElementById('tab-settings');
+      if(t&&!document.getElementById('update-dot')){const d=document.createElement('span');d.id='update-dot';d.style.cssText='position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;';t.style.position='relative';t.appendChild(d);}
     }
-
-    // New SW found during this session
-    reg.addEventListener('updatefound', () => {
-      const newWorker = reg.installing;
-      newWorker.addEventListener('statechange', () => {
-        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-          onNewWorkerWaiting(newWorker);
-        }
-      });
-    });
-
-    // SW was already waiting before page loaded (e.g. user refreshed)
-    if (reg.waiting && navigator.serviceWorker.controller) {
-      onNewWorkerWaiting(reg.waiting);
-    }
-
-    // Periodically check for updates (every 30 mins)
-    setInterval(() => {
-      reg.update().then(() => _setUpdateLastCheck()).catch(() => {});
-    }, 30 * 60 * 1000);
-
-  }).catch(() => {});
-
-  // When new SW takes control → complete progress bar then reload
-  let _reloading = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (_reloading) return;
-    _reloading = true;
-    // Jump to 100%
-    const bar   = document.getElementById('update-progress-bar');
-    const pctEl = document.getElementById('update-progress-pct');
-    const lblEl = document.getElementById('update-progress-label');
-    if (bar)   bar.style.width = '100%';
-    if (pctEl) pctEl.textContent = '100%';
-    if (lblEl) lblEl.textContent = 'Update complete! Reloading…';
-    setTimeout(() => window.location.reload(), 800);
+    reg.addEventListener('updatefound',()=>{const w=reg.installing;w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)onNewWorker(w);});});
+    if(reg.waiting&&navigator.serviceWorker.controller)onNewWorker(reg.waiting);
+    setInterval(()=>reg.update().then(()=>_setUpdateLastCheck()).catch(()=>{}), 30*60*1000);
+  }).catch(()=>{});
+  let _reloading=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(_reloading)return;_reloading=true;
+    const bar=document.getElementById('update-progress-bar');
+    const pct=document.getElementById('update-progress-pct');
+    const lbl=document.getElementById('update-progress-label');
+    if(bar)bar.style.width='100%';if(pct)pct.textContent='100%';if(lbl)lbl.textContent='Reloading…';
+    setTimeout(()=>window.location.reload(),600);
   });
 }
 
@@ -2889,11 +2417,12 @@ document.addEventListener('DOMContentLoaded', () => {
 const USERS = [
   {
     username: 'onchari',
-    pin: '1234',                                                          // fallback (HTTP)
-    pinHash: '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4', // SHA-256 (HTTPS)
+    pin: '1234',
+    pinHash: '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4',
     name: 'Onchari',
     role: 'super',
     roleLabel: 'Super User',
+    // Super: access to everything
     tabs: ['dash','list','add','day','settings']
   },
   {
@@ -2903,6 +2432,7 @@ const USERS = [
     name: 'Vanice',
     role: 'user',
     roleLabel: 'User',
+    // User: everything except Settings
     tabs: ['dash','list','add','day']
   },
   {
@@ -2912,23 +2442,22 @@ const USERS = [
     name: 'Trevor',
     role: 'clerk',
     roleLabel: 'Clerk',
-    tabs: ['list','add']
+    // Clerk: view stock + add stock
+    tabs: ['list', 'add']
   }
 ];
 
-// Hash a PIN using SHA-256. Returns null if crypto.subtle unavailable.
 async function hashPin(pin) {
   try {
     if (window.crypto && crypto.subtle) {
       const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(pin)));
-      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+      return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
     }
-  } catch(e) {
-    console.warn('[AUTH] crypto.subtle failed:', e.message);
-  }
-  return null; // caller will fall back to plain comparison
+  } catch(e) {}
+  return null;
 }
 
+let _loginAttempts = 0, _loginLockedUntil = 0;
 let currentUser = null;
 
 
@@ -2962,7 +2491,7 @@ function logout() {
   localStorage.removeItem(KEY_SESSION);
   localStorage.removeItem('mg_last_page');
   // Reset nav tabs visibility
-  ['dash','list','add','day','settings'].forEach(tab => {
+  ['dash','list','add','sell','day','types','settings'].forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) btn.style.display = '';
   });
@@ -2974,93 +2503,77 @@ function logout() {
   // Clear inputs and show login
   document.getElementById('login-user').value = '';
   document.getElementById('login-pin').value = '';
-  // Clear any sensitive data from memory
-  currentUser = null;
   document.getElementById('login-error').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
 }
 
 
 
-// _origShowPage: direct page navigation (bypasses day-guard)
-
-let _loginAttempts    = 0;
-let _loginLockedUntil = 0;
-
-async function attemptLogin() {
-  try {
-  // Rate limiting — lock for 30s after 5 failed attempts
-  if (Date.now() < _loginLockedUntil) {
-    const secs = Math.ceil((_loginLockedUntil - Date.now()) / 1000);
-    toast('⏳ Too many attempts. Try again in ' + secs + 's', 'err');
+// Guard showPage - block access to restricted tabs
+const _origShowPage = showPage;
+showPage = function(id) {
+  if (currentUser && !currentUser.tabs.includes(id)) {
+    toast('⛔ Access denied', 'err');
     return;
   }
-
-  const username = document.getElementById('login-user').value.trim().toLowerCase();
-  const pin      = document.getElementById('login-pin').value.trim();
-  const err      = document.getElementById('login-error');
-
-  if (!username || !pin) { err.style.display = 'block'; return; }
-
-  // Try SHA-256 hash comparison first (HTTPS), fall back to plain PIN (HTTP)
-  const enteredHash = await hashPin(pin);
-  let user;
-  if (enteredHash) {
-    // HTTPS context — compare hashes
-    user = USERS.find(u => u.username === username && u.pinHash === enteredHash);
-  } else {
-    // HTTP context (e.g. local dev) — compare plain PIN
-    user = USERS.find(u => u.username === username && u.pin === pin);
+  // Block restricted tabs when day is not open (but NOT sheet popups)
+  const dayOpen = activeDay && (activeDay.status === 'OPEN');
+  if (['dash', 'add'].includes(id) && !dayOpen) {
+    _origShowPage('day');
+    setTimeout(() => showDayClosedOverlay(id), 100);
+    return;
   }
+  hideDayClosedOverlay();
+  if (currentUser) localStorage.setItem(KEY_LAST_PAGE, id);
+  _origShowPage(id);
+};
 
+function attemptLogin() {
+  const username = document.getElementById('login-user').value.trim().toLowerCase();
+  const pin = document.getElementById('login-pin').value.trim();
+  const err = document.getElementById('login-error');
+
+  const user = USERS.find(u => u.username === username && u.pin === pin);
   if (!user) {
-    _loginAttempts++;
-    if (_loginAttempts >= 5) {
-      _loginLockedUntil = Date.now() + 30000; // 30 second lockout
-      _loginAttempts = 0;
-      toast('⏳ Too many failed attempts. Locked for 30s', 'err');
-    }
     err.style.display = 'block';
     document.getElementById('login-pin').value = '';
     document.getElementById('login-pin').focus();
+    if (typeof shakeLogin !== 'undefined') shakeLogin();
     return;
   }
 
-  // Successful login — reset counters
-  _loginAttempts = 0;
   err.style.display = 'none';
-  currentUser = user;
-  // Store session with timestamp (not PIN) — session expires after 12h of inactivity
-  localStorage.setItem(KEY_SESSION, JSON.stringify({ username: user.username, ts: Date.now() }));
+  currentUser = user; // SET BEFORE showPage is called
+  localStorage.setItem(KEY_SESSION, JSON.stringify({ username: user.username, pin: user.pin }));
 
+  // Hide login screen
   document.getElementById('login-screen').style.display = 'none';
+
+  // Apply role restrictions
   applyRoleRestrictions(user);
 
+  // Update user pill
   const pill = document.getElementById('user-pill');
   if (pill) {
     pill.style.display = 'inline-flex';
-    pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + escapeHtml(user.name);
+    pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + user.name;
   }
-  const wrap = document.getElementById('user-menu-wrap');
-  if (wrap) wrap.style.display = 'block';
 
-  // Restore last page
-  const lastPage    = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
+  // Go to day page if day not open, otherwise last visited page
+  const lastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
   const allowedPage = user.tabs.includes(lastPage) ? lastPage : user.tabs[0];
+
+  // Check day status
   getBusinessDay(todayDateStr()).then(bday => {
     const dayOpen = bday && bday.status === 'OPEN';
-    if (!dayOpen && allowedPage === 'dash' && user.tabs.includes('day')) {
+    if (!dayOpen && user.tabs.includes('day')) {
       _origShowPage('day');
+      setTimeout(() => toast('⚠️ Please open the business day first.', ''), 500);
     } else {
       _origShowPage(allowedPage);
     }
   });
-  toast('Welcome, ' + escapeHtml(user.name) + '! 👋', 'ok');
-
-  } catch(e) {
-    console.error('[LOGIN]', e);
-    toast('Login error: ' + e.message, 'err');
-  }
+  toast('Welcome, ' + user.name + '! 👋', 'ok');
 }
 
 function checkSession() {
@@ -3071,14 +2584,8 @@ function checkSession() {
     return false;
   }
   try {
-    const { username, ts } = JSON.parse(saved);
-    // Session expires after 12 hours of inactivity
-    if (ts && Date.now() - ts > 12 * 60 * 60 * 1000) {
-      localStorage.removeItem(KEY_SESSION);
-      document.getElementById('login-screen').style.display = 'flex';
-      return false;
-    }
-    const user = USERS.find(u => u.username === username);
+    const { username, pin } = JSON.parse(saved);
+    const user = USERS.find(u => u.username === username && u.pin === pin);
     if (user) {
       currentUser = user;
       document.getElementById('login-screen').style.display = 'none';
@@ -3105,18 +2612,28 @@ function checkSession() {
 // ===== JQUERY ENHANCEMENTS =====
 
 
-window.addEventListener('unhandledrejection', e => {
-  console.error('[UNHANDLED]', e.reason);
-  if (e.reason && e.reason.message && e.reason.message.includes('Database')) toast('⚠️ ' + e.reason.message, 'err');
+window.addEventListener('unhandledrejection',e=>{
+  console.error('[UNHANDLED]',e.reason);
+  if(e.reason&&e.reason.message&&e.reason.message.includes('Database'))toast('⚠️ '+e.reason.message,'err');
 });
+
+// ── APP UPDATE SYSTEM ─────────────────────────────────────────────
+let _pendingWorker = null;
+function _showUpdateState(state){['current','available','installing'].forEach(s=>{const el=document.getElementById('update-state-'+s);if(el)el.style.display=s===state?'':'none';});}
+function _setUpdateLastCheck(){const el=document.getElementById('update-last-check');if(el)el.textContent='Checked: '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
+function installAppUpdate(){
+  if(!_pendingWorker)return;
+  _showUpdateState('installing');
+  let pct=0;
+  const steps=[{t:20,l:'Downloading…',d:300},{t:45,l:'Installing…',d:500},{t:70,l:'Clearing cache…',d:400},{t:90,l:'Finalising…',d:400}];
+  function run(i){if(i>=steps.length)return;const{t,l,d}=steps[i];setTimeout(()=>{pct=t;const bar=document.getElementById('update-progress-bar');const pctEl=document.getElementById('update-progress-pct');const lblEl=document.getElementById('update-progress-label');if(bar)bar.style.width=pct+'%';if(pctEl)pctEl.textContent=pct+'%';if(lblEl)lblEl.textContent=l;run(i+1);},d);}
+  run(0);
+  _pendingWorker.postMessage({type:'SKIP_WAITING'});
+}
 
 // ===== INIT =====
 initDB();
-// Wait for IndexedDB before connecting Firebase
-function initFirebaseWhenReady() {
-  if (db) { initFirebase(); } else { setTimeout(initFirebaseWhenReady, 100); }
-}
-setTimeout(initFirebaseWhenReady, 300);
+setTimeout(initFirebase, 800);
 
 // ===== AUTO SYNC =====
 let autoSyncTimer = null;
@@ -3173,578 +2690,4 @@ const _origInitFirebase = initFirebase;
 initFirebase = async function() {
   await _origInitFirebase();
   if (fbReady) startAutoSync();
-}
-// ===================================================================
-// SHOE INVENTORY SYSTEM
-//
-// Design:
-//   items store     → one record per shoe code (the product)
-//   shoe_sizes store → one record per code+size (size variants)
-//
-// Groups: S=Small/Children (20-28), M=Medium/Teens (29-36), L=Large/Adults (37-45)
-// Each size can have its own price, barcode, reorder level and qty.
-// Stock list shows ONE row per code; detail shows all sizes.
-// ===================================================================
-
-const SHOE_GROUP_DEFAULTS = {
-  S: { min: 20, max: 28, label: 'Small (Children)'  },
-  M: { min: 29, max: 36, label: 'Medium (Teens)'    },
-  L: { min: 37, max: 45, label: 'Large (Adults)'    },
 };
-
-function getShoeGroups() {
-  const saved = localStorage.getItem(KEY_SHOE_GROUPS);
-  if (!saved) return JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS));
-  try { return JSON.parse(saved); } catch(e) { return JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS)); }
-}
-
-function isFootwearType(typeName) {
-  return typeName && (
-    typeName.toLowerCase().includes('shoe') ||
-    typeName.toLowerCase().includes('footwear') ||
-    typeName.toLowerCase().includes('sandal') ||
-    typeName.toLowerCase().includes('boot')  ||
-    typeName.toLowerCase().includes('sneaker')
-  );
-}
-
-// Get all size records for a shoe code
-async function getShoeSizes(itemCode) {
-  const all = await dbAll('shoe_sizes');
-  return all.filter(s => s.itemCode === itemCode)
-            .sort((a,b) => a.size - b.size);
-}
-
-// Get total stock for a shoe code (sum of all sizes)
-async function getShoeTotal(itemCode) {
-  const sizes = await getShoeSizes(itemCode);
-  return sizes.reduce((t, s) => t + (s.qty || 0), 0);
-}
-
-// Get sizes summary string e.g. "34(3), 35(4), 36(3)"
-function buildSizesSummary(sizes) {
-  return sizes.filter(s => s.qty > 0)
-              .map(s => s.size + '(' + s.qty + ')')
-              .join(', ') || 'No stock';
-}
-
-// Upsert a shoe size record (update if code+size exists, insert if new)
-async function upsertShoeSize(sizeRecord) {
-  const all = await dbAll('shoe_sizes');
-  const existing = all.find(s => s.itemCode === sizeRecord.itemCode && s.size === sizeRecord.size);
-  if (existing) {
-    const updated = { ...existing, ...sizeRecord, id: existing.id };
-    await dbPut('shoe_sizes', updated);
-    return updated;
-  } else {
-    sizeRecord.codeSize = sizeRecord.itemCode + '_' + sizeRecord.size; // unique compound key
-    const id = await dbAdd('shoe_sizes', sizeRecord);
-    sizeRecord.id = id;
-    return sizeRecord;
-  }
-}
-
-// ─────────────────────────────────────────────────────
-// SHOE UI FUNCTIONS
-// ─────────────────────────────────────────────────────
-
-// Called when type dropdown changes — shows/hides shoe panel
-function onTypeChange() {
-  const typeEl     = document.getElementById('f-type');
-  const type       = typeEl ? typeEl.value : '';
-  const shoePanel  = document.getElementById('shoe-size-panel');
-  const stdPricing = document.getElementById('std-pricing-section');
-  const sizeField  = document.getElementById('f-size-field');
-  if (!shoePanel || !stdPricing) return;
-
-  const isShoe = isFootwearType(type);
-  shoePanel.style.display  = isShoe ? 'block' : 'none';
-  stdPricing.style.display = isShoe ? 'none'  : 'block';
-  if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
-
-  if (isShoe) {
-    // Reset shoe state on type change
-    _shoeGroup   = null;
-    _shoeSizes   = new Set();
-    _perSizeMode = false;
-    if (typeof _shownGroups !== 'undefined') _shownGroups = new Set();
-    renderShoeGroupButtons();
-    const szGrid      = document.getElementById('shoe-sizes-grid');
-    const szWrap      = document.getElementById('shoe-rows-wrap');
-    const szGridInner = document.getElementById('sz-grid');
-    if (szGrid)      szGrid.style.display = 'none';
-    if (szWrap)      szWrap.style.display = 'none';
-    if (szGridInner) szGridInner.innerHTML = '';
-    const sum = document.getElementById('shoe-selected-summary');
-    if (sum) sum.innerHTML = '';
-  }
-}
-
-
-let _shoeGroup     = null;
-let _shoeSizes     = new Set();
-let _perSizeMode   = false;
-let _isShoeSale    = false;
-let _sellShoeItem  = null;
-let _sellShoeSize  = null;
-
-function renderShoeGroupButtons() {
-  const groups = getShoeGroups();
-  ['S','M','L'].forEach(g => {
-    const btn = document.getElementById('sg-btn-' + g);
-    const rng = document.getElementById('sg-range-' + g);
-    const groupSizes = _getGroupSizes(g);
-    const hasSelected = groupSizes.some(s => _shoeSizes.has(s));
-    if (btn) {
-      btn.classList.toggle('sg-active', hasSelected || _shownGroups.has(g));
-    }
-    if (rng && groups[g]) rng.textContent = groups[g].min + '–' + groups[g].max;
-  });
-}
-
-// Track which groups have been expanded (shown)
-let _shownGroups = new Set();
-
-function _getGroupSizes(g) {
-  const groups = getShoeGroups();
-  if (!groups[g]) return [];
-  const { min, max } = groups[g];
-  return Array.from({ length: max - min + 1 }, (_, i) => min + i);
-}
-
-function selectSizeGroup(g) {
-  const groups = getShoeGroups();
-  const { min, max } = groups[g];
-  const sizes = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-  const grid  = document.getElementById('sz-grid');
-  if (!grid) return;
-
-  if (!_shownGroups.has(g)) {
-    // ── First tap: show this group ───────────────────────────────
-    _shoeGroup = g;
-    _shownGroups.add(g);
-
-    const block = document.createElement('div');
-    block.id = 'sz-group-block-' + g;
-    block.style.cssText = 'margin-bottom:10px;';
-
-    // Label — tapping the S/M/L button again calls deselectSizeGroup
-    const label = document.createElement('div');
-    label.className = 'sz-group-divider';
-    label.innerHTML =
-      '<span class="sz-group-tag sz-group-' + g + '" style="cursor:pointer;" ' +
-      'title="Tap S/M/L button again to remove this group">' +
-      (g === 'S' ? 'Small / Children' : g === 'M' ? 'Medium / Teens' : 'Large / Adults') +
-      ' (' + min + '–' + max + ') ✕</span>';
-    block.appendChild(label);
-
-    // Size buttons — horizontal flex-wrap
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
-    sizes.forEach(s => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'sz-btn' + (_shoeSizes.has(s) ? ' sz-active' : '');
-      btn.id = 'sz-' + s;
-      btn.textContent = s;
-      btn.onclick = () => toggleShoeSize(s);
-      row.appendChild(btn);
-    });
-    block.appendChild(row);
-    grid.appendChild(block);
-
-    const szGrid = document.getElementById('shoe-sizes-grid');
-    if (szGrid) szGrid.style.display = 'block';
-
-  } else {
-    // ── Second tap: DESELECT the whole group ─────────────────────
-    deselectSizeGroup(g);
-    return; // deselectSizeGroup handles all re-renders
-  }
-
-  renderShoeGroupButtons();
-  const szWrap = document.getElementById('shoe-rows-wrap');
-  if (szWrap && _shoeSizes.size > 0) szWrap.style.display = 'block';
-}
-
-// Remove a group: deselects all its sizes, removes DOM block, un-highlights btn
-function deselectSizeGroup(g) {
-  const groups = getShoeGroups();
-  if (!groups[g]) return;
-  const { min, max } = groups[g];
-
-  // Deselect all sizes in this group
-  for (let s = min; s <= max; s++) _shoeSizes.delete(s);
-
-  // Remove DOM block
-  const block = document.getElementById('sz-group-block-' + g);
-  if (block) block.remove();
-
-  _shownGroups.delete(g);
-  if (_shoeGroup === g) _shoeGroup = null;
-
-  // Hide sizes section if no groups remain
-  const grid   = document.getElementById('sz-grid');
-  const szGrid = document.getElementById('shoe-sizes-grid');
-  if (szGrid && grid && grid.children.length === 0) szGrid.style.display = 'none';
-
-  // Hide pricing if nothing selected
-  const szWrap = document.getElementById('shoe-rows-wrap');
-  if (szWrap && _shoeSizes.size === 0) szWrap.style.display = 'none';
-
-  renderShoeGroupButtons();
-  renderShoeSummary();
-  renderShoeRows();
-}
-
-function toggleShoeSize(s) {
-  if (_shoeSizes.has(s)) _shoeSizes.delete(s);
-  else _shoeSizes.add(s);
-  document.querySelectorAll('.sz-btn').forEach(b => {
-    b.classList.toggle('sz-active', _shoeSizes.has(parseInt(b.textContent)));
-  });
-  const szWrap = document.getElementById('shoe-rows-wrap');
-  if (szWrap) szWrap.style.display = _shoeSizes.size > 0 ? 'block' : 'none';
-  renderShoeRows();
-  renderShoeSummary();
-}
-
-function renderShoeSummary() {
-  const el = document.getElementById('shoe-selected-summary');
-  if (!el) return;
-  if (_shoeSizes.size === 0) { el.innerHTML = ''; return; }
-  const sorted = [..._shoeSizes].sort((a,b)=>a-b);
-  el.innerHTML = '<div class="shoe-pills-row">' +
-    sorted.map(s => '<span class="shoe-pill">' + s + '</span>').join('') +
-    '<span style="font-size:11px;color:var(--muted);margin-left:4px;align-self:center;">' +
-    sorted.length + ' size' + (sorted.length>1?'s':'') + ' selected</span></div>';
-  // Update save button to show count
-  const saveBtn = document.getElementById('save-btn');
-  const panel = document.getElementById('shoe-size-panel');
-  if (saveBtn && panel && panel.style.display !== 'none') {
-    saveBtn.textContent = '+ Save ' + sorted.length + ' shoe size' + (sorted.length>1?'s':'');
-  }
-}
-
-function renderShoeRows() {
-  const rows = document.getElementById('shoe-rows');
-  if (!rows) return;
-  if (!_perSizeMode) { rows.innerHTML = ''; return; }
-  const sorted = [..._shoeSizes].sort((a,b)=>a-b);
-  rows.innerHTML = sorted.map(s =>
-    '<div class="shoe-row">' +
-    '<span class="shoe-sz-lbl">' + s + '</span>' +
-    '<input type="number" class="shoe-cell" id="shr-qty-' + s + '" min="0" inputmode="numeric" placeholder="Qty">' +
-    '<input type="number" class="shoe-cell" id="shr-buy-' + s + '" min="0" inputmode="decimal" placeholder="Buy">' +
-    '<input type="number" class="shoe-cell" id="shr-sell-' + s + '" min="0" inputmode="decimal" placeholder="Sell">' +
-    '</div>'
-  ).join('');
-}
-
-function togglePerSizeMode() {
-  _perSizeMode = !_perSizeMode;
-  const btn = document.getElementById('per-size-toggle');
-  const sharedWrap  = document.getElementById('shoe-shared-wrap');
-  const perSizeWrap = document.getElementById('shoe-per-size-wrap');
-  if (btn) {
-    btn.classList.toggle('active', _perSizeMode);
-    btn.innerHTML = _perSizeMode
-      ? '<i class="fa-solid fa-sliders"></i> Shared Pricing'
-      : '<i class="fa-solid fa-sliders"></i> Per-Size Pricing';
-  }
-  if (sharedWrap)  sharedWrap.style.display  = _perSizeMode ? 'none'  : 'block';
-  if (perSizeWrap) perSizeWrap.style.display = _perSizeMode ? 'block' : 'none';
-  renderShoeRows();
-}
-
-// Save shoe product + size records
-async function saveShoeItems(baseCode, baseName, type) {
-  if (!_shoeGroup)           { toast('⚠️ Select a size group (S/M/L)', 'err'); return false; }
-  if (_shoeSizes.size === 0) { toast('⚠️ Select at least one size', 'err'); return false; }
-
-  // Read shared pricing
-  let sharedQty = 0, sharedBuy = 0, sharedSell = 0;
-  if (!_perSizeMode) {
-    sharedQty  = parseInt((document.getElementById('shoe-shared-qty')||{}).value) || 0;
-    sharedBuy  = parseFloat((document.getElementById('shoe-shared-buy')||{}).value) || 0;
-    sharedSell = parseFloat((document.getElementById('shoe-shared-sell')||{}).value) || 0;
-    if (sharedQty  <= 0) { toast('⚠️ Enter quantity per size', 'err'); return false; }
-    if (sharedBuy  <= 0) { toast('⚠️ Enter buying price',     'err'); return false; }
-    if (sharedSell <= 0) { toast('⚠️ Enter selling price',    'err'); return false; }
-  }
-
-  const sorted = [..._shoeSizes].sort((a,b)=>a-b);
-
-  // 1. Ensure parent product record (one per code)
-  const allItms = await dbAll('items');
-  let product = allItms.find(i => i.code === baseCode);
-  if (!product) {
-    const pid = await dbAdd('items', {
-      code: baseCode,
-      name: baseName || type + ' ' + baseCode,
-      type, category: _shoeGroup, isShoe: true,
-      defaultBuy: _perSizeMode ? 0 : sharedBuy,
-      defaultSell: _perSizeMode ? 0 : sharedSell,
-      profit: _perSizeMode ? 0 : sharedSell - sharedBuy,
-      qty: 0,
-      createdAt: new Date().toISOString(),
-    });
-    product = await dbGet('items', pid);
-  } else if (!_perSizeMode) {
-    product.defaultBuy  = sharedBuy;
-    product.defaultSell = sharedSell;
-    product.profit      = sharedSell - sharedBuy;
-    await dbPut('items', product);
-  }
-
-  // 2. Upsert each size record
-  let saved = 0;
-  for (const size of sorted) {
-    let qty, buy, sell;
-    if (_perSizeMode) {
-      qty  = parseInt((document.getElementById('shr-qty-'+size)||{}).value) || 0;
-      buy  = parseFloat((document.getElementById('shr-buy-'+size)||{}).value) || 0;
-      sell = parseFloat((document.getElementById('shr-sell-'+size)||{}).value) || 0;
-      if (qty <= 0 && sell <= 0) continue;
-    } else {
-      qty = sharedQty; buy = sharedBuy; sell = sharedSell;
-    }
-    await upsertShoeSize({
-      itemCode: baseCode, itemId: product.id,
-      size, sizeGroup: _shoeGroup,
-      qty, buyPrice: buy, sellPrice: sell, profit: sell - buy,
-      codeSize: baseCode + '_' + size,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-    });
-    saved++;
-  }
-
-  // 3. Update parent total qty
-  const allSz = await getShoeSizes(baseCode);
-  product.qty = allSz.reduce((t,s)=>t+s.qty, 0);
-  await dbPut('items', product);
-  fbSyncItem(product);
-  return saved;
-}
-
-// Tap a size card in detail sheet → show Sell / Restock / Edit actions
-async function openShoeSizeActions(itemId, size) {
-  const item    = await dbGet('items', itemId);
-  const allSz   = await getShoeSizes(item.code);
-  const sizeRec = allSz.find(s => s.size === size);
-  if (!item || !sizeRec) return;
-
-  const price  = sizeRec.sellPrice || item.defaultSell || 0;
-  const isOut  = sizeRec.qty <= 0;
-
-  // Build or reuse action sheet
-  let sheet = document.getElementById('shoe-size-action-sheet');
-  if (!sheet) {
-    sheet = document.createElement('div');
-    sheet.id = 'shoe-size-action-sheet';
-    sheet.className = 'sheet-overlay';
-    sheet.innerHTML = '<div class="sheet" id="shoe-size-action-inner"></div>';
-    sheet.addEventListener('click', e => { if (e.target === sheet) closeShoeSizeActions(); });
-    document.body.appendChild(sheet);
-  }
-
-  const inner = document.getElementById('shoe-size-action-inner');
-  inner.innerHTML =
-    '<div class="sheet-handle"></div>' +
-
-    // Size header
-    '<div style="display:flex;align-items:center;gap:14px;padding:4px 0 16px;">' +
-      '<div style="width:52px;height:52px;border-radius:var(--r-lg);background:var(--accent-light);' +
-           'display:flex;align-items:center;justify-content:center;flex-shrink:0;">' +
-        '<span style="font-size:22px;font-weight:900;font-family:var(--mono);color:var(--accent);">' + size + '</span>' +
-      '</div>' +
-      '<div>' +
-        '<div style="font-size:16px;font-weight:800;">' + escapeHtml(item.name) + ' · Size ' + size + '</div>' +
-        '<div style="font-size:13px;color:var(--muted);margin-top:2px;font-family:var(--mono);">' +
-          (isOut ? '<span style="color:var(--red);">Out of stock</span>' :
-            '<span style="color:' + (sizeRec.qty <= LOW_STOCK_LEVEL ? '#d97706' : 'var(--green)') + ';">' +
-            sizeRec.qty + ' pairs</span>') +
-          ' · ' + fmt(price) +
-        '</div>' +
-      '</div>' +
-    '</div>' +
-
-    // Action buttons
-    '<div style="display:flex;flex-direction:column;gap:8px;">' +
-
-      // Sell — only show if day open and in stock
-      (isDayOpen() && !isOut
-        ? '<button onclick="closeShoeSizeActions();setTimeout(()=>openSellShoeModal(' + itemId + ',' + size + '),80)" ' +
-          'style="width:100%;padding:16px;background:#1e7a3e;color:white;border:none;border-radius:var(--r);' +
-          'font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);display:flex;align-items:center;gap:10px;">' +
-          '<i class="fa-solid fa-cash-register" style="font-size:18px;"></i> Sell — Size ' + size +
-          '</button>'
-        : '<div style="padding:10px 0;font-size:13px;color:var(--muted);text-align:center;">' +
-          (isOut ? '⚠️ No stock for size ' + size : '📅 Open day to sell') + '</div>') +
-
-      // Restock
-      '<button onclick="closeShoeSizeActions();openShoeSizeRestock(' + itemId + ',' + size + ')" ' +
-      'style="width:100%;padding:14px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;' +
-      'border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);' +
-      'display:flex;align-items:center;gap:10px;">' +
-      '<i class="fa-solid fa-boxes-stacked" style="font-size:16px;"></i> Restock — Size ' + size +
-      '</button>' +
-
-      // Edit price
-      '<button onclick="closeShoeSizeActions();openShoeSizeEdit(' + itemId + ',' + size + ')" ' +
-      'style="width:100%;padding:14px;background:var(--surface2);color:var(--text);' +
-      'border:1px solid var(--border);border-radius:var(--r);font-size:15px;font-weight:800;' +
-      'cursor:pointer;font-family:var(--sans);display:flex;align-items:center;gap:10px;">' +
-      '<i class="fa-solid fa-pen-to-square" style="font-size:16px;"></i> Edit Price — Size ' + size +
-      '</button>' +
-
-      // Cancel
-      '<button onclick="closeShoeSizeActions()" ' +
-      'style="width:100%;padding:13px;background:transparent;border:1px solid var(--border);' +
-      'border-radius:var(--r);font-size:14px;color:var(--muted);cursor:pointer;font-family:var(--sans);">' +
-      'Cancel' +
-      '</button>' +
-
-    '</div>';
-
-  sheet.classList.add('open');
-}
-
-function closeShoeSizeActions() {
-  const sheet = document.getElementById('shoe-size-action-sheet');
-  if (sheet) sheet.classList.remove('open');
-}
-
-// Restock a specific shoe size from detail sheet
-async function openShoeSizeRestock(itemId, size) {
-  const item    = await dbGet('items', itemId);
-  const allSz   = await getShoeSizes(item.code);
-  const sizeRec = allSz.find(s => s.size === size);
-  if (!item || !sizeRec) return;
-
-  const qty = parseInt(prompt('Add stock for size ' + size + '\nCurrent: ' + sizeRec.qty + ' pairs\nHow many pairs to add?') || '0');
-  if (!qty || isNaN(qty) || qty <= 0) return;
-
-  sizeRec.qty       += qty;
-  sizeRec.updatedAt  = new Date().toISOString();
-  await dbPut('shoe_sizes', sizeRec);
-
-  // Update parent total
-  const updatedSizes = await getShoeSizes(item.code);
-  item.qty = updatedSizes.reduce((t,s) => t + s.qty, 0);
-  await dbPut('items', item);
-  fbSyncItem(item);
-
-  allItems = await dbAll('items');
-  await enrichShoeItems(allItems);
-  renderList(); renderDashboard(); updateHeader();
-  scheduleSync();
-
-  // Refresh the detail sheet
-  openSheet(itemId);
-  toast('📦 Size ' + size + ': +' + qty + ' → ' + sizeRec.qty + ' pairs', 'ok');
-}
-
-// Edit sell price for a specific shoe size
-async function openShoeSizeEdit(itemId, size) {
-  const item    = await dbGet('items', itemId);
-  const allSz   = await getShoeSizes(item.code);
-  const sizeRec = allSz.find(s => s.size === size);
-  if (!item || !sizeRec) return;
-
-  const currentPrice = sizeRec.sellPrice || item.defaultSell || 0;
-  const newPriceStr  = prompt('Edit sell price for size ' + size + '\nCurrent price: ' + fmt(currentPrice) + '\nNew price:');
-  if (!newPriceStr) return;
-  const newPrice = parseFloat(newPriceStr);
-  if (isNaN(newPrice) || newPrice <= 0) { toast('⚠️ Invalid price', 'err'); return; }
-
-  sizeRec.sellPrice  = newPrice;
-  sizeRec.profit     = newPrice - (sizeRec.buyPrice || item.defaultBuy || 0);
-  sizeRec.updatedAt  = new Date().toISOString();
-  await dbPut('shoe_sizes', sizeRec);
-  fbSyncItem(item);
-  scheduleSync();
-
-  openSheet(itemId);
-  toast('✅ Size ' + size + ' price updated to ' + fmt(newPrice), 'ok');
-}
-
-// Sell shoe — show size picker sheet
-async function openSellShoeModal(itemId, preselectedSize) {
-  const item  = await dbGet('items', itemId);
-  if (!item) { toast('Item not found', 'err'); return; }
-  const sizes = await getShoeSizes(item.code);
-  const available = sizes.filter(s => s.qty > 0);
-  if (!available.length) { toast('All sizes out of stock', 'err'); return; }
-
-  if (preselectedSize !== undefined) {
-    const sr = sizes.find(s => s.size === preselectedSize);
-    if (sr && sr.qty > 0) { _openSellModalForShoeSize(item, sr); return; }
-  }
-
-  // Show size picker
-  _sellShoeItem = item;
-  const sheetEl = document.getElementById('shoe-picker-sheet');
-  const inner   = document.getElementById('shoe-size-picker');
-  if (!inner) return;
-  inner.innerHTML =
-    '<div class="sheet-handle"></div>' +
-    '<div style="font-size:17px;font-weight:800;margin-bottom:4px;">' + escapeHtml(item.name) + '</div>' +
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;">Select size to sell</div>' +
-    '<div class="sz-grid">' +
-    available.map(s => {
-      const warn = s.qty <= LOW_STOCK_LEVEL ? 'background:#fef3c7;' : '';
-      return '<button type="button" class="sz-btn sz-active" style="height:54px;' + warn + '" ' +
-        'onclick="pickShoeSize(' + s.size + ')">' +
-        '<span style="font-size:14px;font-weight:900;display:block;">' + s.size + '</span>' +
-        '<span style="font-size:9px;opacity:.7;">' + s.qty + ' left</span>' +
-        '</button>';
-    }).join('') +
-    '</div>' +
-    '<button onclick="closeShoePickerSheet()" style="margin-top:14px;width:100%;padding:13px;background:transparent;border:1px solid var(--border);border-radius:var(--r);font-size:14px;cursor:pointer;font-family:var(--sans);">Cancel</button>';
-  sheetEl.classList.add('open');
-}
-
-function closeShoePickerSheet() {
-  document.getElementById('shoe-picker-sheet').classList.remove('open');
-}
-
-function pickShoeSize(size) {
-  closeShoePickerSheet();
-  closeShoeSizeActions();
-  if (!_sellShoeItem) return;
-  getShoeSizes(_sellShoeItem.code).then(sizes => {
-    const sr = sizes.find(s => s.size === size);
-    if (sr) _openSellModalForShoeSize(_sellShoeItem, sr);
-  });
-}
-
-function _openSellModalForShoeSize(item, sizeRec) {
-  _sellShoeItem = item;
-  _sellShoeSize = sizeRec;
-  _isShoeSale   = true;
-  currentSellItemId = item.id;
-  const price = sizeRec.sellPrice || item.defaultSell || 0;
-  const buy   = sizeRec.buyPrice  || item.defaultBuy  || 0;
-  const setEl = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
-  const setVal= (id, v) => { const el=document.getElementById(id); if(el) el.value=v; };
-  setEl('sm-item-name',  escapeHtml(item.name) + ' — Size ' + sizeRec.size);
-  setEl('sm-item-code',  item.code + '-' + sizeRec.size);
-  setEl('sm-sell-price', fmt(price));
-  setEl('sm-buy-price',  fmt(buy));
-  setEl('sm-stock',      sizeRec.qty + ' pairs');
-  const sa = document.getElementById('sm-actual');
-  if (sa) { sa.value = ''; sa.placeholder = fmt(price); }
-  setVal('sm-qty', 1);
-  const sqty = document.getElementById('sm-qty');
-  if (sqty) sqty.max = sizeRec.qty;
-  // Reset errors
-  ['sm-qty-error','sm-price-error'].forEach(id => {
-    const el = document.getElementById(id); if(el) el.style.display='none';
-  });
-  selectPayment('cash');
-  document.getElementById('sell-modal').classList.add('open');
-  updateSellModal();
-}
-
-;
