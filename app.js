@@ -474,7 +474,8 @@ function clearAddFormPhoto() {
 async function saveItem() {
   const editIdRaw = document.getElementById('edit-id').value;
 
-  if (!requireOpenDay()) return;
+  // Stock management (add/edit/restock) does NOT require an open day.
+  // Only sales (confirmSale) require the day to be open.
 
   // ── SHOE SIZE EDIT ─────────────────────────────────────────────
   if (editIdRaw && editIdRaw.startsWith('shoe_edit_')) {
@@ -1057,7 +1058,6 @@ async function deleteItem() {
 }
 
 async function editItem() {
-  if (!isDayOpen()) { toast('⚠️ Open the business day to edit items.', 'err'); return; }
   const item = await dbGet('items', currentDetailId);
   if (!item) { toast('Item not found.', 'err'); return; }
   closeSheet();
@@ -2717,7 +2717,6 @@ async function renderDaySessionsList() {
 // RESTOCK
 // ═══════════════════════════════════════════════════════════
 function toggleRestock() {
-  if (!isDayOpen()) { toast('⚠️ Open the business day to restock items.', 'err'); return; }
   const panel = document.getElementById('restock-panel');
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   if (panel.style.display === 'block') {
