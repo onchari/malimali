@@ -1161,3 +1161,30 @@ body {
 .sh-stat-val.accent2 { color:var(--accent2); }
 .sh-stat-val.accent  { color:var(--accent); }
 .sh-stat-val.green   { color:var(--green); }
+
+/* ── Shoe mode tabs (All Sizes / Per Size) ───────────────────── */
+.shoe-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.shoe-mode-tab {
+  padding: 12px 8px;
+  background: var(--surface2);
+  border: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--sans);
+  transition: all .12s;
+}
+.shoe-mode-tab:first-child { border-right: 1px solid var(--border); }
+.shoe-mode-tab.active {
+  background: var(--accent);
+  color: white;
+}

@@ -653,6 +653,12 @@ function clearForm() {
   if (typeof _shoeSizes !== 'undefined')   _shoeSizes   = new Set();
   if (typeof _perSizeMode !== 'undefined') _perSizeMode = false;
   if (typeof _shownGroups !== 'undefined') _shownGroups = new Set();
+
+  // Reset mode tabs to default (shared)
+  const modeShared  = document.getElementById('mode-tab-shared');
+  const modePerSize = document.getElementById('mode-tab-persize');
+  if (modeShared)  modeShared.classList.add('active');
+  if (modePerSize) modePerSize.classList.remove('active');
   const shoePanel  = document.getElementById('shoe-size-panel');
   const stdPricing = document.getElementById('std-pricing-section');
   const sizeField  = document.getElementById('f-size-field');
@@ -764,21 +770,6 @@ function exitRestockMode() {
   clearForm();
 }
 
-function cancelEdit() {
-  ['f-code','f-type','f-name','f-size'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) { el.disabled=false; el.style.opacity=''; el.style.cursor=''; }
-  });
-  clearForm(); clearAddFormPhoto();
-  showPage('list');
-  if (_editOriginItemId) {
-    setTimeout(() => {
-      const card = document.querySelector('[data-item-id="' + _editOriginItemId + '"]');
-      if (card) card.scrollIntoView({ behavior:'smooth', block:'center' });
-      _editOriginItemId = null;
-    }, 200);
-  }
-}
 
 function cancelEdit() { clearForm(); clearAddFormPhoto(); showPage('list'); }
 
@@ -847,13 +838,24 @@ async function renderList() {
 // ===== DETAIL SHEET =====
 
 function openSellFromSheet() {
-  if (!isDayOpen()) {
-    toast('⚠️ Open the business day to make sales.', 'err');
-    return;
-  }
+  if (!isDayOpen()) { toast('⚠️ Open the business day to make sales.', 'err'); return; }
   const id = currentDetailId;
   closeSheet();
-  setTimeout(() => openSellModal(id), 150);
+  setTimeout(async () => {
+    const item = await dbGet('items', id);
+    if (!item) { toast('Item not found', 'err'); return; }
+    if (item.isShoe) {
+      if (!_selectedShoeSize) {
+        toast('⚠️ Select a size first from the detail sheet', 'err');
+        setTimeout(() => openSheet(id), 150);
+        return;
+      }
+      openSellShoeModal(id, _selectedShoeSize);
+    } else {
+      if (item.qty <= 0) { toast('⚠️ Out of stock', 'err'); return; }
+      openSellModal(id);
+    }
+  }, 120);
 }
 
 function triggerSheetPhotoUpload(event) {
@@ -952,15 +954,40 @@ async function openSheet(id) {
   set('sh-qty', item.qty + ' pcs');
   set('sh-code-large', item.code + (item.size ? ' · ' + item.size : ''));
 
+  // ── SHOE ITEMS — load fresh sizes, show size grid ─────────────
+  const priceCols = document.getElementById('sh-price-cols');
+  const sizeSec   = document.getElementById('sh-shoe-sizes');
+  const sizebar   = document.getElementById('sh-selected-size-bar');
+  _selectedShoeSize = null; // reset selection
+
+  if (item.isShoe) {
+    const freshSizes = await getShoeSizes(item.code);
+    const totalQty   = freshSizes.reduce((t,s) => t+s.qty, 0);
+    item.qty         = totalQty;
+    // Show shoe buy/sell from defaults
+    set('sh-buy',  fmt(item.defaultBuy  || 0));
+    set('sh-sell', fmt(item.defaultSell || 0));
+    set('sh-qty',  totalQty + ' prs');
+    if (sizeSec) sizeSec.style.display = 'block';
+    if (sizebar) { sizebar.style.display = 'none'; sizebar.textContent = ''; }
+    renderShoeDetailGrid(item);
+  } else {
+    set('sh-buy',  fmt(item.buy  || 0));
+    set('sh-sell', fmt(item.sell || 0));
+    set('sh-qty',  item.qty);
+    if (sizeSec) sizeSec.style.display = 'none';
+    if (sizebar) sizebar.style.display = 'none';
+  }
+
   // Out of stock
   const outBadge = document.getElementById('sh-out-badge');
   const sellBtn = document.getElementById('sh-sell-btn');
-  if (item.qty <= 0) {
+  if (item.qty <= 0 && !item.isShoe) {
     if (outBadge) outBadge.style.display = 'block';
     if (sellBtn) { sellBtn.disabled = true; sellBtn.style.opacity = '0.4'; sellBtn.style.cursor = 'not-allowed'; sellBtn.textContent = 'OUT OF STOCK'; }
   } else {
     if (outBadge) outBadge.style.display = 'none';
-    if (sellBtn) { sellBtn.disabled = false; sellBtn.style.opacity = '1'; sellBtn.style.cursor = 'pointer'; sellBtn.textContent = 'SELL'; }
+    if (sellBtn) { sellBtn.disabled = false; sellBtn.style.opacity = '1'; sellBtn.style.cursor = 'pointer'; sellBtn.textContent = item.isShoe ? 'SELECT SIZE & SELL' : 'SELL'; }
   }
   set('sh-total', fmt(item.buy * item.qty));
   set('sh-sold', soldQty);
@@ -1032,30 +1059,71 @@ async function deleteItem() {
 async function editItem() {
   if (!isDayOpen()) { toast('⚠️ Open the business day to edit items.', 'err'); return; }
   const item = await dbGet('items', currentDetailId);
+  if (!item) { toast('Item not found.', 'err'); return; }
   closeSheet();
+
+  if (item.isShoe) {
+    const size = _selectedShoeSize;
+    if (!size) { toast('⚠️ Select a size first before editing', 'err'); setTimeout(()=>openSheet(item.id),100); return; }
+    const sizes = await getShoeSizes(item.code);
+    const sizeRec = sizes.find(s => s.size === size);
+    if (!sizeRec) { toast('Size record not found', 'err'); return; }
+    document.getElementById('edit-id').value = 'shoe_edit_' + item.id + '_' + size;
+    document.getElementById('f-type').value  = item.type || '';
+    document.getElementById('f-code').value  = item.code || '';
+    document.getElementById('f-name').value  = item.name || '';
+    document.getElementById('f-size').value  = size;
+    document.getElementById('f-qty').value   = sizeRec.qty ?? '';
+    document.getElementById('f-buy').value   = sizeRec.buyPrice  || item.defaultBuy  || '';
+    document.getElementById('f-sell').value  = sizeRec.sellPrice || item.defaultSell || '';
+    showPage('add');
+    ['f-code','f-type','f-name','f-size'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.disabled=true; el.style.opacity='0.45'; el.style.cursor='not-allowed'; }
+    });
+    const shoePanel  = document.getElementById('shoe-size-panel');
+    const stdPricing = document.getElementById('std-pricing-section');
+    const sizeField  = document.getElementById('f-size-field');
+    if (shoePanel)  shoePanel.style.display  = 'none';
+    if (stdPricing) stdPricing.style.display = 'block';
+    if (sizeField)  sizeField.style.display  = 'block';
+    document.getElementById('save-btn').textContent = '💾 Save Size ' + size;
+    document.getElementById('form-mode-label').textContent = '✏️ Edit · ' + item.code + ' Size ' + size;
+    document.getElementById('cancel-edit-btn').style.display = 'block';
+    _editOriginItemId = item.id;
+    updateProfitPreview();
+    return;
+  }
+
+  // ── STANDARD ITEM EDIT ────────────────────────────────────────
   showPage('add');
   document.getElementById('edit-id').value = item.id;
-  document.getElementById('f-type').value = item.type;
-  document.getElementById('f-code').value = item.code;
-  document.getElementById('f-name').value = item.name;
-  document.getElementById('f-size').value = item.size || '';
-  document.getElementById('f-qty').value = item.qty;
-  document.getElementById('f-buy').value = item.buy;
-  document.getElementById('f-sell').value = item.sell;
+  document.getElementById('f-type').value  = item.type  || '';
+  document.getElementById('f-code').value  = item.code  || '';
+  document.getElementById('f-name').value  = item.name  || '';
+  document.getElementById('f-size').value  = item.size  || '';
+  document.getElementById('f-qty').value   = item.qty   ?? '';
+  document.getElementById('f-buy').value   = item.buy   || '';
+  document.getElementById('f-sell').value  = item.sell  || '';
+  // Lock code and type — identifying fields
+  ['f-code','f-type'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.disabled=true; el.style.opacity='0.45'; el.style.cursor='not-allowed'; }
+  });
   document.getElementById('save-btn').textContent = '💾 Save Changes';
-  document.getElementById('form-mode-label').textContent = 'Edit Item';
+  document.getElementById('form-mode-label').textContent = '✏️ Edit · ' + (item.name || item.code);
   document.getElementById('cancel-edit-btn').style.display = 'block';
+  _editOriginItemId = item.id;
   updateProfitPreview();
-  // Load existing photo if any
   const existingPhoto = getItemPhoto(item.id);
   if (existingPhoto) {
     _addFormPhotoData = existingPhoto;
-    const photoImg = document.getElementById('add-photo-img');
+    const photoImg    = document.getElementById('add-photo-img');
     const placeholder = document.getElementById('add-photo-placeholder');
-    const removeBtn = document.getElementById('add-photo-remove');
-    if (photoImg) { photoImg.src = existingPhoto; photoImg.style.display = 'block'; }
+    const removeBtn   = document.getElementById('add-photo-remove');
+    if (photoImg)    { photoImg.src = existingPhoto; photoImg.style.display = 'block'; }
     if (placeholder) placeholder.style.display = 'none';
-    if (removeBtn) removeBtn.style.display = 'block';
+    if (removeBtn)   removeBtn.style.display = 'block';
   }
 }
 
@@ -1421,9 +1489,28 @@ async function confirmSale() {
     date:          new Date().toISOString(),
   };
 
-  item.qty -= qty;
+  if (_isShoeSale && _sellShoeSize) {
+    // Shoe sale: deduct from specific size record
+    _sellShoeSize.qty = Math.max(0, (_sellShoeSize.qty || 0) - qty);
+    _sellShoeSize.updatedAt = new Date().toISOString();
+    await dbPut('shoe_sizes', _sellShoeSize);
+    // Update parent item virtual qty
+    const allSz = await getShoeSizes(item.code);
+    item.qty = allSz.reduce((t,s) => t + s.qty, 0);
+    // Sync shoe_sizes record
+    if (fbReady && fbDb) {
+      try {
+        const { doc, setDoc } = await waitForFbImports();
+        if (!_sellShoeSize.fbId) { _sellShoeSize.fbId = 'sz_' + _sellShoeSize.codeSize; }
+        await setDoc(doc(fbDb, 'shoe_sizes', _sellShoeSize.fbId), sanitiseForFirestore({..._sellShoeSize}));
+      } catch(e) { console.warn('[SYNC] shoe size sync:', e.message); }
+    }
+  } else {
+    item.qty = Math.max(0, item.qty - qty);
+  }
   await dbPut('items', item);
-  await dbAdd('sales', sale);
+  const newSaleId = await dbAdd('sales', sale);
+  sale.id = newSaleId;
   fbSyncItem(item);
   fbSyncSale(sale);
   updateLowStockBadge();
@@ -1650,91 +1737,91 @@ const FIREBASE_CONFIG = {
 };
 
 async function initFirebase() {
-  const config = FIREBASE_CONFIG;
-  localStorage.setItem('fb_config', JSON.stringify(config));
-  const cfgInput = document.getElementById('fb-config-input');
-  if (cfgInput) cfgInput.value = JSON.stringify(config, null, 2);
   try {
     setFbStatus('connecting');
-    const { initializeApp, getFirestore, onSnapshot, collection, getApps, getApp } = await waitForFbImports();
+    const {
+      initializeApp, getApp, getApps,
+      getFirestore, onSnapshot, collection
+    } = await waitForFbImports();
 
-    // Reuse existing app to avoid duplicate app errors
-    const existingApps = getApps();
-    fbApp = existingApps.find(a => a.name === 'mandela') || initializeApp(config, 'mandela');
-    fbDb = getFirestore(fbApp);
+    // Reuse existing Firebase app to avoid "duplicate app" errors
+    const apps = getApps();
+    fbApp  = apps.find(a => a.name === 'mandela') || initializeApp(FIREBASE_CONFIG, 'mandela');
+    fbDb   = getFirestore(fbApp);
     fbReady = true;
 
-    // Unsub previous listeners
-    if (fbUnsub) { fbUnsub(); fbUnsub = null; }
-    if (window._fbUnsubSales) { window._fbUnsubSales(); window._fbUnsubSales = null; }
+    // Unsub old listeners before creating new ones
+    if (typeof fbUnsub === 'function')           { fbUnsub(); }
+    if (typeof window._fbUnsubSales === 'function') { window._fbUnsubSales(); }
+    if (typeof window._fbUnsubBd    === 'function') { window._fbUnsubBd(); }
+    fbUnsub = null; window._fbUnsubSales = null; window._fbUnsubBd = null;
 
-    // Live listener: items — processes all changes including initial load
-    const unsubItems = onSnapshot(collection(fbDb, 'items'), async snap => {
-      // Skip if we triggered this snapshot ourselves (echo prevention)
-      if (_localWriting) return;
-      const changes = snap.docChanges().filter(c => c.type !== 'modified' || !c.doc.metadata.hasPendingWrites);
-      if (!changes.length) return;
-      let needsRender = false;
-      for (const change of changes) {
-        const data = { ...change.doc.data(), fbId: change.doc.id };
-        if (change.type === 'removed') {
-          const all = await dbAll('items');
-          const local = all.find(i => i.fbId === change.doc.id);
-          if (local) { await dbDelete('items', local.id); needsRender = true; }
-        } else {
-          const all = await dbAll('items');
-          const existing = all.find(i => i.fbId === change.doc.id || i.code === data.code);
-          if (existing) { data.id = existing.id; await dbPut('items', data); }
-          else { try { delete data.id; await dbAdd('items', data); } catch(_) {} }
-          needsRender = true;
-        }
-      }
-      if (needsRender) {
-        allItems = await dbAll('items');
-        renderList(); renderDashboard(); updateHeader();
-        setFbStatus('on');
-      }
-    }, err => { setFbStatus('error'); console.error('Items listener error:', err); });
-
-    // Live listener: sales
-    const unsubSales = onSnapshot(collection(fbDb, 'sales'), async snap => {
+    // ── items listener ───────────────────────────────────────────
+    fbUnsub = onSnapshot(collection(fbDb, 'items'), async snap => {
       if (_localWriting) return;
       const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
       if (!changes.length) return;
-      for (const change of changes) {
-        const data = { ...change.doc.data(), fbId: change.doc.id };
-        if (change.type === 'removed') {
-          const all = await dbAll('sales');
-          const local = all.find(s => s.fbId === change.doc.id);
-          if (local) await dbDelete('sales', local.id);
+      const localItems = await dbAll('items');
+      const byFbId = Object.fromEntries(localItems.filter(i=>i.fbId).map(i=>[i.fbId,i]));
+      const byCode = Object.fromEntries(localItems.filter(i=>i.code).map(i=>[i.code,i]));
+      let changed = false;
+      for (const c of changes) {
+        const data = { ...c.doc.data(), fbId: c.doc.id };
+        delete data.id;
+        if (c.type === 'removed') {
+          const loc = byFbId[c.doc.id];
+          if (loc) { await dbDelete('items', loc.id); changed = true; }
         } else {
-          const all = await dbAll('sales');
-          const existing = all.find(s => s.fbId === change.doc.id);
-          if (existing) { data.id = existing.id; await dbPut('sales', data); }
-          else { try { delete data.id; await dbAdd('sales', data); } catch(_) {} }
+          const ex = byFbId[c.doc.id] || byCode[data.code];
+          if (ex) { data.id = ex.id; await dbPut('items', data); }
+          else    { try { await dbAdd('items', data); } catch(_) {} }
+          changed = true;
         }
       }
-      try { renderSellPage(); } catch(_) {}
-      try { renderDashboard(); } catch(_) {}
-    }, err => { console.error('Sales listener error:', err); });
+      if (changed) {
+        allItems = await dbAll('items');
+        await enrichShoeItems(allItems);
+        renderList(); renderDashboard(); updateHeader();
+        setFbStatus('on');
+      }
+    }, err => { setFbStatus('error'); console.error('[FB] items listener:', err.message); });
 
-    fbUnsub = unsubItems;
-    window._fbUnsubSales = unsubSales;
+    // ── sales listener ───────────────────────────────────────────
+    window._fbUnsubSales = onSnapshot(collection(fbDb, 'sales'), async snap => {
+      if (_localWriting) return;
+      const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+      if (!changes.length) return;
+      const localSales = await dbAll('sales');
+      const byFbId = Object.fromEntries(localSales.filter(s=>s.fbId).map(s=>[s.fbId,s]));
+      for (const c of changes) {
+        const data = { ...c.doc.data(), fbId: c.doc.id };
+        delete data.id;
+        if (c.type === 'removed') {
+          const loc = byFbId[c.doc.id];
+          if (loc) await dbDelete('sales', loc.id);
+        } else {
+          const ex = byFbId[c.doc.id];
+          if (ex) { data.id = ex.id; await dbPut('sales', data); }
+          else    { try { await dbAdd('sales', data); } catch(_) {} }
+        }
+      }
+      try { if (activeDay) updateDayLiveStats(); } catch(_) {}
+      try { renderDashboard(); } catch(_) {}
+    }, err => { console.error('[FB] sales listener:', err.message); });
 
     setFbStatus('on');
-    toast('☁️ Firebase connected!', 'ok');
-
-    // On connect: pull remote data to get any changes from other devices
-    // Individual writes are pushed via fbSyncItem/fbSyncSale
-    console.log('[SYNC] Firebase connected — pulling remote data');
+    toast('☁️ Firebase connected', 'ok');
+    // Pull remote data to catch any changes made on other devices
     await pullFromFirebase(true);
 
-  } catch (e) {
+  } catch(e) {
     setFbStatus('error');
+    fbReady = false;
+    console.error('[FB] initFirebase error:', e);
     toast('Firebase error: ' + e.message, 'err');
-    console.error('Firebase init error:', e);
   }
 }
+
 
 function waitForFbImports() {
   return new Promise((res, rej) => {
@@ -1785,7 +1872,8 @@ async function fbSyncSale(sale) {
   try {
     const { doc, setDoc } = await waitForFbImports();
     if (!sale.fbId) {
-      sale.fbId = 'sale_' + (sale.date||'').replace(/[:.TZ]/g,'-').slice(0,19) + '_' + (sale.itemCode||'x');
+      const safeDate = (sale.date||new Date().toISOString()).replace(/[^0-9]/g,'').slice(0,14);
+      sale.fbId = 'sale_' + safeDate + '_' + (sale.itemCode||'x').replace(/[^a-zA-Z0-9_-]/g,'_') + '_' + (sale.id||Math.random().toString(36).slice(2,6));
       if (sale.id) await dbPut('sales', sale);
     }
     const data = sanitiseForFirestore({ ...sale });
@@ -1838,13 +1926,41 @@ async function forcePushToFirebase(silent = false) {
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
 
-    await batch.commit();
+    // Push shoe_sizes
+    const shoeSizes = await dbAll('shoe_sizes');
+    for (const sz of shoeSizes) {
+      if (!sz.codeSize) continue;
+      if (!sz.fbId) { sz.fbId = 'sz_' + sz.codeSize; await dbPut('shoe_sizes', sz); }
+      batch.set(doc(fbDb, 'shoe_sizes', sz.fbId), sanitiseForFirestore({...sz}));
+      count++;
+      if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
+    }
+
+    // Push finances
+    const finances = await dbAll('finances');
+    for (const f of finances) {
+      if (!f.fbId) { f.fbId = 'fin_' + (f.createdAt||'').replace(/[:.TZ]/g,'-') + '_' + (f.id||Math.random().toString(36).slice(2,6)); await dbPut('finances', f); }
+      batch.set(doc(fbDb, 'finances', f.fbId), sanitiseForFirestore({...f}));
+      count++;
+      if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
+    }
+
+    // Push business_days
+    const bdays = await dbAll('business_days');
+    for (const bd of bdays) {
+      if (!bd.fbId) { bd.fbId = 'bd_' + (bd.business_date||'unknown'); await dbPut('business_days', bd); }
+      batch.set(doc(fbDb, 'business_days', bd.fbId), sanitiseForFirestore({...bd}));
+      count++;
+      if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
+    }
+
+    if (count > 0) await batch.commit();
     setFbStatus('on');
-    if (!silent) toast('⬆️ Pushed ' + items.length + ' items + ' + sales.length + ' sales', 'ok');
-  } catch (e) {
+    if (!silent) toast('⬆️ Synced ' + items.length + ' items · ' + sales.length + ' sales · ' + shoeSizes.length + ' sizes', 'ok');
+  } catch(e) {
     setFbStatus('error');
-    if (!silent) toast('Push failed: ' + e.message, 'err');
-    console.error('Push error:', e);
+    if (!silent) toast('Sync error: ' + e.message, 'err');
+    console.error('[SYNC] push error:', e);
   }
 }
 
@@ -1901,7 +2017,35 @@ async function pullFromFirebase(silent = false) {
     }
     console.log('[SYNC] Sales: added=' + salesAdded + ' updated=' + salesUpdated);
 
+    // Pull shoe_sizes
+    try {
+      const szSnap = await getDocs(collection(fbDb, 'shoe_sizes'));
+      const localSizes = await dbAll('shoe_sizes');
+      const szByFbId = Object.fromEntries(localSizes.filter(s=>s.fbId).map(s=>[s.fbId,s]));
+      const szByCS   = Object.fromEntries(localSizes.filter(s=>s.codeSize).map(s=>[s.codeSize,s]));
+      for (const d of szSnap.docs) {
+        const data = { ...d.data(), fbId: d.id }; delete data.id;
+        const ex = szByFbId[d.id] || szByCS[data.codeSize];
+        if (ex) { data.id = ex.id; await dbPut('shoe_sizes', data); }
+        else    { try { await dbAdd('shoe_sizes', data); } catch(_) {} }
+      }
+    } catch(_) {}
+
+    // Pull finances
+    try {
+      const finSnap = await getDocs(collection(fbDb, 'finances'));
+      const localFin = await dbAll('finances');
+      const finByFbId = Object.fromEntries(localFin.filter(f=>f.fbId).map(f=>[f.fbId,f]));
+      for (const d of finSnap.docs) {
+        const data = { ...d.data(), fbId: d.id }; delete data.id;
+        const ex = finByFbId[d.id];
+        if (ex) { data.id = ex.id; await dbPut('finances', data); }
+        else    { try { await dbAdd('finances', data); } catch(_) {} }
+      }
+    } catch(_) {}
+
     allItems = await dbAll('items');
+    await enrichShoeItems(allItems);
     renderList(); renderDashboard(); updateHeader();
     try { renderSellPage(); } catch(_) {}
     setFbStatus('on');
@@ -3160,12 +3304,11 @@ async function saveFinanceEntry() {
   if (!type)              { toast('⚠️ Select a transaction type', 'err'); return; }
   if (!amount || amount<=0){ toast('⚠️ Enter a valid amount', 'err'); return; }
 
-  const categoryEl = document.getElementById('fin-category');
   const entry = {
     type,
     amount,
     description: desc,
-    category:    categoryEl ? categoryEl.value : 'other',
+    category:    'other',
     date,
     createdAt:   new Date().toISOString(),
     createdBy:   currentUser ? currentUser.username : 'system',
@@ -3303,9 +3446,22 @@ async function upsertShoeSize(record) {
     return updated;
   } else {
     record.codeSize = record.itemCode + '_' + record.size;
-    const id = await dbAdd('shoe_sizes', record);
-    record.id = id;
-    return record;
+    try {
+      const id = await dbAdd('shoe_sizes', record);
+      record.id = id;
+      return record;
+    } catch(e) {
+      if (e.name === 'ConstraintError') {
+        // Unique codeSize violation — find and update existing
+        const byCS = all.find(s => s.codeSize === record.codeSize);
+        if (byCS) {
+          const updated = { ...byCS, ...record, id: byCS.id };
+          await dbPut('shoe_sizes', updated);
+          return updated;
+        }
+      }
+      throw e;
+    }
   }
 }
 
@@ -3427,6 +3583,8 @@ function selectSizeGroup(g) {
   renderShoeGroupButtons();
   const szWrap = document.getElementById('shoe-rows-wrap');
   if (szWrap && _shoeSizes.size > 0) szWrap.style.display = 'block';
+  // Rebuild per-size rows if in per-size mode
+  if (_perSizeMode) renderShoeRows();
 }
 
 function deselectSizeGroup(g) {
@@ -3450,12 +3608,17 @@ function deselectSizeGroup(g) {
 
 function toggleShoeSize(s) {
   if (_shoeSizes.has(s)) _shoeSizes.delete(s); else _shoeSizes.add(s);
+
+  // Update button appearance
   document.querySelectorAll('.sz-btn').forEach(b => {
     b.classList.toggle('sz-active', _shoeSizes.has(parseInt(b.textContent)));
   });
+
   const szWrap = document.getElementById('shoe-rows-wrap');
   if (szWrap) szWrap.style.display = _shoeSizes.size > 0 ? 'block' : 'none';
-  renderShoeRows();
+
+  // If switching to persize and rows already rendered, rebuild them
+  if (_perSizeMode) renderShoeRows();
   renderShoeSummary();
 }
 
@@ -3490,19 +3653,26 @@ function renderShoeRows() {
   ).join('');
 }
 
-function togglePerSizeMode() {
-  _perSizeMode = !_perSizeMode;
-  const btn        = document.getElementById('per-size-toggle');
-  const sharedWrap = document.getElementById('shoe-shared-wrap');
-  const perWrap    = document.getElementById('shoe-per-size-wrap');
-  if (btn) {
-    btn.classList.toggle('active', _perSizeMode);
-    btn.innerHTML = '<i class="fa-solid fa-sliders"></i> ' + (_perSizeMode ? 'Shared Pricing' : 'Per-Size Pricing');
-  }
-  if (sharedWrap) sharedWrap.style.display = _perSizeMode ? 'none' : 'block';
-  if (perWrap)    perWrap.style.display    = _perSizeMode ? 'block' : 'none';
-  renderShoeRows();
+// Switch between Shared (all sizes) and Per-Size pricing modes
+function setShoeMode(mode) {
+  _perSizeMode = (mode === 'persize');
+
+  // Update tab buttons
+  document.getElementById('mode-tab-shared') .classList.toggle('active', !_perSizeMode);
+  document.getElementById('mode-tab-persize').classList.toggle('active',  _perSizeMode);
+
+  // Show/hide panels
+  const sharedWrap  = document.getElementById('shoe-shared-wrap');
+  const perSizeWrap = document.getElementById('shoe-per-size-wrap');
+  if (sharedWrap)  sharedWrap.style.display  = _perSizeMode ? 'none'  : 'block';
+  if (perSizeWrap) perSizeWrap.style.display = _perSizeMode ? 'block' : 'none';
+
+  // Rebuild per-size rows when switching to per-size
+  if (_perSizeMode) renderShoeRows();
 }
+
+// Keep old togglePerSizeMode as alias so any lingering calls don't break
+function togglePerSizeMode() { setShoeMode(_perSizeMode ? 'shared' : 'persize'); }
 
 // Save shoe items: one parent + one shoe_sizes record per size
 async function saveShoeItems(baseCode, baseName, type) {
@@ -3564,6 +3734,16 @@ async function saveShoeItems(baseCode, baseName, type) {
   product.qty   = allSz.reduce((t,s) => t + s.qty, 0);
   await dbPut('items', product);
   fbSyncItem(product);
+  // Sync shoe_sizes to Firebase
+  if (fbReady && fbDb) {
+    try {
+      const { doc, setDoc } = await waitForFbImports();
+      for (const sz of allSz) {
+        if (!sz.fbId) { sz.fbId = 'sz_' + sz.codeSize; await dbPut('shoe_sizes', sz); }
+        await setDoc(doc(fbDb, 'shoe_sizes', sz.fbId), sanitiseForFirestore({...sz}));
+      }
+    } catch(e) { console.warn('[SYNC] shoe_sizes sync error:', e.message); }
+  }
   return saved;
 }
 

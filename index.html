@@ -33,7 +33,7 @@
        Exports all needed symbols to window._fbImports so the
        non-module app.js can access them. -->
   <script type="module">
-    import { initializeApp, getApps }
+    import { initializeApp, getApp, getApps }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import {
       getFirestore, collection, doc, setDoc, deleteDoc,
@@ -41,7 +41,7 @@
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     window._fbImports = {
-      initializeApp, getApps,
+      initializeApp, getApp, getApps,
       getFirestore, collection, doc, setDoc, deleteDoc,
       getDocs, onSnapshot, writeBatch, serverTimestamp
     };
@@ -453,32 +453,57 @@
 
     <div id="shoe-rows-wrap" style="display:none;">
       <div class="add-section-title">Qty &amp; Pricing</div>
-      <div class="add-section">
-        <div class="shoe-info-bar">
-          <i class="fa-solid fa-circle-info"></i>
-          Applied to all selected sizes
+      <div class="add-section" style="padding-bottom:10px;">
+
+        <!-- ── Mode toggle tabs ─────────────────────────────── -->
+        <div class="shoe-mode-tabs">
+          <button type="button" id="mode-tab-shared" class="shoe-mode-tab active"
+                  onclick="setShoeMode('shared')">
+            📋 All Sizes
+          </button>
+          <button type="button" id="mode-tab-persize" class="shoe-mode-tab"
+                  onclick="setShoeMode('persize')">
+            🎯 Per Size
+          </button>
         </div>
-        <div class="add-row-3">
-          <div class="add-field">
-            <label class="add-label">Qty <span class="add-required">*</span></label>
-            <input class="add-input add-center" id="shoe-shared-qty" type="number" min="0" inputmode="numeric" placeholder="0">
+
+        <!-- ── Shared mode (default) ────────────────────────── -->
+        <div id="shoe-shared-wrap">
+          <div class="shoe-info-bar">
+            <i class="fa-solid fa-circle-info"></i>
+            Same qty &amp; price for all selected sizes
           </div>
-          <div class="add-field">
-            <label class="add-label">Buy <span class="add-required">*</span></label>
-            <input class="add-input add-center" id="shoe-shared-buy" type="number" min="0" inputmode="decimal" placeholder="0">
-          </div>
-          <div class="add-field">
-            <label class="add-label">Sell <span class="add-required">*</span></label>
-            <input class="add-input add-center" id="shoe-shared-sell" type="number" min="0" inputmode="decimal" placeholder="0">
+          <div class="add-row-3">
+            <div class="add-field">
+              <label class="add-label">Qty/size <span class="add-required">*</span></label>
+              <input class="add-input add-center" id="shoe-shared-qty"
+                     type="number" min="0" inputmode="numeric" placeholder="0">
+            </div>
+            <div class="add-field">
+              <label class="add-label">Buy (KES) <span class="add-required">*</span></label>
+              <input class="add-input add-center" id="shoe-shared-buy"
+                     type="number" min="0" inputmode="decimal" placeholder="0">
+            </div>
+            <div class="add-field">
+              <label class="add-label">Sell (KES) <span class="add-required">*</span></label>
+              <input class="add-input add-center" id="shoe-shared-sell"
+                     type="number" min="0" inputmode="decimal" placeholder="0">
+            </div>
           </div>
         </div>
-        <button type="button" id="per-size-toggle" onclick="togglePerSizeMode()" class="shoe-per-size-toggle">
-          <i class="fa-solid fa-sliders"></i> Per-Size Pricing
-        </button>
-        <div id="shoe-per-size-wrap" style="display:none;margin-top:10px;">
-          <div class="shoe-row-hdr"><span>Size</span><span>Qty</span><span>Buy</span><span>Sell</span></div>
+
+        <!-- ── Per-size mode ────────────────────────────────── -->
+        <div id="shoe-per-size-wrap" style="display:none;">
+          <div class="shoe-info-bar" style="background:#fef3c7;border-color:#fcd34d;">
+            <i class="fa-solid fa-sliders" style="color:#92400e;"></i>
+            Enter qty &amp; price for each size individually
+          </div>
+          <div class="shoe-row-hdr" id="shoe-row-hdr">
+            <span>Size</span><span>Qty</span><span>Buy</span><span>Sell</span>
+          </div>
           <div id="shoe-rows"></div>
         </div>
+
       </div>
     </div>
   </div>
