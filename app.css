@@ -1151,3 +1151,13 @@ body {
 .fin-action-btn.green { background:#1e7a3e;color:white; }
 .fin-action-btn.blue  { background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd; }
 .fin-action-btn.grey  { background:var(--surface2);color:var(--text);border:1px solid var(--border); }
+
+/* ── Detail sheet stat boxes ─────────────────────────────────── */
+.sh-stat-box { padding:8px 4px;border:1px solid var(--border);border-radius:var(--r);text-align:center;background:var(--surface2); }
+.sh-stat-box.accent-bg { background:var(--accent-light); }
+.sh-stat-lbl { font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px; }
+.sh-stat-val { font-size:13px;font-weight:900;font-family:var(--mono);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.sh-stat-val.muted   { color:var(--muted); }
+.sh-stat-val.accent2 { color:var(--accent2); }
+.sh-stat-val.accent  { color:var(--accent); }
+.sh-stat-val.green   { color:var(--green); }

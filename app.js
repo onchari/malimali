@@ -103,10 +103,6 @@ function initDB() {
       const bday     = await getBusinessDay(today);
       const dayOpen  = bday && bday.status === 'OPEN';
 
-      if (!dayOpen && lastPage !== 'day' && lastPage !== 'settings') {
-        setTimeout(() => toast('⚠️ Business day not open yet', ''), 1000);
-      }
-
       const allowedPage = currentUser && currentUser.tabs.includes(lastPage)
         ? lastPage : currentUser.tabs[0];
       _origShowPage(allowedPage);
@@ -115,6 +111,63 @@ function initDB() {
 }
 
 // Migrate old field names → normalized names
+// ── IndexedDB helpers ─────────────────────────────────────────────
+function _dbReady(rej) {
+  if (!db) { const e = new Error('Database not ready'); if (rej) rej(e); return false; } return true;
+}
+function dbAll(store) {
+  return new Promise((res, rej) => {
+    if (!_dbReady(rej)) return;
+    try {
+      const tx = db.transaction(store, 'readonly');
+      tx.objectStore(store).getAll().onsuccess = e => res(e.target.result || []);
+      tx.onerror = e => rej(e.target.error);
+    } catch(e) { rej(e); }
+  });
+}
+function dbGet(store, id) {
+  return new Promise((res, rej) => {
+    if (!_dbReady(rej)) return;
+    try {
+      const tx = db.transaction(store, 'readonly');
+      tx.objectStore(store).get(id).onsuccess = e => res(e.target.result);
+      tx.onerror = e => rej(e.target.error);
+    } catch(e) { rej(e); }
+  });
+}
+function dbAdd(store, data) {
+  return new Promise((res, rej) => {
+    if (!_dbReady(rej)) return;
+    try {
+      const tx  = db.transaction(store, 'readwrite');
+      const req = tx.objectStore(store).add(data);
+      req.onsuccess = e => res(e.target.result);
+      tx.onerror = e => rej(e.target.error);
+    } catch(e) { rej(e); }
+  });
+}
+function dbPut(store, data) {
+  return new Promise((res, rej) => {
+    if (!_dbReady(rej)) return;
+    try {
+      const tx  = db.transaction(store, 'readwrite');
+      const req = tx.objectStore(store).put(data);
+      req.onsuccess = e => res(e.target.result);
+      tx.onerror = e => rej(e.target.error);
+    } catch(e) { rej(e); }
+  });
+}
+function dbDelete(store, id) {
+  return new Promise((res, rej) => {
+    if (!_dbReady(rej)) return;
+    try {
+      const tx = db.transaction(store, 'readwrite');
+      tx.objectStore(store).delete(id).onsuccess = e => res(e.target.result);
+      tx.onerror = e => rej(e.target.error);
+    } catch(e) { rej(e); }
+  });
+}
+
 async function migrateData() {
   try {
     const sales = await dbAll('sales');
@@ -1294,7 +1347,7 @@ async function openSellModal(itemId) {
   document.getElementById('sm-meta').textContent = item.code + (item.size ? ' · ' + item.size : '');
   document.getElementById('sm-stock').textContent = item.qty;
   document.getElementById('sm-sell').textContent = fmt(item.sell);
-  document.getElementById('sm-profit').textContent = (item.profit >= 0 ? '+' : '') + fmt(item.profit);
+  const _tpel=document.getElementById('sm-total-profit'); if(_tpel) _tpel.textContent = (item.profit >= 0 ? '+' : '') + fmt(item.profit);
   document.getElementById('sm-cur').textContent = currency;
   document.getElementById('sm-qty').value = 1;
   document.getElementById('sm-qty').max = item.qty;
@@ -1344,7 +1397,7 @@ async function confirmSale() {
   const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : item.sell;
   if (priceUsed <= 0) { toast('⚠️ No selling price set on this item', 'err'); return; }
 
-  const paymentMethod = (document.getElementById('pay-mpesa') && document.getElementById('pay-mpesa').classList.contains('active')) ? 'mpesa' : 'cash';
+  const paymentMethod = _selectedPayment || 'cash';
   const sale = {
     // Item reference
     itemId:        item.id,
@@ -1645,7 +1698,8 @@ async function initFirebase() {
 
     // Live listener: sales
     const unsubSales = onSnapshot(collection(fbDb, 'sales'), async snap => {
-      const changes = snap.docChanges();
+      if (_localWriting) return;
+      const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
       if (!changes.length) return;
       for (const change of changes) {
         const data = { ...change.doc.data(), fbId: change.doc.id };
@@ -1670,10 +1724,9 @@ async function initFirebase() {
     setFbStatus('on');
     toast('☁️ Firebase connected!', 'ok');
 
-    // On connect: first push local data, then pull remote data
-    // This ensures both devices are in sync
-    console.log('[SYNC] Firebase connected — running initial push + pull');
-    await forcePushToFirebase(true);
+    // On connect: pull remote data to get any changes from other devices
+    // Individual writes are pushed via fbSyncItem/fbSyncSale
+    console.log('[SYNC] Firebase connected — pulling remote data');
     await pullFromFirebase(true);
 
   } catch (e) {
@@ -1684,8 +1737,14 @@ async function initFirebase() {
 }
 
 function waitForFbImports() {
-  return new Promise(res => {
-    const check = () => window._fbImports ? res(window._fbImports) : setTimeout(check, 100);
+  return new Promise((res, rej) => {
+    let attempts = 0;
+    const check = () => {
+      if (window._fbImports) { res(window._fbImports); return; }
+      if (window._fbImports === null) { rej(new Error('Firebase SDK failed to load')); return; }
+      if (++attempts > 150) { rej(new Error('Firebase SDK timeout after 15s')); return; }
+      setTimeout(check, 100);
+    };
     check();
   });
 }
@@ -1725,9 +1784,15 @@ async function fbSyncSale(sale) {
   if (!fbReady || !fbDb) return;
   try {
     const { doc, setDoc } = await waitForFbImports();
-    const fbId = 'sale_' + sale.date.replace(/[:.]/g, '-') + '_' + (sale.itemCode || '');
-    await setDoc(doc(fbDb, 'sales', fbId), { ...sale, fbId });
-  } catch (e) { console.error('fbSyncSale error', e); }
+    if (!sale.fbId) {
+      sale.fbId = 'sale_' + (sale.date||'').replace(/[:.TZ]/g,'-').slice(0,19) + '_' + (sale.itemCode||'x');
+      if (sale.id) await dbPut('sales', sale);
+    }
+    const data = sanitiseForFirestore({ ...sale });
+    _localWriting = true;
+    await setDoc(doc(fbDb, 'sales', sale.fbId), data);
+    setTimeout(() => { _localWriting = false; }, 2000);
+  } catch(e) { _localWriting = false; console.error('[SYNC] fbSyncSale error:', e.message); }
 }
 
 function sanitiseForFirestore(obj){
@@ -1758,7 +1823,7 @@ async function forcePushToFirebase(silent = false) {
         item.fbId = 'itm_' + (item.code || 'x').toLowerCase().replace(/[^a-z0-9]/g,'') + '_' + (item.size || 'ns').toLowerCase().replace(/[^a-z0-9]/g,'');
         await dbPut('items', item);
       }
-      batch.set(doc(fbDb, 'items', item.fbId), { ...item, updatedAt: new Date().toISOString() });
+      batch.set(doc(fbDb, 'items', item.fbId), sanitiseForFirestore({ ...item, updatedAt: new Date().toISOString() }));
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
@@ -1768,7 +1833,7 @@ async function forcePushToFirebase(silent = false) {
         sale.fbId = 'sale_' + (sale.date || '').replace(/[:.TZ-]/g,'').slice(0,17) + '_' + Math.random().toString(36).slice(2,6);
         await dbPut('sales', sale);
       }
-      batch.set(doc(fbDb, 'sales', sale.fbId), { ...sale });
+      batch.set(doc(fbDb, 'sales', sale.fbId), sanitiseForFirestore({ ...sale }));
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
@@ -1798,42 +1863,40 @@ async function pullFromFirebase(silent = false) {
     const itemSnap = await getDocs(collection(fbDb, 'items'));
     console.log('[SYNC] Firebase has', itemSnap.size, 'items');
 
+    // Batch: load all local items once, build index by fbId and code
+    const localItems = await dbAll('items');
+    const itemsByFbId = Object.fromEntries(localItems.filter(i=>i.fbId).map(i=>[i.fbId,i]));
+    const itemsByCode = Object.fromEntries(localItems.filter(i=>i.code).map(i=>[i.code,i]));
     let itemsAdded = 0, itemsUpdated = 0;
     for (const d of itemSnap.docs) {
       const data = { ...d.data(), fbId: d.id };
-      // Remove numeric id from Firebase data to avoid IndexedDB key conflicts
       delete data.id;
-      const all = await dbAll('items');
-      const existing = all.find(i => i.fbId === d.id || i.code === data.code);
+      const existing = itemsByFbId[d.id] || itemsByCode[data.code];
       if (existing) {
         data.id = existing.id;
         await dbPut('items', data);
         itemsUpdated++;
       } else {
-        await dbAdd('items', data);
-        itemsAdded++;
+        try { await dbAdd('items', data); itemsAdded++; } catch(_) {}
       }
     }
     console.log('[SYNC] Items: added=' + itemsAdded + ' updated=' + itemsUpdated);
 
-    // Pull sales
-    console.log('[SYNC] Pulling sales from Firebase...');
+    // Pull sales — batch local load
     const saleSnap = await getDocs(collection(fbDb, 'sales'));
-    console.log('[SYNC] Firebase has', saleSnap.size, 'sales');
-
+    const localSales = await dbAll('sales');
+    const salesByFbId = Object.fromEntries(localSales.filter(s=>s.fbId).map(s=>[s.fbId,s]));
     let salesAdded = 0, salesUpdated = 0;
     for (const d of saleSnap.docs) {
       const data = { ...d.data(), fbId: d.id };
       delete data.id;
-      const all = await dbAll('sales');
-      const existing = all.find(s => s.fbId === d.id);
+      const existing = salesByFbId[d.id];
       if (existing) {
         data.id = existing.id;
         await dbPut('sales', data);
         salesUpdated++;
       } else {
-        await dbAdd('sales', data);
-        salesAdded++;
+        try { await dbAdd('sales', data); salesAdded++; } catch(_) {}
       }
     }
     console.log('[SYNC] Sales: added=' + salesAdded + ' updated=' + salesUpdated);
@@ -2133,7 +2196,8 @@ async function closeDay() {
   if (!isDayOpen()) { toast('No open day to close.', 'err'); return; }
 
   const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.business_date === activeDay.business_date);
+  const _dayDate = activeDay.business_date;
+  const daySales = sales.filter(s => (s.businessDate||s.business_date) === _dayDate);
   const revenue   = daySales.reduce((s, x) => s + x.revenue, 0);
   const profit    = daySales.reduce((s, x) => s + x.profit, 0);
   const itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
@@ -2206,7 +2270,8 @@ async function confirmCloseDay() {
   const notes = (document.getElementById('ds-notes') || {}).value || '';
   const now   = new Date();
   const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.business_date === activeDay.business_date);
+  const _dayDate = activeDay.business_date;
+  const daySales = sales.filter(s => (s.businessDate||s.business_date) === _dayDate);
   const items = await dbAll('items');
   const todayStart2 = activeDay.business_date + 'T00:00:00';
   const purchases = items.filter(i => i.createdAt && i.createdAt >= todayStart2);
@@ -2248,6 +2313,48 @@ function startBannerClock() {
 
 // ── AUTO SCHEDULER ───────────────────────────────────────────────────
 // Checks every 30s for time-triggered actions
+// ── VOID SALE ─────────────────────────────────────────────────────
+async function voidSale(saleId) {
+  if (!confirm('Void this sale? Stock will be restored.')) return;
+  const sale = await dbGet('sales', saleId);
+  if (!sale) { toast('Sale not found', 'err'); return; }
+
+  // Restore stock
+  const item = await dbGet('items', sale.itemId);
+  if (item) {
+    if (item.isShoe && (sale.itemSize || sale.size)) {
+      // Restore shoe size qty
+      const sizes = await getShoeSizes(item.code);
+      const sz = sizes.find(s => s.size === parseInt(sale.itemSize || sale.size));
+      if (sz) {
+        sz.qty += (sale.qty || 1);
+        sz.updatedAt = new Date().toISOString();
+        await dbPut('shoe_sizes', sz);
+        const allSz = await getShoeSizes(item.code);
+        item.qty = allSz.reduce((t,s) => t+s.qty, 0);
+      } else {
+        item.qty += (sale.qty || 1);
+      }
+    } else {
+      item.qty += (sale.qty || 1);
+    }
+    item.updatedAt = new Date().toISOString();
+    await dbPut('items', item);
+    fbSyncItem(item);
+  }
+
+  // Delete sale record
+  await dbDelete('sales', saleId);
+
+  // Refresh
+  allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
+  renderList(); renderDashboard(); updateHeader();
+  if (activeDay) updateDayLiveStats();
+  scheduleSync();
+  toast('↩️ Sale voided · stock restored', 'ok');
+}
+
 function startDayTimer() {
   if (dayCheckTimer) clearInterval(dayCheckTimer);
   dayCheckTimer = setInterval(async () => {
@@ -2266,7 +2373,7 @@ function startDayTimer() {
     // 11:59:55 PM — auto-close the open day
     if (bday.status === 'OPEN' && h === 23 && m === 59 && s >= 55) {
       const sales = await dbAll('sales');
-      const ds = sales.filter(s => s.business_date === today);
+      const ds = sales.filter(s => (s.businessDate||s.business_date) === today);
       bday.status     = 'CLOSED';
       bday.closed_at  = now.toISOString();
       bday.auto_closed = true;
@@ -2388,7 +2495,8 @@ function updateDayBanner() {
 async function updateDayLiveStats() {
   if (!activeDay) return;
   const sales = await dbAll('sales');
-  const daySales = sales.filter(s => s.business_date === activeDay.business_date);
+  const _dayDate = activeDay.business_date;
+  const daySales = sales.filter(s => (s.businessDate||s.business_date) === _dayDate);
   const rev   = daySales.reduce((a, s) => a + s.revenue, 0);
   const profit = daySales.reduce((a, s) => a + s.profit, 0);
   const count = daySales.length;
@@ -2885,7 +2993,7 @@ function attemptLogin() {
 
   err.style.display = 'none';
   currentUser = user; // SET BEFORE showPage is called
-  localStorage.setItem(KEY_SESSION, JSON.stringify({ username: user.username, pin: user.pin }));
+  localStorage.setItem(KEY_SESSION, JSON.stringify({ username: user.username, ts: Date.now() }));
 
   // Hide login screen
   document.getElementById('login-screen').style.display = 'none';
@@ -2905,29 +3013,22 @@ function attemptLogin() {
   const allowedPage = user.tabs.includes(lastPage) ? lastPage : user.tabs[0];
 
   // Check day status
-  getBusinessDay(todayDateStr()).then(bday => {
-    const dayOpen = bday && bday.status === 'OPEN';
-    if (!dayOpen && user.tabs.includes('day')) {
-      _origShowPage('day');
-      setTimeout(() => toast('⚠️ Please open the business day first.', ''), 500);
-    } else {
-      _origShowPage(allowedPage);
-    }
-  });
+  // No forced redirect to day — user navigates manually
+  _origShowPage(allowedPage);
   toast('Welcome, ' + user.name + '! 👋', 'ok');
 }
 
 function checkSession() {
   const saved = localStorage.getItem(KEY_SESSION);
-  if (!saved) {
-    // No session — show login screen
-    document.getElementById('login-screen').style.display = 'flex';
-    return false;
-  }
+  if (!saved) { document.getElementById('login-screen').style.display = 'flex'; return false; }
   try {
-    const { username, pin } = JSON.parse(saved);
-    const user = USERS.find(u => u.username === username && u.pin === pin);
-    if (user) {
+    const { username, ts } = JSON.parse(saved);
+    const SESSION_TTL = 12 * 60 * 60 * 1000; // 12 hours
+    const expired = ts && (Date.now() - ts) > SESSION_TTL;
+    const user = USERS.find(u => u.username === username);
+    if (user && !expired) {
+      // Refresh timestamp (sliding window)
+      localStorage.setItem(KEY_SESSION, JSON.stringify({ username, ts: Date.now() }));
       currentUser = user;
       document.getElementById('login-screen').style.display = 'none';
       applyRoleRestrictions(user);
@@ -2936,7 +3037,7 @@ function checkSession() {
         pill.style.display = 'inline-flex';
         pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + user.name;
       }
-      return true; // session valid, let caller handle navigation
+      return true;
     } else {
       localStorage.removeItem(KEY_SESSION);
       document.getElementById('login-screen').style.display = 'flex';
