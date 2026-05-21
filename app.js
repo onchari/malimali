@@ -207,6 +207,27 @@ let currentDetailId = null;
 
 // ===== HELPERS =====
 function fmtN(n) { return Number(n || 0).toLocaleString(); }
+
+// ── Core utilities ─────────────────────────────────────────────────
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function sanitiseCode(raw) {
+  return (raw || '').trim().toUpperCase().replace(/[^A-Z0-9\-.]/g, '');
+}
+
+function fmt(n) {
+  const cur = (typeof currency !== 'undefined' ? currency : 'KES');
+  const val = parseFloat(n) || 0;
+  return cur + ' ' + val.toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
 function toast(msg, type = '') {
   const t = document.getElementById('toast');
   if (!t) return;
@@ -550,7 +571,7 @@ async function saveItem() {
 
   // Read common fields
   const type = document.getElementById('f-type').value;
-  const code = sanitiseCode ? sanitiseCode(document.getElementById('f-code').value) : document.getElementById('f-code').value.trim().toUpperCase();
+  const code = sanitiseCode(document.getElementById('f-code').value);
   const name = (document.getElementById('f-name').value||'').trim().replace(/\s+/g,' ') || (type + ' ' + code);
 
   if (!type) { toast('⚠️ Select an item type', 'err'); return; }
@@ -3163,14 +3184,21 @@ function attemptLogin() {
 
 function checkSession() {
   const saved = localStorage.getItem(KEY_SESSION);
-  if (!saved) { document.getElementById('login-screen').style.display = 'flex'; return false; }
+  if (!saved) {
+    document.getElementById('login-screen').style.display = 'flex';
+    return false;
+  }
   try {
-    const { username, ts } = JSON.parse(saved);
-    const SESSION_TTL = 12 * 60 * 60 * 1000; // 12 hours
-    const expired = ts && (Date.now() - ts) > SESSION_TTL;
-    const user = USERS.find(u => u.username === username);
+    const data = JSON.parse(saved);
+    // Support both old format {username, pin} and new format {username, ts}
+    const username = data.username;
+    const ts       = data.ts || 0;
+    const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days — never expire on normal use
+    const expired  = ts > 0 && (Date.now() - ts) > SESSION_TTL;
+    const user     = USERS.find(u => u.username === username);
+
     if (user && !expired) {
-      // Refresh timestamp (sliding window)
+      // Refresh timestamp
       localStorage.setItem(KEY_SESSION, JSON.stringify({ username, ts: Date.now() }));
       currentUser = user;
       document.getElementById('login-screen').style.display = 'none';
@@ -3180,6 +3208,8 @@ function checkSession() {
         pill.style.display = 'inline-flex';
         pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + user.name;
       }
+      const wrap = document.getElementById('user-menu-wrap');
+      if (wrap) wrap.style.display = 'block';
       return true;
     } else {
       localStorage.removeItem(KEY_SESSION);
@@ -3675,8 +3705,16 @@ function togglePerSizeMode() { setShoeMode(_perSizeMode ? 'shared' : 'persize');
 
 // Save shoe items: one parent + one shoe_sizes record per size
 async function saveShoeItems(baseCode, baseName, type) {
-  if (!_shoeGroup && _shoeSizes.size === 0) { toast('⚠️ Select a size group first', 'err'); return false; }
-  if (_shoeSizes.size === 0)                 { toast('⚠️ Select at least one size', 'err'); return false; }
+  if (_shoeSizes.size === 0) { toast('⚠️ Select at least one size', 'err'); return false; }
+  // Use last selected group, or derive from first selected size
+  if (!_shoeGroup) {
+    const groups = getShoeGroups();
+    const firstSize = [..._shoeSizes][0];
+    for (const [g, cfg] of Object.entries(groups)) {
+      if (firstSize >= cfg.min && firstSize <= cfg.max) { _shoeGroup = g; break; }
+    }
+    if (!_shoeGroup) _shoeGroup = 'S'; // fallback
+  }
 
   let sharedQty = 0, sharedBuy = 0, sharedSell = 0;
   if (!_perSizeMode) {
