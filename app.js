@@ -4030,3 +4030,49 @@ function resetShoeGroups() {
   renderShoeGroupButtons();
   toast('Shoe groups reset to defaults', '');
 }
+
+// ── Expose all functions called from HTML to window scope ──────────
+// Ensures onclick= handlers work even if script loading order changes
+window.addType = addType;
+window.adjSellQty = adjSellQty;
+window.attemptLogin = attemptLogin;
+window.cancelCloseDay = cancelCloseDay;
+window.cancelEdit = cancelEdit;
+window.clearNotifs = clearNotifs;
+window.closePastSessionSheet = closePastSessionSheet;
+window.closeProfileSheet = closeProfileSheet;
+window.closeSellModal = closeSellModal;
+window.closeSheet = closeSheet;
+window.closeUserMenu = closeUserMenu;
+window.confirmCloseDay = confirmCloseDay;
+window.confirmRestock = confirmRestock;
+window.confirmSale = confirmSale;
+window.deleteItem = deleteItem;
+window.disconnectFirebase = disconnectFirebase;
+window.dismissInstall = dismissInstall;
+window.editItem = editItem;
+window.filterFinance = filterFinance;
+window.forcePushToFirebase = forcePushToFirebase;
+window.installAppUpdate = installAppUpdate;
+window.openDay = openDay;
+window.openSellFromSheet = openSellFromSheet;
+window.pickEmoji = pickEmoji;
+window.pullFromFirebase = pullFromFirebase;
+window.removeAddPhoto = removeAddPhoto;
+window.resetAllData = resetAllData;
+window.runSyncDebug = runSyncDebug;
+window.saveFinanceEntry = saveFinanceEntry;
+window.saveFirebaseConfig = saveFirebaseConfig;
+window.saveItem = saveItem;
+window.selectPayment = selectPayment;
+window.selectSizeGroup = selectSizeGroup;
+window.setShoeMode = setShoeMode;
+window.showPage = showPage;
+window.showUserProfile = showUserProfile;
+window.toggleNotifPanel = toggleNotifPanel;
+window.toggleRestock = toggleRestock;
+window.toggleUserMenu = toggleUserMenu;
+window.triggerAddPhotoUpload = triggerAddPhotoUpload;
+window.triggerInstall = triggerInstall;
+window.triggerSheetPhotoUpload = triggerSheetPhotoUpload;
+
