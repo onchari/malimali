@@ -3,7 +3,7 @@
 // ===================================================================
 let db;
 const DB_NAME = 'InventoryApp';
-const DB_VER  = 8;
+const DB_VER  = 9;
 
 // ── APP CONSTANTS ─────────────────────────────────────────────────────
 const KEY_SESSION     = 'mg_session';
@@ -18,27 +18,37 @@ function initDB() {
   const req = indexedDB.open(DB_NAME, DB_VER);
 
   req.onupgradeneeded = e => {
-    const d = e.target.result;
+    const d   = e.target.result;
+    const old = e.oldVersion;
 
-    // items: one record per product SKU
+    // ── items ──────────────────────────────────────────────────────
+    // One record per product SKU.
+    // Normalized fields:
+    //   buyPrice  (was: buy / defaultBuy)
+    //   sellPrice (was: sell / defaultSell)
+    //   variant   (was: size — only for non-shoe items)
+    //   isShoe    — true → sizes stored in shoe_sizes
     if (!d.objectStoreNames.contains('items')) {
       const s = d.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
-      s.createIndex('idx_code',     'code',     { unique: true  });
-      s.createIndex('idx_type',     'type',     { unique: false });
-      s.createIndex('idx_category', 'category', { unique: false });
-      s.createIndex('idx_is_shoe',  'isShoe',   { unique: false });
+      s.createIndex('idx_code',     'code',    { unique: true  });
+      s.createIndex('idx_type',     'type',    { unique: false });
+      s.createIndex('idx_fbid',     'fbId',    { unique: false });
+      s.createIndex('idx_is_shoe',  'isShoe',  { unique: false });
     }
 
-    // shoe_sizes: one record per item_code + size
+    // ── shoe_sizes ─────────────────────────────────────────────────
+    // One record per item_code + size. FK: itemCode → items.code
     if (!d.objectStoreNames.contains('shoe_sizes')) {
       const ss = d.createObjectStore('shoe_sizes', { keyPath: 'id', autoIncrement: true });
-      ss.createIndex('idx_item_code',  'itemCode',  { unique: false });
-      ss.createIndex('idx_code_size',  'codeSize',  { unique: true  });
-      ss.createIndex('idx_size_group', 'sizeGroup', { unique: false });
-      ss.createIndex('idx_item_id',    'itemId',    { unique: false });
+      ss.createIndex('idx_item_code', 'itemCode', { unique: false });
+      ss.createIndex('idx_code_size', 'codeSize', { unique: true  }); // "CODE_42"
+      ss.createIndex('idx_item_id',   'itemId',   { unique: false });
+      ss.createIndex('idx_fbid',      'fbId',     { unique: false });
     }
 
-    // sales: one record per sale transaction
+    // ── sales ──────────────────────────────────────────────────────
+    // One record per transaction line.
+    // businessDate (normalized, was: business_date in old records)
     if (!d.objectStoreNames.contains('sales')) {
       const sa = d.createObjectStore('sales', { keyPath: 'id', autoIncrement: true });
       sa.createIndex('idx_item_id',       'itemId',       { unique: false });
@@ -47,33 +57,35 @@ function initDB() {
       sa.createIndex('idx_date',          'date',         { unique: false });
       sa.createIndex('idx_sold_by',       'soldBy',       { unique: false });
       sa.createIndex('idx_payment',       'paymentMethod',{ unique: false });
+      sa.createIndex('idx_fbid',          'fbId',         { unique: false });
     }
 
-    // finances: investments, expenses, withdrawals
+    // ── finances ───────────────────────────────────────────────────
+    // Money flow: investments, expenses, withdrawals
     if (!d.objectStoreNames.contains('finances')) {
       const fi = d.createObjectStore('finances', { keyPath: 'id', autoIncrement: true });
       fi.createIndex('idx_type',       'type',      { unique: false });
       fi.createIndex('idx_date',       'date',      { unique: false });
-      fi.createIndex('idx_category',   'category',  { unique: false });
       fi.createIndex('idx_created_by', 'createdBy', { unique: false });
+      fi.createIndex('idx_fbid',       'fbId',      { unique: false });
     }
 
-    // business_days: daily open/close sessions
+    // ── business_days ──────────────────────────────────────────────
+    // Daily session records. All fields camelCase.
     if (!d.objectStoreNames.contains('business_days')) {
       const bd = d.createObjectStore('business_days', { keyPath: 'id', autoIncrement: true });
-      bd.createIndex('idx_business_date', 'business_date', { unique: false });
-      bd.createIndex('idx_status',        'status',        { unique: false });
+      bd.createIndex('idx_business_date', 'businessDate', { unique: true  }); // one per day
+      bd.createIndex('idx_status',        'status',       { unique: false });
+      bd.createIndex('idx_fbid',          'fbId',         { unique: false });
     }
 
-    // types: product category definitions
+    // ── types ──────────────────────────────────────────────────────
     if (!d.objectStoreNames.contains('types')) {
       d.createObjectStore('types', { keyPath: 'id', autoIncrement: true });
     }
 
-    // day_sessions: legacy, kept for backward compat
-    if (!d.objectStoreNames.contains('day_sessions')) {
-      d.createObjectStore('day_sessions', { keyPath: 'id', autoIncrement: true });
-    }
+    // NOTE: day_sessions store (legacy) intentionally NOT created in v9.
+    //       Existing data migrated to business_days by migrateData().
   };
 
   req.onerror = e => {
@@ -99,10 +111,6 @@ function initDB() {
       updateLowStockBadge();
 
       const lastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
-      const today    = todayDateStr();
-      const bday     = await getBusinessDay(today);
-      const dayOpen  = bday && bday.status === 'OPEN';
-
       const allowedPage = currentUser && currentUser.tabs.includes(lastPage)
         ? lastPage : currentUser.tabs[0];
       _origShowPage(allowedPage);
@@ -110,7 +118,7 @@ function initDB() {
   };
 }
 
-// Migrate old field names → normalized names
+// Migrate old field names → normalized v9 names
 // ── IndexedDB helpers ─────────────────────────────────────────────
 function _dbReady(rej) {
   if (!db) { const e = new Error('Database not ready'); if (rej) rej(e); return false; } return true;
@@ -168,32 +176,382 @@ function dbDelete(store, id) {
   });
 }
 
+
+// ===================================================================
+// CODING STANDARDS APPLIED
+//
+// 1. Class: DB           — IndexedDB abstraction (DRY, SRP)
+// 2. Class: UI           — DOM access layer (DRY, encapsulation)
+// 3. Class: ShoeState    — shoe form state (SRP, encapsulation)
+// 4. Class: SavingOverlay— progress UI (SRP, reusability)
+// 5. DRY: refreshUI()   — single refresh chain replaces repeated blocks
+// 6. CONST: STORES, CSS  — no magic strings
+// ===================================================================
+
+// ── Standard 6: Named constants — no magic strings ─────────────────
+const STORES = Object.freeze({
+  ITEMS:    'items',
+  SALES:    'sales',
+  SIZES:    'shoe_sizes',
+  FINANCES: 'finances',
+  BDAYS:    'business_days',
+  TYPES:    'types',
+  SESSIONS: 'day_sessions',
+});
+
+const CSS = Object.freeze({
+  ACTIVE:   'active',
+  OPEN:     'open',
+  SHOW:     'show',
+  LOW:      'low',
+  OUT:      'out',
+  SELECTED: 'selected',
+  SZ_ACTIVE:'sz-active',
+  SG_ACTIVE:'sg-active',
+});
+
+// ── Standard 1: DB class — wraps IndexedDB, single place for DB access
+class DB {
+  static all(store)       { return dbAll(store); }
+  static get(store, id)   { return dbGet(store, id); }
+  static add(store, data) { return dbAdd(store, data); }
+  static put(store, data) { return dbPut(store, data); }
+  static del(store, id)   { return dbDelete(store, id); }
+
+  // Convenience: all items with shoe enrichment
+  static async items() {
+    const items = await dbAll(STORES.ITEMS);
+    await enrichShoeItems(items);
+    return items;
+  }
+
+  // Convenience: sales for a given business date
+  static async salesForDay(businessDate) {
+    const all = await dbAll(STORES.SALES);
+    return all.filter(s => (s.businessDate || s.business_date) === businessDate);
+  }
+
+  // Convenience: clear all stores atomically (used by resetAllData)
+  static async clearAll(storeNames) {
+    return new Promise((res, rej) => {
+      const valid = storeNames.filter(s => db.objectStoreNames.contains(s));
+      if (!valid.length) { res(); return; }
+      const tx = db.transaction(valid, 'readwrite');
+      tx.onerror   = e => rej(e.target.error);
+      tx.oncomplete = () => res();
+      valid.forEach(s => tx.objectStore(s).clear());
+    });
+  }
+}
+
+// ── Standard 2: UI class — all DOM access in one place ─────────────
+class UI {
+  // Get element (cached per session, cleared on page transition)
+  static el(id) {
+    return document.getElementById(id);
+  }
+
+  // Set text content safely
+  static setText(id, val) {
+    const el = this.el(id);
+    if (el) el.textContent = (val == null ? '' : val);
+  }
+
+  // Set input value
+  static setVal(id, val) {
+    const el = this.el(id);
+    if (el) el.value = (val == null ? '' : val);
+  }
+
+  // Show/hide by display style
+  static show(id, display = 'block') {
+    const el = this.el(id);
+    if (el) el.style.display = display;
+  }
+  static hide(id) {
+    const el = this.el(id);
+    if (el) el.style.display = 'none';
+  }
+
+  // Toggle a CSS class
+  static toggle(id, cls, force) {
+    const el = this.el(id);
+    if (el) el.classList.toggle(cls, force);
+  }
+
+  // Set/get attribute
+  static attr(id, attr, val) {
+    const el = this.el(id);
+    if (!el) return undefined;
+    if (val !== undefined) el.setAttribute(attr, val);
+    return el.getAttribute(attr);
+  }
+
+  // Get input value trimmed
+  static val(id) {
+    const el = this.el(id);
+    return el ? el.value.trim() : '';
+  }
+
+  // Bulk set text — { elementId: value, ... }
+  static setMany(map) {
+    Object.entries(map).forEach(([id, val]) => this.setText(id, val));
+  }
+
+  // Enable / disable element
+  static setEnabled(id, enabled) {
+    const el = this.el(id);
+    if (!el) return;
+    el.disabled = !enabled;
+    el.style.opacity  = enabled ? '' : '0.45';
+    el.style.cursor   = enabled ? '' : 'not-allowed';
+  }
+}
+
+// ── Standard 3: ShoeState class — encapsulates all shoe form state ──
+class ShoeState {
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.group      = null;       // active group: 'S'|'M'|'L'
+    this.sizes      = new Set();  // selected size numbers
+    this.shownGroups= new Set();  // groups whose buttons are rendered
+    this.perSizeMode= false;      // true = per-size pricing
+  }
+
+  // Add or remove a size
+  toggleSize(s) {
+    if (this.sizes.has(s)) this.sizes.delete(s);
+    else                   this.sizes.add(s);
+  }
+
+  // Sorted array of selected sizes
+  get sortedSizes() {
+    return [...this.sizes].sort((a, b) => a - b);
+  }
+
+  // True if at least one size selected
+  get hasSelection() {
+    return this.sizes.size > 0;
+  }
+
+  // Derive group from a size number
+  groupFor(size) {
+    const groups = getShoeGroups();
+    for (const [g, cfg] of Object.entries(groups)) {
+      if (size >= cfg.min && size <= cfg.max) return g;
+    }
+    return 'S';
+  }
+
+  // Remove all sizes belonging to a group
+  clearGroup(g) {
+    const groups = getShoeGroups();
+    const cfg = groups[g];
+    if (!cfg) return;
+    for (let s = cfg.min; s <= cfg.max; s++) this.sizes.delete(s);
+    this.shownGroups.delete(g);
+    if (this.group === g) this.group = null;
+  }
+}
+
+// ── Standard 4: SavingOverlay class — progress UI ──────────────────
+class SavingOverlay {
+  constructor() {
+    this._timer      = null;
+    this._progress   = 0;
+    this._circumference = 213.6;
+  }
+
+  show(label = 'Saving…') {
+    const overlay = UI.el('saving-overlay');
+    const arc     = UI.el('saving-arc');
+    const lbl     = UI.el('saving-label');
+    const btn     = UI.el('save-btn');
+    if (!overlay) return;
+
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.45'; btn.style.pointerEvents = 'none'; }
+    if (arc) arc.style.strokeDashoffset = this._circumference;
+    if (lbl) lbl.textContent = label;
+    overlay.style.display = 'flex';
+
+    this._progress = 0;
+    clearInterval(this._timer);
+    this._timer = setInterval(() => {
+      this._progress = Math.min(this._progress + (85 / 30), 85);
+      if (arc) arc.style.strokeDashoffset = this._circumference * (1 - this._progress / 100);
+      if (this._progress >= 85) clearInterval(this._timer);
+    }, 50);
+  }
+
+  hide() {
+    clearInterval(this._timer);
+    const arc = UI.el('saving-arc');
+    const btn = UI.el('save-btn');
+    if (arc) arc.style.strokeDashoffset = 0; // snap to 100%
+
+    setTimeout(() => {
+      const overlay = UI.el('saving-overlay');
+      if (overlay) overlay.style.display = 'none';
+      if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.pointerEvents = ''; }
+    }, 350);
+  }
+}
+
+// ── Singleton instances ─────────────────────────────────────────────
+const _overlay   = new SavingOverlay();
+const _shoeState = new ShoeState();
+
+// ── Standard 5: DRY — single UI refresh chain ──────────────────────
+// Replaces 15+ repeated blocks of:
+//   allItems = await dbAll('items');
+//   await enrichShoeItems(allItems);
+//   renderList(); renderDashboard(); updateHeader();
+//   scheduleSync();
+async function refreshUI(opts = {}) {
+  const { sync = true, dashboard = true, list = true, header = true, badge = true } = opts;
+  allItems = await DB.items();
+  if (list)      renderList();
+  if (dashboard) renderDashboard();
+  if (header)    updateHeader();
+  if (badge)     try { updateLowStockBadge(); } catch(_) {}
+  if (sync)      scheduleSync();
+}
+
+
 async function migrateData() {
+  // ── v9 migrations ────────────────────────────────────────────────
+  // Runs on every startup; idempotent — safe to run multiple times.
+  let fixed = 0;
+
   try {
+    // ── 1. items: unify buy/sell fields ────────────────────────────
+    // Old: { buy, sell } for standard; { defaultBuy, defaultSell } for shoes
+    // New: { buyPrice, sellPrice } for ALL items (unified)
+    const items = await dbAll('items');
+    for (const item of items) {
+      let changed = false;
+
+      // Migrate buy → buyPrice
+      if (item.buy != null && item.buyPrice == null) {
+        item.buyPrice = item.buy;
+        changed = true;
+      }
+      // Migrate defaultBuy → buyPrice (shoes)
+      if (item.defaultBuy != null && item.buyPrice == null) {
+        item.buyPrice = item.defaultBuy;
+        changed = true;
+      }
+      // Migrate sell → sellPrice
+      if (item.sell != null && item.sellPrice == null) {
+        item.sellPrice = item.sell;
+        changed = true;
+      }
+      // Migrate defaultSell → sellPrice (shoes)
+      if (item.defaultSell != null && item.sellPrice == null) {
+        item.sellPrice = item.defaultSell;
+        changed = true;
+      }
+      // Migrate size → variant (avoid confusion with shoe sizes)
+      if (item.size != null && item.variant == null) {
+        item.variant = item.size;
+        changed = true;
+      }
+      // Ensure profit is computed
+      if (item.buyPrice != null && item.sellPrice != null) {
+        const expected = item.sellPrice - item.buyPrice;
+        if (item.profit !== expected) { item.profit = expected; changed = true; }
+      }
+      // Ensure required fields
+      if (!item.createdAt) { item.createdAt = new Date().toISOString(); changed = true; }
+      if (!item.code) continue; // skip corrupt records
+
+      if (changed) { await dbPut('items', item); fixed++; }
+    }
+    console.log(`[MIGRATE v9] items: ${fixed} updated`);
+
+    // ── 2. shoe_sizes: ensure all required fields ──────────────────
+    const sizes = await dbAll('shoe_sizes');
+    let szFixed = 0;
+    for (const sz of sizes) {
+      let changed = false;
+      if (!sz.codeSize && sz.itemCode && sz.size != null) {
+        sz.codeSize = sz.itemCode + '_' + sz.size;
+        changed = true;
+      }
+      // Migrate buyPrice/sellPrice if using old names
+      if (sz.buy != null && sz.buyPrice == null)   { sz.buyPrice  = sz.buy;  changed = true; }
+      if (sz.sell != null && sz.sellPrice == null)  { sz.sellPrice = sz.sell; changed = true; }
+      if (!sz.createdAt) { sz.createdAt = new Date().toISOString(); changed = true; }
+      if (changed) { await dbPut('shoe_sizes', sz); szFixed++; }
+    }
+    console.log(`[MIGRATE v9] shoe_sizes: ${szFixed} updated`);
+
+    // ── 3. sales: normalize businessDate field ─────────────────────
     const sales = await dbAll('sales');
-    let fixed = 0;
+    let sFixed = 0;
     for (const s of sales) {
       let changed = false;
       // Normalize business_date → businessDate
-      if (s.business_date && !s.businessDate) { s.businessDate = s.business_date; delete s.business_date; changed = true; }
+      if (s.business_date && !s.businessDate) {
+        s.businessDate = s.business_date;
+        delete s.business_date;
+        changed = true;
+      }
       // Ensure required fields
       if (!s.paymentMethod) { s.paymentMethod = 'cash';   changed = true; }
       if (!s.soldBy)         { s.soldBy = 'system';       changed = true; }
       if (!s.itemCode && s.code) { s.itemCode = s.code;   changed = true; }
       if (!s.itemName && s.name) { s.itemName = s.name;   changed = true; }
-      if (changed) { await dbPut('sales', s); fixed++; }
-    }
-    // Ensure shoe_sizes codeSize field
-    const sizes = await dbAll('shoe_sizes');
-    for (const sz of sizes) {
-      if (!sz.codeSize && sz.itemCode && sz.size != null) {
-        sz.codeSize = sz.itemCode + '_' + sz.size;
-        await dbPut('shoe_sizes', sz);
-        fixed++;
+      if (!s.buyPrice && s.buyPrice !== 0) {
+        s.buyPrice = s.buy || 0; changed = true;
       }
+      if (!s.sellPrice && s.sellPrice !== 0) {
+        s.sellPrice = s.sell || s.price || 0; changed = true;
+      }
+      if (changed) { await dbPut('sales', s); sFixed++; }
     }
-    if (fixed) console.log(`[MIGRATE v8] Fixed ${fixed} records`);
-  } catch(e) { console.warn('[MIGRATE]', e.message); }
+    console.log(`[MIGRATE v9] sales: ${sFixed} updated`);
+
+    // ── 4. business_days: normalize to camelCase ───────────────────
+    const bdays = await dbAll('business_days');
+    let bdFixed = 0;
+    for (const bd of bdays) {
+      let changed = false;
+      // business_date → businessDate
+      if (bd.business_date && !bd.businessDate) {
+        bd.businessDate = bd.business_date;
+        // Keep business_date for backward-compat index — it still has that index
+        changed = true;
+      }
+      // opened_at → openedAt
+      if (bd.opened_at && !bd.openedAt) { bd.openedAt = bd.opened_at; changed = true; }
+      if (bd.closed_at && !bd.closedAt) { bd.closedAt = bd.closed_at; changed = true; }
+      if (bd.reopened_count != null && bd.reopenedCount == null) {
+        bd.reopenedCount = bd.reopened_count; changed = true;
+      }
+      if (changed) { await dbPut('business_days', bd); bdFixed++; }
+    }
+    console.log(`[MIGRATE v9] business_days: ${bdFixed} updated`);
+
+    // ── 5. finances: ensure required fields ────────────────────────
+    const finances = await dbAll('finances');
+    let fFixed = 0;
+    for (const f of finances) {
+      let changed = false;
+      if (!f.createdAt) { f.createdAt = new Date().toISOString(); changed = true; }
+      if (!f.category)  { f.category  = 'other'; changed = true; }
+      if (!f.currency)  { f.currency  = localStorage.getItem(KEY_CURRENCY) || 'KES'; changed = true; }
+      if (changed) { await dbPut('finances', f); fFixed++; }
+    }
+    console.log(`[MIGRATE v9] finances: ${fFixed} updated`);
+
+    console.log('[MIGRATE v9] Complete ✅');
+  } catch(e) {
+    console.warn('[MIGRATE v9] Error:', e.message);
+  }
 }
 
 
@@ -275,7 +633,7 @@ async function loadTypes() {
 }
 
 function renderTypeSelect() {
-  const sel = document.getElementById('f-type');
+  const sel = UI.el('f-type');
   const cur = sel.value;
   sel.innerHTML = '<option value="">— Select type —</option>' +
     types.map(t => `<option value="${t.name}" ${t.name === cur ? 'selected' : ''}>${t.emoji} ${t.name}</option>`).join('');
@@ -332,10 +690,10 @@ async function deleteType(id) {
 
 // ===== PROFIT PREVIEW =====
 function updateProfitPreview() {
-  const buy  = parseFloat(document.getElementById('f-buy').value)  || 0;
-  const sell = parseFloat(document.getElementById('f-sell').value) || 0;
-  const qty  = parseInt(document.getElementById('f-qty').value)    || 0;
-  const preview = document.getElementById('profit-preview');
+  const buy  = parseFloat(UI.el('f-buy').value)  || 0;
+  const sell = parseFloat(UI.el('f-sell').value) || 0;
+  const qty  = parseInt(UI.el('f-qty').value)    || 0;
+  const preview = UI.el('profit-preview');
   if (!preview) return;
 
   if (buy > 0 && sell > 0) {
@@ -492,14 +850,12 @@ function clearAddFormPhoto() {
 }
 
 // ===== SAVE ITEM =====
-// ── Saving progress overlay ───────────────────────────────────────
-let _savingTimer = null;
-
+// Legacy shims — delegates to _overlay singleton
 function showSaving(label) {
   const overlay = document.getElementById('saving-overlay');
   const arc     = document.getElementById('saving-arc');
   const lbl     = document.getElementById('saving-label');
-  const btn     = document.getElementById('save-btn');
+  const btn     = UI.el('save-btn');
   if (!overlay) return;
 
   // Gray out save button
@@ -528,7 +884,7 @@ function showSaving(label) {
 function hideSaving() {
   const overlay = document.getElementById('saving-overlay');
   const arc     = document.getElementById('saving-arc');
-  const btn     = document.getElementById('save-btn');
+  const btn     = UI.el('save-btn');
 
   clearInterval(_savingTimer);
 
@@ -543,9 +899,9 @@ function hideSaving() {
 }
 
 async function saveItem() {
-  showSaving('Saving…');
+  _overlay.show('Saving…');
   try {
-      const editIdRaw = document.getElementById('edit-id').value;
+      const editIdRaw = UI.el('edit-id').value;
 
   // Stock management (add/edit/restock) does NOT require an open day.
   // Only sales (confirmSale) require the day to be open.
@@ -560,9 +916,9 @@ async function saveItem() {
     const sizeRec = allSz.find(s => s.size === size);
     if (!sizeRec) { toast('Size record not found', 'err'); return; }
 
-    const qty  = parseInt(document.getElementById('f-qty').value);
-    const buy  = parseFloat(document.getElementById('f-buy').value)  || sizeRec.buyPrice  || 0;
-    const sell = parseFloat(document.getElementById('f-sell').value) || sizeRec.sellPrice || 0;
+    const qty  = parseInt(UI.el('f-qty').value);
+    const buy  = parseFloat(UI.el('f-buy').value)  || sizeRec.buyPrice  || 0;
+    const sell = parseFloat(UI.el('f-sell').value) || sizeRec.sellPrice || 0;
     if (isNaN(qty) || qty < 0) { toast('⚠️ Enter valid quantity', 'err'); return; }
     if (buy  <= 0) { toast('⚠️ Enter buying price',  'err'); return; }
     if (sell <= 0) { toast('⚠️ Enter selling price', 'err'); return; }
@@ -590,10 +946,7 @@ async function saveItem() {
     if (banner) banner.style.display = 'none';
 
     clearForm();
-    allItems = await dbAll('items');
-    await enrichShoeItems(allItems);
-    renderList(); renderDashboard(); updateHeader();
-    scheduleSync();
+    await refreshUI();
     toast('✅ Size ' + size + ' updated · ' + qty + ' pairs · ' + fmt(sell), 'ok');
     showPage('list');
     return;
@@ -603,7 +956,7 @@ async function saveItem() {
   if (editIdRaw && editIdRaw.startsWith('restock_')) {
     const existing = await dbGet('items', parseInt(editIdRaw.replace('restock_','')));
     if (!existing) { toast('⚠️ Item not found', 'err'); exitRestockMode(); return; }
-    const qtyEl  = document.getElementById('f-qty');
+    const qtyEl  = UI.el('f-qty');
     const addQty = parseInt(qtyEl ? qtyEl.value.trim() : '0');
     if (!addQty || addQty <= 0) { toast('⚠️ Enter quantity to add', 'err'); if(qtyEl) qtyEl.focus(); return; }
     if (addQty > CODE_MAX_QTY && !confirm('Adding ' + addQty + ' units — confirm?')) return;
@@ -612,19 +965,16 @@ async function saveItem() {
     existing.qty = newQty; existing.updatedAt = new Date().toISOString();
     await dbPut('items', existing);
     fbSyncItem(existing);
-    allItems = await dbAll('items');
-    await enrichShoeItems(allItems);
-    renderList(); renderDashboard(); updateHeader();
-    scheduleSync();
+    await refreshUI();
     exitRestockMode();
     toast('📦 ' + existing.code + ': +' + addQty + ' → ' + newQty, 'ok');
     return;
   }
 
   // Read common fields
-  const type = document.getElementById('f-type').value;
-  const code = sanitiseCode(document.getElementById('f-code').value);
-  const name = (document.getElementById('f-name').value||'').trim().replace(/\s+/g,' ') || (type + ' ' + code);
+  const type = UI.el('f-type').value;
+  const code = sanitiseCode(UI.el('f-code').value);
+  const name = (UI.el('f-name').value||'').trim().replace(/\s+/g,' ') || (type + ' ' + code);
 
   if (!type) { toast('⚠️ Select an item type', 'err'); return; }
   if (!code) { toast('⚠️ Enter item code', 'err'); return; }
@@ -634,20 +984,17 @@ async function saveItem() {
     const savedCount = await saveShoeItems(code, name, type);
     if (!savedCount) return;
     clearForm(); clearAddFormPhoto();
-    allItems = await dbAll('items');
-    await enrichShoeItems(allItems);
-    renderList(); renderDashboard(); updateHeader();
-    scheduleSync();
+    await refreshUI();
     toast('✅ ' + savedCount + ' shoe size(s) saved!', 'ok');
     return;
   }
 
   // ── STANDARD ADD / EDIT ────────────────────────────────────────
-  const size   = document.getElementById('f-size').value.trim();
-  const qtyRaw = document.getElementById('f-qty').value;
+  const size   = UI.el('f-size').value.trim();
+  const qtyRaw = UI.el('f-qty').value;
   const qty    = parseInt(qtyRaw);
-  const buy    = parseFloat(document.getElementById('f-buy').value)  || 0;
-  const sell   = parseFloat(document.getElementById('f-sell').value) || 0;
+  const buy    = parseFloat(UI.el('f-buy').value)  || 0;
+  const sell   = parseFloat(UI.el('f-sell').value) || 0;
 
   if (!size)                                  { toast('⚠️ Enter a size (or N/A)', 'err'); return; }
   if (qtyRaw === '' || isNaN(qty) || qty < 0) { toast('⚠️ Enter quantity',       'err'); return; }
@@ -656,7 +1003,7 @@ async function saveItem() {
   if (sell <= 0) { toast('⚠️ Enter selling price', 'err'); return; }
 
   const profit = sell - buy;
-  const item   = { type, code, name, size, buy, sell, profit, qty, createdAt: new Date().toISOString() };
+  const item   = { type, code, name, variant: size, buyPrice: buy, sellPrice: sell, profit, qty, createdAt: new Date().toISOString() };
 
   try {
     if (editIdRaw) {
@@ -697,29 +1044,29 @@ async function saveItem() {
     } else { toast('⚠️ Save failed: ' + (e.message||'Unknown'), 'err'); console.error('[SAVE]', e); }
   }
   } catch(err) {
-    hideSaving();
+    _overlay.hide();
     toast('⚠️ Save failed: ' + (err.message || 'Unknown error'), 'err');
     console.error('[SAVE]', err);
     return;
   }
-  hideSaving();
+  _overlay.hide();
 }
 function clearForm() {
-  document.getElementById('edit-id').value   = '';
-  document.getElementById('f-type').value    = '';
-  document.getElementById('f-code').value    = '';
-  document.getElementById('f-name').value    = '';
-  document.getElementById('f-size').value    = '';
-  document.getElementById('f-qty').value     = '';
-  document.getElementById('f-buy').value     = '';
-  document.getElementById('f-sell').value    = '';
-  const pp = document.getElementById('profit-preview');
+  UI.el('edit-id').value   = '';
+  UI.el('f-type').value    = '';
+  UI.el('f-code').value    = '';
+  UI.el('f-name').value    = '';
+  UI.el('f-size').value    = '';
+  UI.el('f-qty').value     = '';
+  UI.el('f-buy').value     = '';
+  UI.el('f-sell').value    = '';
+  const pp = UI.el('profit-preview');
   if (pp) pp.style.display = 'none';
-  const sb = document.getElementById('save-btn');
+  const sb = UI.el('save-btn');
   if (sb) sb.textContent = '+ Add to Inventory';
-  const ml = document.getElementById('form-mode-label');
+  const ml = UI.el('form-mode-label');
   if (ml) ml.textContent = 'New Item';
-  const ce = document.getElementById('cancel-edit-btn');
+  const ce = UI.el('cancel-edit-btn');
   if (ce) ce.style.display = 'none';
 
   // Re-enable any locked fields
@@ -739,19 +1086,19 @@ function clearForm() {
   const modePerSize = document.getElementById('mode-tab-persize');
   if (modeShared)  modeShared.classList.add('active');
   if (modePerSize) modePerSize.classList.remove('active');
-  const shoePanel  = document.getElementById('shoe-size-panel');
-  const stdPricing = document.getElementById('std-pricing-section');
+  const shoePanel  = UI.el('shoe-size-panel');
+  const stdPricing = UI.el('std-pricing-section');
   const sizeField  = document.getElementById('f-size-field');
   if (shoePanel)  shoePanel.style.display  = 'none';
   if (stdPricing) stdPricing.style.display = 'block';
   if (sizeField)  sizeField.style.display  = 'block';
-  const szGrid  = document.getElementById('shoe-sizes-grid');
-  const szWrap  = document.getElementById('shoe-rows-wrap');
-  const szInner = document.getElementById('sz-grid');
+  const szGrid  = UI.el('shoe-sizes-grid');
+  const szWrap  = UI.el('shoe-rows-wrap');
+  const szInner = UI.el('sz-grid');
   if (szGrid)  szGrid.style.display  = 'none';
   if (szWrap)  szWrap.style.display  = 'none';
   if (szInner) szInner.innerHTML = '';
-  const sum = document.getElementById('shoe-selected-summary');
+  const sum = UI.el('shoe-selected-summary');
   if (sum) sum.innerHTML = '';
   ['shoe-shared-qty','shoe-shared-buy','shoe-shared-sell'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
@@ -769,8 +1116,8 @@ let _codeDropdownActive = false;
 let _editOriginItemId   = null;
 
 function onCodeInput() {
-  const clean = document.getElementById('f-code').value.toUpperCase().replace(/[^A-Z0-9\-.]/g,'');
-  document.getElementById('f-code').value = clean;
+  const clean = UI.el('f-code').value.toUpperCase().replace(/[^A-Z0-9\-.]/g,'');
+  UI.el('f-code').value = clean;
   if (!clean) { hideCodeDropdown(); return; }
   const exact      = allItems.filter(i => i.code === clean);
   const startsWith = allItems.filter(i => i.code !== clean && i.code && i.code.startsWith(clean));
@@ -784,7 +1131,7 @@ function showCodeDropdown(items, typedCode) {
   let dd = document.getElementById('code-dropdown');
   if (!dd) {
     dd = document.createElement('div'); dd.id = 'code-dropdown'; dd.className = 'code-dd';
-    const cf = document.getElementById('f-code');
+    const cf = UI.el('f-code');
     if (cf) cf.parentNode.insertBefore(dd, cf.nextSibling);
   }
   dd.innerHTML = items.map(item => {
@@ -808,17 +1155,17 @@ async function selectExistingItem(itemId) {
   if (!item) { toast('⚠️ Item not found', 'err'); hideCodeDropdown(); return; }
   hideCodeDropdown();
   _codeDropdownActive = true;
-  document.getElementById('f-code').value = item.code;
-  document.getElementById('f-name').value = item.name || '';
-  document.getElementById('f-size').value = item.size || '';
-  const typeEl = document.getElementById('f-type'); if (typeEl) typeEl.value = item.type || '';
+  UI.el('f-code').value = item.code;
+  UI.el('f-name').value = item.name || '';
+  UI.el('f-size').value = item.size || '';
+  const typeEl = UI.el('f-type'); if (typeEl) typeEl.value = item.type || '';
   onTypeChange();
-  document.getElementById('edit-id').value = 'restock_' + itemId;
+  UI.el('edit-id').value = 'restock_' + itemId;
 
   let banner = document.getElementById('restock-mode-banner');
   if (!banner) {
     banner = document.createElement('div'); banner.id = 'restock-mode-banner'; banner.className = 'restock-banner';
-    const cf = document.getElementById('f-code'); if (cf) cf.closest('.add-field').after(banner);
+    const cf = UI.el('f-code'); if (cf) cf.closest('.add-field').after(banner);
   }
   const sc = item.qty<=0?'var(--red)':item.qty<=LOW_STOCK_LEVEL?'#d97706':'var(--green)';
   banner.innerHTML = '<i class="fa-solid fa-boxes-stacked" style="color:var(--accent);font-size:18px;"></i>' +
@@ -836,12 +1183,12 @@ async function selectExistingItem(itemId) {
     const el = document.getElementById(id);
     if (el) { el.disabled=true; el.style.opacity='0.4'; el.style.cursor='not-allowed'; }
   });
-  const qtyEl = document.getElementById('f-qty');
+  const qtyEl = UI.el('f-qty');
   if (qtyEl) { qtyEl.disabled=false; qtyEl.style.opacity='1'; qtyEl.style.cursor=''; qtyEl.value=''; }
 
-  document.getElementById('save-btn').textContent = '📦 Add to Stock';
-  document.getElementById('form-mode-label').textContent = '📦 Restock';
-  document.getElementById('cancel-edit-btn').style.display = 'block';
+  UI.el('save-btn').textContent = '📦 Add to Stock';
+  UI.el('form-mode-label').textContent = '📦 Restock';
+  UI.el('cancel-edit-btn').style.display = 'block';
   setTimeout(() => { if (qtyEl) { qtyEl.focus(); qtyEl.select(); } }, 150);
 }
 
@@ -1147,28 +1494,28 @@ async function editItem() {
     const sizes = await getShoeSizes(item.code);
     const sizeRec = sizes.find(s => s.size === size);
     if (!sizeRec) { toast('Size record not found', 'err'); return; }
-    document.getElementById('edit-id').value = 'shoe_edit_' + item.id + '_' + size;
-    document.getElementById('f-type').value  = item.type || '';
-    document.getElementById('f-code').value  = item.code || '';
-    document.getElementById('f-name').value  = item.name || '';
-    document.getElementById('f-size').value  = size;
-    document.getElementById('f-qty').value   = sizeRec.qty ?? '';
-    document.getElementById('f-buy').value   = sizeRec.buyPrice  || item.defaultBuy  || '';
-    document.getElementById('f-sell').value  = sizeRec.sellPrice || item.defaultSell || '';
+    UI.el('edit-id').value = 'shoe_edit_' + item.id + '_' + size;
+    UI.el('f-type').value  = item.type || '';
+    UI.el('f-code').value  = item.code || '';
+    UI.el('f-name').value  = item.name || '';
+    UI.el('f-size').value  = size;
+    UI.el('f-qty').value   = sizeRec.qty ?? '';
+    UI.el('f-buy').value   = sizeRec.buyPrice  || item.defaultBuy  || '';
+    UI.el('f-sell').value  = sizeRec.sellPrice || item.defaultSell || '';
     showPage('add');
     ['f-code','f-type','f-name','f-size'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.disabled=true; el.style.opacity='0.45'; el.style.cursor='not-allowed'; }
     });
-    const shoePanel  = document.getElementById('shoe-size-panel');
-    const stdPricing = document.getElementById('std-pricing-section');
+    const shoePanel  = UI.el('shoe-size-panel');
+    const stdPricing = UI.el('std-pricing-section');
     const sizeField  = document.getElementById('f-size-field');
     if (shoePanel)  shoePanel.style.display  = 'none';
     if (stdPricing) stdPricing.style.display = 'block';
     if (sizeField)  sizeField.style.display  = 'block';
-    document.getElementById('save-btn').textContent = '💾 Save Size ' + size;
-    document.getElementById('form-mode-label').textContent = '✏️ Edit · ' + item.code + ' Size ' + size;
-    document.getElementById('cancel-edit-btn').style.display = 'block';
+    UI.el('save-btn').textContent = '💾 Save Size ' + size;
+    UI.el('form-mode-label').textContent = '✏️ Edit · ' + item.code + ' Size ' + size;
+    UI.el('cancel-edit-btn').style.display = 'block';
     _editOriginItemId = item.id;
     updateProfitPreview();
     return;
@@ -1176,22 +1523,22 @@ async function editItem() {
 
   // ── STANDARD ITEM EDIT ────────────────────────────────────────
   showPage('add');
-  document.getElementById('edit-id').value = item.id;
-  document.getElementById('f-type').value  = item.type  || '';
-  document.getElementById('f-code').value  = item.code  || '';
-  document.getElementById('f-name').value  = item.name  || '';
-  document.getElementById('f-size').value  = item.size  || '';
-  document.getElementById('f-qty').value   = item.qty   ?? '';
-  document.getElementById('f-buy').value   = item.buy   || '';
-  document.getElementById('f-sell').value  = item.sell  || '';
+  UI.el('edit-id').value = item.id;
+  UI.el('f-type').value  = item.type  || '';
+  UI.el('f-code').value  = item.code  || '';
+  UI.el('f-name').value  = item.name  || '';
+  UI.el('f-size').value  = item.size  || '';
+  UI.el('f-qty').value   = item.qty   ?? '';
+  UI.el('f-buy').value   = item.buy   || '';
+  UI.el('f-sell').value  = item.sell  || '';
   // Lock code and type — identifying fields
   ['f-code','f-type'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.disabled=true; el.style.opacity='0.45'; el.style.cursor='not-allowed'; }
   });
-  document.getElementById('save-btn').textContent = '💾 Save Changes';
-  document.getElementById('form-mode-label').textContent = '✏️ Edit · ' + (item.name || item.code);
-  document.getElementById('cancel-edit-btn').style.display = 'block';
+  UI.el('save-btn').textContent = '💾 Save Changes';
+  UI.el('form-mode-label').textContent = '✏️ Edit · ' + (item.name || item.code);
+  UI.el('cancel-edit-btn').style.display = 'block';
   _editOriginItemId = item.id;
   updateProfitPreview();
   const existingPhoto = getItemPhoto(item.id);
@@ -1564,7 +1911,7 @@ async function confirmSale() {
     paymentMethod,
     // Audit
     soldBy:        currentUser ? currentUser.username : 'system',
-    businessDate:  activeDay ? activeDay.business_date : todayDateStr(),
+    businessDate:  activeDay ? (activeDay.businessDate || activeDay.business_date) : todayDateStr(),
     date:          new Date().toISOString(),
   };
 
@@ -1671,6 +2018,80 @@ function closePastSessionSheet(){const s=document.getElementById('past-session-s
 // FACTORY RESET — clears ALL local data and Firebase
 // Only accessible to Super User in Settings
 // ═══════════════════════════════════════════════════════════════
+// ── Full database rebuild — wipes all data and starts fresh ────────
+async function resetAndRebuildDB() {
+  const msg =
+    '⚠️ FULL DATABASE RESET\n\n' +
+    'This will:\n' +
+    '• Delete ALL items, sales, finances, shoe sizes\n' +
+    '• Delete ALL business day records\n' +
+    '• Clear Firebase cloud data if connected\n' +
+    '• Recreate the database schema clean (v' + DB_VER + ')\n\n' +
+    'Your login and preferences are kept.\n' +
+    'This CANNOT be undone. Type RESET to confirm:';
+
+  const input = prompt(msg);
+  if (input !== 'RESET') { toast('Reset cancelled', ''); return; }
+
+  try {
+    toast('🗑️ Rebuilding database…', '');
+
+    // 1. Clear all IndexedDB data stores
+    await DB.clearAll([
+      STORES.ITEMS, STORES.SALES, STORES.SIZES,
+      STORES.FINANCES, STORES.BDAYS, STORES.TYPES,
+    ]);
+    console.log('[DB] All stores cleared');
+
+    // 2. Clear Firebase if connected
+    if (fbReady && fbDb) {
+      try {
+        const { collection, getDocs, writeBatch, doc } = await waitForFbImports();
+        for (const col of [STORES.ITEMS, STORES.SALES, STORES.SIZES, STORES.FINANCES, STORES.BDAYS]) {
+          const snap = await getDocs(collection(fbDb, col));
+          if (snap.empty) continue;
+          let batch = writeBatch(fbDb); let n = 0;
+          for (const d of snap.docs) {
+            batch.delete(doc(fbDb, col, d.id));
+            if (++n % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); n = 0; }
+          }
+          if (n > 0) await batch.commit();
+        }
+        console.log('[DB] Firebase cleared');
+      } catch(e) { console.warn('[DB] Firebase clear partial:', e.message); }
+    }
+
+    // 3. Reset in-memory state
+    allItems  = [];
+    activeDay = null;
+    types     = [];
+
+    // 4. Clear relevant localStorage keys (keep session + prefs)
+    const keep = {
+      [KEY_SESSION]:     localStorage.getItem(KEY_SESSION),
+      [KEY_CURRENCY]:    localStorage.getItem(KEY_CURRENCY),
+      [KEY_SHOE_GROUPS]: localStorage.getItem(KEY_SHOE_GROUPS),
+    };
+    localStorage.clear();
+    Object.entries(keep).forEach(([k, v]) => v && localStorage.setItem(k, v));
+
+    // 5. Reload default types and re-render
+    await loadTypes();
+    renderList();
+    renderDashboard();
+    updateHeader();
+    try { updateLowStockBadge(); } catch(_) {}
+
+    toast('✅ Database rebuilt clean — fresh start!', 'ok');
+    console.log('[DB] Rebuild complete v' + DB_VER);
+
+  } catch(e) {
+    toast('❌ Rebuild failed: ' + e.message, 'err');
+    console.error('[DB]', e);
+  }
+}
+window.resetAndRebuildDB = resetAndRebuildDB;
+
 async function resetAllData() {
   const confirmed = confirm(
     '⚠️ RESET ALL DATA\n\n' +
@@ -2123,9 +2544,7 @@ async function pullFromFirebase(silent = false) {
       }
     } catch(_) {}
 
-    allItems = await dbAll('items');
-    await enrichShoeItems(allItems);
-    renderList(); renderDashboard(); updateHeader();
+    await refreshUI({ sync: false });
     try { renderSellPage(); } catch(_) {}
     setFbStatus('on');
 
@@ -2364,14 +2783,18 @@ async function refreshDayTab() {
 // ── CREATE A NEW DAY RECORD ──────────────────────────────────────────
 async function createDayRecord(dateStr) {
   const id = await dbAdd('business_days', {
-    business_date: dateStr,
-    status: 'CLOSED',          // starts CLOSED, user opens it
-    opened_at: null,
-    closed_at: null,
-    reopened_count: 0,
-    final_locked_at: null,
-    salesCount: 0, revenue: 0, profit: 0, itemsSold: 0,
-    notes: ''
+    businessDate:   dateStr,
+    business_date:  dateStr,   // keep for legacy index
+    status:        'CLOSED',   // starts CLOSED, user opens it manually
+    openedAt:      null,
+    closedAt:      null,
+    reopenedCount: 0,
+    salesCount:    0,
+    revenue:       0,
+    profit:        0,
+    itemsSold:     0,
+    notes:         '',
+    createdAt:     new Date().toISOString(),
   });
   return await dbGet('business_days', id);
 }
@@ -2419,7 +2842,7 @@ async function closeDay() {
   if (!isDayOpen()) { toast('No open day to close.', 'err'); return; }
 
   const sales = await dbAll('sales');
-  const _dayDate = activeDay.business_date;
+  const _dayDate = (activeDay.businessDate || activeDay.business_date);
   const daySales = sales.filter(s => (s.businessDate||s.business_date) === _dayDate);
   const revenue   = daySales.reduce((s, x) => s + x.revenue, 0);
   const profit    = daySales.reduce((s, x) => s + x.profit, 0);
@@ -2438,7 +2861,7 @@ async function closeDay() {
 
   // Populate summary sheet
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set('ds-date',       fmtFullDate(activeDay.business_date));
+  set('ds-date',       fmtFullDate((activeDay.businessDate || activeDay.business_date)));
   set('ds-time-range', openT + ' → ' + nowT);
   set('ds-revenue',    fmt(revenue));
   set('ds-profit',     fmt(profit));
@@ -2493,10 +2916,10 @@ async function confirmCloseDay() {
   const notes = (document.getElementById('ds-notes') || {}).value || '';
   const now   = new Date();
   const sales = await dbAll('sales');
-  const _dayDate = activeDay.business_date;
+  const _dayDate = (activeDay.businessDate || activeDay.business_date);
   const daySales = sales.filter(s => (s.businessDate||s.business_date) === _dayDate);
   const items = await dbAll('items');
-  const todayStart2 = activeDay.business_date + 'T00:00:00';
+  const todayStart2 = (activeDay.businessDate || activeDay.business_date) + 'T00:00:00';
   const purchases = items.filter(i => i.createdAt && i.createdAt >= todayStart2);
 
   activeDay.status       = 'CLOSED';
@@ -2707,7 +3130,7 @@ function updateDayBanner() {
     badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:var(--surface2);color:var(--muted);';
     title.textContent = 'Archived Day';
     title.style.color = 'var(--muted)';
-    sub.textContent   = fmtFullDate(activeDay.business_date) + ' — read only';
+    sub.textContent   = fmtFullDate((activeDay.businessDate || activeDay.business_date)) + ' — read only';
     actionArea.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:10px 0;">This day is read-only. A new day will appear automatically tomorrow.</div>';
     if (liveSection) liveSection.style.display = 'none';
     setDayMode(false);
@@ -2718,7 +3141,7 @@ function updateDayBanner() {
 async function updateDayLiveStats() {
   if (!activeDay) return;
   const sales = await dbAll('sales');
-  const _dayDate = activeDay.business_date;
+  const _dayDate = (activeDay.businessDate || activeDay.business_date);
   const daySales = sales.filter(s => (s.businessDate||s.business_date) === _dayDate);
   const rev   = daySales.reduce((a, s) => a + s.revenue, 0);
   const profit = daySales.reduce((a, s) => a + s.profit, 0);
@@ -3569,9 +3992,7 @@ async function enrichShoeItems(items) {
 }
 
 // ── SHOE ADD FORM GLOBALS ─────────────────────────────────────────
-let _shoeGroup    = null;
 let _shoeSizes    = new Set();
-let _perSizeMode  = false;
 let _shownGroups  = new Set();
 let _isShoeSale   = false;
 let _sellShoeItem = null;
@@ -3579,10 +4000,10 @@ let _sellShoeSize = null;
 
 // Called when type dropdown changes
 function onTypeChange() {
-  const typeEl     = document.getElementById('f-type');
+  const typeEl     = UI.el('f-type');
   const type       = typeEl ? typeEl.value : '';
-  const shoePanel  = document.getElementById('shoe-size-panel');
-  const stdPricing = document.getElementById('std-pricing-section');
+  const shoePanel  = UI.el('shoe-size-panel');
+  const stdPricing = UI.el('std-pricing-section');
   const sizeField  = document.getElementById('f-size-field');
   if (!shoePanel || !stdPricing) return;
 
@@ -3592,15 +4013,15 @@ function onTypeChange() {
   if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
 
   if (isShoe) {
-    _shoeGroup = null; _shoeSizes = new Set(); _perSizeMode = false; _shownGroups = new Set();
+    _shoeState.group      = null; _shoeState.sizes      = new Set(); _shoeState.perSizeMode= false; _shoeState.shownGroups= new Set();
     renderShoeGroupButtons();
-    const szGrid = document.getElementById('shoe-sizes-grid');
-    const szWrap = document.getElementById('shoe-rows-wrap');
-    const szInner = document.getElementById('sz-grid');
+    const szGrid = UI.el('shoe-sizes-grid');
+    const szWrap = UI.el('shoe-rows-wrap');
+    const szInner = UI.el('sz-grid');
     if (szGrid)  szGrid.style.display  = 'none';
     if (szWrap)  szWrap.style.display  = 'none';
     if (szInner) szInner.innerHTML = '';
-    const sum = document.getElementById('shoe-selected-summary');
+    const sum = UI.el('shoe-selected-summary');
     if (sum) sum.innerHTML = '';
   }
 }
@@ -3610,8 +4031,8 @@ function renderShoeGroupButtons() {
   ['S','M','L'].forEach(g => {
     const btn = document.getElementById('sg-btn-' + g);
     const rng = document.getElementById('sg-range-' + g);
-    const hasSelected = _getGroupSizes(g).some(s => _shoeSizes.has(s));
-    if (btn) btn.classList.toggle('sg-active', hasSelected || _shownGroups.has(g));
+    const hasSelected = _getGroupSizes(g).some(s => _shoeState.sizes.has(s));
+    if (btn) btn.classList.toggle('sg-active', hasSelected || _shoeState.shownGroups.has(g));
     if (rng && groups[g]) rng.textContent = groups[g].min + '–' + groups[g].max;
   });
 }
@@ -3627,12 +4048,12 @@ function selectSizeGroup(g) {
   const groups = getShoeGroups();
   const { min, max } = groups[g];
   const sizes = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-  const grid  = document.getElementById('sz-grid');
+  const grid  = UI.el('sz-grid');
   if (!grid) return;
 
-  if (!_shownGroups.has(g)) {
-    _shoeGroup = g;
-    _shownGroups.add(g);
+  if (!_shoeState.shownGroups.has(g)) {
+    _shoeState.group = g;
+    _shoeState.shownGroups.add(g);
 
     const block = document.createElement('div');
     block.id = 'sz-group-block-' + g;
@@ -3651,7 +4072,7 @@ function selectSizeGroup(g) {
     sizes.forEach(s => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'sz-btn' + (_shoeSizes.has(s) ? ' sz-active' : '');
+      btn.className = 'sz-btn' + (_shoeState.sizes.has(s) ? ' sz-active' : '');
       btn.id = 'sz-' + s;
       btn.textContent = s;
       btn.onclick = () => toggleShoeSize(s);
@@ -3660,7 +4081,7 @@ function selectSizeGroup(g) {
     block.appendChild(row);
     grid.appendChild(block);
 
-    const szGrid = document.getElementById('shoe-sizes-grid');
+    const szGrid = UI.el('shoe-sizes-grid');
     if (szGrid) szGrid.style.display = 'block';
   } else {
     deselectSizeGroup(g);
@@ -3668,58 +4089,58 @@ function selectSizeGroup(g) {
   }
 
   renderShoeGroupButtons();
-  const szWrap = document.getElementById('shoe-rows-wrap');
-  if (szWrap && _shoeSizes.size > 0) szWrap.style.display = 'block';
+  const szWrap = UI.el('shoe-rows-wrap');
+  if (szWrap && _shoeState.sizes.size > 0) szWrap.style.display = 'block';
   // Rebuild per-size rows if in per-size mode
-  if (_perSizeMode) renderShoeRows();
+  if (_shoeState.perSizeMode) renderShoeRows();
 }
 
 function deselectSizeGroup(g) {
   const groups = getShoeGroups();
   if (!groups[g]) return;
   const { min, max } = groups[g];
-  for (let s = min; s <= max; s++) _shoeSizes.delete(s);
+  for (let s = min; s <= max; s++) _shoeState.sizes.delete(s);
   const block = document.getElementById('sz-group-block-' + g);
   if (block) block.remove();
-  _shownGroups.delete(g);
-  if (_shoeGroup === g) _shoeGroup = null;
-  const grid   = document.getElementById('sz-grid');
-  const szGrid = document.getElementById('shoe-sizes-grid');
+  _shoeState.shownGroups.delete(g);
+  if (_shoeState.group === g) _shoeState.group      = null;
+  const grid   = UI.el('sz-grid');
+  const szGrid = UI.el('shoe-sizes-grid');
   if (szGrid && grid && grid.children.length === 0) szGrid.style.display = 'none';
-  const szWrap = document.getElementById('shoe-rows-wrap');
-  if (szWrap && _shoeSizes.size === 0) szWrap.style.display = 'none';
+  const szWrap = UI.el('shoe-rows-wrap');
+  if (szWrap && _shoeState.sizes.size === 0) szWrap.style.display = 'none';
   renderShoeGroupButtons();
   renderShoeSummary();
   renderShoeRows();
 }
 
 function toggleShoeSize(s) {
-  if (_shoeSizes.has(s)) _shoeSizes.delete(s); else _shoeSizes.add(s);
+  if (_shoeState.sizes.has(s)) _shoeState.sizes.delete(s); else _shoeState.sizes.add(s);
 
   // Update button appearance
   document.querySelectorAll('.sz-btn').forEach(b => {
-    b.classList.toggle('sz-active', _shoeSizes.has(parseInt(b.textContent)));
+    b.classList.toggle('sz-active', _shoeState.sizes.has(parseInt(b.textContent)));
   });
 
-  const szWrap = document.getElementById('shoe-rows-wrap');
-  if (szWrap) szWrap.style.display = _shoeSizes.size > 0 ? 'block' : 'none';
+  const szWrap = UI.el('shoe-rows-wrap');
+  if (szWrap) szWrap.style.display = _shoeState.sizes.size > 0 ? 'block' : 'none';
 
   // If switching to persize and rows already rendered, rebuild them
-  if (_perSizeMode) renderShoeRows();
+  if (_shoeState.perSizeMode) renderShoeRows();
   renderShoeSummary();
 }
 
 function renderShoeSummary() {
-  const el = document.getElementById('shoe-selected-summary');
+  const el = UI.el('shoe-selected-summary');
   if (!el) return;
-  if (_shoeSizes.size === 0) { el.innerHTML = ''; return; }
+  if (_shoeState.sizes.size === 0) { el.innerHTML = ''; return; }
   const sorted = [..._shoeSizes].sort((a,b)=>a-b);
   el.innerHTML = '<div class="shoe-pills-row">' +
     sorted.map(s => '<span class="shoe-pill">' + s + '</span>').join('') +
     '<span style="font-size:11px;color:var(--muted);margin-left:4px;align-self:center;">' +
     sorted.length + ' size' + (sorted.length>1?'s':'') + ' selected</span></div>';
-  const saveBtn = document.getElementById('save-btn');
-  const panel   = document.getElementById('shoe-size-panel');
+  const saveBtn = UI.el('save-btn');
+  const panel   = UI.el('shoe-size-panel');
   if (saveBtn && panel && panel.style.display !== 'none') {
     saveBtn.textContent = '+ Save ' + sorted.length + ' shoe size' + (sorted.length>1?'s':'');
   }
@@ -3728,7 +4149,7 @@ function renderShoeSummary() {
 function renderShoeRows() {
   const rows = document.getElementById('shoe-rows');
   if (!rows) return;
-  if (!_perSizeMode) { rows.innerHTML = ''; return; }
+  if (!_shoeState.perSizeMode) { rows.innerHTML = ''; return; }
   const sorted = [..._shoeSizes].sort((a,b)=>a-b);
   rows.innerHTML = sorted.map(s =>
     '<div class="shoe-row">' +
@@ -3742,40 +4163,40 @@ function renderShoeRows() {
 
 // Switch between Shared (all sizes) and Per-Size pricing modes
 function setShoeMode(mode) {
-  _perSizeMode = (mode === 'persize');
+  _shoeState.perSizeMode = (mode === 'persize');
 
   // Update tab buttons
-  document.getElementById('mode-tab-shared') .classList.toggle('active', !_perSizeMode);
-  document.getElementById('mode-tab-persize').classList.toggle('active',  _perSizeMode);
+  document.getElementById('mode-tab-shared') .classList.toggle('active', !_shoeState.perSizeMode);
+  document.getElementById('mode-tab-persize').classList.toggle('active',  _shoeState.perSizeMode);
 
   // Show/hide panels
   const sharedWrap  = document.getElementById('shoe-shared-wrap');
   const perSizeWrap = document.getElementById('shoe-per-size-wrap');
-  if (sharedWrap)  sharedWrap.style.display  = _perSizeMode ? 'none'  : 'block';
-  if (perSizeWrap) perSizeWrap.style.display = _perSizeMode ? 'block' : 'none';
+  if (sharedWrap)  sharedWrap.style.display  = _shoeState.perSizeMode ? 'none'  : 'block';
+  if (perSizeWrap) perSizeWrap.style.display = _shoeState.perSizeMode ? 'block' : 'none';
 
   // Rebuild per-size rows when switching to per-size
-  if (_perSizeMode) renderShoeRows();
+  if (_shoeState.perSizeMode) renderShoeRows();
 }
 
 // Keep old togglePerSizeMode as alias so any lingering calls don't break
-function togglePerSizeMode() { setShoeMode(_perSizeMode ? 'shared' : 'persize'); }
+function togglePerSizeMode() { setShoeMode(_shoeState.perSizeMode ? 'shared' : 'persize'); }
 
 // Save shoe items: one parent + one shoe_sizes record per size
 async function saveShoeItems(baseCode, baseName, type) {
-  if (_shoeSizes.size === 0) { toast('⚠️ Select at least one size', 'err'); return false; }
+  if (_shoeState.sizes.size === 0) { toast('⚠️ Select at least one size', 'err'); return false; }
   // Use last selected group, or derive from first selected size
   if (!_shoeGroup) {
     const groups = getShoeGroups();
     const firstSize = [..._shoeSizes][0];
     for (const [g, cfg] of Object.entries(groups)) {
-      if (firstSize >= cfg.min && firstSize <= cfg.max) { _shoeGroup = g; break; }
+      if (firstSize >= cfg.min && firstSize <= cfg.max) { _shoeState.group = g; break; }
     }
-    if (!_shoeGroup) _shoeGroup = 'S'; // fallback
+    if (!_shoeGroup) _shoeState.group = 'S'; // fallback
   }
 
   let sharedQty = 0, sharedBuy = 0, sharedSell = 0;
-  if (!_perSizeMode) {
+  if (!_shoeState.perSizeMode) {
     sharedQty  = parseInt((document.getElementById('shoe-shared-qty') ||{}).value) || 0;
     sharedBuy  = parseFloat((document.getElementById('shoe-shared-buy') ||{}).value) || 0;
     sharedSell = parseFloat((document.getElementById('shoe-shared-sell')||{}).value) || 0;
@@ -3792,13 +4213,13 @@ async function saveShoeItems(baseCode, baseName, type) {
     const pid = await dbAdd('items', {
       code: baseCode, name: baseName || type + ' ' + baseCode,
       type, category: _shoeGroup, isShoe: true,
-      defaultBuy:  _perSizeMode ? 0 : sharedBuy,
-      defaultSell: _perSizeMode ? 0 : sharedSell,
-      profit:      _perSizeMode ? 0 : sharedSell - sharedBuy,
+      defaultBuy:  _shoeState.perSizeMode ? 0 : sharedBuy,
+      defaultSell: _shoeState.perSizeMode ? 0 : sharedSell,
+      profit:      _shoeState.perSizeMode ? 0 : sharedSell - sharedBuy,
       qty: 0, createdAt: new Date().toISOString(),
     });
     product = await dbGet('items', pid);
-  } else if (!_perSizeMode) {
+  } else if (!_shoeState.perSizeMode) {
     product.defaultBuy  = sharedBuy;
     product.defaultSell = sharedSell;
     product.profit      = sharedSell - sharedBuy;
@@ -3808,7 +4229,7 @@ async function saveShoeItems(baseCode, baseName, type) {
   let saved = 0;
   for (const size of sorted) {
     let qty, buy, sell;
-    if (_perSizeMode) {
+    if (_shoeState.perSizeMode) {
       qty  = parseInt((document.getElementById('shr-qty-' + size)||{}).value)  || 0;
       buy  = parseFloat((document.getElementById('shr-buy-' + size)||{}).value) || 0;
       sell = parseFloat((document.getElementById('shr-sell-'+size)||{}).value)  || 0;
@@ -3817,7 +4238,7 @@ async function saveShoeItems(baseCode, baseName, type) {
 
     await upsertShoeSize({
       itemCode: baseCode, itemId: product.id,
-      size, sizeGroup: _shoeGroup || 'S',
+      size, sizeGroup: _shoeState.group || 'S',
       qty, buyPrice: buy, sellPrice: sell, profit: sell - buy,
       codeSize: baseCode + '_' + size,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),

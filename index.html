@@ -847,12 +847,23 @@
       Permanently deletes all items, sales, and business day records. Cannot be undone.
       Also clears Firebase if connected. Use to start fresh after testing.
     </div>
-    <button onclick="resetAllData()"
-            style="width:100%;padding:13px;background:var(--red);color:white;border:none;
-                   border-radius:var(--r);font-size:14px;font-weight:800;cursor:pointer;
-                   font-family:var(--sans);">
-      🗑️ Reset All Data
-    </button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <button onclick="resetAllData()"
+              style="padding:13px;background:var(--red);color:white;border:none;
+                     border-radius:var(--r);font-size:13px;font-weight:800;cursor:pointer;
+                     font-family:var(--sans);">
+        🗑️ Clear Data
+      </button>
+      <button onclick="resetAndRebuildDB()"
+              style="padding:13px;background:#7c3aed;color:white;border:none;
+                     border-radius:var(--r);font-size:13px;font-weight:800;cursor:pointer;
+                     font-family:var(--sans);">
+        🔧 Rebuild DB
+      </button>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:center;">
+      Rebuild DB wipes everything and recreates schema v9 clean
+    </div>
   </div>
 
 
