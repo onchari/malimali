@@ -492,8 +492,60 @@ function clearAddFormPhoto() {
 }
 
 // ===== SAVE ITEM =====
+// ── Saving progress overlay ───────────────────────────────────────
+let _savingTimer = null;
+
+function showSaving(label) {
+  const overlay = document.getElementById('saving-overlay');
+  const arc     = document.getElementById('saving-arc');
+  const lbl     = document.getElementById('saving-label');
+  const btn     = document.getElementById('save-btn');
+  if (!overlay) return;
+
+  // Gray out save button
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.45'; btn.style.pointerEvents = 'none'; }
+
+  // Reset arc
+  const circumference = 213.6;
+  if (arc) { arc.style.strokeDashoffset = circumference; }
+  if (lbl) lbl.textContent = label || 'Saving…';
+
+  overlay.style.display = 'flex';
+
+  // Animate arc 0 → 85% over ~1.5s (final 15% completes on hideSaving)
+  let progress = 0;
+  const target = 85;
+  const steps  = 30;
+  const stepSize = target / steps;
+  clearInterval(_savingTimer);
+  _savingTimer = setInterval(() => {
+    progress = Math.min(progress + stepSize, target);
+    if (arc) arc.style.strokeDashoffset = circumference * (1 - progress / 100);
+    if (progress >= target) clearInterval(_savingTimer);
+  }, 50);
+}
+
+function hideSaving() {
+  const overlay = document.getElementById('saving-overlay');
+  const arc     = document.getElementById('saving-arc');
+  const btn     = document.getElementById('save-btn');
+
+  clearInterval(_savingTimer);
+
+  // Snap to 100%
+  if (arc) arc.style.strokeDashoffset = 0;
+
+  // Short pause at 100% before hiding
+  setTimeout(() => {
+    if (overlay) overlay.style.display = 'none';
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.pointerEvents = ''; }
+  }, 350);
+}
+
 async function saveItem() {
-  const editIdRaw = document.getElementById('edit-id').value;
+  showSaving('Saving…');
+  try {
+      const editIdRaw = document.getElementById('edit-id').value;
 
   // Stock management (add/edit/restock) does NOT require an open day.
   // Only sales (confirmSale) require the day to be open.
@@ -644,8 +696,14 @@ async function saveItem() {
       else toast('⚠️ Duplicate code "' + code + '"', 'err');
     } else { toast('⚠️ Save failed: ' + (e.message||'Unknown'), 'err'); console.error('[SAVE]', e); }
   }
+  } catch(err) {
+    hideSaving();
+    toast('⚠️ Save failed: ' + (err.message || 'Unknown error'), 'err');
+    console.error('[SAVE]', err);
+    return;
+  }
+  hideSaving();
 }
-
 function clearForm() {
   document.getElementById('edit-id').value   = '';
   document.getElementById('f-type').value    = '';
@@ -4075,4 +4133,5 @@ window.toggleUserMenu = toggleUserMenu;
 window.triggerAddPhotoUpload = triggerAddPhotoUpload;
 window.triggerInstall = triggerInstall;
 window.triggerSheetPhotoUpload = triggerSheetPhotoUpload;
-
+window.showSaving = showSaving;
+window.hideSaving = hideSaving;

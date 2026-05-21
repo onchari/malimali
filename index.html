@@ -2324,5 +2324,30 @@
 </div>
 
 
+
+<!-- ── Saving overlay — circular progress ──────────────────────── -->
+<div id="saving-overlay" style="display:none;position:fixed;inset:0;z-index:99999;
+     background:rgba(0,0,0,0.55);backdrop-filter:blur(3px);
+     display:none;align-items:center;justify-content:center;">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+    <!-- SVG circular progress spinner -->
+    <svg id="saving-svg" width="80" height="80" viewBox="0 0 80 80">
+      <!-- Background circle -->
+      <circle cx="40" cy="40" r="34" fill="none"
+              stroke="rgba(255,255,255,0.2)" stroke-width="7"/>
+      <!-- Progress arc -->
+      <circle id="saving-arc" cx="40" cy="40" r="34" fill="none"
+              stroke="#ffffff" stroke-width="7"
+              stroke-linecap="round"
+              stroke-dasharray="213.6"
+              stroke-dashoffset="213.6"
+              transform="rotate(-90 40 40)"
+              style="transition:stroke-dashoffset 0.15s linear;"/>
+    </svg>
+    <div id="saving-label" style="color:white;font-size:15px;font-weight:700;
+         font-family:var(--sans);letter-spacing:0.5px;">Saving…</div>
+  </div>
+</div>
+
 </body>
 </html>
