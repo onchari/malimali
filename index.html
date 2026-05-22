@@ -199,9 +199,9 @@
 
 <!-- ==============================================================
      BOTTOM NAVIGATION BAR
-     5 tabs: Dashboard · Stock · Add · Day · Settings
+     5 tabs: Dashboard · Stock · Add · History · Settings
      Role-gated: app.js hides tabs based on currentUser.tabs[]
-     DAY_RESTRICTED_TABS = ['dash','add'] require an open business day
+     All tabs accessible without manual day management
      ============================================================== -->
 <div class="nav">
   <button class="nav-btn active" onclick="showPage('dash')" id="tab-dash">
@@ -213,8 +213,8 @@
   <button class="nav-btn" onclick="showPage('add')" id="tab-add">
     <span class="icon"><i class="fa-solid fa-plus"></i></span>Add
   </button>
-  <button class="nav-btn" onclick="showPage('day')" id="tab-day">
-    <span class="icon"><i class="fa-solid fa-calendar-day"></i></span>Day
+  <button class="nav-btn" onclick="showPage('history')" id="tab-history">
+    <span class="icon"><i class="fa-solid fa-clock-rotate-left"></i></span>History
   </button>
   <button class="nav-btn" onclick="showPage('finance')" id="tab-finance">
     <span class="icon"><i class="fa-solid fa-wallet"></i></span>Finance
@@ -610,6 +610,18 @@
 <div class="page" id="page-finance">
 
   <!-- Summary KPIs -->
+  <!-- Row 1: Sales Revenue + Profit -->
+  <div class="fin-kpi-row" style="grid-template-columns:1fr 1fr;">
+    <div class="fin-kpi" style="background:#fff0f0;border-color:#fca5a5;">
+      <div class="fin-kpi-val" style="color:var(--accent2);" id="fin-revenue">KES 0</div>
+      <div class="fin-kpi-lbl">🛒 Revenue</div>
+    </div>
+    <div class="fin-kpi green">
+      <div class="fin-kpi-val" id="fin-profit">KES 0</div>
+      <div class="fin-kpi-lbl">📈 Gross Profit</div>
+    </div>
+  </div>
+  <!-- Row 2: Investments / Expenses / Withdrawn / Net -->
   <div class="fin-kpi-row">
     <div class="fin-kpi green">
       <div class="fin-kpi-val" id="fin-invested">KES 0</div>
@@ -629,17 +641,7 @@
     </div>
   </div>
 
-  <!-- Revenue from sales -->
-  <div class="card" style="margin:0 12px 10px;padding:12px 14px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <span style="font-size:13px;font-weight:700;color:var(--text);">💰 Sales Revenue</span>
-      <span style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--green);" id="fin-revenue">KES 0</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:13px;font-weight:700;color:var(--text);">📈 Gross Profit</span>
-      <span style="font-size:15px;font-weight:800;font-family:var(--mono);color:var(--accent2);" id="fin-profit">KES 0</span>
-    </div>
-  </div>
+
 
   <!-- Record entry -->
   <div class="sec-label" style="padding:0 16px;margin-bottom:6px;">➕ Record Transaction</div>
@@ -680,8 +682,9 @@
   <!-- Transaction history -->
   <div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px;margin-bottom:6px;">
     <span class="sec-label" style="padding:0;margin:0;">📋 Transactions</span>
-    <div style="display:flex;gap:6px;">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
       <button onclick="filterFinance('all')" id="fin-filter-all" class="fin-filter-btn active">All</button>
+      <button onclick="filterFinance('revenue')" id="fin-filter-revenue" class="fin-filter-btn">🛒 Sales</button>
       <button onclick="filterFinance('investment')" id="fin-filter-investment" class="fin-filter-btn">Invested</button>
       <button onclick="filterFinance('expense')" id="fin-filter-expense" class="fin-filter-btn">Expenses</button>
       <button onclick="filterFinance('withdrawal')" id="fin-filter-withdrawal" class="fin-filter-btn">Withdrawn</button>
@@ -931,81 +934,52 @@
 
 
 <!-- ==============================================================
-     PAGE: BUSINESS DAY  (id="page-day")
-     Manages the daily business cycle: PENDING → OPEN → CLOSED → LOCKED.
-     loadActiveDay() runs ONCE on app start.
-     refreshDayTab() runs on every Day tab tap (display-only, no re-init).
-     Timer: startDayTimer() runs every 30 s checking for auto-open/close.
+     PAGE: HISTORY  (id="page-history")
+     Automated daily timeline — no manual open/close
      ============================================================== -->
-<div class="page" id="page-day">
+<div class="page" id="page-history">
 
-  <!-- ── Status banner ─────────────────────────────────────── -->
-  <!-- Appearance controlled by updateDayBanner() via DAY_CONFIGS map -->
-  <div id="day-banner"
-       style="border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;
-              text-align:center;background:var(--surface2);border:2px solid var(--border);">
-    <div id="day-banner-icon" style="font-size:40px;margin-bottom:8px;">📅</div>
-    <div id="day-status-badge"
-         style="display:inline-block;font-size:11px;font-weight:800;
-                font-family:var(--mono);padding:4px 12px;border-radius:20px;
-                margin-bottom:8px;letter-spacing:1px;
-                background:var(--surface2);color:var(--muted);">
-      PENDING
+  <!-- Today summary header -->
+  <div class="hist-today-header">
+    <div>
+      <div class="hist-today-date" id="hist-today-date"></div>
+      <div class="hist-today-sub">Today's activity</div>
     </div>
-    <div id="day-banner-title"
-         style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:4px;">
-      No Active Day
-    </div>
-    <div id="day-banner-sub"
-         style="font-size:13px;color:var(--muted);margin-bottom:16px;">
-      Open a day to start recording sales and purchases
-    </div>
-    <!-- Action button area — swapped by updateDayBanner() -->
-    <div id="day-action-area">
-      <button id="day-open-btn" onclick="openDay()"
-              style="width:100%;padding:16px;background:var(--accent);color:white;
-                     border:none;border-radius:var(--r);font-size:16px;font-weight:800;
-                     cursor:pointer;font-family:var(--sans);">
-        🌅 Open Day
-      </button>
+    <div class="hist-today-stats">
+      <div class="hist-stat">
+        <div class="hist-stat-val" id="hist-today-revenue">KES 0</div>
+        <div class="hist-stat-lbl">Revenue</div>
+      </div>
+      <div class="hist-stat">
+        <div class="hist-stat-val green" id="hist-today-profit">KES 0</div>
+        <div class="hist-stat-lbl">Profit</div>
+      </div>
+      <div class="hist-stat">
+        <div class="hist-stat-val" id="hist-today-sales">0</div>
+        <div class="hist-stat-lbl">Sales</div>
+      </div>
     </div>
   </div>
 
-  <!-- ── Live day stats (visible when day is OPEN) ─────────── -->
-  <div id="day-live" style="display:none;">
-    <div class="stats-row">
-      <div class="stat-box green">
-        <div class="stat-val" id="day-sales-count">0</div>
-        <div class="stat-lbl">Sales Made</div>
-      </div>
-      <div class="stat-box amber">
-        <div class="stat-val" id="day-revenue">KES 0</div>
-        <div class="stat-lbl">Revenue</div>
-      </div>
-      <div class="stat-box cyan">
-        <div class="stat-val" id="day-profit">KES 0</div>
-        <div class="stat-lbl">Profit</div>
-      </div>
-      <div class="stat-box purple">
-        <div class="stat-val" id="day-purchases">0</div>
-        <div class="stat-lbl">Purchases</div>
-      </div>
-    </div>
+  <!-- Today sales list -->
+  <div class="sec-label" style="margin-top:4px;">📋 Today's Sales</div>
+  <div id="hist-today-list" style="padding:0 12px 8px;"></div>
 
-    <!-- Today's sales list -->
-    <div class="sec-label">💸 Today's Sales</div>
-    <div id="day-sales-list"></div>
-
-    <!-- Today's restock additions -->
-    <div class="sec-label" style="margin-top:4px;">📦 Today's Purchases (Stock Added)</div>
-    <div id="day-purchases-list"></div>
+  <!-- Period filter -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 16px 6px;">
+    <span class="sec-label" style="padding:0;margin:0;">📅 Past Records</span>
+    <select id="hist-period-filter" class="add-select" style="width:auto;height:34px;font-size:12px;padding:0 28px 0 8px;" onchange="renderHistoryPage()">
+      <option value="7">Last 7 days</option>
+      <option value="30" selected>Last 30 days</option>
+      <option value="90">Last 90 days</option>
+      <option value="all">All time</option>
+    </select>
   </div>
 
-  <!-- ── Past sessions list ─────────────────────────────────── -->
-  <div class="sec-label" style="margin-top:4px;">📜 Past Day Sessions</div>
-  <div id="day-sessions-list"></div>
+  <!-- Daily records grouped by date -->
+  <div id="hist-records-list" style="padding:0 12px 80px;"></div>
 
-</div><!-- /page-day -->
+</div><!-- /page-history -->
 
 
 <!-- ==============================================================
@@ -1316,156 +1290,7 @@
 </div><!-- /detail-sheet -->
 
 
-<!-- ==============================================================
-     SHEET: DAY CLOSE SUMMARY  (id="day-summary-sheet")
-     Opens when Close Day is tapped.
-     showDaySummary() populates all ds-* elements.
-     confirmCloseDay() saves final status to DB.
-     ============================================================== -->
-<div class="sheet-overlay" id="day-summary-sheet">
-  <div class="sheet" style="max-height:96vh;padding-bottom:24px;">
-    <div class="sheet-handle"></div>
 
-    <!-- Header gradient -->
-    <div style="text-align:center;margin-bottom:18px;padding:16px;
-                background:linear-gradient(135deg,#0d4a22,#1e7a3e);
-                border-radius:var(--r-lg);color:white;">
-      <div style="font-size:44px;margin-bottom:8px;">🌙</div>
-      <div style="font-size:22px;font-weight:800;">End of Day Report</div>
-      <div id="ds-date"
-           style="font-size:13px;opacity:0.75;font-family:var(--mono);margin-top:4px;"></div>
-      <div id="ds-time-range"
-           style="font-size:12px;opacity:0.6;font-family:var(--mono);margin-top:2px;"></div>
-    </div>
-
-    <!-- Day verdict banner -->
-    <div id="ds-verdict"
-         style="border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;">
-    </div>
-
-    <!-- Financials grid -->
-    <div style="font-size:11px;font-weight:700;color:var(--muted);
-                letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">
-      💰 Financials
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
-      <div class="detail-box" style="padding:14px;text-align:center;">
-        <div class="detail-key">REVENUE</div>
-        <div class="detail-val" id="ds-revenue" style="font-size:22px;color:var(--accent2);"></div>
-      </div>
-      <div class="detail-box" style="padding:14px;text-align:center;">
-        <div class="detail-key">PROFIT</div>
-        <div class="detail-val" id="ds-profit" style="font-size:22px;color:var(--green);"></div>
-      </div>
-      <div class="detail-box" style="padding:14px;text-align:center;">
-        <div class="detail-key">PROFIT MARGIN</div>
-        <div class="detail-val" id="ds-margin" style="font-size:22px;color:var(--accent3);"></div>
-      </div>
-      <div class="detail-box" style="padding:14px;text-align:center;">
-        <div class="detail-key">AVG SALE VALUE</div>
-        <div class="detail-val" id="ds-avg-sale" style="font-size:22px;color:var(--accent);"></div>
-      </div>
-    </div>
-
-    <!-- Sales activity grid -->
-    <div style="font-size:11px;font-weight:700;color:var(--muted);
-                letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">
-      📊 Sales Activity
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">SALES</div>
-        <div class="detail-val" id="ds-sales" style="font-size:26px;color:var(--green);"></div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">ITEMS SOLD</div>
-        <div class="detail-val" id="ds-items-sold" style="font-size:26px;color:var(--accent);"></div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">CUSTOM PRICE</div>
-        <div class="detail-val" id="ds-custom-price" style="font-size:26px;color:var(--accent3);"></div>
-      </div>
-    </div>
-
-    <!-- Stock summary grid -->
-    <div style="font-size:11px;font-weight:700;color:var(--muted);
-                letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">
-      📦 Stock Summary
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">OPENING STOCK</div>
-        <div class="detail-val" id="ds-opening-stock" style="font-size:16px;color:var(--text2);"></div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">CLOSING STOCK</div>
-        <div class="detail-val" id="ds-closing-stock" style="font-size:16px;color:var(--accent);"></div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">PURCHASES ADDED</div>
-        <div class="detail-val" id="ds-purchases" style="font-size:18px;color:var(--accent3);"></div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">PURCHASE COST</div>
-        <div class="detail-val" id="ds-purchases-val" style="font-size:16px;color:var(--muted);"></div>
-      </div>
-    </div>
-
-    <!-- Stock movement progress bar -->
-    <div class="detail-box" style="padding:14px;margin-bottom:14px;">
-      <div class="detail-key" style="margin-bottom:8px;">STOCK MOVEMENT TODAY</div>
-      <div style="display:flex;justify-content:space-between;font-size:11px;
-                  color:var(--muted);font-family:var(--mono);margin-bottom:6px;">
-        <span>Sold</span>
-        <span id="ds-stock-pct-label">0%</span>
-      </div>
-      <div style="background:var(--surface2);border-radius:6px;height:12px;overflow:hidden;">
-        <div id="ds-stock-bar"
-             style="height:100%;background:linear-gradient(90deg,var(--green),var(--accent));
-                    border-radius:6px;width:0%;transition:width 0.8s ease;">
-        </div>
-      </div>
-    </div>
-
-    <!-- Top seller -->
-    <div id="ds-top-seller" style="margin-bottom:14px;"></div>
-
-    <!-- Type breakdown -->
-    <div id="ds-type-breakdown" style="margin-bottom:14px;"></div>
-
-    <!-- Optional notes textarea -->
-    <div style="margin-bottom:16px;">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;
-                  text-transform:uppercase;letter-spacing:0.5px;">
-        Day Notes (optional)
-      </div>
-      <textarea id="ds-notes" rows="2"
-                placeholder="Any notes for the day…"
-                style="width:100%;background:var(--surface2);border:1.5px solid var(--border);
-                       border-radius:var(--r);color:var(--text);font-family:var(--sans);
-                       font-size:14px;padding:10px;outline:none;resize:none;"
-                onfocus="this.style.borderColor='var(--accent)'"
-                onblur="this.style.borderColor='var(--border)'">
-      </textarea>
-    </div>
-
-    <!-- Confirm / Cancel -->
-    <button id="ds-pause-btn" style="display:none;" onclick="confirmCloseDay()" class="btn-secondary" style="margin-bottom:8px;">⏸ Pause</button>
-    <button id="ds-confirm-btn" onclick="confirmCloseDay()"
-            style="width:100%;padding:16px;background:var(--accent);color:white;
-                   border:none;border-radius:var(--r);font-size:16px;font-weight:800;
-                   cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
-      <i class="fa-solid fa-circle-check"></i> Confirm &amp; Close Day
-    </button>
-    <button onclick="cancelCloseDay()"
-            style="width:100%;padding:13px;background:transparent;
-                   border:1.5px solid var(--border);border-radius:var(--r);
-                   font-size:14px;font-weight:600;color:var(--muted);
-                   cursor:pointer;font-family:var(--sans);">
-      ← Keep Day Open
-    </button>
-  </div>
-</div><!-- /day-summary-sheet -->
 
 
 <!-- ==============================================================
@@ -1947,156 +1772,7 @@
 </div><!-- /detail-sheet -->
 
 
-<!-- ==============================================================
-     SHEET: DAY CLOSE SUMMARY  (id="day-summary-sheet")
-     Opens when Close Day is tapped.
-     showDaySummary() populates all ds-* elements.
-     confirmCloseDay() saves final status to DB.
-     ============================================================== -->
-<div class="sheet-overlay" id="day-summary-sheet">
-  <div class="sheet" style="max-height:96vh;padding-bottom:24px;">
-    <div class="sheet-handle"></div>
 
-    <!-- Header gradient -->
-    <div style="text-align:center;margin-bottom:18px;padding:16px;
-                background:linear-gradient(135deg,#0d4a22,#1e7a3e);
-                border-radius:var(--r-lg);color:white;">
-      <div style="font-size:44px;margin-bottom:8px;">🌙</div>
-      <div style="font-size:22px;font-weight:800;">End of Day Report</div>
-      <div id="ds-date"
-           style="font-size:13px;opacity:0.75;font-family:var(--mono);margin-top:4px;"></div>
-      <div id="ds-time-range"
-           style="font-size:12px;opacity:0.6;font-family:var(--mono);margin-top:2px;"></div>
-    </div>
-
-    <!-- Day verdict banner -->
-    <div id="ds-verdict"
-         style="border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;">
-    </div>
-
-    <!-- Financials grid -->
-    <div style="font-size:11px;font-weight:700;color:var(--muted);
-                letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">
-      💰 Financials
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
-      <div class="detail-box" style="padding:14px;text-align:center;">
-        <div class="detail-key">REVENUE</div>
-        <div class="detail-val" id="ds-revenue" style="font-size:22px;color:var(--accent2);"></div>
-      </div>
-      <div class="detail-box" style="padding:14px;text-align:center;">
-        <div class="detail-key">PROFIT</div>
-        <div class="detail-val" id="ds-profit" style="font-size:22px;color:var(--green);"></div>
-      </div>
-      <div class="detail-box" style="padding:14px;text-align:center;">
-        <div class="detail-key">PROFIT MARGIN</div>
-        <div class="detail-val" id="ds-margin" style="font-size:22px;color:var(--accent3);"></div>
-      </div>
-      <div class="detail-box" style="padding:14px;text-align:center;">
-        <div class="detail-key">AVG SALE VALUE</div>
-        <div class="detail-val" id="ds-avg-sale" style="font-size:22px;color:var(--accent);"></div>
-      </div>
-    </div>
-
-    <!-- Sales activity grid -->
-    <div style="font-size:11px;font-weight:700;color:var(--muted);
-                letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">
-      📊 Sales Activity
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">SALES</div>
-        <div class="detail-val" id="ds-sales" style="font-size:26px;color:var(--green);"></div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">ITEMS SOLD</div>
-        <div class="detail-val" id="ds-items-sold" style="font-size:26px;color:var(--accent);"></div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">CUSTOM PRICE</div>
-        <div class="detail-val" id="ds-custom-price" style="font-size:26px;color:var(--accent3);"></div>
-      </div>
-    </div>
-
-    <!-- Stock summary grid -->
-    <div style="font-size:11px;font-weight:700;color:var(--muted);
-                letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">
-      📦 Stock Summary
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">OPENING STOCK</div>
-        <div class="detail-val" id="ds-opening-stock" style="font-size:16px;color:var(--text2);"></div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">CLOSING STOCK</div>
-        <div class="detail-val" id="ds-closing-stock" style="font-size:16px;color:var(--accent);"></div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">PURCHASES ADDED</div>
-        <div class="detail-val" id="ds-purchases" style="font-size:18px;color:var(--accent3);"></div>
-      </div>
-      <div class="detail-box" style="padding:12px;text-align:center;">
-        <div class="detail-key">PURCHASE COST</div>
-        <div class="detail-val" id="ds-purchases-val" style="font-size:16px;color:var(--muted);"></div>
-      </div>
-    </div>
-
-    <!-- Stock movement progress bar -->
-    <div class="detail-box" style="padding:14px;margin-bottom:14px;">
-      <div class="detail-key" style="margin-bottom:8px;">STOCK MOVEMENT TODAY</div>
-      <div style="display:flex;justify-content:space-between;font-size:11px;
-                  color:var(--muted);font-family:var(--mono);margin-bottom:6px;">
-        <span>Sold</span>
-        <span id="ds-stock-pct-label">0%</span>
-      </div>
-      <div style="background:var(--surface2);border-radius:6px;height:12px;overflow:hidden;">
-        <div id="ds-stock-bar"
-             style="height:100%;background:linear-gradient(90deg,var(--green),var(--accent));
-                    border-radius:6px;width:0%;transition:width 0.8s ease;">
-        </div>
-      </div>
-    </div>
-
-    <!-- Top seller -->
-    <div id="ds-top-seller" style="margin-bottom:14px;"></div>
-
-    <!-- Type breakdown -->
-    <div id="ds-type-breakdown" style="margin-bottom:14px;"></div>
-
-    <!-- Optional notes textarea -->
-    <div style="margin-bottom:16px;">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;
-                  text-transform:uppercase;letter-spacing:0.5px;">
-        Day Notes (optional)
-      </div>
-      <textarea id="ds-notes" rows="2"
-                placeholder="Any notes for the day…"
-                style="width:100%;background:var(--surface2);border:1.5px solid var(--border);
-                       border-radius:var(--r);color:var(--text);font-family:var(--sans);
-                       font-size:14px;padding:10px;outline:none;resize:none;"
-                onfocus="this.style.borderColor='var(--accent)'"
-                onblur="this.style.borderColor='var(--border)'">
-      </textarea>
-    </div>
-
-    <!-- Confirm / Cancel -->
-    <button id="ds-pause-btn" style="display:none;" onclick="confirmCloseDay()" class="btn-secondary" style="margin-bottom:8px;">⏸ Pause</button>
-    <button id="ds-confirm-btn" onclick="confirmCloseDay()"
-            style="width:100%;padding:16px;background:var(--accent);color:white;
-                   border:none;border-radius:var(--r);font-size:16px;font-weight:800;
-                   cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
-      <i class="fa-solid fa-circle-check"></i> Confirm &amp; Close Day
-    </button>
-    <button onclick="cancelCloseDay()"
-            style="width:100%;padding:13px;background:transparent;
-                   border:1.5px solid var(--border);border-radius:var(--r);
-                   font-size:14px;font-weight:600;color:var(--muted);
-                   cursor:pointer;font-family:var(--sans);">
-      ← Keep Day Open
-    </button>
-  </div>
-</div><!-- /day-summary-sheet -->
 
 
 <!-- ==============================================================

@@ -608,7 +608,7 @@ function showPage(id) {
   // summary removed
 
 
-  if (id === 'day') { refreshDayTab(); }
+  if (id === 'history') { renderHistoryPage(); }
 }
 
 // ===== TYPES =====
@@ -882,19 +882,25 @@ function showSaving(label) {
 }
 
 function hideSaving() {
+  clearInterval(_savingTimer);
+
   const overlay = document.getElementById('saving-overlay');
   const arc     = document.getElementById('saving-arc');
   const btn     = UI.el('save-btn');
 
-  clearInterval(_savingTimer);
-
-  // Snap to 100%
+  // Snap arc to 100%
   if (arc) arc.style.strokeDashoffset = 0;
 
-  // Short pause at 100% before hiding
+  // Re-enable button IMMEDIATELY so user can retry on validation fail
+  if (btn) {
+    btn.disabled = false;
+    btn.style.opacity = '';
+    btn.style.pointerEvents = '';
+  }
+
+  // Hide overlay after short pause so user sees the complete circle
   setTimeout(() => {
     if (overlay) overlay.style.display = 'none';
-    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.pointerEvents = ''; }
   }, 350);
 }
 
@@ -1044,12 +1050,11 @@ async function saveItem() {
     } else { toast('⚠️ Save failed: ' + (e.message||'Unknown'), 'err'); console.error('[SAVE]', e); }
   }
   } catch(err) {
-    _overlay.hide();
     toast('⚠️ Save failed: ' + (err.message || 'Unknown error'), 'err');
     console.error('[SAVE]', err);
-    return;
+  } finally {
+    _overlay.hide(); // ALWAYS runs — on success, error, or early return
   }
-  _overlay.hide();
 }
 function clearForm() {
   UI.el('edit-id').value   = '';
@@ -1299,18 +1304,19 @@ async function renderList() {
         cards.push(`
           <div class="item-card shoe-size-row" onclick="openShoeSizeCard('${escapeHtml(item.code)}',${sz.size})">
             <div class="item-top">
-              <div class="shoe-size-badge">${sz.size}</div>
+              <!-- Big green size number -->
+              <div class="shoe-size-badge ${isOut ? 'out' : isLow ? 'low' : ''}">${sz.size}</div>
               <div class="item-body">
-                <div class="item-code" style="font-size:13px;">${escapeHtml(item.code)} · Size ${sz.size}
-                  ${sz.sizeGroup ? '<span class="tag tag-gray" style="font-size:9px;margin-left:4px;">' + (sz.sizeGroup==='S'?'Children':sz.sizeGroup==='M'?'Teens':'Adults') + '</span>' : ''}
-                </div>
+                <!-- Item name + group label only — no "Size XX" text -->
+                <div class="item-code">${escapeHtml(item.name || item.code)}</div>
                 <div class="item-tags">
+                  ${sz.sizeGroup ? `<span class="tag tag-gray">${sz.sizeGroup==='S'?'Children':sz.sizeGroup==='M'?'Teens':'Adults'}</span>` : ''}
                   <span class="tag ${stockColor}">${stockLabel}</span>
                   <span class="tag tag-gray">${soldQty} sold</span>
                 </div>
               </div>
               <div class="item-right">
-                <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(price)}</div>
+                <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent2);">${fmt(price)}</div>
                 <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px;">Buy: ${fmt(buy)}</div>
               </div>
             </div>
@@ -1353,15 +1359,79 @@ async function renderList() {
   list.innerHTML = cards.join('');
 }
 
-// Open a shoe size card — goes straight to size action sheet
+// Open a dedicated size detail sheet from the stock list
 async function openShoeSizeCard(itemCode, size) {
   const items   = await dbAll('items');
   const item    = items.find(i => i.code === itemCode);
   if (!item) { toast('Item not found', 'err'); return; }
-  // Open detail sheet with this size pre-selected
-  await openSheet(item.id);
-  // Pre-select the size after sheet opens
-  setTimeout(() => selectDetailShoeSize(item.id, size), 200);
+
+  const allSz  = await getShoeSizes(itemCode);
+  const sizeRec = allSz.find(s => s.size === size);
+  if (!sizeRec) { toast('Size record not found', 'err'); return; }
+
+  const price    = sizeRec.sellPrice || item.sellPrice || 0;
+  const buy      = sizeRec.buyPrice  || item.buyPrice  || 0;
+  const profit   = price - buy;
+  const isOut    = sizeRec.qty <= 0;
+  const isLow    = !isOut && sizeRec.qty <= LOW_STOCK_LEVEL;
+  const stockCol = isOut ? 'var(--red)' : isLow ? '#d97706' : 'var(--green)';
+  const stockLbl = isOut ? 'Out of stock' : sizeRec.qty + ' pairs in stock';
+
+  // Reuse or create size action sheet
+  let sheet = document.getElementById('shoe-size-action-sheet');
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'shoe-size-action-sheet';
+    sheet.className = 'sheet-overlay';
+    sheet.innerHTML = '<div class="sheet" id="shoe-size-action-inner"></div>';
+    sheet.addEventListener('click', e => { if (e.target === sheet) closeShoeSizeActions(); });
+    document.body.appendChild(sheet);
+  }
+
+  const inner = document.getElementById('shoe-size-action-inner');
+  inner.innerHTML = `
+    <div class="sheet-handle"></div>
+
+    <!-- Size header -->
+    <div style="display:flex;align-items:center;gap:14px;padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:16px;">
+      <div class="shoe-size-badge ${isOut?'out':isLow?'low':''}" style="width:64px;height:64px;font-size:28px;">${size}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:18px;font-weight:900;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name || item.code)}</div>
+        <div style="font-size:12px;font-family:var(--mono);color:var(--muted);margin-top:2px;">${escapeHtml(item.code)} · ${sizeRec.sizeGroup==='S'?'Children':sizeRec.sizeGroup==='M'?'Teens':'Adults'}</div>
+        <div style="font-size:13px;font-weight:700;color:${stockCol};margin-top:4px;">${stockLbl}</div>
+      </div>
+    </div>
+
+    <!-- Price stats -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Buy</div><div class="sh-stat-val muted">${fmt(buy)}</div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Sell</div><div class="sh-stat-val accent2">${fmt(price)}</div></div>
+      <div class="sh-stat-box ${profit>0?'accent-bg':''}"><div class="sh-stat-lbl">Profit</div><div class="sh-stat-val ${profit>0?'green':'muted'}">${fmt(profit)}</div></div>
+    </div>
+
+    <!-- Action buttons -->
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${!isOut ? `
+        <button onclick="closeShoeSizeActions();closeSheet();openSellShoeModal(${item.id},${size})"
+                style="width:100%;padding:16px;background:#1e7a3e;color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);display:flex;align-items:center;justify-content:center;gap:10px;">
+          <i class="fa-solid fa-cash-register"></i> Sell — Size ${size}
+        </button>` : isOut ? `
+        <div style="padding:12px;text-align:center;font-size:13px;color:var(--muted);background:var(--surface2);border-radius:var(--r);">Out of stock — restock first</div>` : ''}
+      <button onclick="closeShoeSizeActions();openShoeSizeRestock(${item.id},${size})"
+              style="width:100%;padding:14px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);display:flex;align-items:center;justify-content:center;gap:10px;">
+        <i class="fa-solid fa-boxes-stacked"></i> Restock — Size ${size}
+      </button>
+      <button onclick="closeShoeSizeActions();openShoeSizeEdit(${item.id},${size})"
+              style="width:100%;padding:14px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);display:flex;align-items:center;justify-content:center;gap:10px;">
+        <i class="fa-solid fa-pen-to-square"></i> Edit Price — Size ${size}
+      </button>
+      <button onclick="closeShoeSizeActions()"
+              style="width:100%;padding:13px;background:transparent;border:1px solid var(--border);border-radius:var(--r);font-size:14px;color:var(--muted);cursor:pointer;font-family:var(--sans);">
+        Close
+      </button>
+    </div>`;
+
+  sheet.classList.add('open');
 }
 window.openShoeSizeCard = openShoeSizeCard;
 
@@ -1369,7 +1439,6 @@ window.openShoeSizeCard = openShoeSizeCard;
 // ===== DETAIL SHEET =====
 
 function openSellFromSheet() {
-  if (!isDayOpen()) { toast('⚠️ Open the business day to make sales.', 'err'); return; }
   const id = currentDetailId;
   closeSheet();
   setTimeout(async () => {
@@ -1987,75 +2056,147 @@ function adjSellQty(d) {
 
 async function confirmSale() {
   if (!currentSellItemId) return;
-  if (!requireOpenDay()) return;
+
   const item = await dbGet('items', currentSellItemId);
-  const qty = Math.max(1, parseInt(document.getElementById('sm-qty').value) || 1);
-  if (qty > item.qty) { toast('⚠️ Not enough stock!', 'err'); return; }
-  const actualRaw = parseFloat(document.getElementById('sm-actual').value);
-  const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : item.sell;
-  if (priceUsed <= 0) { toast('⚠️ No selling price set on this item', 'err'); return; }
+  if (!item) { toast('Item not found', 'err'); closeSellModal(); return; }
+
+  // ── Read form values ───────────────────────────────────────────
+  const qtyEl     = document.getElementById('sm-qty');
+  const actualEl  = document.getElementById('sm-actual');
+  const qty       = Math.max(1, parseInt(qtyEl?.value || '1') || 1);
+  const actualRaw = parseFloat(actualEl?.value || '');
+
+  // ── Prices — use normalized sellPrice/buyPrice ─────────────────
+  const sellPrice = _isShoeSale && _sellShoeSize
+    ? (_sellShoeSize.sellPrice || item.sellPrice || item.sell || 0)
+    : (item.sellPrice || item.sell || 0);
+  const buyPrice  = _isShoeSale && _sellShoeSize
+    ? (_sellShoeSize.buyPrice  || item.buyPrice  || item.buy  || 0)
+    : (item.buyPrice  || item.buy  || 0);
+
+  const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : sellPrice;
+  if (priceUsed <= 0) { toast('⚠️ No selling price set', 'err'); return; }
+
+  // ── Validate qty ───────────────────────────────────────────────
+  const maxQty = _isShoeSale && _sellShoeSize ? _sellShoeSize.qty : item.qty;
+  if (qty > maxQty) { toast('⚠️ Only ' + maxQty + ' in stock', 'err'); return; }
+
+  // ── Validate actual price ≥ buy price ─────────────────────────
+  if (!isNaN(actualRaw) && actualRaw > 0 && actualRaw < buyPrice) {
+    toast('⚠️ Sale price cannot be below buying price (' + fmt(buyPrice) + ')', 'err');
+    return;
+  }
+
+  const revenue = qty * priceUsed;
+  const profit  = qty * (priceUsed - buyPrice);
 
   const paymentMethod = _selectedPayment || 'cash';
+
   const sale = {
-    // Item reference
     itemId:        item.id,
     itemCode:      item.code,
     itemName:      item.name || item.code,
-    itemType:      item.type  || '',
-    itemSize:      item.size  || '',
-    // Transaction
+    itemType:      item.type || '',
+    itemSize:      _isShoeSale && _sellShoeSize ? String(_sellShoeSize.size) : (item.variant || item.size || ''),
     qty,
-    buyPrice:      item.buy   || item.defaultBuy  || 0,
-    sellPrice:     item.sell  || item.defaultSell || 0,
+    buyPrice,
+    sellPrice,
     actualPrice:   priceUsed,
-    revenue:       qty * priceUsed,
-    profit:        qty * (priceUsed - (item.buy || item.defaultBuy || 0)),
-    overridden:    !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== item.sell,
-    // Payment
+    revenue,
+    profit,
+    overridden:    !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== sellPrice,
     paymentMethod,
-    // Audit
     soldBy:        currentUser ? currentUser.username : 'system',
-    businessDate:  activeDay ? (activeDay.businessDate || activeDay.business_date) : todayDateStr(),
+    businessDate:  todayDateStr(), // auto-assigned by date
     date:          new Date().toISOString(),
   };
 
+  // ── Deduct stock ───────────────────────────────────────────────
   if (_isShoeSale && _sellShoeSize) {
-    // Shoe sale: deduct from specific size record
     _sellShoeSize.qty = Math.max(0, (_sellShoeSize.qty || 0) - qty);
     _sellShoeSize.updatedAt = new Date().toISOString();
     await dbPut('shoe_sizes', _sellShoeSize);
-    // Update parent item virtual qty
     const allSz = await getShoeSizes(item.code);
-    item.qty = allSz.reduce((t,s) => t + s.qty, 0);
-    // Sync shoe_sizes record
+    item.qty = allSz.reduce((t, s) => t + s.qty, 0);
     if (fbReady && fbDb) {
       try {
         const { doc, setDoc } = await waitForFbImports();
-        if (!_sellShoeSize.fbId) { _sellShoeSize.fbId = 'sz_' + _sellShoeSize.codeSize; }
+        if (!_sellShoeSize.fbId) _sellShoeSize.fbId = 'sz_' + _sellShoeSize.codeSize;
         await setDoc(doc(fbDb, 'shoe_sizes', _sellShoeSize.fbId), sanitiseForFirestore({..._sellShoeSize}));
-      } catch(e) { console.warn('[SYNC] shoe size sync:', e.message); }
+      } catch(e) { console.warn('[SYNC] shoe size:', e.message); }
     }
   } else {
     item.qty = Math.max(0, item.qty - qty);
   }
   await dbPut('items', item);
+
+  // ── Record sale ────────────────────────────────────────────────
   const newSaleId = await dbAdd('sales', sale);
   sale.id = newSaleId;
   fbSyncItem(item);
   fbSyncSale(sale);
+
+  // ── AUTO-RECORD TO FINANCES ────────────────────────────────────
+  // Every sale automatically creates a finance revenue entry
+  try {
+    const finEntry = {
+      type:        'revenue',
+      amount:      revenue,
+      profit:      profit,
+      description: 'Sale: ' + (item.name || item.code) +
+                   (_isShoeSale && _sellShoeSize ? ' (Size ' + _sellShoeSize.size + ')' : '') +
+                   ' × ' + qty,
+      category:    'sales',
+      paymentMethod,
+      saleId:      newSaleId,
+      itemCode:    item.code,
+      date:        todayDateStr(),
+      createdAt:   new Date().toISOString(),
+      createdBy:   currentUser ? currentUser.username : 'system',
+    };
+    await dbAdd('finances', finEntry);
+    // Sync to Firebase
+    if (fbReady && fbDb) {
+      try {
+        const { doc, setDoc } = await waitForFbImports();
+        const fbFinId = 'fin_sale_' + newSaleId;
+        finEntry.fbId = fbFinId;
+        await setDoc(doc(fbDb, 'finances', fbFinId), sanitiseForFirestore({...finEntry}));
+      } catch(e) { console.warn('[SYNC] finance entry:', e.message); }
+    }
+  } catch(e) {
+    console.warn('[FINANCE] Auto-record failed:', e.message);
+  }
+
+  // ── Close all overlays ─────────────────────────────────────────
+  closeSellModal();       // sell modal
+  closeSheet();           // detail sheet (if open)
+  closeShoeSizeActions(); // size action sheet (if open)
+
+  // ── Reset sell search if on sell page ─────────────────────────
+  const sellSearch = document.getElementById('sell-search');
+  const sellResults = document.getElementById('sell-results');
+  if (sellSearch)  sellSearch.value = '';
+  if (sellResults) sellResults.innerHTML = '';
+
+  // ── Refresh UI ─────────────────────────────────────────────────
+  allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
+  renderList();
+  renderDashboard();
+  updateHeader();
   updateLowStockBadge();
   scheduleSync();
+  try { renderSellPage(); } catch(_) {}
+  try { if (activeDay) updateDayLiveStats(); } catch(_) {}
+  // Refresh finance page if it's currently visible
+  try {
+    if (document.getElementById('page-finance')?.classList.contains('active')) {
+      renderFinancePage();
+    }
+  } catch(_) {}
 
-  closeSellModal();
-  document.getElementById('sell-search').value = '';
-  document.getElementById('sell-results').innerHTML = '';
-
-  toast('✅ Sale: ' + fmt(sale.revenue) + ' · Profit: ' + fmt(sale.profit), 'ok');
-  renderSellPage();
-  renderDashboard();
-  renderList();
-  updateHeader();
-  if (activeDay) updateDayLiveStats();
+  toast('✅ ' + fmt(revenue) + ' · Profit: ' + fmt(profit), 'ok');
 }
 
 async function renderSellPage() {
@@ -2826,53 +2967,26 @@ function fmtFullDate(dateStr) {
 }
 
 // ── STATE CHECKS ─────────────────────────────────────────────────────
-function isDayOpen() {
-  return activeDay && activeDay.status === 'OPEN';
-}
+// isDayOpen() removed — system always active, date-based tracking
+function isDayOpen() { return true; }
 
-function requireOpenDay() {
-  if (!isDayOpen()) {
-    const status = activeDay ? activeDay.status : 'NONE';
-    const msg = status === 'CLOSED'
-      ? '🌙 Day is closed — tap Open Day to continue.'
-      : status === 'LOCKED'
-        ? '🔒 This day is archived and cannot be modified.'
-        : '📅 Open the business day to record transactions.';
-    toast(msg, 'err');
-    showPage('day');
-    return false;
-  }
-  return true;
-}
+// requireOpenDay removed — always returns true
+function requireOpenDay() { return true; }
 
 // ── LOAD ACTIVE DAY ON APP START ─────────────────────────────────────
 // Called once at startup. Finds or creates today's day record.
 // Also locks any past days that were left OPEN or CLOSED overnight.
 async function loadActiveDay() {
-  const today = todayDateStr();
-
-  // Lock any past days left open (e.g. app not opened since yesterday)
-  const all = await dbAll('business_days');
-  for (const d of all) {
-    if (d.business_date !== today && d.status !== 'LOCKED') {
-      d.status = 'LOCKED';
-      d.final_locked_at = new Date().toISOString();
-      await dbPut('business_days', d);
-    }
-  }
-
-  // Find or create today's record
-  let bday = await getBusinessDay(today);
-  if (!bday) bday = await createDayRecord(today);
-
-  activeDay = bday;
-  updateDayBanner();
-  if (isDayOpen()) updateDayLiveStats();
-  startDayTimer();
-  startBannerClock();
+  // Replaced by automatic date-based tracking
+  // activeDay kept for backward-compat but not required
+  try {
+    const today = todayDateStr();
+    let bday = await getBusinessDay(today);
+    if (!bday) bday = await createDayRecord(today);
+    activeDay = bday;
+  } catch(e) { console.warn('[DAY]', e.message); }
 }
 
-// ── REFRESH DAY TAB (no re-init) ─────────────────────────────────────
 async function refreshDayTab() {
   const today = todayDateStr();
   const bday = await getBusinessDay(today);
@@ -3105,79 +3219,7 @@ async function voidSale(saleId) {
   toast('↩️ Sale voided · stock restored', 'ok');
 }
 
-function startDayTimer() {
-  if (dayCheckTimer) clearInterval(dayCheckTimer);
-  dayCheckTimer = setInterval(async () => {
-    const now   = new Date();
-    const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
-    const today = todayDateStr();
-    const bday  = await getBusinessDay(today);
-    if (!bday) return;
-
-    // 11:45 PM — warn once that auto-close is coming
-    if (bday.status === 'OPEN' && h === 23 && m === 45 && s < 30 && _warned1145 !== today) {
-      _warned1145 = today;
-      toast('⏰ 15 minutes left — day auto-closes at midnight!', 'err');
-    }
-
-    // 11:59:55 PM — auto-close the open day
-    if (bday.status === 'OPEN' && h === 23 && m === 59 && s >= 55) {
-      const sales = await dbAll('sales');
-      const ds = sales.filter(s => (s.businessDate||s.business_date) === today);
-      bday.status     = 'CLOSED';
-      bday.closed_at  = now.toISOString();
-      bday.auto_closed = true;
-      bday.salesCount = ds.length;
-      bday.revenue    = ds.reduce((a, s) => a + s.revenue, 0);
-      bday.profit     = ds.reduce((a, s) => a + s.profit, 0);
-      bday.itemsSold  = ds.reduce((a, s) => a + s.qty, 0);
-      await dbPut('business_days', bday);
-      activeDay = bday;
-      setDayMode(false);
-      updateDayBanner();
-      renderDaySessionsList();
-      toast('🌙 Day auto-closed at midnight.', '');
-    }
-
-    // 00:00 — lock yesterday, create today fresh
-    if (h === 0 && m === 0 && s < 30) {
-      const yesterday = new Date(now - 864e5).toISOString().split('T')[0];
-      const yBday = await getBusinessDay(yesterday);
-      if (yBday && yBday.status !== 'LOCKED') {
-        yBday.status = 'LOCKED';
-        yBday.final_locked_at = now.toISOString();
-        await dbPut('business_days', yBday);
-      }
-      // Ensure today's record exists
-      let todayBday = await getBusinessDay(today);
-      if (!todayBday) todayBday = await createDayRecord(today);
-      _warned1145 = null; // reset warning for new day
-      _lastKnownDate = today;
-      activeDay = todayBday;
-      setDayMode(false);
-      updateDayBanner();
-      renderDaySessionsList();
-      // Restart banner clock for new day
-      startBannerClock();
-    }
-  }, 30000);
-}
-
-// ── VISIBILITY CHANGE — handle phone wake ────────────────────────────
-let _lastKnownDate = todayDateStr();
-document.addEventListener('visibilitychange', async () => {
-  if (document.hidden) return;
-  const today = todayDateStr();
-  if (today !== _lastKnownDate) {
-    _lastKnownDate = today;
-    _warned1145 = null;
-    await loadActiveDay(); // date changed overnight — full reinit
-  } else {
-    await refreshDayTab(); // same day — just refresh display
-  }
-});
-
-// ── LOCK OLD DAY ─────────────────────────────────────────────────────
+function startDayTimer() { /* replaced by automatic date tracking */ }
 async function lockBusinessDay(bday) {
   bday.status = 'LOCKED';
   bday.final_locked_at = new Date().toISOString();
@@ -3621,7 +3663,7 @@ const USERS = [
     role: 'super',
     roleLabel: 'Super User',
     // Super: access to everything
-    tabs: ['dash','list','add','day','finance','settings']
+    tabs: ['dash','list','add','history','finance','settings']
   },
   {
     username: 'vanice',
@@ -3631,7 +3673,7 @@ const USERS = [
     role: 'user',
     roleLabel: 'User',
     // User: everything except Settings
-    tabs: ['dash','list','add','day','finance']
+    tabs: ['dash','list','add','history','finance']
   },
   {
     username: 'trevor',
@@ -3662,7 +3704,7 @@ let currentUser = null;
 
 function applyRoleRestrictions(user) {
   // Show/hide nav tabs based on role
-  const allTabs = ['dash','list','add','day','finance','settings'];
+  const allTabs = ['dash','list','add','history','finance','settings'];
   allTabs.forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) {
@@ -3714,14 +3756,6 @@ showPage = function(id) {
     toast('⛔ Access denied', 'err');
     return;
   }
-  // Block restricted tabs when day is not open (but NOT sheet popups)
-  const dayOpen = activeDay && (activeDay.status === 'OPEN');
-  if (['dash', 'add'].includes(id) && !dayOpen) {
-    _origShowPage('day');
-    setTimeout(() => showDayClosedOverlay(id), 100);
-    return;
-  }
-  hideDayClosedOverlay();
   if (currentUser) localStorage.setItem(KEY_LAST_PAGE, id);
   _origShowPage(id);
 };
@@ -3850,8 +3884,14 @@ async function renderFinancePage() {
   const invested  = entries.filter(e=>e.type==='investment').reduce((s,e)=>s+e.amount,0);
   const expenses  = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
   const withdrawn = entries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+e.amount,0);
-  const revenue   = sales.reduce((s,e)=>s+e.revenue,0);
-  const profit    = sales.reduce((s,e)=>s+e.profit,0);
+  // Revenue from both sales entries (auto-recorded) and direct sales table
+  const salesRevEntries = entries.filter(e=>e.type==='revenue'&&e.category==='sales');
+  const revenue   = salesRevEntries.length
+    ? salesRevEntries.reduce((s,e)=>s+e.amount,0)
+    : sales.reduce((s,e)=>s+e.revenue,0);
+  const profit    = salesRevEntries.length
+    ? salesRevEntries.reduce((s,e)=>s+(e.profit||0),0)
+    : sales.reduce((s,e)=>s+e.profit,0);
   const net       = invested + revenue - expenses - withdrawn;
 
   const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=fmt(v); };
@@ -3887,6 +3927,7 @@ function renderFinList(entries) {
     investment: { icon:'💵', color:'var(--green)',  label:'Investment' },
     expense:    { icon:'💸', color:'var(--red)',    label:'Expense'    },
     withdrawal: { icon:'🏧', color:'var(--amber)',  label:'Withdrawal' },
+    revenue:    { icon:'🛒', color:'var(--accent2)',label:'Sale Revenue'},
     other:      { icon:'📝', color:'var(--muted)',  label:'Other'      },
   };
   list.innerHTML = entries.map(e => {
@@ -4369,3 +4410,118 @@ async function saveShoeItems(baseCode, baseName, type) {
   return saved;
 }
 
+
+// ===================================================================
+// HISTORY PAGE — automated daily timeline
+// Replaces the old "Day" tab. No manual open/close.
+// Groups all sales and activities by calendar date automatically.
+// ===================================================================
+
+async function renderHistoryPage() {
+  const today     = todayDateStr();
+  const todayFull = new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+  // Set today header
+  UI.setText('hist-today-date', todayFull);
+
+  // All data
+  const allSales    = await dbAll('sales');
+  const allFinances = await dbAll('finances');
+
+  // Today's sales
+  const todaySales = allSales.filter(s => (s.businessDate || s.date?.slice(0,10)) === today);
+  const todayRev   = todaySales.reduce((s,x) => s + x.revenue, 0);
+  const todayProf  = todaySales.reduce((s,x) => s + x.profit, 0);
+
+  UI.setText('hist-today-revenue', fmt(todayRev));
+  UI.setText('hist-today-profit',  fmt(todayProf));
+  UI.setText('hist-today-sales',   todaySales.length);
+
+  // Today sales list
+  const todayList = UI.el('hist-today-list');
+  if (todayList) {
+    if (!todaySales.length) {
+      todayList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales today yet.</div>';
+    } else {
+      const sorted = [...todaySales].sort((a,b) => new Date(b.date) - new Date(a.date));
+      todayList.innerHTML = sorted.map(s => `
+        <div class="hist-sale-row">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              ${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize?' · Size '+escapeHtml(s.itemSize):''}
+            </div>
+            <div style="font-size:11px;color:var(--muted);">
+              ${s.qty} × ${fmt(s.actualPrice||s.sellPrice||0)} · ${s.paymentMethod||'cash'} · ${fmtTime(s.date)}
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
+            <div style="font-size:11px;color:var(--green);font-family:var(--mono);">+${fmt(s.profit)}</div>
+          </div>
+        </div>`).join('');
+    }
+  }
+
+  // Past records grouped by date
+  const filterEl = UI.el('hist-period-filter');
+  const days     = filterEl ? parseInt(filterEl.value) || 999 : 30;
+  const cutoff   = new Date();
+  if (!isNaN(days)) cutoff.setDate(cutoff.getDate() - days);
+
+  // Group sales by date (excluding today)
+  const byDate = {};
+  allSales.forEach(s => {
+    const d = s.businessDate || s.date?.slice(0,10) || today;
+    if (d === today) return; // today shown separately
+    if (!isNaN(days) && new Date(d) < cutoff) return;
+    if (!byDate[d]) byDate[d] = { sales: [], revenue: 0, profit: 0 };
+    byDate[d].sales.push(s);
+    byDate[d].revenue += s.revenue;
+    byDate[d].profit  += s.profit;
+  });
+
+  const datesSorted = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
+  const recList = UI.el('hist-records-list');
+  if (recList) {
+    if (!datesSorted.length) {
+      recList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:16px 0;text-align:center;">No historical records in this period.</div>';
+    } else {
+      recList.innerHTML = datesSorted.map(date => {
+        const day   = byDate[date];
+        const label = new Date(date + 'T12:00:00').toLocaleDateString('en-GB',
+                      { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+        const rows  = [...day.sales]
+          .sort((a,b) => new Date(b.date) - new Date(a.date))
+          .slice(0, 5)
+          .map(s => `
+            <div class="hist-sale-row" style="border-top:1px solid var(--border);">
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                  ${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize?' · Sz'+escapeHtml(s.itemSize):''}
+                </div>
+                <div style="font-size:10px;color:var(--muted);">${s.qty} × ${fmt(s.actualPrice||s.sellPrice||0)} · ${fmtTime(s.date)}</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0;font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
+            </div>`).join('');
+        const more  = day.sales.length > 5
+          ? `<div style="font-size:11px;color:var(--muted);padding:6px 0;text-align:center;">+${day.sales.length-5} more sales</div>` : '';
+
+        return `
+          <div class="hist-day-card">
+            <div class="hist-day-header">
+              <div>
+                <div style="font-size:14px;font-weight:800;">${label}</div>
+                <div style="font-size:11px;color:var(--muted);">${day.sales.length} sale${day.sales.length!==1?'s':''}</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(day.revenue)}</div>
+                <div style="font-size:11px;color:var(--green);font-family:var(--mono);">+${fmt(day.profit)}</div>
+              </div>
+            </div>
+            ${rows}${more}
+          </div>`;
+      }).join('');
+    }
+  }
+}
+window.renderHistoryPage = renderHistoryPage;
