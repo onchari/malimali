@@ -4525,3 +4525,45 @@ async function renderHistoryPage() {
   }
 }
 window.renderHistoryPage = renderHistoryPage;
+
+// ── Window exports — all onclick= handlers ──────────────────────
+window.addType = addType;
+window.adjSellQty = adjSellQty;
+window.attemptLogin = attemptLogin;
+window.cancelEdit = cancelEdit;
+window.checkSession = checkSession;
+window.clearNotifs = clearNotifs;
+window.closePastSessionSheet = closePastSessionSheet;
+window.closeProfileSheet = closeProfileSheet;
+window.closeSellModal = closeSellModal;
+window.closeSheet = closeSheet;
+window.closeUserMenu = closeUserMenu;
+window.confirmRestock = confirmRestock;
+window.confirmSale = confirmSale;
+window.deleteItem = deleteItem;
+window.disconnectFirebase = disconnectFirebase;
+window.dismissInstall = dismissInstall;
+window.editItem = editItem;
+window.filterFinance = filterFinance;
+window.forcePushToFirebase = forcePushToFirebase;
+window.installAppUpdate = installAppUpdate;
+window.openSellFromSheet = openSellFromSheet;
+window.pickEmoji = pickEmoji;
+window.pullFromFirebase = pullFromFirebase;
+window.removeAddPhoto = removeAddPhoto;
+window.resetAllData = resetAllData;
+window.runSyncDebug = runSyncDebug;
+window.saveFinanceEntry = saveFinanceEntry;
+window.saveFirebaseConfig = saveFirebaseConfig;
+window.saveItem = saveItem;
+window.selectPayment = selectPayment;
+window.selectSizeGroup = selectSizeGroup;
+window.setShoeMode = setShoeMode;
+window.showPage = showPage;
+window.showUserProfile = showUserProfile;
+window.toggleNotifPanel = toggleNotifPanel;
+window.toggleRestock = toggleRestock;
+window.toggleUserMenu = toggleUserMenu;
+window.triggerAddPhotoUpload = triggerAddPhotoUpload;
+window.triggerInstall = triggerInstall;
+window.triggerSheetPhotoUpload = triggerSheetPhotoUpload;
