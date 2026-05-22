@@ -1076,10 +1076,7 @@ function clearForm() {
   });
 
   // Reset shoe state
-  if (typeof _shoeGroup !== 'undefined')   _shoeGroup   = null;
-  if (typeof _shoeSizes !== 'undefined')   _shoeSizes   = new Set();
-  if (typeof _perSizeMode !== 'undefined') _perSizeMode = false;
-  if (typeof _shownGroups !== 'undefined') _shownGroups = new Set();
+  _shoeState.reset(); // ShoeState class handles all shoe form state
 
   // Reset mode tabs to default (shared)
   const modeShared  = document.getElementById('mode-tab-shared');
@@ -1203,64 +1200,171 @@ function cancelEdit() { clearForm(); clearAddFormPhoto(); showPage('list'); }
 // ===== RENDER LIST =====
 async function renderList() {
   allItems = await dbAll('items');
-  const search = (document.getElementById('search').value || '').toLowerCase();
+  const search = (UI.el('search')?.value || '').toLowerCase();
   renderTypeChips();
 
+  // Filter non-shoe items normally
   let filtered = allItems.filter(item => {
-    const matchSearch = !search ||
-      item.name.toLowerCase().includes(search) ||
-      item.code.toLowerCase().includes(search) ||
-      (item.size || '').toLowerCase().includes(search) ||
-      item.type.toLowerCase().includes(search);
+    const q = search;
+    const matchSearch = !q ||
+      (item.name || '').toLowerCase().includes(q) ||
+      (item.code || '').toLowerCase().includes(q) ||
+      (item.variant || item.size || '').toLowerCase().includes(q) ||
+      (item.type || '').toLowerCase().includes(q);
     const matchType = activeTypeFilter === 'all' || item.type === activeTypeFilter;
     return matchSearch && matchType;
-  }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // newest first
+  }).sort((a, b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
 
   updateHeader();
 
-  const list = document.getElementById('item-list');
+  const list = UI.el('item-list');
+  if (!list) return;
+
   if (!filtered.length) {
-    list.innerHTML = `<div class="empty"><div class="e-icon">${allItems.length ? '🔍' : '📦'}</div><p>${allItems.length ? 'No items match your search.' : 'No items yet.\nTap ➕ Add Item to get started.'}</p></div>`;
+    list.innerHTML = `<div class="empty">
+      <div class="e-icon">${allItems.length ? '🔍' : '📦'}</div>
+      <p>${allItems.length ? 'No items match your search.' : 'No items yet.\nTap ➕ Add Item to get started.'}</p>
+    </div>`;
     return;
   }
 
-  // Get sales data for profit calculations
-  const allSales = await dbAll('sales');
+  // Sales index for profit display
+  const allSales    = await dbAll('sales');
   const salesByItem = {};
+  const salesBySize = {}; // for shoe sizes: key = "CODE_size"
   allSales.forEach(s => {
-    if (!salesByItem[s.itemId]) salesByItem[s.itemId] = { revenue: 0, profit: 0, qty: 0 };
-    salesByItem[s.itemId].revenue += s.revenue;
-    salesByItem[s.itemId].profit += s.profit;
-    salesByItem[s.itemId].qty += s.qty;
+    if (!salesByItem[s.itemId]) salesByItem[s.itemId] = { qty: 0 };
+    salesByItem[s.itemId].qty += (s.qty || 1);
+    if (s.itemCode && (s.itemSize || s.size)) {
+      const k = s.itemCode + '_' + (s.itemSize || s.size);
+      if (!salesBySize[k]) salesBySize[k] = 0;
+      salesBySize[k] += (s.qty || 1);
+    }
   });
 
-  list.innerHTML = filtered.map(item => {
+  // Load all shoe sizes once
+  const allSizes = await dbAll('shoe_sizes');
+
+  const cards = [];
+
+  for (const item of filtered) {
     const t = getTypeObj(item.type);
-    const stockColor = item.qty === 0 ? 'tag-red' : item.qty <= 3 ? 'tag-amber' : 'tag-green';
-    const stockLabel = item.qty === 0 ? '✕ Out' : item.qty + ' pcs';
-    const itemSales = salesByItem[item.id] || { profit: 0, qty: 0 };
-    const soldQty = itemSales.qty;
-    return `<div class="item-card" onclick="openSheet(${item.id})">
-      <div class="item-top">
-        <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
-        <div class="item-body">
-          <div class="item-code">${item.code}${item.size ? ' · ' + item.size : ''}</div>
-          <div class="item-name">${item.name || ''}</div>
-          <div class="item-tags">
-            <span class="tag tag-cyan">${item.type}</span>
-            <span class="tag tag-gray">${soldQty} sold</span>
-            <span class="tag ${stockColor}">${stockLabel}</span>
+
+    if (item.isShoe) {
+      // ── SHOE ITEM — one card per SIZE ─────────────────────────────
+      const sizes = allSizes
+        .filter(s => s.itemCode === item.code)
+        .sort((a, b) => a.size - b.size);
+
+      if (!sizes.length) {
+        // Shoe parent with no sizes yet — show placeholder
+        cards.push(`
+          <div class="item-card item-card-shoe-header" onclick="openSheet(${item.id})">
+            <div class="item-top">
+              <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
+              <div class="item-body">
+                <div class="item-code">${escapeHtml(item.code)}</div>
+                <div class="item-name">${escapeHtml(item.name || '')}</div>
+                <div class="item-tags">
+                  <span class="tag tag-cyan">${escapeHtml(item.type)}</span>
+                  <span class="tag tag-gray">No sizes added</span>
+                </div>
+              </div>
+            </div>
+          </div>`);
+        continue;
+      }
+
+      // Group header (not tappable separately — just a label divider)
+      cards.push(`
+        <div class="shoe-group-header">
+          <div class="shoe-group-icon" style="background:${t.color || '#1e3a5f'};">${t.emoji}</div>
+          <div class="shoe-group-info">
+            <span class="shoe-group-code">${escapeHtml(item.code)}</span>
+            <span class="shoe-group-name">${escapeHtml(item.name || '')}</span>
           </div>
-        </div>
-        <div class="item-right">
-          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">Sell: ${fmt(item.sell)}</div>
-          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">Buy: ${fmt(item.buy)}</div>
-          <div style="font-size:11px;color:var(--accent);font-family:var(--mono);margin-top:2px;">${item.qty} in store</div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+          <span class="tag tag-cyan" style="font-size:10px;flex-shrink:0;">${escapeHtml(item.type)}</span>
+        </div>`);
+
+      // One row per size
+      sizes.forEach(sz => {
+        const price       = sz.sellPrice || item.sellPrice || 0;
+        const buy         = sz.buyPrice  || item.buyPrice  || 0;
+        const isOut       = sz.qty <= 0;
+        const isLow       = !isOut && sz.qty <= LOW_STOCK_LEVEL;
+        const stockColor  = isOut ? 'tag-red' : isLow ? 'tag-amber' : 'tag-green';
+        const stockLabel  = isOut ? '✕ Out'   : sz.qty + ' prs';
+        const soldQty     = salesBySize[item.code + '_' + sz.size] || 0;
+
+        cards.push(`
+          <div class="item-card shoe-size-row" onclick="openShoeSizeCard('${escapeHtml(item.code)}',${sz.size})">
+            <div class="item-top">
+              <div class="shoe-size-badge">${sz.size}</div>
+              <div class="item-body">
+                <div class="item-code" style="font-size:13px;">${escapeHtml(item.code)} · Size ${sz.size}
+                  ${sz.sizeGroup ? '<span class="tag tag-gray" style="font-size:9px;margin-left:4px;">' + (sz.sizeGroup==='S'?'Children':sz.sizeGroup==='M'?'Teens':'Adults') + '</span>' : ''}
+                </div>
+                <div class="item-tags">
+                  <span class="tag ${stockColor}">${stockLabel}</span>
+                  <span class="tag tag-gray">${soldQty} sold</span>
+                </div>
+              </div>
+              <div class="item-right">
+                <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(price)}</div>
+                <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px;">Buy: ${fmt(buy)}</div>
+              </div>
+            </div>
+          </div>`);
+      });
+
+      // Spacer between shoe groups
+      cards.push('<div style="height:6px;"></div>');
+
+    } else {
+      // ── STANDARD ITEM — single card ───────────────────────────────
+      const stockColor = item.qty === 0 ? 'tag-red' : item.qty <= LOW_STOCK_LEVEL ? 'tag-amber' : 'tag-green';
+      const stockLabel = item.qty === 0 ? '✕ Out'   : item.qty + ' pcs';
+      const soldQty    = (salesByItem[item.id] || {}).qty || 0;
+      const sellPrice  = item.sellPrice || item.sell || 0;
+      const buyPrice   = item.buyPrice  || item.buy  || 0;
+
+      cards.push(`
+        <div class="item-card" onclick="openSheet(${item.id})">
+          <div class="item-top">
+            <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
+            <div class="item-body">
+              <div class="item-code">${escapeHtml(item.code)}${(item.variant||item.size) ? ' · ' + escapeHtml(item.variant||item.size) : ''}</div>
+              <div class="item-name">${escapeHtml(item.name || '')}</div>
+              <div class="item-tags">
+                <span class="tag tag-cyan">${escapeHtml(item.type)}</span>
+                <span class="tag tag-gray">${soldQty} sold</span>
+                <span class="tag ${stockColor}">${stockLabel}</span>
+              </div>
+            </div>
+            <div class="item-right">
+              <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(sellPrice)}</div>
+              <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">Buy: ${fmt(buyPrice)}</div>
+            </div>
+          </div>
+        </div>`);
+    }
+  }
+
+  list.innerHTML = cards.join('');
 }
+
+// Open a shoe size card — goes straight to size action sheet
+async function openShoeSizeCard(itemCode, size) {
+  const items   = await dbAll('items');
+  const item    = items.find(i => i.code === itemCode);
+  if (!item) { toast('Item not found', 'err'); return; }
+  // Open detail sheet with this size pre-selected
+  await openSheet(item.id);
+  // Pre-select the size after sheet opens
+  setTimeout(() => selectDetailShoeSize(item.id, size), 200);
+}
+window.openShoeSizeCard = openShoeSizeCard;
+
 
 // ===== DETAIL SHEET =====
 
@@ -3992,8 +4096,7 @@ async function enrichShoeItems(items) {
 }
 
 // ── SHOE ADD FORM GLOBALS ─────────────────────────────────────────
-let _shoeSizes    = new Set();
-let _shownGroups  = new Set();
+// _shoeSizes and _shownGroups are now properties of _shoeState instance
 let _isShoeSale   = false;
 let _sellShoeItem = null;
 let _sellShoeSize = null;
@@ -4134,7 +4237,7 @@ function renderShoeSummary() {
   const el = UI.el('shoe-selected-summary');
   if (!el) return;
   if (_shoeState.sizes.size === 0) { el.innerHTML = ''; return; }
-  const sorted = [..._shoeSizes].sort((a,b)=>a-b);
+  const sorted = _shoeState.sortedSizes;
   el.innerHTML = '<div class="shoe-pills-row">' +
     sorted.map(s => '<span class="shoe-pill">' + s + '</span>').join('') +
     '<span style="font-size:11px;color:var(--muted);margin-left:4px;align-self:center;">' +
@@ -4150,7 +4253,7 @@ function renderShoeRows() {
   const rows = document.getElementById('shoe-rows');
   if (!rows) return;
   if (!_shoeState.perSizeMode) { rows.innerHTML = ''; return; }
-  const sorted = [..._shoeSizes].sort((a,b)=>a-b);
+  const sorted = _shoeState.sortedSizes;
   rows.innerHTML = sorted.map(s =>
     '<div class="shoe-row">' +
     '<span class="shoe-sz-lbl">' + s + '</span>' +
@@ -4185,60 +4288,60 @@ function togglePerSizeMode() { setShoeMode(_shoeState.perSizeMode ? 'shared' : '
 // Save shoe items: one parent + one shoe_sizes record per size
 async function saveShoeItems(baseCode, baseName, type) {
   if (_shoeState.sizes.size === 0) { toast('⚠️ Select at least one size', 'err'); return false; }
-  // Use last selected group, or derive from first selected size
-  if (!_shoeGroup) {
-    const groups = getShoeGroups();
-    const firstSize = [..._shoeSizes][0];
-    for (const [g, cfg] of Object.entries(groups)) {
-      if (firstSize >= cfg.min && firstSize <= cfg.max) { _shoeState.group = g; break; }
-    }
-    if (!_shoeGroup) _shoeState.group = 'S'; // fallback
+
+  if (!_shoeState.group) {
+    const firstSize = [..._shoeState.sizes][0];
+    _shoeState.group = _shoeState.groupFor(firstSize) || 'S';
   }
 
   let sharedQty = 0, sharedBuy = 0, sharedSell = 0;
   if (!_shoeState.perSizeMode) {
-    sharedQty  = parseInt((document.getElementById('shoe-shared-qty') ||{}).value) || 0;
-    sharedBuy  = parseFloat((document.getElementById('shoe-shared-buy') ||{}).value) || 0;
-    sharedSell = parseFloat((document.getElementById('shoe-shared-sell')||{}).value) || 0;
-    if (sharedQty  <= 0) { toast('⚠️ Enter quantity per size', 'err'); return false; }
-    if (sharedBuy  <= 0) { toast('⚠️ Enter buying price',     'err'); return false; }
-    if (sharedSell <= 0) { toast('⚠️ Enter selling price',    'err'); return false; }
+    sharedQty  = parseInt(UI.el('shoe-shared-qty')?.value  || '0') || 0;
+    sharedBuy  = parseFloat(UI.el('shoe-shared-buy')?.value  || '0') || 0;
+    sharedSell = parseFloat(UI.el('shoe-shared-sell')?.value || '0') || 0;
+    if (sharedQty  <= 0) { toast('⚠️ Enter quantity per size (must be > 0)', 'err'); return false; }
+    if (sharedBuy  <= 0) { toast('⚠️ Enter buying price',  'err'); return false; }
+    if (sharedSell <= 0) { toast('⚠️ Enter selling price', 'err'); return false; }
+    if (sharedSell < sharedBuy) { toast('⚠️ Sell price cannot be less than buy price', 'err'); return false; }
   }
 
-  const sorted   = [..._shoeSizes].sort((a,b)=>a-b);
-  const allItems = await dbAll('items');
-  let product    = allItems.find(i => i.code === baseCode);
+  const sorted  = _shoeState.sortedSizes;
+  const allItms = await dbAll('items');
+  let product   = allItms.find(i => i.code === baseCode);
 
   if (!product) {
     const pid = await dbAdd('items', {
-      code: baseCode, name: baseName || type + ' ' + baseCode,
-      type, category: _shoeGroup, isShoe: true,
-      defaultBuy:  _shoeState.perSizeMode ? 0 : sharedBuy,
-      defaultSell: _shoeState.perSizeMode ? 0 : sharedSell,
-      profit:      _shoeState.perSizeMode ? 0 : sharedSell - sharedBuy,
+      code: baseCode, name: baseName || (type + ' ' + baseCode),
+      type, category: _shoeState.group, isShoe: true,
+      buyPrice:  _shoeState.perSizeMode ? 0 : sharedBuy,
+      sellPrice: _shoeState.perSizeMode ? 0 : sharedSell,
+      profit:    _shoeState.perSizeMode ? 0 : sharedSell - sharedBuy,
       qty: 0, createdAt: new Date().toISOString(),
     });
     product = await dbGet('items', pid);
   } else if (!_shoeState.perSizeMode) {
-    product.defaultBuy  = sharedBuy;
-    product.defaultSell = sharedSell;
-    product.profit      = sharedSell - sharedBuy;
+    product.buyPrice  = sharedBuy;
+    product.sellPrice = sharedSell;
+    product.profit    = sharedSell - sharedBuy;
     await dbPut('items', product);
   }
 
   let saved = 0;
+  const perSizeErrors = [];
   for (const size of sorted) {
     let qty, buy, sell;
     if (_shoeState.perSizeMode) {
-      qty  = parseInt((document.getElementById('shr-qty-' + size)||{}).value)  || 0;
-      buy  = parseFloat((document.getElementById('shr-buy-' + size)||{}).value) || 0;
-      sell = parseFloat((document.getElementById('shr-sell-'+size)||{}).value)  || 0;
-      if (qty <= 0 && sell <= 0) continue;
+      qty  = parseInt(UI.el('shr-qty-'  + size)?.value || '0') || 0;
+      buy  = parseFloat(UI.el('shr-buy-'  + size)?.value || '0') || 0;
+      sell = parseFloat(UI.el('shr-sell-' + size)?.value || '0') || 0;
+      if (qty  <= 0) { perSizeErrors.push('Size ' + size + ': qty must be > 0'); continue; }
+      if (buy  <= 0) { perSizeErrors.push('Size ' + size + ': buy price required'); continue; }
+      if (sell <= 0) { perSizeErrors.push('Size ' + size + ': sell price required'); continue; }
     } else { qty = sharedQty; buy = sharedBuy; sell = sharedSell; }
 
     await upsertShoeSize({
       itemCode: baseCode, itemId: product.id,
-      size, sizeGroup: _shoeState.group || 'S',
+      size, sizeGroup: _shoeState.group,
       qty, buyPrice: buy, sellPrice: sell, profit: sell - buy,
       codeSize: baseCode + '_' + size,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -4246,11 +4349,14 @@ async function saveShoeItems(baseCode, baseName, type) {
     saved++;
   }
 
-  const allSz   = await getShoeSizes(baseCode);
-  product.qty   = allSz.reduce((t,s) => t + s.qty, 0);
+  if (perSizeErrors.length) toast('⚠️ Skipped: ' + perSizeErrors.join(' · '), 'err');
+  if (saved === 0) { toast('⚠️ No sizes saved — fill all required fields', 'err'); return false; }
+
+  const allSz = await getShoeSizes(baseCode);
+  product.qty = allSz.reduce((t, s) => t + s.qty, 0);
   await dbPut('items', product);
   fbSyncItem(product);
-  // Sync shoe_sizes to Firebase
+
   if (fbReady && fbDb) {
     try {
       const { doc, setDoc } = await waitForFbImports();
@@ -4258,301 +4364,8 @@ async function saveShoeItems(baseCode, baseName, type) {
         if (!sz.fbId) { sz.fbId = 'sz_' + sz.codeSize; await dbPut('shoe_sizes', sz); }
         await setDoc(doc(fbDb, 'shoe_sizes', sz.fbId), sanitiseForFirestore({...sz}));
       }
-    } catch(e) { console.warn('[SYNC] shoe_sizes sync error:', e.message); }
+    } catch(e) { console.warn('[SYNC] shoe_sizes:', e.message); }
   }
   return saved;
 }
 
-// ── DETAIL SHEET — shoe size grid ────────────────────────────────
-let _selectedShoeSize = null;
-
-async function renderShoeDetailGrid(item) {
-  const sizeSection = document.getElementById('sh-shoe-sizes');
-  if (!sizeSection) return;
-  const sizes = await getShoeSizes(item.code);
-  if (!sizes.length) { sizeSection.style.display = 'none'; return; }
-
-  const totalStock = sizes.reduce((t,s) => t+s.qty, 0);
-  sizeSection.style.display = 'block';
-  sizeSection.innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
-      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);">Select Size</div>' +
-      '<div style="font-size:12px;font-family:var(--mono);font-weight:700;color:var(--muted);">' + totalStock + ' pairs total</div>' +
-    '</div>' +
-    '<div class="sh-sz-grid">' +
-    sizes.map(s => {
-      const isOut = s.qty <= 0;
-      const isLow = !isOut && s.qty <= LOW_STOCK_LEVEL;
-      const price = s.sellPrice || item.defaultSell || 0;
-      return '<div class="sh-sz-card2 ' + (isOut?'out':isLow?'low':'') + '" ' +
-        'id="shsz-' + s.size + '" onclick="selectDetailShoeSize(' + item.id + ',' + s.size + ')">' +
-        (isOut ? '' : '<div class="sh-sz-dot"></div>') +
-        '<div class="sh-sz-num">' + s.size + '</div>' +
-        '<div class="sh-sz-qty">' + (isOut?'Out':s.qty+(s.qty===1?' pr':' prs')) + '</div>' +
-        '<div class="sh-sz-price">' + fmt(price) + '</div>' +
-      '</div>';
-    }).join('') +
-    '</div>' +
-    '<div style="font-size:10px;color:var(--muted);text-align:center;margin-top:6px;">Tap a size to select</div>';
-}
-
-function selectDetailShoeSize(itemId, size) {
-  _selectedShoeSize = size;
-  document.querySelectorAll('.sh-sz-card2').forEach(c => {
-    c.classList.remove('selected');
-  });
-  const selected = document.getElementById('shsz-' + size);
-  if (selected && !selected.classList.contains('out')) selected.classList.add('selected');
-  const bar = document.getElementById('sh-selected-size-bar');
-  if (bar) { bar.style.display = 'block'; bar.textContent = 'Size ' + size + ' selected · tap action below'; }
-}
-
-// ── SELL SHOE ─────────────────────────────────────────────────────
-async function openSellShoeModal(itemId, preselectedSize) {
-  const item  = await dbGet('items', itemId);
-  if (!item) { toast('Item not found', 'err'); return; }
-  const sizes = await getShoeSizes(item.code);
-
-  if (preselectedSize !== undefined) {
-    const sr = sizes.find(s => s.size === preselectedSize);
-    if (sr && sr.qty > 0) { _openSellModalForShoeSize(item, sr); return; }
-    else if (sr && sr.qty <= 0) { toast('Size ' + preselectedSize + ' is out of stock', 'err'); return; }
-  }
-
-  // Show size picker
-  _sellShoeItem = item;
-  const available = sizes.filter(s => s.qty > 0);
-  if (!available.length) { toast('All sizes out of stock', 'err'); return; }
-
-  let sheet = document.getElementById('shoe-picker-sheet');
-  if (!sheet) {
-    sheet = document.createElement('div');
-    sheet.id = 'shoe-picker-sheet';
-    sheet.className = 'sheet-overlay';
-    sheet.innerHTML = '<div class="sheet" id="shoe-size-picker"></div>';
-    sheet.addEventListener('click', e => { if (e.target===sheet) closeShoePickerSheet(); });
-    document.body.appendChild(sheet);
-  }
-  const inner = document.getElementById('shoe-size-picker');
-  inner.innerHTML =
-    '<div class="sheet-handle"></div>' +
-    '<div style="font-size:17px;font-weight:800;margin-bottom:4px;">' + escapeHtml(item.name) + '</div>' +
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Select size to sell</div>' +
-    '<div style="display:flex;flex-wrap:wrap;gap:8px;">' +
-    available.map(s => {
-      const warn = s.qty <= LOW_STOCK_LEVEL ? 'background:#fef3c7;' : '';
-      return '<button type="button" class="sz-btn sz-active" style="height:58px;flex-direction:column;width:56px;' + warn + '" ' +
-        'onclick="pickShoeSize(' + s.size + ')">' +
-        '<span style="font-size:15px;font-weight:900;">' + s.size + '</span>' +
-        '<span style="font-size:9px;opacity:.7;">' + s.qty + ' left</span></button>';
-    }).join('') +
-    '</div>' +
-    '<button onclick="closeShoePickerSheet()" style="margin-top:14px;width:100%;padding:13px;background:transparent;border:1px solid var(--border);border-radius:var(--r);font-size:14px;cursor:pointer;font-family:var(--sans);">Cancel</button>';
-  sheet.classList.add('open');
-}
-
-function closeShoePickerSheet() {
-  const s = document.getElementById('shoe-picker-sheet');
-  if (s) s.classList.remove('open');
-}
-
-function pickShoeSize(size) {
-  closeShoePickerSheet();
-  if (!_sellShoeItem) return;
-  getShoeSizes(_sellShoeItem.code).then(sizes => {
-    const sr = sizes.find(s => s.size === size);
-    if (sr) _openSellModalForShoeSize(_sellShoeItem, sr);
-  });
-}
-
-function _openSellModalForShoeSize(item, sizeRec) {
-  _sellShoeItem = item;
-  _sellShoeSize = sizeRec;
-  _isShoeSale   = true;
-  currentSellItemId = item.id;
-  const price = sizeRec.sellPrice || item.defaultSell || 0;
-  const buy   = sizeRec.buyPrice  || item.defaultBuy  || 0;
-  const set   = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
-  const setV  = (id,v) => { const el=document.getElementById(id); if(el) el.value=v; };
-  set('sm-item-name',  escapeHtml(item.name) + ' — Size ' + sizeRec.size);
-  set('sm-item-code',  item.code + '-' + sizeRec.size);
-  set('sm-sell-price', fmt(price));
-  set('sm-buy-price',  fmt(buy));
-  set('sm-stock',      sizeRec.qty + ' pairs');
-  const sa = document.getElementById('sm-actual');
-  if (sa) { sa.value = ''; sa.placeholder = fmt(price); }
-  setV('sm-qty', 1);
-  const sqty = document.getElementById('sm-qty');
-  if (sqty) sqty.max = sizeRec.qty;
-  ['sm-qty-error','sm-price-error'].forEach(id => { const el=document.getElementById(id); if(el) el.style.display='none'; });
-  selectPayment('cash');
-  document.getElementById('sell-modal').classList.add('open');
-  updateSellModal();
-}
-
-// Shoe size action sheet (⋯ button)
-async function openShoeSizeActions(itemId, size) {
-  const item    = await dbGet('items', itemId);
-  const allSz   = await getShoeSizes(item ? item.code : '');
-  const sizeRec = allSz.find(s => s.size === size);
-  if (!item || !sizeRec) return;
-
-  const price = sizeRec.sellPrice || item.defaultSell || 0;
-  const isOut = sizeRec.qty <= 0;
-
-  let sheet = document.getElementById('shoe-size-action-sheet');
-  if (!sheet) {
-    sheet = document.createElement('div');
-    sheet.id = 'shoe-size-action-sheet';
-    sheet.className = 'sheet-overlay';
-    sheet.innerHTML = '<div class="sheet" id="shoe-size-action-inner"></div>';
-    sheet.addEventListener('click', e => { if(e.target===sheet) closeShoeSizeActions(); });
-    document.body.appendChild(sheet);
-  }
-  const inner = document.getElementById('shoe-size-action-inner');
-  const sc = sizeRec.qty <= 0 ? 'var(--red)' : sizeRec.qty <= LOW_STOCK_LEVEL ? '#d97706' : 'var(--green)';
-  inner.innerHTML =
-    '<div class="sheet-handle"></div>' +
-    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">' +
-      '<div style="width:48px;height:48px;border-radius:var(--r);background:var(--accent-light);display:flex;align-items:center;justify-content:center;">' +
-        '<span style="font-size:20px;font-weight:900;font-family:var(--mono);color:var(--accent);">' + size + '</span>' +
-      '</div>' +
-      '<div><div style="font-size:15px;font-weight:800;">' + escapeHtml(item.name) + ' · Size ' + size + '</div>' +
-      '<div style="font-size:12px;color:' + sc + ';font-family:var(--mono);">' + (isOut?'Out of stock':sizeRec.qty+' pairs') + ' · ' + fmt(price) + '</div></div>' +
-    '</div>' +
-    '<div style="display:flex;flex-direction:column;gap:8px;">' +
-      (isDayOpen() && !isOut
-        ? '<button onclick="closeShoeSizeActions();closeSheet();openSellShoeModal(' + itemId + ',' + size + ')" class="fin-action-btn green"><i class="fa-solid fa-cash-register"></i> Sell — Size ' + size + '</button>' : '') +
-      '<button onclick="closeShoeSizeActions();openShoeSizeRestock(' + itemId + ',' + size + ')" class="fin-action-btn blue"><i class="fa-solid fa-boxes-stacked"></i> Restock — Size ' + size + '</button>' +
-      '<button onclick="closeShoeSizeActions();openShoeSizeEdit(' + itemId + ',' + size + ')" class="fin-action-btn grey"><i class="fa-solid fa-pen-to-square"></i> Edit Price — Size ' + size + '</button>' +
-      '<button onclick="closeShoeSizeActions()" style="width:100%;padding:13px;background:transparent;border:1px solid var(--border);border-radius:var(--r);font-size:14px;color:var(--muted);cursor:pointer;font-family:var(--sans);">Cancel</button>' +
-    '</div>';
-  sheet.classList.add('open');
-}
-
-function closeShoeSizeActions() {
-  const s = document.getElementById('shoe-size-action-sheet');
-  if (s) s.classList.remove('open');
-}
-
-async function openShoeSizeRestock(itemId, size) {
-  const item    = await dbGet('items', itemId);
-  const allSz   = await getShoeSizes(item ? item.code : '');
-  const sizeRec = allSz.find(s => s.size === size);
-  if (!item || !sizeRec) return;
-  const qty = parseInt(prompt('Restock Size ' + size + '\nCurrent stock: ' + sizeRec.qty + ' pairs\nAdd how many pairs?') || '0');
-  if (!qty || qty <= 0) return;
-  sizeRec.qty       += qty;
-  sizeRec.updatedAt  = new Date().toISOString();
-  await dbPut('shoe_sizes', sizeRec);
-  const updatedSizes = await getShoeSizes(item.code);
-  item.qty = updatedSizes.reduce((t,s) => t+s.qty, 0);
-  await dbPut('items', item);
-  fbSyncItem(item);
-  allItems = await dbAll('items');
-  await enrichShoeItems(allItems);
-  renderList(); renderDashboard(); updateHeader();
-  scheduleSync();
-  openSheet(itemId);
-  toast('📦 Size ' + size + ': +' + qty + ' → ' + sizeRec.qty + ' pairs', 'ok');
-}
-
-async function openShoeSizeEdit(itemId, size) {
-  const item    = await dbGet('items', itemId);
-  const allSz   = await getShoeSizes(item ? item.code : '');
-  const sizeRec = allSz.find(s => s.size === size);
-  if (!item || !sizeRec) return;
-  const currentPrice = sizeRec.sellPrice || item.defaultSell || 0;
-  const newPriceStr  = prompt('Edit sell price for size ' + size + '\nCurrent: ' + fmt(currentPrice) + '\nNew price:');
-  if (!newPriceStr) return;
-  const newPrice = parseFloat(newPriceStr);
-  if (isNaN(newPrice) || newPrice <= 0) { toast('⚠️ Invalid price', 'err'); return; }
-  sizeRec.sellPrice = newPrice;
-  sizeRec.profit    = newPrice - (sizeRec.buyPrice || item.defaultBuy || 0);
-  sizeRec.updatedAt = new Date().toISOString();
-  await dbPut('shoe_sizes', sizeRec);
-  fbSyncItem(item);
-  scheduleSync();
-  openSheet(itemId);
-  toast('✅ Size ' + size + ' price updated to ' + fmt(newPrice), 'ok');
-}
-
-// Settings — shoe group customization
-function loadShoeGroupSettings() {
-  const groups = getShoeGroups();
-  ['S','M','L'].forEach(g => {
-    const minEl = document.getElementById('sg-set-min-' + g);
-    const maxEl = document.getElementById('sg-set-max-' + g);
-    if (minEl) minEl.value = groups[g].min;
-    if (maxEl) maxEl.value = groups[g].max;
-  });
-}
-
-function saveShoeGroups() {
-  const groups = getShoeGroups();
-  ['S','M','L'].forEach(g => {
-    const minEl = document.getElementById('sg-set-min-' + g);
-    const maxEl = document.getElementById('sg-set-max-' + g);
-    if (minEl && maxEl) {
-      groups[g].min = parseInt(minEl.value) || groups[g].min;
-      groups[g].max = parseInt(maxEl.value) || groups[g].max;
-    }
-  });
-  localStorage.setItem(KEY_SHOE_GROUPS, JSON.stringify(groups));
-  renderShoeGroupButtons();
-  toast('✅ Shoe size groups saved', 'ok');
-}
-
-function resetShoeGroups() {
-  localStorage.removeItem(KEY_SHOE_GROUPS);
-  loadShoeGroupSettings();
-  renderShoeGroupButtons();
-  toast('Shoe groups reset to defaults', '');
-}
-
-// ── Expose all functions called from HTML to window scope ──────────
-// Ensures onclick= handlers work even if script loading order changes
-window.addType = addType;
-window.adjSellQty = adjSellQty;
-window.attemptLogin = attemptLogin;
-window.cancelCloseDay = cancelCloseDay;
-window.cancelEdit = cancelEdit;
-window.clearNotifs = clearNotifs;
-window.closePastSessionSheet = closePastSessionSheet;
-window.closeProfileSheet = closeProfileSheet;
-window.closeSellModal = closeSellModal;
-window.closeSheet = closeSheet;
-window.closeUserMenu = closeUserMenu;
-window.confirmCloseDay = confirmCloseDay;
-window.confirmRestock = confirmRestock;
-window.confirmSale = confirmSale;
-window.deleteItem = deleteItem;
-window.disconnectFirebase = disconnectFirebase;
-window.dismissInstall = dismissInstall;
-window.editItem = editItem;
-window.filterFinance = filterFinance;
-window.forcePushToFirebase = forcePushToFirebase;
-window.installAppUpdate = installAppUpdate;
-window.openDay = openDay;
-window.openSellFromSheet = openSellFromSheet;
-window.pickEmoji = pickEmoji;
-window.pullFromFirebase = pullFromFirebase;
-window.removeAddPhoto = removeAddPhoto;
-window.resetAllData = resetAllData;
-window.runSyncDebug = runSyncDebug;
-window.saveFinanceEntry = saveFinanceEntry;
-window.saveFirebaseConfig = saveFirebaseConfig;
-window.saveItem = saveItem;
-window.selectPayment = selectPayment;
-window.selectSizeGroup = selectSizeGroup;
-window.setShoeMode = setShoeMode;
-window.showPage = showPage;
-window.showUserProfile = showUserProfile;
-window.toggleNotifPanel = toggleNotifPanel;
-window.toggleRestock = toggleRestock;
-window.toggleUserMenu = toggleUserMenu;
-window.triggerAddPhotoUpload = triggerAddPhotoUpload;
-window.triggerInstall = triggerInstall;
-window.triggerSheetPhotoUpload = triggerSheetPhotoUpload;
-window.showSaving = showSaving;
-window.hideSaving = hideSaving;
