@@ -605,11 +605,21 @@ function showPage(id) {
   if (id === 'dash') renderDashboard();
   if (id === 'list') renderList();
   if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
-  // summary removed
-
-
   if (id === 'history') { renderHistoryPage(); }
+  if (id === 'finance')  { renderFinancePage(); }
 }
+
+// Guard: wrap showPage to enforce tab access by role
+// Defined immediately after showPage so _origShowPage is available at startup
+const _origShowPage = showPage;
+showPage = function(id) {
+  if (currentUser && !currentUser.tabs.includes(id)) {
+    toast('⛔ Access denied', 'err');
+    return;
+  }
+  if (currentUser) localStorage.setItem(KEY_LAST_PAGE, id);
+  _origShowPage(id);
+};
 
 // ===== TYPES =====
 const DEFAULT_TYPES = [
@@ -3763,17 +3773,6 @@ function logout() {
 }
 
 
-
-// Guard showPage - block access to restricted tabs
-const _origShowPage = showPage;
-showPage = function(id) {
-  if (currentUser && !currentUser.tabs.includes(id)) {
-    toast('⛔ Access denied', 'err');
-    return;
-  }
-  if (currentUser) localStorage.setItem(KEY_LAST_PAGE, id);
-  _origShowPage(id);
-};
 
 function attemptLogin() {
   const username = document.getElementById('login-user').value.trim().toLowerCase();
