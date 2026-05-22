@@ -416,7 +416,7 @@ async function refreshUI(opts = {}) {
   if (list)      renderList();
   if (dashboard) renderDashboard();
   if (header)    updateHeader();
-  if (badge)     try { updateLowStockBadge(); } catch(_) {}
+  if (badge)     try { updateLowStockBadge(); } catch(_) { /* intentionally ignored */ }
   if (sync)      scheduleSync();
 }
 
@@ -623,6 +623,7 @@ const DEFAULT_TYPES = [
 ];
 
 async function loadTypes() {
+  try {
   types = await dbAll('types');
   if (types.length === 0) {
     for (const t of DEFAULT_TYPES) await dbAdd('types', t);
@@ -630,6 +631,7 @@ async function loadTypes() {
   }
   renderTypeSelect();
   renderTypeChips();
+  } catch(e) { console.error("[loadTypes]", e); toast("Error: " + e.message, "err"); }
 }
 
 function renderTypeSelect() {
@@ -653,6 +655,7 @@ function setTypeFilter(name, el) {
 }
 
 async function renderTypes() {
+  try {
   types = await dbAll('types');
   renderTypeSelect();
   const list = document.getElementById('types-list');
@@ -662,6 +665,7 @@ async function renderTypes() {
       <div class="type-name"><span>${t.emoji}</span>${t.name}</div>
       <button class="type-del" onclick="deleteType(${t.id})">✕</button>
     </div>`).join('');
+  } catch(e) { console.error("[renderTypes]", e); toast("Error: " + e.message, "err"); }
 }
 
 function pickEmoji(el) {
@@ -671,6 +675,7 @@ function pickEmoji(el) {
 }
 
 async function addType() {
+  try {
   const name = document.getElementById('new-type-name').value.trim();
   if (!name) { toast('Enter a type name', 'err'); return; }
   if (types.find(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Type already exists', 'err'); return; }
@@ -679,13 +684,16 @@ async function addType() {
   await loadTypes();
   renderTypes();
   toast('✅ Type added!', 'ok');
+  } catch(e) { console.error("[addType]", e); toast("Error: " + e.message, "err"); }
 }
 
 async function deleteType(id) {
+  try {
   if (!confirm('Delete this type? Items using it will still show.')) return;
   await dbDelete('types', id);
   await loadTypes();
   renderTypes();
+  } catch(e) { console.error("[deleteType]", e); toast("Error: " + e.message, "err"); }
 }
 
 // ===== PROFIT PREVIEW =====
@@ -907,155 +915,127 @@ function hideSaving() {
 async function saveItem() {
   _overlay.show('Saving…');
   try {
-      const editIdRaw = UI.el('edit-id').value;
+    const editIdRaw = UI.el('edit-id')?.value || '';
 
-  // Stock management (add/edit/restock) does NOT require an open day.
-  // Only sales (confirmSale) require the day to be open.
-
-  // ── SHOE SIZE EDIT ─────────────────────────────────────────────
-  if (editIdRaw && editIdRaw.startsWith('shoe_edit_')) {
-    const parts   = editIdRaw.replace('shoe_edit_','').split('_');
-    const itemId  = parseInt(parts[0]);
-    const size    = parseInt(parts[1]);
-    const item    = await dbGet('items', itemId);
-    const allSz   = await getShoeSizes(item ? item.code : '');
-    const sizeRec = allSz.find(s => s.size === size);
-    if (!sizeRec) { toast('Size record not found', 'err'); return; }
-
-    const qty  = parseInt(UI.el('f-qty').value);
-    const buy  = parseFloat(UI.el('f-buy').value)  || sizeRec.buyPrice  || 0;
-    const sell = parseFloat(UI.el('f-sell').value) || sizeRec.sellPrice || 0;
-    if (isNaN(qty) || qty < 0) { toast('⚠️ Enter valid quantity', 'err'); return; }
-    if (buy  <= 0) { toast('⚠️ Enter buying price',  'err'); return; }
-    if (sell <= 0) { toast('⚠️ Enter selling price', 'err'); return; }
-
-    sizeRec.qty = qty; sizeRec.buyPrice = buy; sizeRec.sellPrice = sell;
-    sizeRec.profit = sell - buy; sizeRec.updatedAt = new Date().toISOString();
-    await dbPut('shoe_sizes', sizeRec);
-
-    if (item) {
-      const updatedSizes = await getShoeSizes(item.code);
-      item.qty = updatedSizes.reduce((t,s) => t+s.qty, 0);
-      item.defaultBuy = buy; item.defaultSell = sell;
-      item.updatedAt = new Date().toISOString();
-      item.updatedBy = currentUser ? currentUser.username : 'system';
-      await dbPut('items', item);
-      fbSyncItem(item);
+    // SHOE SIZE EDIT
+    if (editIdRaw && editIdRaw.startsWith('shoe_edit_')) {
+      const parts=editIdRaw.replace('shoe_edit_','').split('_');
+      const itemId=parseInt(parts[0]); const size=parseInt(parts[1]);
+      const item=await dbGet('items',itemId);
+      const allSz=await getShoeSizes(item?item.code:'');
+      const sizeRec=allSz.find(s=>s.size===size);
+      if(!sizeRec){toast('Size record not found','err');return;}
+      const qty=parseInt(UI.el('f-qty')?.value);
+      const buy=parseFloat(UI.el('f-buy')?.value)||sizeRec.buyPrice||0;
+      const sell=parseFloat(UI.el('f-sell')?.value)||sizeRec.sellPrice||0;
+      if(isNaN(qty)||qty<0){toast('\u26a0\ufe0f Enter valid quantity','err');return;}
+      if(buy<=0){toast('\u26a0\ufe0f Enter buying price','err');return;}
+      if(sell<=0){toast('\u26a0\ufe0f Enter selling price','err');return;}
+      sizeRec.qty=qty;sizeRec.buyPrice=buy;sizeRec.sellPrice=sell;
+      sizeRec.profit=sell-buy;sizeRec.updatedAt=new Date().toISOString();
+      await dbPut('shoe_sizes',sizeRec);
+      if(item){
+        const updSz=await getShoeSizes(item.code);
+        item.qty=updSz.reduce((t,s)=>t+s.qty,0);
+        item.buyPrice=buy;item.sellPrice=sell;
+        item.updatedAt=new Date().toISOString();
+        item.updatedBy=currentUser?currentUser.username:'system';
+        await dbPut('items',item);fbSyncItem(item);
+      }
+      ['f-code','f-type','f-name','f-size'].forEach(id=>{const el=document.getElementById(id);if(el){el.disabled=false;el.style.opacity='';el.style.cursor='';}});
+      const banner=document.getElementById('restock-mode-banner');if(banner)banner.style.display='none';
+      clearForm();
+      allItems=await dbAll('items');await enrichShoeItems(allItems);
+      renderList();renderDashboard();updateHeader();scheduleSync();
+      toast('\u2705 Size '+size+' updated \u00b7 '+qty+' pairs \u00b7 '+fmt(sell),'ok');
+      showPage('list');return;
     }
 
-    // Re-enable locked fields
-    ['f-code','f-type','f-name','f-size'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) { el.disabled = false; el.style.opacity = ''; el.style.cursor = ''; }
-    });
-    const banner = document.getElementById('restock-mode-banner');
-    if (banner) banner.style.display = 'none';
+    // RESTOCK MODE
+    if(editIdRaw&&editIdRaw.startsWith('restock_')){
+      const existing=await dbGet('items',parseInt(editIdRaw.replace('restock_','')));
+      if(!existing){toast('\u26a0\ufe0f Item not found','err');exitRestockMode();return;}
+      const qtyEl=UI.el('f-qty');
+      const addQty=parseInt(qtyEl?qtyEl.value.trim():'0');
+      if(!addQty||addQty<=0){toast('\u26a0\ufe0f Enter quantity to add','err');if(qtyEl)qtyEl.focus();return;}
+      if(addQty>CODE_MAX_QTY&&!confirm('Adding '+addQty+' units — confirm?'))return;
+      const newQty=existing.qty+addQty;
+      if(newQty>999999){toast('\u26a0\ufe0f Exceeds max 999,999','err');return;}
+      existing.qty=newQty;existing.updatedAt=new Date().toISOString();
+      await dbPut('items',existing);fbSyncItem(existing);
+      allItems=await dbAll('items');await enrichShoeItems(allItems);
+      renderList();renderDashboard();updateHeader();scheduleSync();
+      exitRestockMode();
+      toast('\U0001f4e6 '+existing.code+': +'+addQty+' → '+newQty,'ok');return;
+    }
 
-    clearForm();
-    await refreshUI();
-    toast('✅ Size ' + size + ' updated · ' + qty + ' pairs · ' + fmt(sell), 'ok');
-    showPage('list');
-    return;
-  }
+    // COMMON FIELDS
+    const type=UI.el('f-type')?.value||'';
+    const code=sanitiseCode(UI.el('f-code')?.value||'');
+    const name=(UI.el('f-name')?.value||'').trim().replace(/[ \t]+/g,' ')||(type+' '+code);
+    if(!type){toast('\u26a0\ufe0f Select an item type','err');return;}
+    if(!code){toast('\u26a0\ufe0f Enter item code','err');return;}
 
-  // ── RESTOCK MODE ───────────────────────────────────────────────
-  if (editIdRaw && editIdRaw.startsWith('restock_')) {
-    const existing = await dbGet('items', parseInt(editIdRaw.replace('restock_','')));
-    if (!existing) { toast('⚠️ Item not found', 'err'); exitRestockMode(); return; }
-    const qtyEl  = UI.el('f-qty');
-    const addQty = parseInt(qtyEl ? qtyEl.value.trim() : '0');
-    if (!addQty || addQty <= 0) { toast('⚠️ Enter quantity to add', 'err'); if(qtyEl) qtyEl.focus(); return; }
-    if (addQty > CODE_MAX_QTY && !confirm('Adding ' + addQty + ' units — confirm?')) return;
-    const newQty = existing.qty + addQty;
-    if (newQty > 999999) { toast('⚠️ Exceeds max 999,999', 'err'); return; }
-    existing.qty = newQty; existing.updatedAt = new Date().toISOString();
-    await dbPut('items', existing);
-    fbSyncItem(existing);
-    await refreshUI();
-    exitRestockMode();
-    toast('📦 ' + existing.code + ': +' + addQty + ' → ' + newQty, 'ok');
-    return;
-  }
+    // SHOE MODE
+    if(isFootwearType(type)&&!editIdRaw){
+      const savedCount=await saveShoeItems(code,name,type);
+      if(!savedCount)return;
+      clearForm();clearAddFormPhoto();
+      allItems=await dbAll('items');await enrichShoeItems(allItems);
+      renderList();renderDashboard();updateHeader();scheduleSync();
+      toast('\u2705 '+savedCount+' shoe size(s) saved!','ok');return;
+    }
 
-  // Read common fields
-  const type = UI.el('f-type').value;
-  const code = sanitiseCode(UI.el('f-code').value);
-  const name = (UI.el('f-name').value||'').trim().replace(/\s+/g,' ') || (type + ' ' + code);
+    // STANDARD ADD / EDIT
+    const size=UI.el('f-size')?.value.trim()||'';
+    const qtyRaw=UI.el('f-qty')?.value||'';
+    const qty=parseInt(qtyRaw);
+    const buy=parseFloat(UI.el('f-buy')?.value)||0;
+    const sell=parseFloat(UI.el('f-sell')?.value)||0;
+    if(!size){toast('\u26a0\ufe0f Enter a size (or N/A)','err');return;}
+    if(qtyRaw===''||isNaN(qty)||qty<0){toast('\u26a0\ufe0f Enter quantity','err');return;}
+    if(qty>CODE_MAX_QTY&&!confirm('Adding '+qty+' units — confirm?'))return;
+    if(buy<=0){toast('\u26a0\ufe0f Enter buying price','err');return;}
+    if(sell<=0){toast('\u26a0\ufe0f Enter selling price','err');return;}
+    const profit=sell-buy;
+    const item={type,code,name,variant:size,buyPrice:buy,sellPrice:sell,profit,qty,createdAt:new Date().toISOString()};
 
-  if (!type) { toast('⚠️ Select an item type', 'err'); return; }
-  if (!code) { toast('⚠️ Enter item code', 'err'); return; }
-
-  // ── SHOE MODE ──────────────────────────────────────────────────
-  if (isFootwearType(type) && !editIdRaw) {
-    const savedCount = await saveShoeItems(code, name, type);
-    if (!savedCount) return;
-    clearForm(); clearAddFormPhoto();
-    await refreshUI();
-    toast('✅ ' + savedCount + ' shoe size(s) saved!', 'ok');
-    return;
-  }
-
-  // ── STANDARD ADD / EDIT ────────────────────────────────────────
-  const size   = UI.el('f-size').value.trim();
-  const qtyRaw = UI.el('f-qty').value;
-  const qty    = parseInt(qtyRaw);
-  const buy    = parseFloat(UI.el('f-buy').value)  || 0;
-  const sell   = parseFloat(UI.el('f-sell').value) || 0;
-
-  if (!size)                                  { toast('⚠️ Enter a size (or N/A)', 'err'); return; }
-  if (qtyRaw === '' || isNaN(qty) || qty < 0) { toast('⚠️ Enter quantity',       'err'); return; }
-  if (qty > CODE_MAX_QTY && !confirm('Adding ' + qty + ' units — confirm?')) return;
-  if (buy  <= 0) { toast('⚠️ Enter buying price',  'err'); return; }
-  if (sell <= 0) { toast('⚠️ Enter selling price', 'err'); return; }
-
-  const profit = sell - buy;
-  const item   = { type, code, name, variant: size, buyPrice: buy, sellPrice: sell, profit, qty, createdAt: new Date().toISOString() };
-
-  try {
-    if (editIdRaw) {
-      const original = await dbGet('items', parseInt(editIdRaw));
-      item.id        = parseInt(editIdRaw);
-      item.createdAt = original ? (original.createdAt || item.createdAt) : item.createdAt;
-      item.updatedAt = new Date().toISOString();
-      item.updatedBy = currentUser ? currentUser.username : 'system';
-      item.fbId      = original ? original.fbId : undefined;
-      await dbPut('items', item);
-      if (_addFormPhotoData) setItemPhoto(item.id, _addFormPhotoData);
+    if(editIdRaw){
+      const original=await dbGet('items',parseInt(editIdRaw));
+      item.id=parseInt(editIdRaw);
+      item.createdAt=original?(original.createdAt||item.createdAt):item.createdAt;
+      item.updatedAt=new Date().toISOString();
+      item.updatedBy=currentUser?currentUser.username:'system';
+      item.fbId=original?original.fbId:undefined;
+      await dbPut('items',item);
+      if(_addFormPhotoData)setItemPhoto(item.id,_addFormPhotoData);
       fbSyncItem(item);
       clearForm();
-      allItems = await dbAll('items');
-      await enrichShoeItems(allItems);
-      renderList(); renderDashboard(); updateHeader();
-      scheduleSync();
-      toast('✅ Item updated!', 'ok');
-      showPage('list');
-    } else {
-      const newId = await dbAdd('items', item);
-      item.id = newId;
-      if (_addFormPhotoData) setItemPhoto(newId, _addFormPhotoData);
+      allItems=await dbAll('items');await enrichShoeItems(allItems);
+      renderList();renderDashboard();updateHeader();scheduleSync();
+      toast('\u2705 Item updated!','ok');showPage('list');
+    }else{
+      const newId=await dbAdd('items',item);item.id=newId;
+      if(_addFormPhotoData)setItemPhoto(newId,_addFormPhotoData);
       fbSyncItem(item);
-      clearForm(); clearAddFormPhoto();
-      allItems = await dbAll('items');
-      await enrichShoeItems(allItems);
-      renderList(); renderDashboard(); updateHeader();
-      scheduleSync();
-      showSplash(name, sell, profit);
-      if (activeDay) updateDayLiveStats();
+      clearForm();clearAddFormPhoto();
+      allItems=await dbAll('items');await enrichShoeItems(allItems);
+      renderList();renderDashboard();updateHeader();scheduleSync();
+      showSplash(name,sell,profit);
     }
-  } catch(e) {
-    if (e.name === 'ConstraintError') {
-      const dup = allItems.find(i => i.code === code && i.id !== parseInt(editIdRaw));
-      if (dup && !editIdRaw) { toast('⚠️ Code "' + code + '" exists — select from dropdown to restock', 'err'); }
-      else toast('⚠️ Duplicate code "' + code + '"', 'err');
-    } else { toast('⚠️ Save failed: ' + (e.message||'Unknown'), 'err'); console.error('[SAVE]', e); }
-  }
-  } catch(err) {
-    toast('⚠️ Save failed: ' + (err.message || 'Unknown error'), 'err');
-    console.error('[SAVE]', err);
-  } finally {
-    _overlay.hide(); // ALWAYS runs — on success, error, or early return
+
+  }catch(err){
+    if(err.name==='ConstraintError'){
+      toast('\u26a0\ufe0f Code already exists — select from dropdown to restock','err');
+    }else{
+      toast('\u26a0\ufe0f Save failed: '+(err.message||'Unknown error'),'err');
+      console.error('[SAVE]',err);
+    }
+  }finally{
+    _overlay.hide();
   }
 }
+
 function clearForm() {
   UI.el('edit-id').value   = '';
   UI.el('f-type').value    = '';
@@ -1153,6 +1133,7 @@ function hideCodeDropdown() {
 }
 
 async function selectExistingItem(itemId) {
+  try {
   const item = await dbGet('items', itemId);
   if (!item) { toast('⚠️ Item not found', 'err'); hideCodeDropdown(); return; }
   hideCodeDropdown();
@@ -1192,6 +1173,7 @@ async function selectExistingItem(itemId) {
   UI.el('form-mode-label').textContent = '📦 Restock';
   UI.el('cancel-edit-btn').style.display = 'block';
   setTimeout(() => { if (qtyEl) { qtyEl.focus(); qtyEl.select(); } }, 150);
+  } catch(e) { console.error("[selectExistingItem]", e); toast("Error: " + e.message, "err"); }
 }
 
 function exitRestockMode() {
@@ -1643,6 +1625,7 @@ async function openSheet(id) {
 function closeSheet() { document.getElementById('detail-sheet').classList.remove('open'); }
 
 async function deleteItem() {
+  try {
   if (!confirm('Delete this item?')) return;
   const toDelete = await dbGet('items', currentDetailId);
   await dbDelete('items', currentDetailId);
@@ -1654,9 +1637,11 @@ async function deleteItem() {
   renderSummary();
   updateHeader();
   toast('Item deleted');
+  } catch(e) { console.error("[deleteItem]", e); toast("Error: " + e.message, "err"); }
 }
 
 async function editItem() {
+  try {
   const item = await dbGet('items', currentDetailId);
   if (!item) { toast('Item not found.', 'err'); return; }
   closeSheet();
@@ -1724,6 +1709,7 @@ async function editItem() {
     if (placeholder) placeholder.style.display = 'none';
     if (removeBtn)   removeBtn.style.display = 'block';
   }
+  } catch(e) { console.error("[editItem]", e); toast("Error: " + e.message, "err"); }
 }
 
 // ===== DASHBOARD =====
@@ -1955,6 +1941,7 @@ let currentSellItemId = null;
 let _selectedPayment = 'Cash'; // Cash | M-Pesa | Credit
 
 async function searchSell() {
+  try {
   const q = (document.getElementById('sell-search').value || '').trim().toLowerCase();
   const results = document.getElementById('sell-results');
   if (!q) { results.innerHTML = ''; return; }
@@ -1994,6 +1981,7 @@ async function searchSell() {
       </div>
     </div>`;
   }).join('');
+  } catch(e) { console.error("[searchSell]", e); toast("Error: " + e.message, "err"); }
 }
 
 function selectPayment(method) {
@@ -2005,6 +1993,7 @@ function selectPayment(method) {
 }
 
 async function openSellModal(itemId) {
+  try {
   const item = await dbGet('items', itemId);
   currentSellItemId = itemId;
   const t = getTypeObj(item.type);
@@ -2022,6 +2011,7 @@ async function openSellModal(itemId) {
   updateSellModal();
   selectPayment('Cash'); // reset payment method
   document.getElementById('sell-modal').classList.add('open');
+  } catch(e) { console.error("[openSellModal]", e); toast("Error: " + e.message, "err"); }
 }
 
 function closeSellModal() {
@@ -2030,6 +2020,7 @@ function closeSellModal() {
 }
 
 async function updateSellModal() {
+  try {
   if (!currentSellItemId) return;
   const item = await dbGet('items', currentSellItemId);
   const qty = Math.max(1, parseInt(document.getElementById('sm-qty').value) || 1);
@@ -2044,6 +2035,7 @@ async function updateSellModal() {
   document.getElementById('sm-total-profit').style.color = totalProfit >= 0 ? 'var(--green)' : 'var(--red)';
   // cap qty at stock
   document.getElementById('sm-qty').max = item.qty;
+  } catch(e) { console.error("[updateSellModal]", e); toast("Error: " + e.message, "err"); }
 }
 
 function adjSellQty(d) {
@@ -2187,19 +2179,20 @@ async function confirmSale() {
   updateHeader();
   updateLowStockBadge();
   scheduleSync();
-  try { renderSellPage(); } catch(_) {}
-  try { if (activeDay) updateDayLiveStats(); } catch(_) {}
+  try { renderSellPage(); } catch(_) { /* intentionally ignored */ }
+  try { if (activeDay) updateDayLiveStats(); } catch(_) { /* intentionally ignored */ }
   // Refresh finance page if it's currently visible
   try {
     if (document.getElementById('page-finance')?.classList.contains('active')) {
       renderFinancePage();
     }
-  } catch(_) {}
+  } catch(_) { /* intentionally ignored */ }
 
   toast('✅ ' + fmt(revenue) + ' · Profit: ' + fmt(profit), 'ok');
 }
 
 async function renderSellPage() {
+  try {
   const sales = await dbAll('sales');
   const todayStr = new Date().toISOString().split('T')[0];
   const todaySales = sales.filter(s => s.date.startsWith(todayStr));
@@ -2243,6 +2236,7 @@ async function renderSellPage() {
         <button onclick="deleteSale(${s.id})" style="background:var(--red-light);border:none;color:var(--red);border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px;flex-shrink:0;">🗑</button>
       </div>`;
     }).join('');
+  } catch(e) { console.error("[renderSellPage]", e); toast("Error: " + e.message, "err"); }
 }
 
 // close sell modal on backdrop click
@@ -2325,7 +2319,7 @@ async function resetAndRebuildDB() {
     renderList();
     renderDashboard();
     updateHeader();
-    try { updateLowStockBadge(); } catch(_) {}
+    try { updateLowStockBadge(); } catch(_) { /* intentionally ignored */ }
 
     toast('✅ Database rebuilt clean — fresh start!', 'ok');
     console.log('[DB] Rebuild complete v' + DB_VER);
@@ -2519,7 +2513,7 @@ async function initFirebase() {
         } else {
           const ex = byFbId[c.doc.id] || byCode[data.code];
           if (ex) { data.id = ex.id; await dbPut('items', data); }
-          else    { try { await dbAdd('items', data); } catch(_) {} }
+          else    { try { await dbAdd('items', data); } catch(_) { /* intentionally ignored */ } }
           changed = true;
         }
       }
@@ -2547,11 +2541,11 @@ async function initFirebase() {
         } else {
           const ex = byFbId[c.doc.id];
           if (ex) { data.id = ex.id; await dbPut('sales', data); }
-          else    { try { await dbAdd('sales', data); } catch(_) {} }
+          else    { try { await dbAdd('sales', data); } catch(_) { /* intentionally ignored */ } }
         }
       }
-      try { if (activeDay) updateDayLiveStats(); } catch(_) {}
-      try { renderDashboard(); } catch(_) {}
+      try { if (activeDay) updateDayLiveStats(); } catch(_) { /* intentionally ignored */ }
+      try { renderDashboard(); } catch(_) { /* intentionally ignored */ }
     }, err => { console.error('[FB] sales listener:', err.message); });
 
     setFbStatus('on');
@@ -2582,10 +2576,12 @@ function waitForFbImports() {
 }
 
 async function saveFirebaseConfig() {
+  try {
   // Config is hardcoded — just reconnect
   if (fbUnsub) { fbUnsub(); fbUnsub = null; }
   fbApp = null; fbDb = null; fbReady = false;
   await initFirebase();
+  } catch(e) { console.error("[saveFirebaseConfig]", e); toast("Error: " + e.message, "err"); }
 }
 
 async function fbSyncItem(item) {
@@ -2738,7 +2734,7 @@ async function pullFromFirebase(silent = false) {
         await dbPut('items', data);
         itemsUpdated++;
       } else {
-        try { await dbAdd('items', data); itemsAdded++; } catch(_) {}
+        try { await dbAdd('items', data); itemsAdded++; } catch(_) { /* intentionally ignored */ }
       }
     }
     console.log('[SYNC] Items: added=' + itemsAdded + ' updated=' + itemsUpdated);
@@ -2757,7 +2753,7 @@ async function pullFromFirebase(silent = false) {
         await dbPut('sales', data);
         salesUpdated++;
       } else {
-        try { await dbAdd('sales', data); salesAdded++; } catch(_) {}
+        try { await dbAdd('sales', data); salesAdded++; } catch(_) { /* intentionally ignored */ }
       }
     }
     console.log('[SYNC] Sales: added=' + salesAdded + ' updated=' + salesUpdated);
@@ -2772,9 +2768,9 @@ async function pullFromFirebase(silent = false) {
         const data = { ...d.data(), fbId: d.id }; delete data.id;
         const ex = szByFbId[d.id] || szByCS[data.codeSize];
         if (ex) { data.id = ex.id; await dbPut('shoe_sizes', data); }
-        else    { try { await dbAdd('shoe_sizes', data); } catch(_) {} }
+        else    { try { await dbAdd('shoe_sizes', data); } catch(_) { /* intentionally ignored */ } }
       }
-    } catch(_) {}
+    } catch(_) { /* intentionally ignored */ }
 
     // Pull finances
     try {
@@ -2785,12 +2781,12 @@ async function pullFromFirebase(silent = false) {
         const data = { ...d.data(), fbId: d.id }; delete data.id;
         const ex = finByFbId[d.id];
         if (ex) { data.id = ex.id; await dbPut('finances', data); }
-        else    { try { await dbAdd('finances', data); } catch(_) {} }
+        else    { try { await dbAdd('finances', data); } catch(_) { /* intentionally ignored */ } }
       }
-    } catch(_) {}
+    } catch(_) { /* intentionally ignored */ }
 
     await refreshUI({ sync: false });
-    try { renderSellPage(); } catch(_) {}
+    try { renderSellPage(); } catch(_) { /* intentionally ignored */ }
     setFbStatus('on');
 
     const msg = '⬇️ ' + itemSnap.size + ' items, ' + saleSnap.size + ' sales from Firebase';
@@ -3179,6 +3175,7 @@ function startBannerClock() {
 // Checks every 30s for time-triggered actions
 // ── VOID SALE ─────────────────────────────────────────────────────
 async function voidSale(saleId) {
+  try {
   if (!confirm('Void this sale? Stock will be restored.')) return;
   const sale = await dbGet('sales', saleId);
   if (!sale) { toast('Sale not found', 'err'); return; }
@@ -3217,6 +3214,7 @@ async function voidSale(saleId) {
   if (activeDay) updateDayLiveStats();
   scheduleSync();
   toast('↩️ Sale voided · stock restored', 'ok');
+  } catch(e) { console.error("[voidSale]", e); toast("Error: " + e.message, "err"); }
 }
 
 function startDayTimer() { /* replaced by automatic date tracking */ }
@@ -3374,42 +3372,57 @@ function toggleRestock() {
 }
 
 async function confirmRestock() {
-  const qty = parseInt(document.getElementById('restock-qty').value) || 0;
-  if (qty <= 0) { toast('⚠️ Enter quantity to add', 'err'); return; }
-  const item = await dbGet('items', currentDetailId);
-  item.qty += qty;
-  await dbPut('items', item);
-  fbSyncItem(item);
-  scheduleSync();
-  document.getElementById('sh-qty').textContent = item.qty + ' pcs';
-  document.getElementById('restock-panel').style.display = 'none';
-  allItems = await dbAll('items');
-  renderList();
-  renderDashboard();
-  updateHeader();
-  updateLowStockBadge();
-  toast('✅ Added ' + qty + ' pcs to ' + item.name, 'ok');
+  const restockBtn = document.querySelector('#restock-panel button');
+  if (restockBtn) { restockBtn.disabled = true; restockBtn.style.opacity = '0.5'; }
+  try {
+    const qty = parseInt(document.getElementById('restock-qty').value) || 0;
+    if (qty <= 0) { toast('⚠️ Enter quantity to add', 'err'); return; }
+    const item = await dbGet('items', currentDetailId);
+    if (!item) { toast('⚠️ Item not found', 'err'); return; }
+    item.qty += qty;
+    item.updatedAt = new Date().toISOString();
+    await dbPut('items', item);
+    fbSyncItem(item);
+    scheduleSync();
+    const qtyEl = document.getElementById('sh-qty');
+    if (qtyEl) qtyEl.textContent = item.qty + (item.isShoe ? ' prs' : ' pcs');
+    document.getElementById('restock-panel').style.display = 'none';
+    allItems = await dbAll('items');
+    await enrichShoeItems(allItems);
+    renderList(); renderDashboard(); updateHeader();
+    updateLowStockBadge();
+    toast('✅ Added ' + qty + (item.isShoe ? ' prs' : ' pcs') + ' to ' + (item.name || item.code), 'ok');
+  } catch(e) {
+    console.error('[confirmRestock]', e);
+    toast('⚠️ Restock failed: ' + e.message, 'err');
+  } finally {
+    if (restockBtn) { restockBtn.disabled = false; restockBtn.style.opacity = ''; }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
 // LOW STOCK BADGE IN HEADER
 // ═══════════════════════════════════════════════════════════
 async function updateLowStockBadge() {
+  try {
   const items = await dbAll('items');
   const badge = document.getElementById('low-stock-badge');
   // low stock badge removed from header
+  } catch(e) { console.error("[updateLowStockBadge]", e); toast("Error: " + e.message, "err"); }
 }
 
 // ═══════════════════════════════════════════════════════════
 // DELETE SALE
 // ═══════════════════════════════════════════════════════════
 async function deleteSale(saleId) {
+  try {
   if (!confirm('Delete this sale record? Stock will NOT be restored.')) return;
   await dbDelete('sales', saleId);
   renderSellPage();
   renderDashboard();
   scheduleSync();
   toast('Sale record deleted', '');
+  } catch(e) { console.error("[deleteSale]", e); toast("Error: " + e.message, "err"); }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3578,6 +3591,7 @@ function hideInstallBanner() {
 }
 
 async function triggerInstall() {
+  try {
   if (deferredInstallPrompt) {
     deferredInstallPrompt.prompt();
     const result = await deferredInstallPrompt.userChoice;
@@ -3587,6 +3601,7 @@ async function triggerInstall() {
     }
     deferredInstallPrompt = null;
   }
+  } catch(e) { console.error("[triggerInstall]", e); toast("Error: " + e.message, "err"); }
 }
 
 function dismissInstall(permanent) {
@@ -4019,7 +4034,7 @@ function scheduleSync() {
     try {
       await forcePushToFirebase(true);
       await pullFromFirebase(true);
-    } catch(e) { console.warn('Auto sync error:', e); }
+    } catch(e) { /* auto sync failed silently */ setFbStatus('error'); console.warn('[AutoSync]', e.message); }
   }, 2000);
 }
 

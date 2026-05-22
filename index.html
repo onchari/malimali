@@ -850,6 +850,23 @@
       Permanently deletes all items, sales, and business day records. Cannot be undone.
       Also clears Firebase if connected. Use to start fresh after testing.
     </div>
+    <!-- Dummy data for testing -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <button onclick="loadDummyData()"
+              style="padding:12px;background:#0891b2;color:white;border:none;
+                     border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+        📦 Load Test Data
+      </button>
+      <button onclick="wipeDummyData()"
+              style="padding:12px;background:#6b7280;color:white;border:none;
+                     border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+        🗑️ Wipe Test Data
+      </button>
+    </div>
+    <div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px;">
+      Loads 7 items · 9 sales · 13 finance entries for testing
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
       <button onclick="resetAllData()"
               style="padding:13px;background:var(--red);color:white;border:none;
@@ -1428,7 +1445,7 @@
        id="day-closed-msg">
     Please open the business day to access this section.
   </div>
-  <button onclick="showPage('day')"
+  <button onclick="showPage('history')"
           style="padding:16px 32px;background:var(--accent);color:white;border:none;
                  border-radius:var(--r);font-size:16px;font-weight:800;
                  cursor:pointer;font-family:var(--sans);">
@@ -1910,7 +1927,7 @@
        id="day-closed-msg">
     Please open the business day to access this section.
   </div>
-  <button onclick="showPage('day')"
+  <button onclick="showPage('history')"
           style="padding:16px 32px;background:var(--accent);color:white;border:none;
                  border-radius:var(--r);font-size:16px;font-weight:800;
                  cursor:pointer;font-family:var(--sans);">
