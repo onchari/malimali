@@ -2252,7 +2252,8 @@ async function renderSellPage() {
 }
 
 // close sell modal on backdrop click
-document.getElementById('sell-modal').addEventListener('click', function(e) {
+const _sellModal = document.getElementById('sell-modal');
+if (_sellModal) _sellModal.addEventListener('click', function(e) {
   if (e.target === this) closeSellModal();
 });
 
@@ -3463,13 +3464,16 @@ function filterSalesByPeriod(sales, period) {
 
 
 // ===== CLOSE SHEET ON BACKDROP =====
-document.getElementById('detail-sheet').addEventListener('click', function(e) {
+const _detailSheet = document.getElementById('detail-sheet');
+if (_detailSheet) _detailSheet.addEventListener('click', function(e) {
   if (e.target === this) closeSheet();
 });
-document.getElementById('day-summary-sheet').addEventListener('click', function(e) {
+const _daySummarySheet = document.getElementById('day-summary-sheet');
+if (_daySummarySheet) _daySummarySheet.addEventListener('click', function(e) {
   if (e.target === this) cancelCloseDay();
 });
-document.getElementById('past-session-sheet').addEventListener('click', function(e) {
+const _pastSessionSheet = document.getElementById('past-session-sheet');
+if (_pastSessionSheet) _pastSessionSheet.addEventListener('click', function(e) {
   if (e.target === this) closePastSessionSheet();
 });
 
