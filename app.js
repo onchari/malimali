@@ -363,13 +363,16 @@ class SavingOverlay {
     this._timer      = null;
     this._progress   = 0;
     this._circumference = 213.6;
+    this._targetBtn  = null;
   }
 
-  show(label = 'Saving…') {
+  show(label = 'Saving…', targetBtn = null) {
     const overlay = UI.el('saving-overlay');
     const arc     = UI.el('saving-arc');
     const lbl     = UI.el('saving-label');
-    const btn     = UI.el('save-btn');
+    // Default to save-btn; caller can pass a different button (e.g. Confirm Sale)
+    const btn     = targetBtn || UI.el('save-btn');
+    this._targetBtn = btn;
     if (!overlay) return;
 
     if (btn) { btn.disabled = true; btn.style.opacity = '0.45'; btn.style.pointerEvents = 'none'; }
@@ -389,13 +392,14 @@ class SavingOverlay {
   hide() {
     clearInterval(this._timer);
     const arc = UI.el('saving-arc');
-    const btn = UI.el('save-btn');
+    const btn = this._targetBtn || UI.el('save-btn');
     if (arc) arc.style.strokeDashoffset = 0; // snap to 100%
 
     setTimeout(() => {
       const overlay = UI.el('saving-overlay');
       if (overlay) overlay.style.display = 'none';
       if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.pointerEvents = ''; }
+      this._targetBtn = null;
     }, 350);
   }
 }
@@ -2088,8 +2092,14 @@ function adjSellQty(d) {
 async function confirmSale() {
   if (!currentSellItemId) return;
 
+  // Gray out confirm button + show progress overlay
+  const _confirmBtn = document.getElementById('confirm-sale-btn');
+  _overlay.show('Processing Sale…', _confirmBtn);
+
+  try {
+
   const item = await dbGet('items', currentSellItemId);
-  if (!item) { toast('Item not found', 'err'); closeSellModal(); return; }
+  if (!item) { toast('Item not found', 'err'); closeSellModal(); _overlay.hide(); return; }
 
   // ── Read form values ───────────────────────────────────────────
   const qtyEl     = document.getElementById('sm-qty');
@@ -2228,6 +2238,13 @@ async function confirmSale() {
   } catch(_) { /* intentionally ignored */ }
 
   toast('✅ ' + fmt(revenue) + ' · Profit: ' + fmt(profit), 'ok');
+
+  } catch(err) {
+    console.error('[confirmSale]', err);
+    toast('⚠️ Sale failed: ' + (err.message || 'Unknown error'), 'err');
+  } finally {
+    _overlay.hide();
+  }
 }
 
 async function renderSellPage() {
