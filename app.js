@@ -1033,6 +1033,7 @@ async function saveItem() {
       clearForm();clearAddFormPhoto();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
       renderList();renderDashboard();updateHeader();scheduleSync();
+      showPage('list');
       showSplash(name,sell,profit);
     }
 
@@ -1634,7 +1635,12 @@ async function openSheet(id) {
   }
 }
 
-function closeSheet() { document.getElementById('detail-sheet').classList.remove('open'); }
+function closeSheet() {
+  const sheet = document.getElementById('detail-sheet');
+  if (sheet) sheet.classList.remove('open');
+  const ov = document.getElementById('saving-overlay');
+  if (ov) ov.style.display = 'none';
+}
 
 async function deleteItem() {
   try {
@@ -1889,10 +1895,14 @@ function saveCurrency() {
   toast('Currency: ' + currency, 'ok');
 }
 function updateCurrencyUI() {
-  document.getElementById('currency-sel').value = currency;
-  document.getElementById('bp-cur').textContent = currency;
-  document.getElementById('sp-cur').textContent = currency;
-  document.getElementById('splash-cur').textContent = currency;
+  const sel = document.getElementById('currency-sel');
+  if (sel) sel.value = currency;
+  const bp = document.getElementById('bp-cur');
+  if (bp) bp.textContent = currency;
+  const sp = document.getElementById('sp-cur');
+  if (sp) sp.textContent = currency;
+  const sc = document.getElementById('splash-cur');
+  if (sc) sc.textContent = currency;
 }
 
 // ===== SPLASH =====
@@ -1937,7 +1947,6 @@ function showSplash(name, sell, profit) {
     splash.style.transition = 'opacity 0.35s ease';
     setTimeout(() => {
       splash.style.display = 'none';
-      showPage('list');
     }, 350);
   }, 2200);
 }
@@ -3694,7 +3703,7 @@ const USERS = [
     role: 'super',
     roleLabel: 'Super User',
     // Super: access to everything
-    tabs: ['dash','list','add','history','finance','settings']
+    tabs: ['dash','list','add','history','finance','day','settings']
   },
   {
     username: 'vanice',
@@ -3704,7 +3713,7 @@ const USERS = [
     role: 'user',
     roleLabel: 'User',
     // User: everything except Settings
-    tabs: ['dash','list','add','history','finance']
+    tabs: ['dash','list','add','history','finance','day']
   },
   {
     username: 'trevor',
@@ -3735,7 +3744,7 @@ let currentUser = null;
 
 function applyRoleRestrictions(user) {
   // Show/hide nav tabs based on role
-  const allTabs = ['dash','list','add','history','finance','settings'];
+  const allTabs = ['dash','list','add','history','finance','day','settings'];
   allTabs.forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) {
@@ -4587,3 +4596,174 @@ window.toggleUserMenu = toggleUserMenu;
 window.triggerAddPhotoUpload = triggerAddPhotoUpload;
 window.triggerInstall = triggerInstall;
 window.triggerSheetPhotoUpload = triggerSheetPhotoUpload;
+
+// ── Additional exports (missing from original) ──────────────────────
+window.cancelCloseDay      = cancelCloseDay;
+window.confirmCloseDay     = confirmCloseDay;
+window.confirmLogout       = confirmLogout;
+window.closeDay            = closeDay;
+window.openDay             = openDay;
+window.deleteSale          = deleteSale;
+window.deleteFinanceEntry  = deleteFinanceEntry;
+window.deleteType          = deleteType;
+window.deselectSizeGroup   = deselectSizeGroup;
+window.exitRestockMode     = exitRestockMode;
+window.onTypeChange        = onTypeChange;
+window.openSheet           = openSheet;
+window.renderList          = renderList;
+window.renderSellPage      = renderSellPage;
+window.saveCurrency        = saveCurrency;
+window.searchSell          = searchSell;
+window.selectExistingItem  = selectExistingItem;
+window.setTypeFilter       = setTypeFilter;
+window.toggleShoeSize      = toggleShoeSize;
+window.updateFinTypeColor  = updateFinTypeColor;
+window.updateProfitPreview = updateProfitPreview;
+window.updateSellModal     = updateSellModal;
+window.voidSale            = voidSale;
+
+// ── Missing functions (called but never defined) ─────────────────────
+
+function closeShoeSizeActions() {
+  const sheet = document.getElementById('shoe-size-action-sheet');
+  if (sheet) sheet.classList.remove('open');
+}
+window.closeShoeSizeActions = closeShoeSizeActions;
+
+async function openShoeSizeRestock(itemId, size) {
+  closeShoeSizeActions();
+  const item = await dbGet('items', itemId);
+  if (!item) { toast('Item not found', 'err'); return; }
+  const sizes = await getShoeSizes(item.code);
+  const sizeRec = sizes.find(s => s.size === size);
+  if (!sizeRec) { toast('Size record not found', 'err'); return; }
+  showPage('add');
+  setTimeout(() => {
+    UI.el('f-type').value = item.type || '';
+    UI.el('f-code').value = item.code || '';
+    UI.el('f-name').value = item.name || '';
+    UI.el('edit-id').value = 'shoe_edit_' + itemId + '_' + size;
+    UI.el('f-qty').value = '';
+    UI.el('f-buy').value  = sizeRec.buyPrice  || '';
+    UI.el('f-sell').value = sizeRec.sellPrice || '';
+    onTypeChange();
+    const shoePanel  = UI.el('shoe-size-panel');
+    const stdPricing = UI.el('std-pricing-section');
+    const sizeField  = document.getElementById('f-size-field');
+    if (shoePanel)  shoePanel.style.display  = 'none';
+    if (stdPricing) stdPricing.style.display = 'block';
+    if (sizeField)  sizeField.style.display  = 'block';
+    ['f-code','f-type','f-name','f-size','f-buy','f-sell'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.disabled=true; el.style.opacity='0.45'; el.style.cursor='not-allowed'; }
+    });
+    const qtyEl = UI.el('f-qty');
+    if (qtyEl) { qtyEl.disabled=false; qtyEl.style.opacity='1'; qtyEl.style.cursor=''; qtyEl.focus(); }
+    UI.el('save-btn').textContent = '📦 Add to Stock — Size ' + size;
+    UI.el('form-mode-label').textContent = '📦 Restock Size ' + size;
+    UI.el('cancel-edit-btn').style.display = 'block';
+  }, 100);
+}
+window.openShoeSizeRestock = openShoeSizeRestock;
+
+async function openShoeSizeEdit(itemId, size) {
+  closeShoeSizeActions();
+  const item = await dbGet('items', itemId);
+  if (!item) { toast('Item not found', 'err'); return; }
+  const sizes = await getShoeSizes(item.code);
+  const sizeRec = sizes.find(s => s.size === size);
+  if (!sizeRec) { toast('Size record not found', 'err'); return; }
+  showPage('add');
+  setTimeout(() => {
+    UI.el('f-type').value  = item.type || '';
+    UI.el('f-code').value  = item.code || '';
+    UI.el('f-name').value  = item.name || '';
+    UI.el('f-size').value  = size;
+    UI.el('f-qty').value   = sizeRec.qty ?? '';
+    UI.el('f-buy').value   = sizeRec.buyPrice  || '';
+    UI.el('f-sell').value  = sizeRec.sellPrice || '';
+    UI.el('edit-id').value = 'shoe_edit_' + itemId + '_' + size;
+    onTypeChange();
+    const shoePanel  = UI.el('shoe-size-panel');
+    const stdPricing = UI.el('std-pricing-section');
+    const sizeField  = document.getElementById('f-size-field');
+    if (shoePanel)  shoePanel.style.display  = 'none';
+    if (stdPricing) stdPricing.style.display = 'block';
+    if (sizeField)  sizeField.style.display  = 'block';
+    ['f-code','f-type','f-name','f-size'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.disabled=true; el.style.opacity='0.45'; el.style.cursor='not-allowed'; }
+    });
+    UI.el('save-btn').textContent = '💾 Save Size ' + size;
+    UI.el('form-mode-label').textContent = '✏️ Edit Size ' + size + ' — ' + item.code;
+    UI.el('cancel-edit-btn').style.display = 'block';
+    updateProfitPreview();
+  }, 100);
+}
+window.openShoeSizeEdit = openShoeSizeEdit;
+
+async function openSellShoeModal(itemId, size) {
+  closeShoeSizeActions();
+  closeSheet();
+  const item = await dbGet('items', itemId);
+  if (!item) { toast('Item not found', 'err'); return; }
+  const sizes = await getShoeSizes(item.code);
+  const sizeRec = sizes.find(s => s.size === size);
+  if (!sizeRec || sizeRec.qty <= 0) { toast('Size ' + size + ' is out of stock', 'err'); return; }
+  _isShoeSale   = true;
+  _sellShoeItem = item;
+  _sellShoeSize = size;
+  currentSellItemId = itemId;
+  const t = types.find(t => t.name === item.type) || { emoji:'👟', color:'var(--surface2)' };
+  const el = id => document.getElementById(id);
+  if (el('sm-icon'))  { el('sm-icon').textContent = t.emoji; el('sm-icon').style.background = t.color || 'var(--surface2)'; }
+  if (el('sm-name'))  el('sm-name').textContent  = item.name + ' (Size ' + size + ')';
+  if (el('sm-meta'))  el('sm-meta').textContent  = item.code + ' · Size ' + size;
+  if (el('sm-stock')) el('sm-stock').textContent = sizeRec.qty;
+  if (el('sm-sell'))  el('sm-sell').textContent  = fmt(sizeRec.sellPrice || item.sellPrice || 0);
+  if (el('sm-cur'))   el('sm-cur').textContent   = currency;
+  if (el('sm-qty'))   { el('sm-qty').value = 1; el('sm-qty').max = sizeRec.qty; }
+  if (el('sm-actual')) el('sm-actual').value = '';
+  const tpEl = el('sm-total-profit');
+  if (tpEl) tpEl.textContent = '';
+  const sellModal = document.getElementById('sell-modal');
+  if (sellModal) sellModal.classList.add('open');
+  updateSellModal();
+}
+window.openSellShoeModal = openSellShoeModal;
+
+async function viewPastSession(sessionId) {
+  const session = await dbGet('business_days', sessionId);
+  if (!session) { toast('Session not found', 'err'); return; }
+  const content = document.getElementById('past-session-content');
+  if (!content) return;
+  const sales = await dbAll('sales');
+  const sessionSales = sales.filter(s => s.businessDate === session.businessDate);
+  const totalRev = sessionSales.reduce((t, s) => t + (s.revenue || 0), 0);
+  const totalProfit = sessionSales.reduce((t, s) => t + (s.profit || 0), 0);
+  content.innerHTML = `
+    <div style="font-size:17px;font-weight:800;margin-bottom:4px;">${session.businessDate || 'Session'}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+      ${session.openedAt ? 'Opened: ' + new Date(session.openedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : ''}
+      ${session.closedAt ? ' · Closed: ' + new Date(session.closedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : ''}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Revenue</div><div class="sh-stat-val accent2">${fmt(totalRev)}</div></div>
+      <div class="sh-stat-box accent-bg"><div class="sh-stat-lbl">Profit</div><div class="sh-stat-val green">${fmt(totalProfit)}</div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Sales</div><div class="sh-stat-val">${sessionSales.length}</div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Notes</div><div class="sh-stat-val" style="font-size:11px;">${session.notes || '—'}</div></div>
+    </div>
+    ${sessionSales.length > 0 ? `
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Sales</div>
+      ${sessionSales.map(s => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
+          <div><strong>${escapeHtml(s.code||'')}</strong>${s.size?' · '+s.size:''}<span style="color:var(--muted);font-size:11px;margin-left:6px;">×${s.qty}</span></div>
+          <div style="font-weight:700;color:var(--accent);">${fmt(s.revenue||0)}</div>
+        </div>`).join('')}
+    ` : '<div style="color:var(--muted);font-size:13px;text-align:center;padding:16px;">No sales this session</div>'}
+    <button onclick="closePastSessionSheet()" style="width:100%;margin-top:16px;padding:13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans);color:var(--text2);">Close</button>
+  `;
+  const sheet = document.getElementById('past-session-sheet');
+  if (sheet) sheet.classList.add('open');
+}
+window.viewPastSession = viewPastSession;

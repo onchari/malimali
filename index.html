@@ -70,6 +70,21 @@
       } catch(e) {}
     })();
   </script>
+  <script>
+    // Global error catcher - shows errors on login screen
+    window.onerror = function(msg, src, line, col, err) {
+      var dbg = document.getElementById('login-debug');
+      if (dbg) {
+        dbg.style.display = 'block';
+        dbg.textContent = 'JS Error: ' + msg + ' (line ' + line + ')';
+      }
+      console.error('[GLOBAL ERROR]', msg, src, line, col, err);
+      return false;
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      console.error('[UNHANDLED PROMISE]', e.reason);
+    });
+  </script>
 </head>
 <body>
 
@@ -213,6 +228,9 @@
   <button class="nav-btn" onclick="showPage('add')" id="tab-add">
     <span class="icon"><i class="fa-solid fa-plus"></i></span>Add
   </button>
+  <button class="nav-btn" onclick="showPage('day')" id="tab-day">
+    <span class="icon"><i class="fa-solid fa-calendar-day"></i></span>Day
+  </button>
   <button class="nav-btn" onclick="showPage('history')" id="tab-history">
     <span class="icon"><i class="fa-solid fa-clock-rotate-left"></i></span>History
   </button>
@@ -261,12 +279,27 @@
              onkeydown="if(event.key==='Enter') attemptLogin()">
     </div>
 
-    <button class="login-btn" onclick="attemptLogin()">Sign In →</button>
+    <div id="login-debug" style="display:none;background:#fee;color:#900;padding:8px;border-radius:6px;font-size:11px;margin-bottom:10px;word-break:break-all;"></div>
+    <button class="login-btn" onclick="
+      try {
+        if (typeof attemptLogin === 'function') {
+          attemptLogin();
+        } else if (typeof window.attemptLogin === 'function') {
+          window.attemptLogin();
+        } else {
+          document.getElementById('login-debug').style.display='block';
+          document.getElementById('login-debug').textContent='ERROR: attemptLogin not loaded. Check browser console.';
+        }
+      } catch(e) {
+        document.getElementById('login-debug').style.display='block';
+        document.getElementById('login-debug').textContent='ERROR: '+e.message;
+      }
+    ">Sign In →</button>
   </div>
 
   <div style="margin-top:20px;font-size:11px;color:rgba(255,255,255,0.4);
               text-align:center;font-family:var(--mono);">
-    Mandela General Stores · (Secure Access)
+    Mandela General Stores · Secure Access
   </div>
 </div><!-- /login-screen -->
 
@@ -546,13 +579,13 @@
                  oninput="updateProfitPreview()">
         </div>
         <div class="add-field">
-          <label class="add-label">Buy (KES) <span class="add-required">*</span></label>
+          <label class="add-label">Buy (<span id="bp-cur">KES</span>) <span class="add-required">*</span></label>
           <input class="add-input add-center" id="f-buy" type="number"
                  placeholder="0" min="0" inputmode="decimal"
                  oninput="updateProfitPreview()">
         </div>
         <div class="add-field">
-          <label class="add-label">Sell (KES) <span class="add-required">*</span></label>
+          <label class="add-label">Sell (<span id="sp-cur">KES</span>) <span class="add-required">*</span></label>
           <input class="add-input add-center" id="f-sell" type="number"
                  placeholder="0" min="0" inputmode="decimal"
                  oninput="updateProfitPreview()">
@@ -849,19 +882,6 @@
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">
       Permanently deletes all items, sales, and business day records. Cannot be undone.
       Also clears Firebase if connected. Use to start fresh after testing.
-    </div>
-    <!-- Dummy data for testing -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-      <button onclick="loadDummyData()"
-              style="padding:12px;background:#0891b2;color:white;border:none;
-                     border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);">
-        📦 Load Test Data
-      </button>
-      <button onclick="wipeDummyData()"
-              style="padding:12px;background:#6b7280;color:white;border:none;
-                     border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);">
-        🗑️ Wipe Test Data
-      </button>
     </div>
     <div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px;">
       Loads 7 items · 9 sales · 13 finance entries for testing
@@ -1532,5 +1552,141 @@
 
 <!-- ── App JavaScript ──────────────────────────────────────────── -->
 <script src="app.js"></script>
+
+
+<!-- ==============================================================
+     PAGE: DAY MANAGEMENT  (id="page-day")
+     ============================================================== -->
+<div class="page" id="page-day">
+  <div style="padding:4px 0 12px;">
+
+    <!-- Day status banner -->
+    <div id="day-banner" style="background:var(--surface2);border:2px solid var(--border);border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;">
+      <div id="day-banner-icon" style="font-size:32px;margin-bottom:6px;">📅</div>
+      <div id="day-status-badge" style="display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:var(--surface2);color:var(--muted);">LOADING</div>
+      <div id="day-banner-title" style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px;"></div>
+      <div id="day-banner-sub" style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-bottom:14px;"></div>
+      <div id="day-action-area"></div>
+    </div>
+
+    <!-- Live stats (shown when day is open) -->
+    <div id="day-live" style="display:none;">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Today's Activity</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+        <div class="stat-box cyan" style="padding:12px;">
+          <div class="stat-val" id="day-sales-count" style="font-size:22px;">0</div>
+          <div class="stat-lbl">Sales</div>
+        </div>
+        <div class="stat-box amber" style="padding:12px;">
+          <div class="stat-val" id="day-revenue" style="font-size:18px;">0</div>
+          <div class="stat-lbl">Revenue</div>
+        </div>
+        <div class="stat-box" style="padding:12px;background:var(--green-light);border:1.5px solid #a8d8b5;">
+          <div class="stat-val" id="day-profit" style="font-size:18px;color:var(--green);">0</div>
+          <div class="stat-lbl">Profit</div>
+        </div>
+        <div class="stat-box" style="padding:12px;">
+          <div class="stat-val" id="day-purchases" style="font-size:22px;">0</div>
+          <div class="stat-lbl">Purchases</div>
+        </div>
+      </div>
+
+      <!-- Today's sales list -->
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Sales Today</div>
+      <div class="card" style="padding:12px;">
+        <div id="day-sales-list">
+          <div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales yet today</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Past sessions -->
+    <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px;">Past Sessions</div>
+    <div id="day-sessions-list">
+      <div style="color:var(--muted);font-size:13px;padding:8px 0;">No past sessions yet</div>
+    </div>
+
+  </div>
+</div><!-- /page-day -->
+
+
+<!-- ==============================================================
+     SHEET: DAY CLOSE SUMMARY  (id="day-summary-sheet")
+     ============================================================== -->
+<div class="sheet-overlay" id="day-summary-sheet">
+  <div class="sheet" style="max-height:90vh;overflow-y:auto;">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">🌙 Close Day Summary</div>
+
+    <div id="ds-verdict" style="border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;"></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Date</div><div class="sh-stat-val" id="ds-date" style="font-size:12px;"></div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Hours</div><div class="sh-stat-val" id="ds-time-range" style="font-size:11px;"></div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Revenue</div><div class="sh-stat-val accent2" id="ds-revenue"></div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Profit</div><div class="sh-stat-val green" id="ds-profit"></div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Margin</div><div class="sh-stat-val" id="ds-margin"></div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Avg Sale</div><div class="sh-stat-val" id="ds-avg-sale"></div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Sales</div><div class="sh-stat-val" id="ds-sales"></div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Items Sold</div><div class="sh-stat-val" id="ds-items-sold"></div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Custom Price</div><div class="sh-stat-val" id="ds-custom-price"></div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Purchases</div><div class="sh-stat-val" id="ds-purchases"></div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Opening Stock</div><div class="sh-stat-val" id="ds-opening-stock" style="font-size:12px;"></div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Closing Stock</div><div class="sh-stat-val" id="ds-closing-stock" style="font-size:12px;"></div></div>
+    </div>
+
+    <!-- Stock movement bar -->
+    <div style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span style="font-size:11px;font-weight:700;color:var(--muted);">Stock Moved</span>
+        <span id="ds-stock-pct-label" style="font-size:11px;font-weight:700;color:var(--accent);">0%</span>
+      </div>
+      <div style="height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;">
+        <div id="ds-stock-bar" style="height:100%;width:0%;background:var(--accent);border-radius:4px;transition:width .5s ease;"></div>
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px;">Notes (optional)</label>
+      <textarea id="ds-notes" rows="2" placeholder="Any notes for today..."
+        style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-family:var(--sans);background:var(--surface2);outline:none;resize:none;box-sizing:border-box;"></textarea>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button id="ds-confirm-btn" onclick="confirmCloseDay()"
+        style="width:100%;padding:15px;background:var(--red);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+        🌙 Confirm Close Day
+      </button>
+      <button id="ds-pause-btn" onclick="cancelCloseDay()" style="display:none;width:100%;padding:15px;background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:var(--r);font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans);">
+        Cancel
+      </button>
+      <button onclick="cancelCloseDay()"
+        style="width:100%;padding:13px;background:transparent;color:var(--muted);border:none;font-size:14px;cursor:pointer;font-family:var(--sans);">
+        Cancel — keep day open
+      </button>
+    </div>
+  </div>
+</div><!-- /day-summary-sheet -->
+
+
+<!-- ── Saving overlay — circular progress ──────────────────────── -->
+<div id="saving-overlay" style="display:none;position:fixed;inset:0;z-index:99999;
+     background:rgba(0,0,0,0.55);backdrop-filter:blur(3px);
+     align-items:center;justify-content:center;">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+    <svg id="saving-svg" width="80" height="80" viewBox="0 0 80 80">
+      <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="7"/>
+      <circle id="saving-arc" cx="40" cy="40" r="34" fill="none"
+              stroke="#ffffff" stroke-width="7" stroke-linecap="round"
+              stroke-dasharray="213.6" stroke-dashoffset="213.6"
+              transform="rotate(-90 40 40)"
+              style="transition:stroke-dashoffset 0.15s linear;"/>
+    </svg>
+    <div id="saving-label" style="color:white;font-size:15px;font-weight:700;
+         font-family:var(--sans);letter-spacing:0.5px;">Saving…</div>
+  </div>
+</div>
+
 </body>
 </html>
