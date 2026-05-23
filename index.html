@@ -311,90 +311,125 @@
      ============================================================== -->
 <div class="page active" id="page-dash">
 
-  <!-- ── 4 KPI tiles ─────────────────────────────────────────── -->
-  <div class="stats-row">
-    <div class="stat-box cyan">
-      <div class="stat-val" id="d-items">0</div>
-      <div class="stat-lbl">Total Items</div>
+  <!-- ── Period selector ──────────────────────────────────────── -->
+  <div style="display:flex;gap:6px;padding:10px 12px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch;">
+    <button onclick="dashSetPeriod('today')"  id="dash-period-today"  class="fin-filter-btn active">Today</button>
+    <button onclick="dashSetPeriod('week')"   id="dash-period-week"   class="fin-filter-btn">This Week</button>
+    <button onclick="dashSetPeriod('month')"  id="dash-period-month"  class="fin-filter-btn">This Month</button>
+    <button onclick="dashSetPeriod('all')"    id="dash-period-all"    class="fin-filter-btn">All Time</button>
+  </div>
+
+  <!-- ── Row 1: Revenue · Profit · Margin ────────────────────── -->
+  <div class="stats-row" style="grid-template-columns:1fr 1fr 1fr;gap:6px;">
+    <div class="stat-box green">
+      <div class="stat-val" id="d-revenue" style="font-size:15px;">0</div>
+      <div class="stat-lbl">💰 Revenue</div>
     </div>
-    <div class="stat-box amber">
-      <div class="stat-val" id="d-qty">0</div>
-      <div class="stat-lbl">Total Pieces</div>
+    <div class="stat-box cyan">
+      <div class="stat-val" id="d-profit-earned" style="font-size:15px;">0</div>
+      <div class="stat-lbl">📈 Profit</div>
     </div>
     <div class="stat-box purple">
-      <div class="stat-val" id="d-stock-val">0</div>
-      <div class="stat-lbl">Stock Value</div>
+      <div class="stat-val" id="d-margin" style="font-size:15px;">0%</div>
+      <div class="stat-lbl">📊 Margin</div>
+    </div>
+  </div>
+
+  <!-- ── Row 2: Items · Pieces · Sold · Sales# ────────────────── -->
+  <div class="stats-row" style="gap:6px;">
+    <div class="stat-box amber">
+      <div class="stat-val" id="d-items" style="font-size:18px;">0</div>
+      <div class="stat-lbl">SKUs</div>
+    </div>
+    <div class="stat-box cyan">
+      <div class="stat-val" id="d-qty" style="font-size:18px;">0</div>
+      <div class="stat-lbl">In Stock</div>
     </div>
     <div class="stat-box green">
-      <div class="stat-val" id="d-total-sold">0</div>
-      <div class="stat-lbl">Total Sold</div>
+      <div class="stat-val" id="d-total-sold" style="font-size:18px;">0</div>
+      <div class="stat-lbl">Sales</div>
+    </div>
+    <div class="stat-box purple">
+      <div class="stat-val" id="d-pieces-sold" style="font-size:18px;">0</div>
+      <div class="stat-lbl">Pieces Out</div>
     </div>
   </div>
 
-  <!-- ── Stock value breakdown ───────────────────────────────── -->
-  <div class="sec-label">📦 Stock</div>
-  <div class="card" style="margin-bottom:12px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;
-                padding:10px 0;border-bottom:1px solid var(--border);">
-      <span style="font-size:14px;font-weight:700;color:var(--text);">Stock Value (cost)</span>
-      <span style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--text2);"
-            id="d-cost-total">KES 0</span>
+  <!-- ── Alert strip ──────────────────────────────────────────── -->
+  <div id="d-alerts" style="padding:0 12px;"></div>
+
+  <!-- ── 7-day revenue spark line ─────────────────────────────── -->
+  <div id="d-sparkline-wrap" style="margin:0 12px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">7-Day Revenue</span>
+      <span id="d-spark-total" style="font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent);"></span>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;
-                padding:10px 0;border-bottom:1px solid var(--border);">
-      <span style="font-size:14px;font-weight:700;color:var(--text);">Stock Value (retail)</span>
-      <span style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent2);"
-            id="d-retail-total">KES 0</span>
+    <div id="d-sparkline" style="display:flex;align-items:flex-end;gap:3px;height:48px;"></div>
+    <div id="d-sparkline-labels" style="display:flex;gap:3px;margin-top:4px;"></div>
+  </div>
+
+  <!-- ── Today snapshot ───────────────────────────────────────── -->
+  <div id="d-today-wrap" style="margin:0 12px 8px;display:none;">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Today at a Glance</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;" id="d-today-grid"></div>
+  </div>
+
+  <!-- ── Stock health ─────────────────────────────────────────── -->
+  <div style="margin:0 12px 8px;">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">📦 Stock Health</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+      <div class="stat-box" style="padding:10px 8px;">
+        <div class="stat-val" id="d-stock-val" style="font-size:14px;color:var(--text2);">0</div>
+        <div class="stat-lbl">Cost Value</div>
+      </div>
+      <div class="stat-box amber" style="padding:10px 8px;">
+        <div class="stat-val" id="d-retail-total" style="font-size:14px;">0</div>
+        <div class="stat-lbl">Retail Value</div>
+      </div>
+      <div class="stat-box green" style="padding:10px 8px;">
+        <div class="stat-val" id="d-potential-profit" style="font-size:14px;">0</div>
+        <div class="stat-lbl">Pot. Profit</div>
+      </div>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
-      <span style="font-size:14px;font-weight:700;color:var(--text);">Stock Value Remaining</span>
-      <span style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent);"
-            id="d-remaining">KES 0</span>
+    <!-- Stock progress bar: sold vs remaining -->
+    <div id="d-stock-bar-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:10px 12px;display:none;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">
+        <span>Pieces Sold</span><span>Remaining in Stock</span>
+      </div>
+      <div style="height:10px;border-radius:5px;background:var(--surface2);overflow:hidden;display:flex;">
+        <div id="d-stock-bar-sold" style="height:100%;background:var(--accent);border-radius:5px 0 0 5px;transition:width .4s;"></div>
+        <div id="d-stock-bar-rem"  style="height:100%;background:var(--surface2);flex:1;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--muted);margin-top:4px;">
+        <span id="d-bar-sold-lbl"></span><span id="d-bar-rem-lbl"></span>
+      </div>
     </div>
   </div>
 
-  <!-- ── Sales totals ────────────────────────────────────────── -->
-  <div class="sec-label">💸 Sales</div>
-  <div class="card" style="margin-bottom:12px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;
-                padding:10px 0;border-bottom:1px solid var(--border);">
-      <span style="font-size:14px;font-weight:700;color:var(--text);">Total Revenue</span>
-      <span style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--green);"
-            id="d-revenue">KES 0</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;
-                padding:10px 0;border-bottom:1px solid var(--border);">
-      <span style="font-size:14px;font-weight:700;color:var(--text);">Total Profit Earned</span>
-      <span style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent2);"
-            id="d-profit-earned">KES 0</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
-      <span style="font-size:14px;font-weight:700;color:var(--text);">Items Sold (pieces)</span>
-      <span style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--accent);"
-            id="d-pieces-sold">0</span>
-    </div>
+  <!-- ── Insights ─────────────────────────────────────────────── -->
+  <div id="d-insights" style="margin:0 12px 8px;"></div>
+
+  <!-- ── Top sellers ──────────────────────────────────────────── -->
+  <div style="margin:0 12px 8px;">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">🏆 Top Sellers (period)</div>
+    <div id="d-top-sellers"></div>
   </div>
 
-  <!-- ── Finance quick view ──────────────────────────────────────── -->
-  <div class="sec-label">💼 Money Flow</div>
-  <div class="card" id="d-finance-summary" style="margin-bottom:12px;">
-    <div style="color:var(--muted);font-size:13px;padding:8px 0;">Loading…</div>
+  <!-- ── Top items by stock value ─────────────────────────────── -->
+  <div style="margin:0 12px 8px;">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">📦 Highest Stock Value</div>
+    <div id="d-top-items"></div>
   </div>
 
-  <!-- ── Insights ────────────────────────────────────────────── -->
-  <div class="sec-label">💡 Insights</div>
-  <div class="card" id="d-insights" style="margin-bottom:12px;"></div>
+  <!-- ── By type breakdown ────────────────────────────────────── -->
+  <div style="margin:0 12px 80px;">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">📂 By Category</div>
+    <div id="d-by-type"></div>
+  </div>
 
-  <!-- ── Alert badges (out-of-stock, low stock) ─────────────── -->
-  <div id="d-alerts"></div>
-
-  <!-- ── Top 5 items by stock value (mini bar chart) ─────────── -->
-  <div class="sec-label">🏆 Top Items by Stock Value</div>
-  <div id="d-top-items"></div>
-
-  <!-- ── Per-type stock breakdown ───────────────────────────── -->
-  <div class="sec-label" style="margin-top:4px;">📂 By Type</div>
-  <div id="d-by-type"></div>
+  <!-- hidden compat IDs -->
+  <span id="d-cost-total" style="display:none;"></span>
+  <span id="d-remaining"  style="display:none;"></span>
 
 </div><!-- /page-dash -->
 
@@ -458,7 +493,8 @@
                placeholder="SH001"
                autocomplete="off" spellcheck="false"
                style="text-transform:uppercase;"
-               oninput="this.value=this.value.toUpperCase()">
+               oninput="onCodeInput()"
+               onblur="setTimeout(hideCodeDropdown,180)">
       </div>
       <div class="add-field" id="f-size-field">
         <label class="add-label">Size / Variant</label>

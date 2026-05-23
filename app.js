@@ -1231,13 +1231,25 @@ let _editOriginItemId   = null;
 let _editingItemId      = null;  // tracks current edit ID reliably (backup to hidden input)
 
 function onCodeInput() {
-  const clean = UI.el('f-code').value.toUpperCase().replace(/[^A-Z0-9\-.]/g,'');
+  const raw   = UI.el('f-code').value;
+  const clean = raw.toUpperCase().replace(/[^A-Z0-9\-.\s]/g, '').trimStart();
   UI.el('f-code').value = clean;
   if (!clean) { hideCodeDropdown(); return; }
-  const exact      = allItems.filter(i => i.code === clean);
-  const startsWith = allItems.filter(i => i.code !== clean && i.code && i.code.startsWith(clean));
-  const contains   = allItems.filter(i => i.code !== clean && i.code && !i.code.startsWith(clean) && i.code.includes(clean));
-  const matches    = [...exact, ...startsWith, ...contains].slice(0,8);
+
+  // De-duplicate by code then search: exact → startsWith → contains
+  const seen = new Set();
+  const unique = [];
+  for (const item of allItems) {
+    if (!item.code || seen.has(item.code)) continue;
+    seen.add(item.code);
+    unique.push(item);
+  }
+  const exact      = unique.filter(i => i.code === clean);
+  const startsWith = unique.filter(i => i.code !== clean && i.code.startsWith(clean));
+  const contains   = unique.filter(i => i.code !== clean && !i.code.startsWith(clean) && i.code.includes(clean));
+  const nameMatch  = unique.filter(i => !seen.has('NAME_'+i.code) && i.name && i.name.toUpperCase().includes(clean) && !exact.includes(i) && !startsWith.includes(i) && !contains.includes(i));
+  const matches    = [...exact, ...startsWith, ...contains, ...nameMatch].slice(0, 10);
+
   if (!matches.length) { hideCodeDropdown(); return; }
   showCodeDropdown(matches, clean);
 }
@@ -1245,67 +1257,52 @@ function onCodeInput() {
 function showCodeDropdown(items, typedCode) {
   let dd = document.getElementById('code-dropdown');
   if (!dd) {
-    dd = document.createElement('div'); dd.id = 'code-dropdown'; dd.className = 'code-dd';
+    dd = document.createElement('div');
+    dd.id = 'code-dropdown';
+    dd.className = 'code-dd';
     const cf = UI.el('f-code');
-    if (cf) cf.parentNode.insertBefore(dd, cf.nextSibling);
+    if (cf) cf.parentNode.appendChild(dd);
   }
   dd.innerHTML = items.map(item => {
     const isExact = item.code === typedCode;
-    const sc = item.qty<=0?'var(--red)':item.qty<=LOW_STOCK_LEVEL?'#d97706':'var(--green)';
-    const sl = item.qty<=0?'Out':item.qty+' in stock';
-    return '<div class="code-dd-item' + (isExact?' code-dd-exact':'') + '" onclick="selectExistingItem(' + item.id + ')">' +
-      '<span class="code-dd-code">' + escapeHtml(item.code) + (isExact?' <span class="code-dd-match-badge">exact</span>':'') + '</span>' +
-      '<span class="code-dd-stock" style="color:' + sc + ';">' + sl + '</span>' +
-    '</div>';
+    const sc = item.qty <= 0 ? 'var(--red)' : item.qty <= LOW_STOCK_LEVEL ? '#d97706' : 'var(--green)';
+    const stockLabel = item.qty <= 0 ? 'Out of stock' : item.qty + ' in stock';
+    const sell = item.sellPrice || item.sell || 0;
+    return `<div class="code-dd-item${isExact?' code-dd-exact':''}" onclick="selectExistingItem(${item.id})">
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+        <span style="font-size:14px;">${(getTypeObj(item.type)).emoji}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:800;font-family:var(--mono);">${escapeHtml(item.code)}${isExact?'<span class="code-dd-match-badge">exact</span>':''}</div>
+          <div style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name||'')}</div>
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-size:11px;font-weight:700;color:${sc};">${stockLabel}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${fmt(sell)}</div>
+      </div>
+    </div>`;
   }).join('');
   dd.style.display = 'block';
 }
 
 function hideCodeDropdown() {
-  const dd = document.getElementById('code-dropdown'); if (dd) dd.style.display = 'none';
+  const dd = document.getElementById('code-dropdown');
+  if (dd) dd.style.display = 'none';
 }
 
 async function selectExistingItem(itemId) {
   try {
-  const item = await dbGet('items', itemId);
-  if (!item) { toast('⚠️ Item not found', 'err'); hideCodeDropdown(); return; }
-  hideCodeDropdown();
-  _codeDropdownActive = true;
-  UI.el('f-code').value = item.code;
-  UI.el('f-name').value = item.name || '';
-  UI.el('f-size').value = item.variant || item.size || '';
-  const typeEl = UI.el('f-type'); if (typeEl) typeEl.value = item.type || '';
-  onTypeChange();
-  UI.el('edit-id').value = 'restock_' + itemId;
+    const item = await dbGet('items', itemId);
+    if (!item) { toast('⚠️ Item not found', 'err'); hideCodeDropdown(); return; }
+    hideCodeDropdown();
 
-  let banner = document.getElementById('restock-mode-banner');
-  if (!banner) {
-    banner = document.createElement('div'); banner.id = 'restock-mode-banner'; banner.className = 'restock-banner';
-    const cf = UI.el('f-code'); if (cf) cf.closest('.add-field').after(banner);
-  }
-  const sc = item.qty<=0?'var(--red)':item.qty<=LOW_STOCK_LEVEL?'#d97706':'var(--green)';
-  banner.innerHTML = '<i class="fa-solid fa-boxes-stacked" style="color:var(--accent);font-size:18px;"></i>' +
-    '<div style="flex:1;min-width:0;">' +
-      '<div style="font-size:13px;font-weight:800;">Restock Mode</div>' +
-      '<div style="font-size:11px;color:var(--muted);">' + escapeHtml(item.code) + (item.name?' · '+escapeHtml(item.name):'') +
-        ' · Stock: <strong style="color:' + sc + ';">' + item.qty + '</strong>' +
-        ' · Sell: ' + fmt(item.sell||item.defaultSell||0) +
-      '</div>' +
-    '</div>' +
-    '<button onclick="exitRestockMode()" class="restock-banner-exit" title="Cancel">✕</button>';
-  banner.style.display = 'flex';
+    // If on the Add page: open the item's detail sheet directly
+    // This lets the user see, restock, edit or sell without creating a duplicate
+    showPage('list');
+    setTimeout(async () => {
+      await openSheet(itemId);
+    }, 80);
 
-  ['f-code','f-name','f-size','f-type','f-buy','f-sell'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) { el.disabled=true; el.style.opacity='0.4'; el.style.cursor='not-allowed'; }
-  });
-  const qtyEl = UI.el('f-qty');
-  if (qtyEl) { qtyEl.disabled=false; qtyEl.style.opacity='1'; qtyEl.style.cursor=''; qtyEl.value=''; }
-
-  UI.el('save-btn').textContent = '📦 Add to Stock';
-  UI.el('form-mode-label').textContent = '📦 Restock';
-  UI.el('cancel-edit-btn').style.display = 'block';
-  setTimeout(() => { if (qtyEl) { qtyEl.focus(); qtyEl.select(); } }, 150);
   } catch(e) { console.error("[selectExistingItem]", e); toast("Error: " + e.message, "err"); }
 }
 
@@ -1859,151 +1856,305 @@ async function editItem() {
 }
 
 // ===== DASHBOARD =====
+// ── Dashboard period state ──────────────────────────────────
+let _dashPeriod = 'today';
+
+function dashSetPeriod(p) {
+  _dashPeriod = p;
+  document.querySelectorAll('[id^="dash-period-"]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('dash-period-' + p);
+  if (btn) btn.classList.add('active');
+  renderDashboard();
+}
+
+function _dashDateRange() {
+  const today = todayDateStr();
+  if (_dashPeriod === 'today') return { from: today, to: today };
+  if (_dashPeriod === 'week')  { const d=new Date(); d.setDate(d.getDate()-6); return { from:d.toISOString().split('T')[0], to:today }; }
+  if (_dashPeriod === 'month') { const d=new Date(); d.setDate(1); return { from:d.toISOString().split('T')[0], to:today }; }
+  return { from: null, to: null };
+}
+
 async function renderDashboard() {
-  const items = await dbAll('items');
-  const sales = await dbAll('sales');
+  const allItems = await dbAll('items');
+  const allSales = await dbAll('sales');
+  const range    = _dashDateRange();
+  const today    = todayDateStr();
 
-  const totalItems = items.length;
-  const totalQty = items.reduce((s, i) => s + i.qty, 0);
-  const stockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
-  const stockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
+  // Filter sales by period
+  const sales = allSales.filter(s => {
+    const d = s.businessDate || (s.date||'').split('T')[0];
+    if (!range.from) return true;
+    return d >= range.from && d <= range.to;
+  });
 
-  // Sales aggregates
-  const totalRevenue = sales.reduce((s, x) => s + x.revenue, 0);
-  const totalProfitEarned = sales.reduce((s, x) => s + x.profit, 0);
-  const totalPiecesSold = sales.reduce((s, x) => s + x.qty, 0);
-  const totalSalesCount = sales.length;
+  // ── Stock metrics (always all-time) ──────────────────────
+  const totalItems  = allItems.length;
+  const totalQty    = allItems.reduce((s,i) => s+(i.qty||0), 0);
+  const stockCost   = allItems.reduce((s,i) => s+((i.buyPrice||i.buy||0)*(i.qty||0)), 0);
+  const stockRetail = allItems.reduce((s,i) => s+((i.sellPrice||i.sell||0)*(i.qty||0)), 0);
+  const potProfit   = stockRetail - stockCost;
 
-  // Stock value remaining = current stock retail value
-  const stockRemaining = stockRetail;
+  // ── Period sales metrics ──────────────────────────────────
+  const totalRevenue      = sales.reduce((s,x) => s+(x.revenue||0), 0);
+  const totalProfitEarned = sales.reduce((s,x) => s+(x.profit||0), 0);
+  const totalPiecesSold   = sales.reduce((s,x) => s+(x.qty||0), 0);
+  const totalSalesCount   = sales.length;
+  const margin = totalRevenue > 0 ? (totalProfitEarned/totalRevenue*100) : 0;
+  const avgSale = totalSalesCount > 0 ? totalRevenue/totalSalesCount : 0;
 
-  // Top stat boxes
-  document.getElementById('d-items').textContent = totalItems;
-  document.getElementById('d-qty').textContent = fmtN(totalQty);
-  document.getElementById('d-stock-val').textContent = fmt(stockCost);
-  document.getElementById('d-total-sold').textContent = totalSalesCount;
+  // ── KPI tiles ─────────────────────────────────────────────
+  const setEl = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+  setEl('d-revenue',      fmt(totalRevenue));
+  setEl('d-profit-earned',fmt(totalProfitEarned));
+  setEl('d-margin',       margin.toFixed(1)+'%');
+  setEl('d-items',        fmtN(totalItems));
+  setEl('d-qty',          fmtN(totalQty));
+  setEl('d-total-sold',   fmtN(totalSalesCount));
+  setEl('d-pieces-sold',  fmtN(totalPiecesSold));
+  setEl('d-stock-val',    fmt(stockCost));
+  setEl('d-retail-total', fmt(stockRetail));
+  setEl('d-potential-profit', fmt(potProfit));
+  // Compat
+  setEl('d-cost-total', fmt(stockCost));
+  setEl('d-remaining',  fmt(stockRetail));
 
-  // Stock card
-  document.getElementById('d-cost-total').textContent = fmt(stockCost);
-  document.getElementById('d-retail-total').textContent = fmt(stockRetail);
-  document.getElementById('d-remaining').textContent = fmt(stockRemaining);
+  // Margin colour
+  const mEl = document.getElementById('d-margin');
+  if (mEl) mEl.style.color = margin >= 20 ? 'var(--green)' : margin >= 10 ? 'var(--amber)' : 'var(--red)';
 
-  // Sales card
-  document.getElementById('d-revenue').textContent = fmt(totalRevenue);
-  document.getElementById('d-profit-earned').textContent = fmt(totalProfitEarned);
-  document.getElementById('d-pieces-sold').textContent = fmtN(totalPiecesSold);
+  // ── Sold vs remaining bar ─────────────────────────────────
+  const barWrap = document.getElementById('d-stock-bar-wrap');
+  const totalEver = totalPiecesSold + totalQty;
+  if (barWrap && totalEver > 0) {
+    barWrap.style.display = '';
+    const soldPct = (totalPiecesSold / totalEver * 100).toFixed(1);
+    const remPct  = (totalQty / totalEver * 100).toFixed(1);
+    const barSold = document.getElementById('d-stock-bar-sold');
+    if (barSold) barSold.style.width = soldPct + '%';
+    setEl('d-bar-sold-lbl', fmtN(totalPiecesSold) + ' sold (' + soldPct + '%)');
+    setEl('d-bar-rem-lbl',  fmtN(totalQty) + ' remaining (' + remPct + '%)');
+  } else if (barWrap) { barWrap.style.display = 'none'; }
 
-  // Insights
-  const insightsEl = document.getElementById('d-insights');
+  // ── Today at a Glance (only show on Today period) ─────────
+  const todayWrap = document.getElementById('d-today-wrap');
+  if (todayWrap) {
+    if (_dashPeriod === 'today') {
+      const todaySales = allSales.filter(s => (s.businessDate||(s.date||'').split('T')[0]) === today);
+      const tRev  = todaySales.reduce((s,x)=>s+(x.revenue||0),0);
+      const tProf = todaySales.reduce((s,x)=>s+(x.profit||0),0);
+      const tQty  = todaySales.reduce((s,x)=>s+(x.qty||0),0);
+      todayWrap.style.display = '';
+      const grid = document.getElementById('d-today-grid');
+      if (grid) grid.innerHTML = [
+        { label:'Revenue', val:fmt(tRev), color:'var(--green)' },
+        { label:'Profit',  val:fmt(tProf), color: tProf>=0?'var(--accent2)':'var(--red)' },
+        { label:'Pieces',  val:fmtN(tQty), color:'var(--accent)' },
+      ].map(k=>`<div class="stat-box" style="padding:10px 8px;"><div class="stat-val" style="font-size:15px;color:${k.color};">${k.val}</div><div class="stat-lbl">${k.label}</div></div>`).join('');
+    } else {
+      todayWrap.style.display = 'none';
+    }
+  }
+
+  // ── 7-day sparkline ───────────────────────────────────────
+  const sparkWrap = document.getElementById('d-sparkline-wrap');
+  const sparkEl   = document.getElementById('d-sparkline');
+  const sparkLbls = document.getElementById('d-sparkline-labels');
+  if (sparkWrap && sparkEl) {
+    const days7 = Array.from({length:7},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-(6-i)); return d.toISOString().split('T')[0]; });
+    const dayRevs = days7.map(date => allSales.filter(s=>(s.businessDate||(s.date||'').split('T')[0])===date).reduce((s,x)=>s+(x.revenue||0),0));
+    const hasData = dayRevs.some(v=>v>0);
+    sparkWrap.style.display = hasData ? '' : 'none';
+    if (hasData) {
+      const maxRev = Math.max(...dayRevs, 1);
+      const weekTotal = dayRevs.reduce((s,v)=>s+v,0);
+      setEl('d-spark-total', fmt(weekTotal));
+      sparkEl.innerHTML = dayRevs.map((v,i)=>{
+        const h = Math.max(3, Math.round(v/maxRev*44));
+        const isToday = days7[i]===today;
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:48px;">
+          <div title="${fmt(v)}" style="width:100%;background:${isToday?'var(--accent2)':'var(--accent)'};border-radius:3px 3px 0 0;height:${h}px;opacity:${v>0?1:0.2};"></div>
+        </div>`;
+      }).join('');
+      if (sparkLbls) sparkLbls.innerHTML = days7.map((d,i)=>`<div style="flex:1;text-align:center;font-size:9px;color:var(--muted);font-weight:${days7[i]===today?800:600};">${new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short'}).slice(0,2)}</div>`).join('');
+    }
+  }
+
+  // ── Alerts ────────────────────────────────────────────────
+  const outStk = allItems.filter(i => i.qty === 0);
+  const lowStk = allItems.filter(i => i.qty > 0 && i.qty <= LOW_STOCK_LEVEL);
+  const alertEl = document.getElementById('d-alerts');
+  if (alertEl) {
+    let html = '';
+    if (outStk.length) html += `<div style="background:var(--red-light);border:1px solid rgba(192,57,43,0.25);border-radius:var(--r);padding:10px 12px;margin-bottom:6px;font-size:12px;color:var(--red);font-weight:600;">⚠️ <strong>${outStk.length}</strong> out of stock — ${outStk.slice(0,4).map(i=>escapeHtml(i.code)).join(', ')}${outStk.length>4?' +more':''}</div>`;
+    if (lowStk.length) html += `<div style="background:var(--amber-light);border:1px solid #f5d9a0;border-radius:var(--r);padding:10px 12px;margin-bottom:6px;font-size:12px;color:var(--amber);font-weight:600;">📉 <strong>${lowStk.length}</strong> running low — ${lowStk.slice(0,4).map(i=>escapeHtml(i.code)).join(', ')}${lowStk.length>4?' +more':''}</div>`;
+    alertEl.innerHTML = html;
+  }
+
+  // ── Insights ──────────────────────────────────────────────
   const insights = [];
   if (totalItems === 0) {
-    insights.push({ icon: '📦', text: 'No items yet — tap ➕ Add to get started', color: 'var(--muted)' });
+    insights.push({ icon:'📦', text:'No items yet — tap ➕ Add to get started', color:'var(--muted)' });
   } else {
-    // Best selling type
-    const typeRevMap = {};
-    sales.forEach(s => { typeRevMap[s.type] = (typeRevMap[s.type] || 0) + s.revenue; });
-    const bestType = Object.entries(typeRevMap).sort((a,b) => b[1]-a[1])[0];
-    if (bestType) insights.push({ icon: '🏆', text: 'Best selling type: <strong>' + bestType[0] + '</strong> (' + fmt(bestType[1]) + ' revenue)', color: 'var(--accent2)' });
+    if (totalSalesCount > 0) {
+      insights.push({ icon:'🛒', text:`${fmtN(totalSalesCount)} sale${totalSalesCount!==1?'s':''} · avg ${fmt(avgSale)} per sale`, color:'var(--accent2)' });
+    }
+    if (margin < 0 && totalRevenue > 0) insights.push({ icon:'🚨', text:`Negative margin (${margin.toFixed(1)}%) — selling below cost!`, color:'var(--red)' });
+    else if (margin < 10 && totalRevenue > 0) insights.push({ icon:'⚠️', text:`Low margin ${margin.toFixed(1)}% — consider reviewing prices`, color:'#d97706' });
+    else if (margin >= 30 && totalRevenue > 0) insights.push({ icon:'🎯', text:`Strong margin: ${margin.toFixed(1)}%`, color:'var(--green)' });
 
-    // Profit margin overall
-    if (totalRevenue > 0) {
-      const margin = ((totalProfitEarned / totalRevenue) * 100).toFixed(1);
-      insights.push({ icon: '📈', text: 'Overall profit margin: <strong>' + margin + '%</strong>', color: margin >= 20 ? 'var(--green)' : 'var(--amber)' });
+    // Best selling item in period
+    if (sales.length > 0) {
+      const itemRev = {};
+      sales.forEach(s => { itemRev[s.itemCode]=(itemRev[s.itemCode]||0)+(s.revenue||0); });
+      const bestCode = Object.entries(itemRev).sort((a,b)=>b[1]-a[1])[0];
+      if (bestCode) {
+        const bestItem = allItems.find(i=>i.code===bestCode[0]);
+        insights.push({ icon:'🏆', text:`Best seller: <strong>${escapeHtml(bestItem?.name||bestCode[0])}</strong> (${fmt(bestCode[1])})`, color:'var(--accent2)' });
+      }
     }
 
-    // Out of stock
-    const outStock = items.filter(i => i.qty === 0);
-    if (outStock.length) insights.push({ icon: '⚠️', text: '<strong>' + outStock.length + '</strong> item' + (outStock.length>1?'s':'') + ' out of stock: ' + outStock.map(i=>i.code).join(', '), color: 'var(--red)' });
+    // Best selling category
+    if (sales.length > 0) {
+      const typeRev = {};
+      sales.forEach(s => { typeRev[s.itemType||s.type]=(typeRev[s.itemType||s.type]||0)+(s.revenue||0); });
+      const bestType = Object.entries(typeRev).filter(([k])=>k).sort((a,b)=>b[1]-a[1])[0];
+      if (bestType) insights.push({ icon:'📂', text:`Top category: <strong>${escapeHtml(bestType[0])}</strong> (${fmt(bestType[1])})`, color:'var(--accent)' });
+    }
 
-    // Low stock
-    const lowStock = items.filter(i => i.qty > 0 && i.qty <= 3);
-    if (lowStock.length) insights.push({ icon: '📉', text: '<strong>' + lowStock.length + '</strong> item' + (lowStock.length>1?'s':'') + ' running low (≤3 pcs): ' + lowStock.map(i=>i.code).join(', '), color: 'var(--amber)' });
+    // Potential profit still in stock
+    if (potProfit > 0) insights.push({ icon:'💎', text:`Potential profit in stock: <strong>${fmt(potProfit)}</strong>`, color:'var(--green)' });
 
-    // Stock turnover hint
+    // Stock turnover
     if (totalPiecesSold > 0 && totalQty > 0) {
-      const ratio = (totalPiecesSold / (totalPiecesSold + totalQty) * 100).toFixed(0);
-      insights.push({ icon: '🔄', text: '<strong>' + ratio + '%</strong> of your stock has been sold', color: 'var(--accent)' });
+      const ratio = (totalPiecesSold/(totalPiecesSold+totalQty)*100).toFixed(0);
+      insights.push({ icon:'🔄', text:`${ratio}% of all stock has been sold`, color:'var(--accent)' });
     }
-
-    if (insights.length === 0) insights.push({ icon: '✅', text: 'All good — stock levels healthy', color: 'var(--green)' });
+    if (insights.length === 0 && totalItems > 0) insights.push({ icon:'✅', text:'Stock levels healthy — all good', color:'var(--green)' });
   }
 
-  insightsEl.innerHTML = insights.map(ins => `
-    <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
-      <span style="font-size:18px;flex-shrink:0;">${ins.icon}</span>
-      <span style="font-size:13px;font-weight:500;color:${ins.color};line-height:1.5;">${ins.text}</span>
-    </div>`).join('').replace(/border-bottom[^;]+;(?=[^<]*<\/div>\s*$)/, '');
+  const insightsEl = document.getElementById('d-insights');
+  if (insightsEl) {
+    insightsEl.innerHTML = insights.length ? insights.map(ins =>
+      `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-bottom:5px;">
+        <span style="font-size:16px;flex-shrink:0;">${ins.icon}</span>
+        <span style="font-size:12px;font-weight:600;color:${ins.color};line-height:1.5;">${ins.text}</span>
+      </div>`
+    ).join('') : '';
+  }
 
-  // Alerts separately
-  const outStk = items.filter(i => i.qty === 0);
-  const lowStk = items.filter(i => i.qty > 0 && i.qty <= 3);
-  const alertEl = document.getElementById('d-alerts');
-  let alertHTML = '';
-  if (outStk.length) alertHTML += `<div style="background:var(--red-light);border:1px solid rgba(192,57,43,0.25);border-radius:var(--r);padding:12px 14px;margin-bottom:8px;font-size:13px;color:var(--red);">⚠️ <strong>${outStk.length}</strong> out of stock: ${outStk.map(i=>i.code).join(', ')}</div>`;
-  if (lowStk.length) alertHTML += `<div style="background:var(--amber-light);border:1px solid #f5d9a0;border-radius:var(--r);padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--amber);">📉 <strong>${lowStk.length}</strong> low stock: ${lowStk.map(i=>i.code).join(', ')}</div>`;
-  alertEl.innerHTML = alertHTML;
+  // ── Top sellers (period) ──────────────────────────────────
+  const topSellersEl = document.getElementById('d-top-sellers');
+  if (topSellersEl) {
+    if (sales.length === 0) {
+      topSellersEl.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:8px;">No sales in this period</div>`;
+    } else {
+      const codeRev = {};
+      const codeQty = {};
+      sales.forEach(s => {
+        codeRev[s.itemCode]=(codeRev[s.itemCode]||0)+(s.revenue||0);
+        codeQty[s.itemCode]=(codeQty[s.itemCode]||0)+(s.qty||0);
+      });
+      const topSellers = Object.entries(codeRev).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      const maxRev = topSellers[0]?.[1] || 1;
+      topSellersEl.innerHTML = topSellers.map(([code,rev],idx) => {
+        const item = allItems.find(i=>i.code===code);
+        const t    = getTypeObj(item?.type||'');
+        const pct  = Math.max(8, Math.round(rev/maxRev*100));
+        const qty  = codeQty[code]||0;
+        return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="font-size:16px;">${t.emoji}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item?.name||code)}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${escapeHtml(code)} · ${fmtN(qty)} pcs sold</div>
+            </div>
+            <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(rev)}</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:3px;height:5px;overflow:hidden;">
+            <div style="height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:${pct}%;border-radius:3px;"></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
 
-  // Top 5 items by stock value
-  const sorted = [...items].sort((a, b) => (b.sell * b.qty) - (a.sell * a.qty)).slice(0, 5);
+  // ── Top items by stock value ──────────────────────────────
   const topEl = document.getElementById('d-top-items');
-  if (!sorted.length) { topEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No items yet</div>'; }
-  else {
-    const maxVal = sorted[0].sell * sorted[0].qty || 1;
-    topEl.innerHTML = sorted.map(item => {
-      const val = item.sell * item.qty;
-      const pct = Math.max(6, (val / maxVal) * 100);
-      const t = getTypeObj(item.type);
-      return `<div class="card" style="padding:12px;margin-bottom:8px;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-          <span style="font-size:20px;">${t.emoji}</span>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.name}</div>
-            <div style="font-size:11px;font-family:var(--mono);color:var(--muted);">${item.code} · ${item.qty} pcs</div>
+  if (topEl) {
+    const sorted = [...allItems].sort((a,b)=>((b.sellPrice||b.sell||0)*b.qty)-((a.sellPrice||a.sell||0)*a.qty)).slice(0,5);
+    if (!sorted.length) { topEl.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:8px 0;">No items yet</div>`; }
+    else {
+      const maxVal = (sorted[0].sellPrice||sorted[0].sell||0)*sorted[0].qty || 1;
+      topEl.innerHTML = sorted.map(item => {
+        const sell = item.sellPrice||item.sell||0;
+        const buy  = item.buyPrice||item.buy||0;
+        const val  = sell * item.qty;
+        const pct  = Math.max(6, Math.round(val/maxVal*100));
+        const t    = getTypeObj(item.type);
+        return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="font-size:16px;">${t.emoji}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name||item.code)}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${escapeHtml(item.code)} · ${fmtN(item.qty)} pcs · buy ${fmt(buy)}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(val)}</div>
+              <div style="font-size:9px;color:var(--green);font-weight:700;">+${fmt((sell-buy)*item.qty)} pot.</div>
+            </div>
           </div>
-          <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--accent2);">${fmt(val)}</div>
+          <div style="background:var(--surface2);border-radius:3px;height:5px;overflow:hidden;">
+            <div style="height:100%;background:linear-gradient(90deg,var(--accent3),var(--accent2));width:${pct}%;border-radius:3px;"></div>
           </div>
-        </div>
-        <div style="background:var(--surface2);border-radius:4px;height:6px;overflow:hidden;">
-          <div style="height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:4px;width:${pct}%;"></div>
-        </div>
-      </div>`;
-    }).join('');
+        </div>`;
+      }).join('');
+    }
   }
 
-  // By type
+  // ── By type ───────────────────────────────────────────────
   const byType = {};
-  items.forEach(item => {
-    if (!byType[item.type]) byType[item.type] = { qty: 0, cost: 0, retail: 0, count: 0 };
-    byType[item.type].qty += item.qty;
-    byType[item.type].cost += item.buy * item.qty;
-    byType[item.type].retail += item.sell * item.qty;
-    byType[item.type].count++;
+  allItems.forEach(item => {
+    const tp = item.type || 'Unknown';
+    if (!byType[tp]) byType[tp] = { qty:0, cost:0, retail:0, count:0, sold:0 };
+    byType[tp].qty    += item.qty||0;
+    byType[tp].cost   += (item.buyPrice||item.buy||0)*(item.qty||0);
+    byType[tp].retail += (item.sellPrice||item.sell||0)*(item.qty||0);
+    byType[tp].count++;
   });
+  sales.forEach(s => {
+    const tp = s.itemType||s.type||'Unknown';
+    if (!byType[tp]) byType[tp] = { qty:0, cost:0, retail:0, count:0, sold:0 };
+    byType[tp].sold += s.revenue||0;
+  });
+
   const typeEl = document.getElementById('d-by-type');
-  if (!Object.keys(byType).length) { typeEl.innerHTML = ''; return; }
-  typeEl.innerHTML = Object.entries(byType).map(([type, data]) => {
-    const t = getTypeObj(type);
-    return `<div class="card" style="margin-bottom:8px;padding:12px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-        <span style="font-size:22px;">${t.emoji}</span>
-        <div style="flex:1;">
-          <div style="font-weight:700;font-size:14px;">${type}</div>
-          <div style="font-size:11px;font-family:var(--mono);color:var(--muted);">${data.count} item${data.count!==1?'s':''} · ${fmtN(data.qty)} pcs</div>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div class="detail-box" style="padding:10px;">
-          <div class="detail-key" style="font-size:10px;">STOCK COST</div>
-          <div class="detail-val" style="font-size:13px;color:var(--text2);">${fmt(data.cost)}</div>
-        </div>
-        <div class="detail-box" style="padding:10px;">
-          <div class="detail-key" style="font-size:10px;">STOCK VALUE</div>
-          <div class="detail-val" style="font-size:13px;color:var(--accent2);">${fmt(data.retail)}</div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+  if (typeEl) {
+    if (!Object.keys(byType).length) { typeEl.innerHTML=''; }
+    else {
+      typeEl.innerHTML = Object.entries(byType).sort((a,b)=>b[1].retail-a[1].retail).map(([type,data]) => {
+        const t = getTypeObj(type);
+        const margin = data.retail > 0 ? ((data.retail-data.cost)/data.retail*100).toFixed(0) : 0;
+        return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <span style="font-size:22px;">${t.emoji}</span>
+            <div style="flex:1;">
+              <div style="font-weight:700;font-size:13px;">${escapeHtml(type)}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${data.count} SKU${data.count!==1?'s':''} · ${fmtN(data.qty)} pcs in stock</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:10px;font-weight:700;color:var(--green);">Margin ${margin}%</div>
+              ${data.sold>0?`<div style="font-size:10px;color:var(--accent2);font-weight:600;">Sold ${fmt(data.sold)}</div>`:''}
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <div class="detail-box" style="padding:8px;"><div class="detail-key" style="font-size:9px;">COST VALUE</div><div class="detail-val" style="font-size:12px;color:var(--text2);">${fmt(data.cost)}</div></div>
+            <div class="detail-box" style="padding:8px;"><div class="detail-key" style="font-size:9px;">RETAIL VALUE</div><div class="detail-val" style="font-size:12px;color:var(--accent2);">${fmt(data.retail)}</div></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
 }
 
 // renderSummary removed — content merged into renderDashboard
@@ -4954,6 +5105,7 @@ window.setTypeFilter       = setTypeFilter;
 window.toggleShoeSize      = toggleShoeSize;
 window.updateFinTypeColor  = updateFinTypeColor;
 window.finSetPeriod        = finSetPeriod;
+window.dashSetPeriod       = dashSetPeriod;
 window.updateProfitPreview = updateProfitPreview;
 window.updateSellModal     = updateSellModal;
 window.voidSale            = voidSale;
@@ -5104,3 +5256,4 @@ async function viewPastSession(sessionId) {
   if (sheet) sheet.classList.add('open');
 }
 window.viewPastSession = viewPastSession;
+window.onCodeInput = onCodeInput;
