@@ -931,9 +931,47 @@ function hideSaving() {
 async function saveItem() {
   _overlay.show('Saving…');
   try {
-    const editIdRaw = UI.el('edit-id')?.value || '';
+    // Use hidden input; fall back to JS variable if input got cleared unexpectedly
+    const editIdRaw = UI.el('edit-id')?.value || (_editingItemId ? String(_editingItemId) : '');
 
     // SHOE SIZE EDIT
+    // SHOE SIZE RESTOCK — adds qty to existing, never replaces
+    if (editIdRaw && editIdRaw.startsWith('shoe_restock_')) {
+      const parts = editIdRaw.replace('shoe_restock_','').split('_');
+      const itemId = parseInt(parts[0]); const size = parseInt(parts[1]);
+      const item = await dbGet('items', itemId);
+      const allSz = await getShoeSizes(item ? item.code : '');
+      const sizeRec = allSz.find(s => s.size === size);
+      if (!sizeRec) { toast('Size record not found', 'err'); return; }
+      const addQty = parseInt(UI.el('f-qty')?.value);
+      if (isNaN(addQty) || addQty <= 0) { toast('\u26a0\ufe0f Enter quantity to add', 'err'); return; }
+      const newQty = (sizeRec.qty || 0) + addQty;
+      if (newQty > 999999) { toast('\u26a0\ufe0f Exceeds max 999,999', 'err'); return; }
+      sizeRec.qty = newQty;
+      sizeRec.updatedAt = new Date().toISOString();
+      await dbPut('shoe_sizes', sizeRec);
+      if (item) {
+        const updSz = await getShoeSizes(item.code);
+        item.qty = updSz.reduce((t, s) => t + s.qty, 0);
+        item.updatedAt = new Date().toISOString();
+        item.updatedBy = currentUser ? currentUser.username : 'system';
+        await dbPut('items', item); fbSyncItem(item);
+      }
+      // Sync shoe size to Firebase
+      if (fbReady && fbDb) {
+        try {
+          const { doc, setDoc } = await waitForFbImports();
+          if (!sizeRec.fbId) sizeRec.fbId = 'sz_' + sizeRec.codeSize;
+          await setDoc(doc(fbDb, 'shoe_sizes', sizeRec.fbId), sanitiseForFirestore({...sizeRec}));
+        } catch(e) { console.warn('[SYNC] shoe restock:', e.message); }
+      }
+      clearForm();
+      allItems = await dbAll('items'); await enrichShoeItems(allItems);
+      renderList(); renderDashboard(); updateHeader(); scheduleSync();
+      toast('\U0001f4e6 Size ' + size + ': +' + addQty + ' → ' + newQty, 'ok');
+      showPage('list'); return;
+    }
+
     if (editIdRaw && editIdRaw.startsWith('shoe_edit_')) {
       const parts=editIdRaw.replace('shoe_edit_','').split('_');
       const itemId=parseInt(parts[0]); const size=parseInt(parts[1]);
@@ -1017,15 +1055,27 @@ async function saveItem() {
     const item={type,code,name,variant:size,buyPrice:buy,sellPrice:sell,profit,qty,createdAt:new Date().toISOString()};
 
     if(editIdRaw){
-      const original=await dbGet('items',parseInt(editIdRaw));
-      item.id=parseInt(editIdRaw);
-      item.createdAt=original?(original.createdAt||item.createdAt):item.createdAt;
-      item.updatedAt=new Date().toISOString();
-      item.updatedBy=currentUser?currentUser.username:'system';
-      item.fbId=original?original.fbId:undefined;
-      await dbPut('items',item);
-      if(_addFormPhotoData)setItemPhoto(item.id,_addFormPhotoData);
-      fbSyncItem(item);
+      const resolvedId = parseInt(editIdRaw);
+      if (!resolvedId || isNaN(resolvedId)) { toast('⚠️ Cannot save: item ID missing', 'err'); return; }
+      const original=await dbGet('items', resolvedId);
+      // Merge: start from original to preserve all fields (isShoe, photo refs, etc)
+      // then overwrite only what the form controls
+      const saved = Object.assign({}, original || {}, {
+        id:        resolvedId,
+        type, code, name,
+        variant:   size,
+        buyPrice:  buy,
+        sellPrice: sell,
+        profit,
+        qty,
+        createdAt: original ? (original.createdAt || item.createdAt) : item.createdAt,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser ? currentUser.username : 'system',
+        fbId:      original ? original.fbId : undefined,
+      });
+      await dbPut('items', saved);
+      if(_addFormPhotoData)setItemPhoto(saved.id,_addFormPhotoData);
+      fbSyncItem(saved);
       clearForm();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
       renderList();renderDashboard();updateHeader();scheduleSync();
@@ -1055,6 +1105,7 @@ async function saveItem() {
 
 function clearForm() {
   UI.el('edit-id').value   = '';
+  _editingItemId = null;  // clear JS-side edit tracker
   UI.el('f-type').value    = '';
   UI.el('f-code').value    = '';
   UI.el('f-name').value    = '';
@@ -1113,6 +1164,7 @@ function clearForm() {
 // Code autocomplete helpers
 let _codeDropdownActive = false;
 let _editOriginItemId   = null;
+let _editingItemId      = null;  // tracks current edit ID reliably (backup to hidden input)
 
 function onCodeInput() {
   const clean = UI.el('f-code').value.toUpperCase().replace(/[^A-Z0-9\-.]/g,'');
@@ -1157,7 +1209,7 @@ async function selectExistingItem(itemId) {
   _codeDropdownActive = true;
   UI.el('f-code').value = item.code;
   UI.el('f-name').value = item.name || '';
-  UI.el('f-size').value = item.size || '';
+  UI.el('f-size').value = item.variant || item.size || '';
   const typeEl = UI.el('f-type'); if (typeEl) typeEl.value = item.type || '';
   onTypeChange();
   UI.el('edit-id').value = 'restock_' + itemId;
@@ -1674,6 +1726,7 @@ async function editItem() {
     const sizes = await getShoeSizes(item.code);
     const sizeRec = sizes.find(s => s.size === size);
     if (!sizeRec) { toast('Size record not found', 'err'); return; }
+    _editingItemId = null;  // shoe edits use shoe_edit_ prefix, not _editingItemId
     UI.el('edit-id').value = 'shoe_edit_' + item.id + '_' + size;
     UI.el('f-type').value  = item.type || '';
     UI.el('f-code').value  = item.code || '';
@@ -1702,15 +1755,16 @@ async function editItem() {
   }
 
   // ── STANDARD ITEM EDIT ────────────────────────────────────────
+  _editingItemId = item.id;   // store reliably in JS variable
   showPage('add');
   UI.el('edit-id').value = item.id;
   UI.el('f-type').value  = item.type  || '';
   UI.el('f-code').value  = item.code  || '';
   UI.el('f-name').value  = item.name  || '';
-  UI.el('f-size').value  = item.size  || '';
+  UI.el('f-size').value  = item.variant || item.size || '';   // normalized field name
   UI.el('f-qty').value   = item.qty   ?? '';
-  UI.el('f-buy').value   = item.buy   || '';
-  UI.el('f-sell').value  = item.sell  || '';
+  UI.el('f-buy').value   = item.buyPrice  || item.buy  || '';  // normalized field name
+  UI.el('f-sell').value  = item.sellPrice || item.sell || '';  // normalized field name
   // Lock code and type — identifying fields
   ['f-code','f-type'].forEach(id => {
     const el = document.getElementById(id);
@@ -4677,7 +4731,7 @@ async function openShoeSizeRestock(itemId, size) {
     UI.el('f-type').value = item.type || '';
     UI.el('f-code').value = item.code || '';
     UI.el('f-name').value = item.name || '';
-    UI.el('edit-id').value = 'shoe_edit_' + itemId + '_' + size;
+    UI.el('edit-id').value = 'shoe_restock_' + itemId + '_' + size;  // restock = ADD to qty
     UI.el('f-qty').value = '';
     UI.el('f-buy').value  = sizeRec.buyPrice  || '';
     UI.el('f-sell').value = sizeRec.sellPrice || '';
@@ -4694,8 +4748,9 @@ async function openShoeSizeRestock(itemId, size) {
     });
     const qtyEl = UI.el('f-qty');
     if (qtyEl) { qtyEl.disabled=false; qtyEl.style.opacity='1'; qtyEl.style.cursor=''; qtyEl.focus(); }
-    UI.el('save-btn').textContent = '📦 Add to Stock — Size ' + size;
-    UI.el('form-mode-label').textContent = '📦 Restock Size ' + size;
+    // Show current stock so user knows what they're adding to
+    UI.el('save-btn').textContent = '📦 Add to Stock — Size ' + size + ' (currently ' + (sizeRec.qty || 0) + ')';
+    UI.el('form-mode-label').textContent = '📦 Restock Size ' + size + ' · Current: ' + (sizeRec.qty || 0);
     UI.el('cancel-edit-btn').style.display = 'block';
   }, 100);
 }
