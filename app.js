@@ -2044,18 +2044,21 @@ async function updateSellModal() {
   try {
   if (!currentSellItemId) return;
   const item = await dbGet('items', currentSellItemId);
+  // For shoe sales use the specific size record prices & stock
+  const basePrice = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.sellPrice || item.sellPrice || item.sell || 0) : (item.sell || item.sellPrice || 0);
+  const baseBuy   = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.buyPrice  || item.buyPrice  || item.buy  || 0) : (item.buy  || item.buyPrice  || 0);
+  const maxStock  = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.qty || 0) : (item.qty || 0);
   const qty = Math.max(1, parseInt(document.getElementById('sm-qty').value) || 1);
   const actualRaw = parseFloat(document.getElementById('sm-actual').value);
-  const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : item.sell;
+  const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : basePrice;
   const totalRev = qty * priceUsed;
-  const totalProfit = qty * (priceUsed - item.buy);
-  const overridden = !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== item.sell;
+  const totalProfit = qty * (priceUsed - baseBuy);
+  const overridden = !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== basePrice;
   document.getElementById('sm-price-used').textContent = fmt(priceUsed) + (overridden ? ' (custom)' : ' (default)');
   document.getElementById('sm-total-rev').textContent = fmt(totalRev);
   document.getElementById('sm-total-profit').textContent = (totalProfit >= 0 ? '+' : '') + fmt(totalProfit);
   document.getElementById('sm-total-profit').style.color = totalProfit >= 0 ? 'var(--green)' : 'var(--red)';
-  // cap qty at stock
-  document.getElementById('sm-qty').max = item.qty;
+  document.getElementById('sm-qty').max = maxStock;
   } catch(e) { console.error("[updateSellModal]", e); toast("Error: " + e.message, "err"); }
 }
 
@@ -4712,7 +4715,7 @@ async function openSellShoeModal(itemId, size) {
   if (!sizeRec || sizeRec.qty <= 0) { toast('Size ' + size + ' is out of stock', 'err'); return; }
   _isShoeSale   = true;
   _sellShoeItem = item;
-  _sellShoeSize = size;
+  _sellShoeSize = sizeRec;  // must be the full sizeRec object, not just the size number
   currentSellItemId = itemId;
   const t = types.find(t => t.name === item.type) || { emoji:'👟', color:'var(--surface2)' };
   const el = id => document.getElementById(id);
