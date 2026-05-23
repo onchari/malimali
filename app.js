@@ -1959,7 +1959,7 @@ function showSplash(name, sell, profit) {
 
 // ===== MAKE A SALE =====
 let currentSellItemId = null;
-let _selectedPayment = 'Cash'; // Cash | M-Pesa | Credit
+let _selectedPayment = 'cash'; // cash | mpesa
 
 async function searchSell() {
   try {
@@ -2007,10 +2007,13 @@ async function searchSell() {
 
 function selectPayment(method) {
   _selectedPayment = method;
-  ['Cash','M-Pesa','Credit'].forEach(m => {
-    const btn = document.getElementById('pm-' + m);
-    if (btn) btn.classList.toggle('pm-active', m === method);
-  });
+  // Reset all payment buttons
+  document.querySelectorAll('.pay-btn').forEach(btn => btn.classList.remove('active'));
+  // Activate selected
+  const idMap = { cash: 'pay-cash', mpesa: 'pay-mpesa', Cash: 'pay-cash', 'M-Pesa': 'pay-mpesa' };
+  const btnId = idMap[method] || 'pay-cash';
+  const btn = document.getElementById(btnId);
+  if (btn) btn.classList.add('active');
 }
 
 async function openSellModal(itemId) {
@@ -2023,21 +2026,29 @@ async function openSellModal(itemId) {
   document.getElementById('sm-name').textContent = item.name;
   document.getElementById('sm-meta').textContent = item.code + (item.size ? ' · ' + item.size : '');
   document.getElementById('sm-stock').textContent = item.qty;
-  document.getElementById('sm-sell').textContent = fmt(item.sell);
-  const _tpel=document.getElementById('sm-total-profit'); if(_tpel) _tpel.textContent = (item.profit >= 0 ? '+' : '') + fmt(item.profit);
+  const _itemSell = item.sellPrice || item.sell || 0;
+  const _itemBuy  = item.buyPrice  || item.buy  || 0;
+  document.getElementById('sm-sell').textContent = fmt(_itemSell);
+  const _smProfit = document.getElementById('sm-profit');
+  if (_smProfit) _smProfit.textContent = (_itemSell - _itemBuy >= 0 ? '+' : '') + fmt(_itemSell - _itemBuy);
+  const _tpel=document.getElementById('sm-total-profit'); if(_tpel) _tpel.textContent = (_itemSell - _itemBuy >= 0 ? '+' : '') + fmt(_itemSell - _itemBuy);
   document.getElementById('sm-cur').textContent = currency;
   document.getElementById('sm-qty').value = 1;
   document.getElementById('sm-qty').max = item.qty;
   document.getElementById('sm-actual').value = '';
   updateSellModal();
-  selectPayment('Cash'); // reset payment method
+  selectPayment('cash'); // reset payment method
   document.getElementById('sell-modal').classList.add('open');
   } catch(e) { console.error("[openSellModal]", e); toast("Error: " + e.message, "err"); }
 }
 
 function closeSellModal() {
-  document.getElementById('sell-modal').classList.remove('open');
+  const modal = document.getElementById('sell-modal');
+  if (modal) modal.classList.remove('open');
   currentSellItemId = null;
+  _isShoeSale   = false;
+  _sellShoeItem = null;
+  _sellShoeSize = null;
 }
 
 async function updateSellModal() {
@@ -2059,6 +2070,10 @@ async function updateSellModal() {
   document.getElementById('sm-total-profit').textContent = (totalProfit >= 0 ? '+' : '') + fmt(totalProfit);
   document.getElementById('sm-total-profit').style.color = totalProfit >= 0 ? 'var(--green)' : 'var(--red)';
   document.getElementById('sm-qty').max = maxStock;
+  // Update per-item profit display
+  const profitPerItem = priceUsed - baseBuy;
+  const smProfit = document.getElementById('sm-profit');
+  if (smProfit) { smProfit.textContent = (profitPerItem >= 0 ? '+' : '') + fmt(profitPerItem); smProfit.style.color = profitPerItem >= 0 ? 'var(--green)' : 'var(--red)'; }
   } catch(e) { console.error("[updateSellModal]", e); toast("Error: " + e.message, "err"); }
 }
 
