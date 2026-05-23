@@ -477,7 +477,7 @@
 
   </div>
 
-  <!-- ── Shoe size panel ────────── -->
+  <!-- ── Shoe size panel ───────────────────────────────────────── -->
   <div id="shoe-size-panel" style="display:none;">
     <div class="add-section-title">Size Group</div>
     <div class="add-section" style="padding-bottom:10px;">
@@ -642,68 +642,104 @@
      ============================================================== -->
 <div class="page" id="page-finance">
 
-  <!-- Summary KPIs -->
-  <!-- Row 1: Sales Revenue + Profit -->
-  <div class="fin-kpi-row" style="grid-template-columns:1fr 1fr;">
+  <!-- ── Period selector ──────────────────────────────────── -->
+  <div style="display:flex;gap:6px;padding:10px 12px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch;">
+    <button onclick="finSetPeriod('today')"  id="fin-period-today"  class="fin-filter-btn active">Today</button>
+    <button onclick="finSetPeriod('week')"   id="fin-period-week"   class="fin-filter-btn">This Week</button>
+    <button onclick="finSetPeriod('month')"  id="fin-period-month"  class="fin-filter-btn">This Month</button>
+    <button onclick="finSetPeriod('all')"    id="fin-period-all"    class="fin-filter-btn">All Time</button>
+  </div>
+
+  <!-- ── Row 1: Revenue · Profit · Margin ─────────────────── -->
+  <div class="fin-kpi-row" style="grid-template-columns:1fr 1fr 1fr;">
     <div class="fin-kpi" style="background:#fff0f0;border-color:#fca5a5;">
-      <div class="fin-kpi-val" style="color:var(--accent2);" id="fin-revenue">KES 0</div>
+      <div class="fin-kpi-val" style="color:var(--accent2);" id="fin-revenue">0</div>
       <div class="fin-kpi-lbl">🛒 Revenue</div>
     </div>
     <div class="fin-kpi green">
-      <div class="fin-kpi-val" id="fin-profit">KES 0</div>
-      <div class="fin-kpi-lbl">📈 Gross Profit</div>
-    </div>
-  </div>
-  <!-- Row 2: Investments / Expenses / Withdrawn / Net -->
-  <div class="fin-kpi-row">
-    <div class="fin-kpi green">
-      <div class="fin-kpi-val" id="fin-invested">KES 0</div>
-      <div class="fin-kpi-lbl">Invested</div>
-    </div>
-    <div class="fin-kpi red">
-      <div class="fin-kpi-val" id="fin-expenses">KES 0</div>
-      <div class="fin-kpi-lbl">Expenses</div>
-    </div>
-    <div class="fin-kpi amber">
-      <div class="fin-kpi-val" id="fin-withdrawn">KES 0</div>
-      <div class="fin-kpi-lbl">Withdrawn</div>
+      <div class="fin-kpi-val" id="fin-profit">0</div>
+      <div class="fin-kpi-lbl">📈 Profit</div>
     </div>
     <div class="fin-kpi cyan">
-      <div class="fin-kpi-val" id="fin-net">KES 0</div>
-      <div class="fin-kpi-lbl">Net Position</div>
+      <div class="fin-kpi-val" id="fin-margin">0%</div>
+      <div class="fin-kpi-lbl">📊 Margin</div>
     </div>
   </div>
 
+  <!-- ── Row 2: Invested · Expenses · Withdrawn · Net ─────── -->
+  <div class="fin-kpi-row">
+    <div class="fin-kpi green">
+      <div class="fin-kpi-val" id="fin-invested">0</div>
+      <div class="fin-kpi-lbl">💵 Invested</div>
+    </div>
+    <div class="fin-kpi red">
+      <div class="fin-kpi-val" id="fin-expenses">0</div>
+      <div class="fin-kpi-lbl">💸 Expenses</div>
+    </div>
+    <div class="fin-kpi amber">
+      <div class="fin-kpi-val" id="fin-withdrawn">0</div>
+      <div class="fin-kpi-lbl">🏧 Withdrawn</div>
+    </div>
+    <div class="fin-kpi" id="fin-net-kpi">
+      <div class="fin-kpi-val" id="fin-net">0</div>
+      <div class="fin-kpi-lbl">⚖️ Net</div>
+    </div>
+  </div>
 
+  <!-- ── Insights bar ──────────────────────────────────────── -->
+  <div id="fin-insights" style="margin:0 12px 8px;"></div>
 
-  <!-- Record entry -->
+  <!-- ── Mini cash-flow bar chart ─────────────────────────── -->
+  <div id="fin-chart-wrap" style="margin:0 12px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;display:none;">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Daily Cash Flow</div>
+    <div id="fin-chart" style="display:flex;align-items:flex-end;gap:3px;height:60px;"></div>
+    <div id="fin-chart-labels" style="display:flex;gap:3px;margin-top:4px;"></div>
+  </div>
+
+  <!-- ── Record entry ──────────────────────────────────────── -->
   <div class="sec-label" style="padding:0 16px;margin-bottom:6px;">➕ Record Transaction</div>
   <div class="card" style="margin:0 12px 12px;padding:14px;">
     <div class="add-row-2" style="margin-bottom:10px;">
       <div class="add-field">
         <label class="add-label">Type <span class="add-required">*</span></label>
         <select class="add-select" id="fin-type" onchange="updateFinTypeColor()">
-          <option value="">Select…</option>
-          <option value="investment">💵 Investment</option>
-          <option value="expense">💸 Expense</option>
-          <option value="withdrawal">🏧 Withdrawal</option>
+          <option value="">Select type…</option>
+          <option value="investment">💵 Investment (money in)</option>
+          <option value="expense">💸 Expense (running cost)</option>
+          <option value="withdrawal">🏧 Withdrawal (owner draw)</option>
           <option value="other">📝 Other</option>
         </select>
       </div>
       <div class="add-field">
-        <label class="add-label">Amount (KES) <span class="add-required">*</span></label>
+        <label class="add-label">Amount <span class="add-required">*</span></label>
         <input class="add-input add-mono" id="fin-amount" type="number"
-               min="0" inputmode="decimal" placeholder="0">
+               min="0" inputmode="decimal" placeholder="0.00">
       </div>
     </div>
     <div class="add-field" style="margin-bottom:10px;">
-      <label class="add-label">Description</label>
-      <input class="add-input" id="fin-desc" type="text"
-             placeholder="e.g. Bought stock from supplier · Rent · Airtime">
+      <label class="add-label">Description <span class="add-required">*</span></label>
+      <input class="add-input" id="fin-desc" type="text" maxlength="200"
+             placeholder="e.g. Restock from supplier, Rent, Airtime, Owner draw">
     </div>
-    <div class="add-field" style="margin-bottom:12px;">
-      <label class="add-label">Date</label>
-      <input class="add-input" id="fin-date" type="date">
+    <div class="add-row-2" style="margin-bottom:12px;">
+      <div class="add-field">
+        <label class="add-label">Date <span class="add-required">*</span></label>
+        <input class="add-input" id="fin-date" type="date">
+      </div>
+      <div class="add-field">
+        <label class="add-label">Category</label>
+        <select class="add-select" id="fin-category">
+          <option value="general">General</option>
+          <option value="stock">Stock Purchase</option>
+          <option value="rent">Rent / Utilities</option>
+          <option value="transport">Transport</option>
+          <option value="salaries">Salaries</option>
+          <option value="marketing">Marketing</option>
+          <option value="tax">Tax / Levy</option>
+          <option value="equipment">Equipment</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
     </div>
     <button onclick="saveFinanceEntry()"
             style="width:100%;padding:14px;background:var(--accent);color:white;border:none;
@@ -712,17 +748,18 @@
     </button>
   </div>
 
-  <!-- Transaction history -->
+  <!-- ── Transaction history ───────────────────────────────── -->
   <div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px;margin-bottom:6px;">
     <span class="sec-label" style="padding:0;margin:0;">📋 Transactions</span>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      <button onclick="filterFinance('all')" id="fin-filter-all" class="fin-filter-btn active">All</button>
-      <button onclick="filterFinance('revenue')" id="fin-filter-revenue" class="fin-filter-btn">🛒 Sales</button>
-      <button onclick="filterFinance('investment')" id="fin-filter-investment" class="fin-filter-btn">Invested</button>
-      <button onclick="filterFinance('expense')" id="fin-filter-expense" class="fin-filter-btn">Expenses</button>
-      <button onclick="filterFinance('withdrawal')" id="fin-filter-withdrawal" class="fin-filter-btn">Withdrawn</button>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;">
+      <button onclick="filterFinance('all')"        id="fin-filter-all"        class="fin-filter-btn active">All</button>
+      <button onclick="filterFinance('revenue')"    id="fin-filter-revenue"    class="fin-filter-btn">🛒 Sales</button>
+      <button onclick="filterFinance('investment')" id="fin-filter-investment" class="fin-filter-btn">💵 In</button>
+      <button onclick="filterFinance('expense')"    id="fin-filter-expense"    class="fin-filter-btn">💸 Expenses</button>
+      <button onclick="filterFinance('withdrawal')" id="fin-filter-withdrawal" class="fin-filter-btn">🏧 Out</button>
     </div>
   </div>
+  <div id="fin-summary-line" style="padding:0 12px 6px;font-size:12px;color:var(--muted);"></div>
   <div id="fin-list" style="padding:0 12px 80px;"></div>
 
 </div><!-- /page-finance -->

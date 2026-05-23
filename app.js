@@ -308,6 +308,60 @@ class UI {
   }
 }
 
+
+// ═══════════════════════════════════════════════════════════
+// VALIDATION HELPERS
+// ═══════════════════════════════════════════════════════════
+const Validate = {
+  // Highlight a field red and focus it
+  _shake(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.borderColor = 'var(--red)';
+    el.focus();
+    setTimeout(() => { el.style.borderColor = ''; }, 2000);
+  },
+  fail(msg, fieldId) {
+    toast('⚠️ ' + msg, 'err');
+    if (fieldId) this._shake(fieldId);
+    return false;
+  },
+  // Price rules
+  price(buy, sell, buyFieldId, sellFieldId) {
+    if (!buy || buy <= 0)  return this.fail('Enter buying price (must be > 0)', buyFieldId);
+    if (!sell || sell <= 0) return this.fail('Enter selling price (must be > 0)', sellFieldId);
+    if (sell < buy)        return this.fail('Selling price (' + fmt(sell) + ') cannot be less than buying price (' + fmt(buy) + ')', sellFieldId);
+    return true;
+  },
+  // Qty rules for new stock
+  qty(qty, qtyFieldId) {
+    if (qty === '' || qty === null || isNaN(qty)) return this.fail('Enter a quantity', qtyFieldId);
+    if (qty < 0)  return this.fail('Quantity cannot be negative', qtyFieldId);
+    if (qty === 0) return this.fail('Quantity must be at least 1 when adding new stock', qtyFieldId);
+    if (qty > 999999) return this.fail('Quantity exceeds maximum (999,999)', qtyFieldId);
+    return true;
+  },
+  // Qty rules for restock (adding to existing — 0 not allowed)
+  restockQty(qty, qtyFieldId) {
+    if (!qty || isNaN(qty) || qty <= 0) return this.fail('Enter a quantity to add (must be at least 1)', qtyFieldId);
+    if (qty > 999999) return this.fail('Quantity exceeds maximum (999,999)', qtyFieldId);
+    return true;
+  },
+  // Stock available check for selling
+  stock(wantQty, inStock, itemName) {
+    if (inStock <= 0) return this.fail((itemName || 'Item') + ' is out of stock', null);
+    if (wantQty > inStock) return this.fail('Only ' + inStock + ' in stock — cannot sell ' + wantQty, null);
+    if (wantQty <= 0) return this.fail('Quantity to sell must be at least 1', null);
+    return true;
+  },
+  // Sale price check
+  salePrice(priceUsed, buyPrice, sellPrice) {
+    if (!priceUsed || priceUsed <= 0) return this.fail('Enter a selling price', null);
+    if (priceUsed < buyPrice) return this.fail('Sale price ' + fmt(priceUsed) + ' is below cost price ' + fmt(buyPrice) + ' — selling at a loss is not allowed', null);
+    return true;
+  },
+};
+
 // ── Standard 3: ShoeState class — encapsulates all shoe form state ──
 class ShoeState {
   constructor() {
@@ -705,7 +759,12 @@ async function addType() {
 
 async function deleteType(id) {
   try {
-  if (!confirm('Delete this type? Items using it will still show.')) return;
+  const allItems = await dbAll('items');
+  const typeObj = types.find(t => t.id === id);
+  const inUse = allItems.filter(i => i.type === (typeObj ? typeObj.name : '')).length;
+  let msg = 'Delete type "' + (typeObj ? typeObj.name : 'this type') + '"?';
+  if (inUse > 0) msg += '\n\n⚠️ ' + inUse + ' item(s) use this type. They will keep showing but the type filter will not work.';
+  if (!confirm(msg)) return;
   await dbDelete('types', id);
   await loadTypes();
   renderTypes();
@@ -982,9 +1041,8 @@ async function saveItem() {
       const qty=parseInt(UI.el('f-qty')?.value);
       const buy=parseFloat(UI.el('f-buy')?.value)||sizeRec.buyPrice||0;
       const sell=parseFloat(UI.el('f-sell')?.value)||sizeRec.sellPrice||0;
-      if(isNaN(qty)||qty<0){toast('\u26a0\ufe0f Enter valid quantity','err');return;}
-      if(buy<=0){toast('\u26a0\ufe0f Enter buying price','err');return;}
-      if(sell<=0){toast('\u26a0\ufe0f Enter selling price','err');return;}
+      if (isNaN(qty) || qty < 0) return Validate.fail('Enter a valid quantity (0 or more)', 'f-qty');
+      if (!Validate.price(buy, sell, 'f-buy', 'f-sell')) return;
       sizeRec.qty=qty;sizeRec.buyPrice=buy;sizeRec.sellPrice=sell;
       sizeRec.profit=sell-buy;sizeRec.updatedAt=new Date().toISOString();
       await dbPut('shoe_sizes',sizeRec);
@@ -1046,11 +1104,17 @@ async function saveItem() {
     const qty=parseInt(qtyRaw);
     const buy=parseFloat(UI.el('f-buy')?.value)||0;
     const sell=parseFloat(UI.el('f-sell')?.value)||0;
-    if(!size){toast('\u26a0\ufe0f Enter a size (or N/A)','err');return;}
-    if(qtyRaw===''||isNaN(qty)||qty<0){toast('\u26a0\ufe0f Enter quantity','err');return;}
-    if(qty>CODE_MAX_QTY&&!confirm('Adding '+qty+' units — confirm?'))return;
-    if(buy<=0){toast('\u26a0\ufe0f Enter buying price','err');return;}
-    if(sell<=0){toast('\u26a0\ufe0f Enter selling price','err');return;}
+    if (!size) return Validate.fail('Enter a size or variant (e.g. N/A, Medium, 42)', 'f-size');
+    if (qtyRaw === '' || isNaN(qty)) return Validate.fail('Enter a quantity', 'f-qty');
+    if (!editIdRaw) {
+      // New item: qty must be ≥ 1
+      if (!Validate.qty(qty, 'f-qty')) return;
+    } else {
+      // Edit: qty can be 0 (stock may be legitimately depleted via sales)
+      if (qty < 0) return Validate.fail('Quantity cannot be negative', 'f-qty');
+    }
+    if (qty > CODE_MAX_QTY && !confirm('Adding ' + qty + ' units — confirm?')) return;
+    if (!Validate.price(buy, sell, 'f-buy', 'f-sell')) return;
     const profit=sell-buy;
     const item={type,code,name,variant:size,buyPrice:buy,sellPrice:sell,profit,qty,createdAt:new Date().toISOString()};
 
@@ -1700,8 +1764,14 @@ function closeSheet() {
 
 async function deleteItem() {
   try {
-  if (!confirm('Delete this item?')) return;
   const toDelete = await dbGet('items', currentDetailId);
+  if (!toDelete) { toast('Item not found', 'err'); return; }
+  // Warn if item has sales history
+  const allSales = await dbAll('sales');
+  const itemSales = allSales.filter(s => s.itemId === currentDetailId || s.itemCode === toDelete.code);
+  let msg = 'Delete "' + (toDelete.name || toDelete.code) + '"?';
+  if (itemSales.length > 0) msg += '\n\n⚠️ This item has ' + itemSales.length + ' sale record(s). The sales history will remain but the item cannot be restocked.';
+  if (!confirm(msg)) return;
   await dbDelete('items', currentDetailId);
   if (toDelete && toDelete.fbId) fbDeleteItem(toDelete.fbId);
   closeSheet();
@@ -2077,6 +2147,11 @@ function selectPayment(method) {
 async function openSellModal(itemId) {
   try {
   const item = await dbGet('items', itemId);
+  if (!item) { toast('⚠️ Item not found', 'err'); return; }
+  if (item.qty <= 0) {
+    toast('⚠️ ' + (item.name || item.code) + ' is out of stock — restock first', 'err');
+    return;
+  }
   currentSellItemId = itemId;
   const t = getTypeObj(item.type);
   document.getElementById('sm-icon').textContent = t.emoji;
@@ -2128,10 +2203,24 @@ async function updateSellModal() {
   document.getElementById('sm-total-profit').textContent = (totalProfit >= 0 ? '+' : '') + fmt(totalProfit);
   document.getElementById('sm-total-profit').style.color = totalProfit >= 0 ? 'var(--green)' : 'var(--red)';
   document.getElementById('sm-qty').max = maxStock;
-  // Update per-item profit display
+  // Update per-item profit display + warn if below cost
   const profitPerItem = priceUsed - baseBuy;
   const smProfit = document.getElementById('sm-profit');
-  if (smProfit) { smProfit.textContent = (profitPerItem >= 0 ? '+' : '') + fmt(profitPerItem); smProfit.style.color = profitPerItem >= 0 ? 'var(--green)' : 'var(--red)'; }
+  if (smProfit) {
+    smProfit.textContent = (profitPerItem >= 0 ? '+' : '') + fmt(profitPerItem);
+    smProfit.style.color = profitPerItem >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+  // Warn confirm button if below-cost
+  const confirmBtn = document.getElementById('confirm-sale-btn');
+  if (confirmBtn) {
+    if (priceUsed < baseBuy && priceUsed > 0) {
+      confirmBtn.style.background = 'var(--red)';
+      confirmBtn.title = 'Warning: selling below cost price';
+    } else {
+      confirmBtn.style.background = '';
+      confirmBtn.title = '';
+    }
+  }
   } catch(e) { console.error("[updateSellModal]", e); toast("Error: " + e.message, "err"); }
 }
 
@@ -2139,7 +2228,8 @@ function adjSellQty(d) {
   const inp = document.getElementById('sm-qty');
   let v = (parseInt(inp.value) || 1) + d;
   const max = parseInt(inp.max) || 9999;
-  inp.value = Math.max(1, Math.min(v, max));
+  if (v > max) { toast('⚠️ Only ' + max + ' in stock', 'err'); v = max; }
+  inp.value = Math.max(1, v);
   updateSellModal();
 }
 
@@ -2170,17 +2260,14 @@ async function confirmSale() {
     : (item.buyPrice  || item.buy  || 0);
 
   const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : sellPrice;
-  if (priceUsed <= 0) { toast('⚠️ No selling price set', 'err'); return; }
 
-  // ── Validate qty ───────────────────────────────────────────────
+  // ── Validate stock ─────────────────────────────────────────────
   const maxQty = _isShoeSale && _sellShoeSize ? _sellShoeSize.qty : item.qty;
-  if (qty > maxQty) { toast('⚠️ Only ' + maxQty + ' in stock', 'err'); return; }
+  const itemLabel = item.name || item.code;
+  if (!Validate.stock(qty, maxQty, itemLabel)) return;
 
-  // ── Validate actual price ≥ buy price ─────────────────────────
-  if (!isNaN(actualRaw) && actualRaw > 0 && actualRaw < buyPrice) {
-    toast('⚠️ Sale price cannot be below buying price (' + fmt(buyPrice) + ')', 'err');
-    return;
-  }
+  // ── Validate sale price ────────────────────────────────────────
+  if (!Validate.salePrice(priceUsed, buyPrice, sellPrice)) return;
 
   const revenue = qty * priceUsed;
   const profit  = qty * (priceUsed - buyPrice);
@@ -3287,7 +3374,13 @@ function startBannerClock() {
 // ── VOID SALE ─────────────────────────────────────────────────────
 async function voidSale(saleId) {
   try {
-  if (!confirm('Void this sale? Stock will be restored.')) return;
+  const _voidSale = await dbGet('sales', saleId);
+  const _voidMsg = _voidSale
+    ? 'Void sale of "' + (_voidSale.itemName || _voidSale.itemCode || 'item') + '"' +
+      (_voidSale.itemSize ? ' (Size ' + _voidSale.itemSize + ')' : '') +
+      ' × ' + (_voidSale.qty||1) + ' for ' + fmt(_voidSale.revenue||0) + '?\n\nStock will be restored.'
+    : 'Void this sale? Stock will be restored.';
+  if (!confirm(_voidMsg)) return;
   const sale = await dbGet('sales', saleId);
   if (!sale) { toast('Sale not found', 'err'); return; }
 
@@ -3486,8 +3579,8 @@ async function confirmRestock() {
   const restockBtn = document.querySelector('#restock-panel button');
   if (restockBtn) { restockBtn.disabled = true; restockBtn.style.opacity = '0.5'; }
   try {
-    const qty = parseInt(document.getElementById('restock-qty').value) || 0;
-    if (qty <= 0) { toast('⚠️ Enter quantity to add', 'err'); return; }
+    const qty = parseInt(document.getElementById('restock-qty').value);
+    if (!Validate.restockQty(qty, 'restock-qty')) return;
     const item = await dbGet('items', currentDetailId);
     if (!item) { toast('⚠️ Item not found', 'err'); return; }
     item.qty += qty;
@@ -3990,78 +4083,214 @@ function installAppUpdate(){
 
 let _finFilter = 'all';
 
+// ── Finance period state ────────────────────────────────────
+let _finPeriod = 'today';  // today | week | month | all
+
+function finSetPeriod(period) {
+  _finPeriod = period;
+  document.querySelectorAll('[id^="fin-period-"]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('fin-period-' + period);
+  if (btn) btn.classList.add('active');
+  renderFinancePage();
+}
+
+function _finDateRange() {
+  const now   = new Date();
+  const today = todayDateStr();
+  if (_finPeriod === 'today') return { from: today, to: today };
+  if (_finPeriod === 'week') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 6);
+    return { from: d.toISOString().split('T')[0], to: today };
+  }
+  if (_finPeriod === 'month') {
+    const d = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: d.toISOString().split('T')[0], to: today };
+  }
+  return { from: null, to: null }; // all
+}
+
+function _finInRange(date, range) {
+  if (!range.from) return true;
+  return date >= range.from && date <= range.to;
+}
+
 async function renderFinancePage() {
-  // Set today as default date
+  // Default date
   const dateEl = document.getElementById('fin-date');
   if (dateEl && !dateEl.value) dateEl.value = todayDateStr();
 
-  const entries = await dbAll('finances');
-  const sales   = await dbAll('sales');
+  const allEntries = await dbAll('finances');
+  const allSales   = await dbAll('sales');
+  const range      = _finDateRange();
 
-  // Compute totals
+  // Filter entries and sales by period
+  const entries = allEntries.filter(e => _finInRange(e.date || (e.createdAt||'').split('T')[0], range));
+  const sales   = allSales.filter(s   => _finInRange(s.businessDate || (s.date||'').split('T')[0], range));
+
+  // ── Compute KPIs ──────────────────────────────────────────
   const invested  = entries.filter(e=>e.type==='investment').reduce((s,e)=>s+e.amount,0);
   const expenses  = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
   const withdrawn = entries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+e.amount,0);
-  // Revenue from both sales entries (auto-recorded) and direct sales table
-  const salesRevEntries = entries.filter(e=>e.type==='revenue'&&e.category==='sales');
-  const revenue   = salesRevEntries.length
-    ? salesRevEntries.reduce((s,e)=>s+e.amount,0)
-    : sales.reduce((s,e)=>s+e.revenue,0);
-  const profit    = salesRevEntries.length
-    ? salesRevEntries.reduce((s,e)=>s+(e.profit||0),0)
-    : sales.reduce((s,e)=>s+e.profit,0);
-  const net       = invested + revenue - expenses - withdrawn;
 
-  const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=fmt(v); };
-  set('fin-invested',  invested);
-  set('fin-expenses',  expenses);
-  set('fin-withdrawn', withdrawn);
-  set('fin-revenue',   revenue);
-  set('fin-profit',    profit);
+  // Revenue: prefer finance revenue entries, fall back to raw sales
+  const revEntries = entries.filter(e=>e.type==='revenue'&&e.category==='sales');
+  const revenue = revEntries.length
+    ? revEntries.reduce((s,e)=>s+e.amount,0)
+    : sales.reduce((s,s2)=>s+(s2.revenue||0),0);
+  const profit  = revEntries.length
+    ? revEntries.reduce((s,e)=>s+(e.profit||0),0)
+    : sales.reduce((s,s2)=>s+(s2.profit||0),0);
+  const margin  = revenue > 0 ? ((profit / revenue) * 100) : 0;
+  const net     = invested + revenue - expenses - withdrawn;
+  const salesCount = sales.length;
+  const avgSale    = salesCount > 0 ? revenue / salesCount : 0;
 
-  // Net position colour
-  const netEl = document.getElementById('fin-net');
-  if (netEl) {
-    netEl.textContent = fmt(net);
-    netEl.style.color = net >= 0 ? 'var(--green)' : 'var(--red)';
-    const kpi = netEl.closest('.fin-kpi');
-    if (kpi) { kpi.classList.remove('green','red','cyan'); kpi.classList.add(net>=0?'green':'red'); }
+  // ── Update KPI tiles ──────────────────────────────────────
+  const setT = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=fmt(v); };
+  setT('fin-revenue',  revenue);
+  setT('fin-profit',   profit);
+  setT('fin-invested', invested);
+  setT('fin-expenses', expenses);
+  setT('fin-withdrawn',withdrawn);
+
+  const marginEl = document.getElementById('fin-margin');
+  if (marginEl) {
+    marginEl.textContent = margin.toFixed(1) + '%';
+    marginEl.style.color = margin >= 20 ? 'var(--green)' : margin >= 0 ? 'var(--text)' : 'var(--red)';
   }
 
-  // Filter and render list
-  const filtered = _finFilter === 'all' ? entries : entries.filter(e=>e.type===_finFilter);
-  const sorted   = filtered.sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const netEl  = document.getElementById('fin-net');
+  const netKpi = document.getElementById('fin-net-kpi');
+  if (netEl) {
+    netEl.textContent = (net >= 0 ? '' : '-') + fmt(Math.abs(net));
+    netEl.style.color = net >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+  if (netKpi) {
+    netKpi.className = 'fin-kpi ' + (net >= 0 ? 'green' : 'red');
+  }
+
+  // ── Insights ──────────────────────────────────────────────
+  const insights = [];
+  if (salesCount > 0)   insights.push({ icon:'🛒', text: salesCount + ' sale' + (salesCount!==1?'s':'') + ' · avg ' + fmt(avgSale) });
+  if (margin < 0)       insights.push({ icon:'🚨', text: 'Selling below cost — margin is negative!', color:'var(--red)' });
+  else if (margin < 10) insights.push({ icon:'⚠️', text: 'Low margin (' + margin.toFixed(1) + '%) — consider reviewing prices', color:'#d97706' });
+  else if (margin >= 40)insights.push({ icon:'🎯', text: 'Strong margin: ' + margin.toFixed(1) + '%', color:'var(--green)' });
+  if (expenses > revenue && revenue > 0) insights.push({ icon:'⚠️', text: 'Expenses exceed revenue this period', color:'var(--red)' });
+  if (withdrawn > profit && profit > 0)  insights.push({ icon:'⚠️', text: 'Withdrawals exceed profit — watch cash flow', color:'#d97706' });
+  // Top expense category
+  const expEntries = entries.filter(e=>e.type==='expense');
+  if (expEntries.length > 0) {
+    const catTotals = {};
+    expEntries.forEach(e => { const c=e.category||'general'; catTotals[c]=(catTotals[c]||0)+e.amount; });
+    const topCat = Object.entries(catTotals).sort((a,b)=>b[1]-a[1])[0];
+    if (topCat) insights.push({ icon:'💸', text: 'Biggest expense: ' + topCat[0] + ' (' + fmt(topCat[1]) + ')' });
+  }
+
+  const insightsEl = document.getElementById('fin-insights');
+  if (insightsEl) {
+    if (insights.length) {
+      insightsEl.innerHTML = insights.map(i =>
+        '<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-bottom:6px;font-size:12px;font-weight:600;color:' + (i.color||'var(--text2)') + ';">' +
+          '<span style="font-size:16px;">' + i.icon + '</span>' + escapeHtml(i.text) +
+        '</div>'
+      ).join('');
+    } else {
+      insightsEl.innerHTML = '';
+    }
+  }
+
+  // ── 7-day cash flow bar chart ─────────────────────────────
+  _renderFinChart(allEntries, allSales);
+
+  // ── Filter transaction list ───────────────────────────────
+  const periodEntries = _finFilter === 'all' ? allEntries : allEntries.filter(e=>e.type===_finFilter);
+  const sorted = [...periodEntries].sort((a,b)=>new Date(b.date||b.createdAt)-new Date(a.date||a.createdAt));
+
+  const summaryLine = document.getElementById('fin-summary-line');
+  if (summaryLine) {
+    const total = periodEntries.reduce((s,e)=>s+e.amount,0);
+    summaryLine.textContent = periodEntries.length + ' record' + (periodEntries.length!==1?'s':'') + ' · Total: ' + fmt(total);
+  }
+
   renderFinList(sorted);
+}
+
+function _renderFinChart(allEntries, allSales) {
+  const chartWrap = document.getElementById('fin-chart-wrap');
+  const chart     = document.getElementById('fin-chart');
+  const labels    = document.getElementById('fin-chart-labels');
+  if (!chart || !chartWrap) return;
+
+  // Build last 7 days
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    days.push(d.toISOString().split('T')[0]);
+  }
+
+  const dayData = days.map(date => {
+    const revE = allEntries.filter(e=>e.type==='revenue'&&e.category==='sales'&&(e.date||'').split('T')[0]===date);
+    const rev  = revE.length ? revE.reduce((s,e)=>s+e.amount,0) : allSales.filter(s=>(s.businessDate||(s.date||'').split('T')[0])===date).reduce((s,s2)=>s+(s2.revenue||0),0);
+    const exp  = allEntries.filter(e=>e.type==='expense'&&(e.date||'').split('T')[0]===date).reduce((s,e)=>s+e.amount,0);
+    return { date, rev, exp, net: rev - exp };
+  });
+
+  const hasData = dayData.some(d => d.rev > 0 || d.exp > 0);
+  chartWrap.style.display = hasData ? '' : 'none';
+  if (!hasData) return;
+
+  const maxVal = Math.max(...dayData.map(d => Math.max(d.rev, d.exp)), 1);
+  const barW   = 'calc(' + (100/7) + '% - 3px)';
+
+  chart.innerHTML = dayData.map(d => {
+    const revH = Math.round((d.rev / maxVal) * 56);
+    const expH = Math.round((d.exp / maxVal) * 56);
+    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:60px;justify-content:flex-end;">' +
+      (d.rev > 0 ? '<div title="Revenue: ' + fmt(d.rev) + '" style="width:100%;background:var(--accent);border-radius:3px 3px 0 0;height:' + revH + 'px;"></div>' : '<div style="height:' + revH + 'px;"></div>') +
+    '</div>';
+  }).join('');
+
+  labels.innerHTML = dayData.map(d => {
+    const label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-GB',{weekday:'short'}).slice(0,2);
+    return '<div style="flex:1;text-align:center;font-size:9px;color:var(--muted);font-weight:600;">' + label + '</div>';
+  }).join('');
 }
 
 function renderFinList(entries) {
   const list = document.getElementById('fin-list');
   if (!list) return;
   if (!entries.length) {
-    list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);font-size:14px;">No transactions yet.<br><span style="font-size:12px;">Record your first investment, expense or withdrawal above.</span></div>';
+    list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);font-size:14px;">No transactions found.<br><span style="font-size:12px;">Record your first investment, expense or withdrawal above.</span></div>';
     return;
   }
   const typeConfig = {
-    investment: { icon:'💵', color:'var(--green)',  label:'Investment' },
-    expense:    { icon:'💸', color:'var(--red)',    label:'Expense'    },
-    withdrawal: { icon:'🏧', color:'var(--amber)',  label:'Withdrawal' },
-    revenue:    { icon:'🛒', color:'var(--accent2)',label:'Sale Revenue'},
-    other:      { icon:'📝', color:'var(--muted)',  label:'Other'      },
+    investment: { icon:'💵', color:'var(--green)',   label:'Investment'   },
+    expense:    { icon:'💸', color:'var(--red)',     label:'Expense'      },
+    withdrawal: { icon:'🏧', color:'#d97706',        label:'Withdrawal'   },
+    revenue:    { icon:'🛒', color:'var(--accent2)', label:'Sale Revenue' },
+    other:      { icon:'📝', color:'var(--muted)',   label:'Other'        },
   };
   list.innerHTML = entries.map(e => {
     const cfg   = typeConfig[e.type] || typeConfig.other;
-    const fdate = e.date ? new Date(e.date+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '';
+    const dateStr = (e.date || (e.createdAt||'').split('T')[0]);
+    const fdate = dateStr ? new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+    const isOut = e.type === 'expense' || e.type === 'withdrawal';
+    const sign  = isOut ? '-' : (e.type === 'revenue' || e.type === 'investment' ? '+' : '');
+    const catBadge = e.category && e.category !== 'general' && e.category !== 'other' && e.category !== 'sales'
+      ? '<span style="font-size:9px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1px 6px;margin-left:6px;color:var(--muted);font-weight:600;">' + escapeHtml(e.category) + '</span>' : '';
+    const addedBy = e.createdBy ? ' · ' + e.createdBy : '';
     return '<div class="fin-entry" style="border-left:3px solid ' + cfg.color + ';">' +
       '<div style="display:flex;align-items:center;gap:10px;">' +
-        '<span style="font-size:22px;">' + cfg.icon + '</span>' +
+        '<span style="font-size:22px;flex-shrink:0;">' + cfg.icon + '</span>' +
         '<div style="flex:1;min-width:0;">' +
-          '<div style="font-size:13px;font-weight:700;color:var(--text);">' + escapeHtml(e.description||cfg.label) + '</div>' +
-          '<div style="font-size:11px;color:var(--muted);margin-top:1px;">' + cfg.label + ' · ' + fdate + '</div>' +
+          '<div style="font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(e.description||cfg.label) + catBadge + '</div>' +
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px;">' + cfg.label + ' · ' + fdate + addedBy + '</div>' +
+          (e.type==='revenue'&&e.profit!=null ? '<div style="font-size:10px;color:' + (e.profit>=0?'var(--green)':'var(--red)') + ';font-weight:700;">Profit: ' + (e.profit>=0?'+':'') + fmt(e.profit) + '</div>' : '') +
         '</div>' +
         '<div style="text-align:right;flex-shrink:0;">' +
-          '<div style="font-size:15px;font-weight:800;font-family:var(--mono);color:' + cfg.color + ';">' + fmt(e.amount) + '</div>' +
-          '<button onclick="deleteFinanceEntry(' + e.id + ')" ' +
-            'style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px;">✕ delete</button>' +
+          '<div style="font-size:16px;font-weight:900;font-family:var(--mono);color:' + cfg.color + ';">' + sign + fmt(e.amount) + '</div>' +
+          (currentUser&&currentUser.role==='super' ? '<button onclick="deleteFinanceEntry(' + e.id + ')" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 0;display:block;">✕ delete</button>' : '') +
         '</div>' +
       '</div>' +
     '</div>';
@@ -4073,36 +4302,46 @@ async function saveFinanceEntry() {
   const amount = parseFloat(document.getElementById('fin-amount').value);
   const desc   = (document.getElementById('fin-desc').value||'').trim();
   const date   = document.getElementById('fin-date').value || todayDateStr();
+  const cat    = (document.getElementById('fin-category')?.value) || 'general';
 
-  if (!type)              { toast('⚠️ Select a transaction type', 'err'); return; }
-  if (!amount || amount<=0){ toast('⚠️ Enter a valid amount', 'err'); return; }
+  if (!type)                   return Validate.fail('Select a transaction type', 'fin-type');
+  if (!amount || amount <= 0)  return Validate.fail('Enter a valid amount (must be > 0)', 'fin-amount');
+  if (amount > 99999999)       return Validate.fail('Amount too large — check the value', 'fin-amount');
+  if (!desc)                   return Validate.fail('Enter a description for this transaction', 'fin-desc');
+  if (desc.length > 200)       return Validate.fail('Description too long (max 200 characters)', 'fin-desc');
+  if (!date)                   return Validate.fail('Select a date', 'fin-date');
+  // Warn if future date
+  if (date > todayDateStr() && !confirm('Date is in the future — are you sure?')) return;
 
-  const entry = {
-    type,
-    amount,
-    description: desc,
-    category:    'other',
-    date,
-    createdAt:   new Date().toISOString(),
-    createdBy:   currentUser ? currentUser.username : 'system',
-  };
+  const entry = { type, amount, description: desc, category: cat, date,
+    createdAt: new Date().toISOString(), createdBy: currentUser ? currentUser.username : 'system' };
   await dbAdd('finances', entry);
 
-  // Clear form
-  document.getElementById('fin-type').value   = '';
+  // Sync to Firebase
+  if (fbReady && fbDb) {
+    try {
+      const { doc, setDoc } = await waitForFbImports();
+      const fbId = 'fin_manual_' + Date.now();
+      entry.fbId = fbId;
+      await setDoc(doc(fbDb, 'finances', fbId), sanitiseForFirestore({...entry}));
+    } catch(e) { console.warn('[SYNC] finance entry:', e.message); }
+  }
+
+  // Clear form (keep type and date for fast back-to-back entry)
   document.getElementById('fin-amount').value = '';
   document.getElementById('fin-desc').value   = '';
-  document.getElementById('fin-date').value   = todayDateStr();
 
   renderFinancePage();
-  toast('✅ Transaction recorded', 'ok');
+  scheduleSync();
+  toast('✅ ' + (type==='investment'?'Investment':'Expense') + ' recorded: ' + fmt(amount), 'ok');
 }
 
 async function deleteFinanceEntry(id) {
-  if (!confirm('Delete this transaction?')) return;
+  if (!confirm('Delete this transaction? This cannot be undone.')) return;
   await dbDelete('finances', id);
   renderFinancePage();
-  toast('Entry deleted', '');
+  scheduleSync();
+  toast('Transaction deleted', '');
 }
 
 function filterFinance(type) {
@@ -4114,11 +4353,17 @@ function filterFinance(type) {
 }
 
 function updateFinTypeColor() {
-  // Visual feedback when type is selected
   const sel = document.getElementById('fin-type');
   if (!sel) return;
   const colors = { investment:'#dcfce7', expense:'#fee2e2', withdrawal:'#fef3c7', other:'var(--surface2)' };
-  sel.style.background = colors[sel.value] || 'var(--bg)';
+  sel.style.background = colors[sel.value] || '';
+  // Auto-set category to 'stock' for investments
+  const catEl = document.getElementById('fin-category');
+  if (catEl) {
+    if (sel.value === 'investment') catEl.value = 'stock';
+    else if (sel.value === 'expense') catEl.value = 'general';
+    else catEl.value = 'general';
+  }
 }
 
 // ===== INIT =====
@@ -4493,9 +4738,10 @@ async function saveShoeItems(baseCode, baseName, type) {
       qty  = parseInt(UI.el('shr-qty-'  + size)?.value || '0') || 0;
       buy  = parseFloat(UI.el('shr-buy-'  + size)?.value || '0') || 0;
       sell = parseFloat(UI.el('shr-sell-' + size)?.value || '0') || 0;
-      if (qty  <= 0) { perSizeErrors.push('Size ' + size + ': qty must be > 0'); continue; }
-      if (buy  <= 0) { perSizeErrors.push('Size ' + size + ': buy price required'); continue; }
-      if (sell <= 0) { perSizeErrors.push('Size ' + size + ': sell price required'); continue; }
+      if (qty  <= 0) { perSizeErrors.push('Size ' + size + ': quantity must be ≥ 1'); continue; }
+      if (buy  <= 0) { perSizeErrors.push('Size ' + size + ': buying price required'); continue; }
+      if (sell <= 0) { perSizeErrors.push('Size ' + size + ': selling price required'); continue; }
+      if (sell < buy) { perSizeErrors.push('Size ' + size + ': sell price (' + fmt(sell) + ') below buy price (' + fmt(buy) + ')'); continue; }
     } else { qty = sharedQty; buy = sharedBuy; sell = sharedSell; }
 
     await upsertShoeSize({
@@ -4707,6 +4953,7 @@ window.selectExistingItem  = selectExistingItem;
 window.setTypeFilter       = setTypeFilter;
 window.toggleShoeSize      = toggleShoeSize;
 window.updateFinTypeColor  = updateFinTypeColor;
+window.finSetPeriod        = finSetPeriod;
 window.updateProfitPreview = updateProfitPreview;
 window.updateSellModal     = updateSellModal;
 window.voidSale            = voidSale;
