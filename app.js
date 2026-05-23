@@ -600,8 +600,10 @@ function getTypeObj(name) { return types.find(t => t.name === name) || { name, e
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('page-' + id).classList.add('active');
-  document.getElementById('tab-' + id).classList.add('active');
+  const pageEl = document.getElementById('page-' + id);
+  if (pageEl) pageEl.classList.add('active');
+  const tabEl = document.getElementById('tab-' + id);
+  if (tabEl) tabEl.classList.add('active');
   if (id === 'dash') renderDashboard();
   if (id === 'list') renderList();
   if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
