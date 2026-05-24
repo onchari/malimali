@@ -1645,59 +1645,205 @@
 <script src="app.js"></script>
 
 
-<!-- ==============================================================
-     PAGE: DAY MANAGEMENT  (id="page-day")
+<!-- ==========================================================<!-- ==============================================================
+     PAGE: DAY CASH FLOW  (id="page-day")
+     Cash flow summary + physical reconciliation
      ============================================================== -->
-<div class="page" id="page-day">
-  <div style="padding:4px 0 12px;">
+<div class="page" id="page-day" style="padding:10px 12px 0;">
 
-    <!-- Day status banner -->
-    <div id="day-banner" style="background:var(--surface2);border:2px solid var(--border);border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;">
-      <div id="day-banner-icon" style="font-size:32px;margin-bottom:6px;">📅</div>
-      <div id="day-status-badge" style="display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:var(--surface2);color:var(--muted);">LOADING</div>
-      <div id="day-banner-title" style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px;"></div>
-      <div id="day-banner-sub" style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-bottom:14px;"></div>
-      <div id="day-action-area"></div>
-    </div>
-
-    <!-- Live stats (shown when day is open) -->
-    <div id="day-live" style="display:none;">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Today's Activity</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
-        <div class="stat-box cyan" style="padding:12px;">
-          <div class="stat-val" id="day-sales-count" style="font-size:22px;">0</div>
-          <div class="stat-lbl">Sales</div>
-        </div>
-        <div class="stat-box amber" style="padding:12px;">
-          <div class="stat-val" id="day-revenue" style="font-size:18px;">0</div>
-          <div class="stat-lbl">Revenue</div>
-        </div>
-        <div class="stat-box" style="padding:12px;background:var(--green-light);border:1.5px solid #a8d8b5;">
-          <div class="stat-val" id="day-profit" style="font-size:18px;color:var(--green);">0</div>
-          <div class="stat-lbl">Profit</div>
-        </div>
-        <div class="stat-box" style="padding:12px;">
-          <div class="stat-val" id="day-purchases" style="font-size:22px;">0</div>
-          <div class="stat-lbl">Purchases</div>
-        </div>
+  <!-- ── Date + status header ────────────────────────────────── -->
+  <div id="day-banner" style="background:var(--surface2);border:2px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;margin-bottom:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div>
+        <div id="day-banner-title" style="font-size:15px;font-weight:800;color:var(--text);"></div>
+        <div id="day-banner-sub"   style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:1px;"></div>
       </div>
-
-      <!-- Today's sales list -->
-      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Sales Today</div>
-      <div class="card" style="padding:12px;">
-        <div id="day-sales-list">
-          <div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales yet today</div>
-        </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span id="day-status-badge" style="font-size:10px;font-weight:800;font-family:var(--mono);padding:3px 10px;border-radius:20px;letter-spacing:1px;background:var(--surface2);color:var(--muted);">LOADING</span>
+        <span id="day-banner-icon" style="font-size:22px;">📅</span>
       </div>
     </div>
-
-    <!-- Past sessions -->
-    <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px;">Past Sessions</div>
-    <div id="day-sessions-list">
-      <div style="color:var(--muted);font-size:13px;padding:8px 0;">No past sessions yet</div>
-    </div>
-
+    <div id="day-action-area"></div>
   </div>
+
+  <!-- ── System cash flow (always visible) ───────────────────── -->
+  <div id="day-live">
+
+    <!-- Row 1: 4 KPI tiles -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+      <div style="background:#e8f9f0;border:1.5px solid #a8d8b5;border-radius:var(--r);padding:9px 6px;text-align:center;">
+        <div id="day-sales-count" style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--green);">0</div>
+        <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Sales</div>
+      </div>
+      <div style="background:#e8f9f0;border:1.5px solid #a8d8b5;border-radius:var(--r);padding:9px 6px;text-align:center;">
+        <div id="day-revenue" style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--green);">0</div>
+        <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Revenue</div>
+      </div>
+      <div style="background:#e8f9f0;border:1.5px solid #a8d8b5;border-radius:var(--r);padding:9px 6px;text-align:center;">
+        <div id="day-profit" style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--green);">0</div>
+        <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Profit</div>
+      </div>
+      <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);padding:9px 6px;text-align:center;">
+        <div id="day-margin-pct" style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent);">0%</div>
+        <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Margin</div>
+      </div>
+    </div>
+
+    <!-- Money In block -->
+    <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;">💰 Money In (System)</div>
+    <div style="border:1.5px solid #a8d8b5;border-radius:var(--r-lg);overflow:hidden;margin-bottom:8px;background:var(--surface);">
+      <div class="day-row" style="border-bottom:1px solid #e2f0e6;">
+        <div><div class="day-row-label">💵 Cash Sales</div><div id="day-cash-sales-count" class="day-row-sub"></div></div>
+        <div id="day-cash-sales"  class="day-row-val" style="color:var(--green);">0</div>
+      </div>
+      <div class="day-row" style="border-bottom:1px solid #e2f0e6;">
+        <div><div class="day-row-label">📱 M-Pesa Sales</div><div id="day-mpesa-sales-count" class="day-row-sub"></div></div>
+        <div id="day-mpesa-sales" class="day-row-val" style="color:var(--green);">0</div>
+      </div>
+      <div class="day-row" style="border-bottom:1px solid #e2f0e6;">
+        <div><div class="day-row-label">💉 Cash Injected</div><div id="day-injected-desc" class="day-row-sub">from finance records</div></div>
+        <div id="day-injected"    class="day-row-val" style="color:var(--green);">0</div>
+      </div>
+      <div class="day-row" style="background:#f0faf4;">
+        <div class="day-row-label" style="font-weight:800;color:var(--green);">Total In</div>
+        <div id="day-total-in"    style="font-size:17px;font-weight:900;font-family:var(--mono);color:var(--green);">0</div>
+      </div>
+    </div>
+
+    <!-- Money Out block -->
+    <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;">💸 Money Out (System)</div>
+    <div style="border:1.5px solid #fca5a5;border-radius:var(--r-lg);overflow:hidden;margin-bottom:8px;background:var(--surface);">
+      <div class="day-row" style="border-bottom:1px solid #fee2e2;">
+        <div><div class="day-row-label">🛍️ Stock Purchased</div><div id="day-stock-purchased-desc" class="day-row-sub"></div></div>
+        <div id="day-stock-purchased" class="day-row-val" style="color:var(--red);">0</div>
+      </div>
+      <div class="day-row" style="border-bottom:1px solid #fee2e2;">
+        <div><div class="day-row-label">💸 Expenses</div><div id="day-expenses-desc" class="day-row-sub"></div></div>
+        <div id="day-expenses"        class="day-row-val" style="color:var(--red);">0</div>
+      </div>
+      <div class="day-row" style="border-bottom:1px solid #fee2e2;">
+        <div><div class="day-row-label">🏧 Withdrawn</div><div id="day-withdrawn-desc" class="day-row-sub"></div></div>
+        <div id="day-withdrawn"       class="day-row-val" style="color:#d97706;">0</div>
+      </div>
+      <div class="day-row" style="background:#fff5f5;">
+        <div class="day-row-label" style="font-weight:800;color:var(--red);">Total Out</div>
+        <div id="day-total-out"       style="font-size:17px;font-weight:900;font-family:var(--mono);color:var(--red);">0</div>
+      </div>
+    </div>
+
+    <!-- Expected position -->
+    <div style="border:2px solid var(--accent);border-radius:var(--r-lg);overflow:hidden;margin-bottom:12px;background:var(--surface);">
+      <div class="day-row" style="border-bottom:1px solid var(--border);">
+        <div><div class="day-row-label">💵 Expected Cash at Hand</div><div class="day-row-sub">Cash sales + injections − withdrawals − cash expenses − stock</div></div>
+        <div id="day-cash-at-hand" class="day-row-val" style="color:var(--accent);">0</div>
+      </div>
+      <div class="day-row" style="border-bottom:1px solid var(--border);">
+        <div><div class="day-row-label">📱 Expected M-Pesa</div><div class="day-row-sub">M-Pesa sales today</div></div>
+        <div id="day-mpesa-balance" class="day-row-val" style="color:#6366f1;">0</div>
+      </div>
+      <div class="day-row" style="background:var(--green-light);" id="day-net-flow-row">
+        <div class="day-row-label" style="font-weight:800;color:var(--green);">⚖️ Net Cash Flow</div>
+        <div id="day-net-flow" style="font-size:19px;font-weight:900;font-family:var(--mono);color:var(--green);">0</div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════
+         PHYSICAL RECONCILIATION FORM
+         ══════════════════════════════════════════════════════════ -->
+    <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;">🔍 End-of-Day Reconciliation</div>
+    <div style="border:2px solid var(--accent);border-radius:var(--r-lg);overflow:hidden;margin-bottom:8px;background:var(--surface);">
+
+      <!-- Form header -->
+      <div style="background:var(--accent);padding:10px 14px;">
+        <div style="font-size:13px;font-weight:800;color:white;">Count your physical cash & M-Pesa, then hit Reconcile</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.7);margin-top:2px;">The system will compare against expected amounts and flag any discrepancy</div>
+      </div>
+
+      <!-- Input rows -->
+      <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px;">
+
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="font-size:20px;flex-shrink:0;">📱</div>
+          <div style="flex:1;">
+            <div style="font-size:12px;font-weight:700;color:var(--text);">Amount in M-Pesa</div>
+            <div style="font-size:10px;color:var(--muted);">Your M-Pesa till / float balance</div>
+          </div>
+          <input id="rc-mpesa" type="number" min="0" inputmode="decimal" placeholder="0"
+                 style="width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;font-family:var(--mono);text-align:right;background:var(--bg);outline:none;">
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="font-size:20px;flex-shrink:0;">🏧</div>
+          <div style="flex:1;">
+            <div style="font-size:12px;font-weight:700;color:var(--text);">Amount in Till</div>
+            <div style="font-size:10px;color:var(--muted);">Cash in the till / cash register</div>
+          </div>
+          <input id="rc-till" type="number" min="0" inputmode="decimal" placeholder="0"
+                 style="width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;font-family:var(--mono);text-align:right;background:var(--bg);outline:none;">
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="font-size:20px;flex-shrink:0;">💵</div>
+          <div style="flex:1;">
+            <div style="font-size:12px;font-weight:700;color:var(--text);">Loose Cash</div>
+            <div style="font-size:10px;color:var(--muted);">Cash in hand / pocket / float</div>
+          </div>
+          <input id="rc-cash" type="number" min="0" inputmode="decimal" placeholder="0"
+                 style="width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;font-family:var(--mono);text-align:right;background:var(--bg);outline:none;">
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="font-size:20px;flex-shrink:0;">💸</div>
+          <div style="flex:1;">
+            <div style="font-size:12px;font-weight:700;color:var(--text);">Amount Spent (Expenses)</div>
+            <div style="font-size:10px;color:var(--muted);">Cash paid out for expenses today</div>
+          </div>
+          <input id="rc-expenses" type="number" min="0" inputmode="decimal" placeholder="0"
+                 style="width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;font-family:var(--mono);text-align:right;background:var(--bg);outline:none;">
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="font-size:20px;flex-shrink:0;">🏧</div>
+          <div style="flex:1;">
+            <div style="font-size:12px;font-weight:700;color:var(--text);">Amount Withdrawn</div>
+            <div style="font-size:10px;color:var(--muted);">Cash taken by owner today</div>
+          </div>
+          <input id="rc-withdrawn" type="number" min="0" inputmode="decimal" placeholder="0"
+                 style="width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;font-family:var(--mono);text-align:right;background:var(--bg);outline:none;">
+        </div>
+
+        <!-- Reconcile button -->
+        <button onclick="reconcileDay()"
+                style="width:100%;padding:14px;background:var(--accent);color:white;border:none;
+                       border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;
+                       font-family:var(--sans);margin-top:4px;letter-spacing:.3px;">
+          🔍 Reconcile
+        </button>
+      </div>
+
+      <!-- Results panel (hidden until reconcile is run) -->
+      <div id="rc-results" style="display:none;border-top:2px solid var(--border);"></div>
+    </div>
+
+    <!-- ── Transactions today ─────────────────────────────────── -->
+    <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;">🧾 Transactions Today</div>
+    <div style="border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;margin-bottom:12px;">
+      <div id="day-sales-list">
+        <div style="color:var(--muted);font-size:13px;padding:14px 16px;">No transactions yet today</div>
+      </div>
+    </div>
+
+  </div><!-- /day-live -->
+
+  <!-- ── Past sessions ─────────────────────────────────────────── -->
+  <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;">📅 Past Sessions</div>
+  <div id="day-sessions-list" style="margin-bottom:80px;">
+    <div style="color:var(--muted);font-size:13px;padding:8px 0;">No past sessions yet</div>
+  </div>
+
+  <!-- hidden compat IDs -->
+  <span id="day-purchases" style="display:none;"></span>
+
 </div><!-- /page-day -->
 
 

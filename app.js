@@ -664,6 +664,7 @@ function showPage(id) {
   if (tabEl) tabEl.classList.add('active');
   if (id === 'dash') renderDashboard();
   if (id === 'list') renderList();
+  if (id === 'day') { updateDayBanner(); updateDayLiveStats(); renderDaySessionsList(); }
   if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
   if (id === 'history') { renderHistoryPage(); }
   if (id === 'finance')  { renderFinancePage(); }
@@ -3633,6 +3634,7 @@ function updateDayBanner() {
     actionArea.innerHTML = '<button onclick="closeDay()" style="' + BTN + 'background:var(--red);color:white;"><i class="fa-solid fa-moon"></i> Close Day</button>';
     if (liveSection) liveSection.style.display = 'block';
     setDayMode(true);
+    updateDayLiveStats();
   } else if (status === 'CLOSED') {
     banner.style.cssText = 'background:#fef3c7;border:2px solid #f5d9a0;border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
     icon.textContent  = '🌙';
@@ -3644,8 +3646,9 @@ function updateDayBanner() {
       ? 'Closed at ' + fmtTime(closed_at) + (auto_closed ? ' · auto' : '') + (reopened_count > 0 ? ' · Opened ' + (reopened_count + 1) + 'x today' : '') + ' · Tap to reopen'
       : 'Tap Open Day to begin — ' + fmtFullDate(todayDateStr());
     actionArea.innerHTML = '<button onclick="openDay()" style="' + BTN + 'background:var(--accent);color:white;"><i class="fa-solid fa-sun"></i> Open Day</button>';
-    if (liveSection) liveSection.style.display = 'none';
+    if (liveSection) liveSection.style.display = 'block';  // still show cash summary when closed
     setDayMode(false);
+    updateDayLiveStats();
   } else if (status === 'LOCKED') {
     banner.style.cssText = 'background:var(--surface2);border:2px solid var(--border);border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
     icon.textContent  = '🔒';
@@ -3655,43 +3658,141 @@ function updateDayBanner() {
     title.style.color = 'var(--muted)';
     sub.textContent   = fmtFullDate((activeDay.businessDate || activeDay.business_date)) + ' — read only';
     actionArea.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:10px 0;">This day is read-only. A new day will appear automatically tomorrow.</div>';
-    if (liveSection) liveSection.style.display = 'none';
+    if (liveSection) liveSection.style.display = 'block';
     setDayMode(false);
+    updateDayLiveStats();
   }
 }
 
-// ── LIVE STATS ───────────────────────────────────────────────────────
+// ── LIVE STATS — full cash flow summary ─────────────────────────────
 async function updateDayLiveStats() {
   if (!activeDay) return;
-  const sales = await dbAll('sales');
-  const _dayDate = (activeDay.businessDate || activeDay.business_date);
-  const daySales = sales.filter(s => (s.businessDate||s.business_date) === _dayDate);
-  const rev   = daySales.reduce((a, s) => a + s.revenue, 0);
-  const profit = daySales.reduce((a, s) => a + s.profit, 0);
-  const count = daySales.length;
-  const items = await dbAll('items');
-  const purchases = items.filter(i => activeDay.opened_at && i.createdAt >= activeDay.opened_at);
+  const today  = activeDay.businessDate || activeDay.business_date || todayDateStr();
+  const sales  = await dbAll('sales');
+  const fins   = await dbAll('finances');
 
-  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('day-sales-count', count);
-  set('day-revenue',     fmt(rev));
-  set('day-profit',      fmt(profit));
-  set('day-purchases',   purchases.length);
+  // Filter to today
+  const daySales = sales.filter(s => (s.businessDate||s.business_date||(s.date||'').split('T')[0]) === today);
+  const dayFins  = fins.filter(e  => (e.date||(e.createdAt||'').split('T')[0]) === today);
 
-  // Today's sales list
+  // ── Sales split by payment method ──────────────────────────
+  const cashSales  = daySales.filter(s => !s.paymentMethod || s.paymentMethod === 'cash');
+  const mpesaSales = daySales.filter(s => s.paymentMethod === 'mpesa');
+  const cashRev    = cashSales.reduce((a,s)=>a+(s.revenue||0), 0);
+  const mpesaRev   = mpesaSales.reduce((a,s)=>a+(s.revenue||0), 0);
+  const totalRev   = daySales.reduce((a,s)=>a+(s.revenue||0), 0);
+  const totalProf  = daySales.reduce((a,s)=>a+(s.profit||0), 0);
+  const margin     = totalRev > 0 ? (totalProf/totalRev*100) : 0;
+  const salesCount = daySales.length;
+
+  // ── Finance entries today ──────────────────────────────────
+  const injected   = dayFins.filter(e=>e.type==='injection'||e.type==='investment').reduce((a,e)=>a+(e.amount||0), 0);
+  const stockBought= dayFins.filter(e=>e.type==='stock_purchase').reduce((a,e)=>a+(e.amount||0), 0);
+  const expenses   = dayFins.filter(e=>e.type==='expense').reduce((a,e)=>a+(e.amount||0), 0);
+  const withdrawn  = dayFins.filter(e=>e.type==='withdrawal').reduce((a,e)=>a+(e.amount||0), 0);
+
+  // ── Cash position ──────────────────────────────────────────
+  // Cash at hand = cash sales + cash injections − withdrawals − cash expenses − stock bought with cash
+  const cashAtHand = cashRev + injected - withdrawn - expenses - stockBought;
+  const mpesaBal   = mpesaRev;
+  const netFlow    = totalRev + injected - withdrawn - expenses - stockBought;
+  const totalIn    = cashRev + mpesaRev + injected;
+  const totalOut   = stockBought + expenses + withdrawn;
+
+  // ── Populate UI ────────────────────────────────────────────
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const setColor = (id, c) => { const el = document.getElementById(id); if (el) el.style.color = c; };
+
+  // Money In
+  set('day-cash-sales',       fmt(cashRev));
+  set('day-cash-sales-count', cashSales.length + ' sale' + (cashSales.length!==1?'s':''));
+  set('day-mpesa-sales',      fmt(mpesaRev));
+  set('day-mpesa-sales-count', mpesaSales.length + ' sale' + (mpesaSales.length!==1?'s':''));
+  set('day-injected',         fmt(injected));
+  const injEntries = dayFins.filter(e=>e.type==='injection'||e.type==='investment');
+  set('day-injected-desc',    injEntries.length ? injEntries.map(e=>e.description||'Injection').slice(0,2).join(', ') : 'no injections today');
+  set('day-total-in',         fmt(totalIn));
+
+  // Money Out
+  set('day-stock-purchased',  fmt(stockBought));
+  const stockEntries = dayFins.filter(e=>e.type==='stock_purchase');
+  set('day-stock-purchased-desc', stockEntries.length ? stockEntries.length + ' purchase' + (stockEntries.length!==1?'s':'') : 'no purchases today');
+  set('day-expenses',         fmt(expenses));
+  const expEntries = dayFins.filter(e=>e.type==='expense');
+  set('day-expenses-desc',    expEntries.length ? expEntries.length + ' expense' + (expEntries.length!==1?'s':'') : 'no expenses today');
+  set('day-withdrawn',        fmt(withdrawn));
+  const wdEntries = dayFins.filter(e=>e.type==='withdrawal');
+  set('day-withdrawn-desc',   wdEntries.length ? wdEntries.length + ' withdrawal' + (wdEntries.length!==1?'s':'') : 'none today');
+  set('day-total-out',        fmt(totalOut));
+
+  // Cash position
+  set('day-cash-at-hand',   (cashAtHand>=0?'':'-') + fmt(Math.abs(cashAtHand)));
+  set('day-mpesa-balance',  fmt(mpesaBal));
+  set('day-net-flow',       (netFlow>=0?'+':'') + fmt(netFlow));
+  setColor('day-cash-at-hand', cashAtHand >= 0 ? 'var(--accent)' : 'var(--red)');
+  setColor('day-net-flow',     netFlow    >= 0 ? 'var(--green)'  : 'var(--red)');
+  const netEl = document.getElementById('day-net-flow');
+  if (netEl && netEl.closest) {
+    const wrap = netEl.closest('div[style*="green-light"]');
+    if (wrap) wrap.style.background = netFlow >= 0 ? 'var(--green-light)' : 'var(--red-light)';
+  }
+
+  // Sales breakdown
+  set('day-sales-count', salesCount);
+  set('day-revenue',     fmt(totalRev));
+  set('day-profit',      fmt(totalProf));
+  set('day-margin-pct',  margin.toFixed(1) + '%');
+  setColor('day-margin-pct', margin >= 20 ? 'var(--green)' : margin >= 10 ? '#d97706' : 'var(--red)');
+
+  // ── Sales + Finance transactions list ─────────────────────
   const sl = document.getElementById('day-sales-list');
   if (sl) {
-    sl.innerHTML = daySales.length
-      ? daySales.slice().reverse().slice(0, 20).map(s =>
-          '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">' +
-          '<div style="flex:1;"><div style="font-size:13px;font-weight:700;">' + (s.itemName||'') + '</div>' +
-          '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);">' + fmtTime(s.date) + ' · ' + (s.itemCode||'') + ' · ' + (s.paymentMethod||'Cash') + '</div></div>' +
-          '<div style="text-align:right;"><div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(s.revenue) + '</div>' +
-          '<div style="font-size:11px;color:var(--green);">+' + fmt(s.profit) + '</div></div>' +
-          (isDayOpen() ? '<button onclick="voidSale(' + s.id + ')" style="font-size:10px;padding:2px 8px;background:var(--red-light);color:var(--red);border:1px solid var(--red);border-radius:4px;cursor:pointer;font-weight:700;flex-shrink:0;">Void</button>' : '') +
-          '</div>'
-        ).join('')
-      : '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales yet today</div>';
+    // Merge sales and finance entries into one timeline
+    const txns = [
+      ...daySales.map(s => ({
+        time:  s.date || s.createdAt,
+        type:  'sale',
+        label: (s.itemName||s.itemCode||'Sale') + (s.itemSize ? ' ·'+s.itemSize : ''),
+        sub:   (s.paymentMethod||'cash').toUpperCase() + ' · ' + (s.qty||1) + ' pc' + ((s.qty||1)!==1?'s':''),
+        amt:   s.revenue||0,
+        color: 'var(--green)',
+        sign:  '+',
+        id:    s.id,
+        canVoid: true,
+      })),
+      ...dayFins.map(e => {
+        const isMinus = e.type==='expense'||e.type==='withdrawal'||e.type==='stock_purchase';
+        const icons = {injection:'💉',investment:'💵',stock_purchase:'🛍️',expense:'💸',withdrawal:'🏧',other:'📝'};
+        return {
+          time:  e.date ? e.date+'T12:00:00' : e.createdAt,
+          type:  'finance',
+          label: icons[e.type]||'📝' + ' ' + (e.description||e.type),
+          sub:   e.type.replace('_',' '),
+          amt:   e.amount||0,
+          color: isMinus ? 'var(--red)' : 'var(--green)',
+          sign:  isMinus ? '-' : '+',
+          id:    e.id,
+          canVoid: false,
+        };
+      }),
+    ].sort((a,b) => new Date(b.time)-new Date(a.time));
+
+    if (!txns.length) {
+      sl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:14px 16px;">No transactions yet today</div>';
+    } else {
+      sl.innerHTML = txns.map((t,i) =>
+        `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;${i<txns.length-1?'border-bottom:1px solid var(--border);':''}${i%2===0?'background:var(--surface);':'background:#f7faf7;'}">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.label)}</div>
+            <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px;">${t.time?fmtTime(t.time):''} · ${t.sub}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:${t.color};">${t.sign}${fmt(t.amt)}</div>
+          </div>
+          ${t.canVoid && isDayOpen() ? `<button onclick="voidSale(${t.id})" style="font-size:9px;padding:2px 7px;background:var(--red-light);color:var(--red);border:1px solid var(--red);border-radius:4px;cursor:pointer;font-weight:700;flex-shrink:0;">Void</button>` : ''}
+        </div>`
+      ).join('');
+    }
   }
 }
 
@@ -4582,6 +4683,169 @@ function _renderSizeGroupFilter() {
   const hasShoe = allItems.some(i=>i.isShoe && (activeTypeFilter==='all'||i.type===activeTypeFilter));
   wrap.style.display = hasShoe ? 'flex' : 'none';
 }
+
+
+// ═══════════════════════════════════════════════════════════
+// DAY RECONCILIATION
+// ═══════════════════════════════════════════════════════════
+async function reconcileDay() {
+  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
+
+  // ── Get system figures ──────────────────────────────────
+  const allSales = await dbAll('sales');
+  const allFins  = await dbAll('finances');
+  const daySales = allSales.filter(s=>(s.businessDate||s.business_date||(s.date||'').split('T')[0])===today);
+  const dayFins  = allFins.filter(e=>(e.date||(e.createdAt||'').split('T')[0])===today);
+
+  const sysCashSales  = daySales.filter(s=>!s.paymentMethod||s.paymentMethod==='cash').reduce((a,s)=>a+(s.revenue||0),0);
+  const sysMpesaSales = daySales.filter(s=>s.paymentMethod==='mpesa').reduce((a,s)=>a+(s.revenue||0),0);
+  const sysInjected   = dayFins.filter(e=>e.type==='injection'||e.type==='investment').reduce((a,e)=>a+(e.amount||0),0);
+  const sysStockBought= dayFins.filter(e=>e.type==='stock_purchase').reduce((a,e)=>a+(e.amount||0),0);
+  const sysExpenses   = dayFins.filter(e=>e.type==='expense').reduce((a,e)=>a+(e.amount||0),0);
+  const sysWithdrawn  = dayFins.filter(e=>e.type==='withdrawal').reduce((a,e)=>a+(e.amount||0),0);
+
+  // Expected cash = cash sales + injections − withdrawals − expenses − stock bought
+  const expCash  = sysCashSales + sysInjected - sysWithdrawn - sysExpenses - sysStockBought;
+  const expMpesa = sysMpesaSales;
+  const expTotal = expCash + expMpesa;
+
+  // ── Read physical amounts from form ────────────────────
+  const rcMpesa     = parseFloat(document.getElementById('rc-mpesa').value)    || 0;
+  const rcTill      = parseFloat(document.getElementById('rc-till').value)     || 0;
+  const rcCash      = parseFloat(document.getElementById('rc-cash').value)     || 0;
+  const rcExpenses  = parseFloat(document.getElementById('rc-expenses').value) || 0;
+  const rcWithdrawn = parseFloat(document.getElementById('rc-withdrawn').value)|| 0;
+
+  if (rcMpesa===0 && rcTill===0 && rcCash===0) {
+    toast('⚠️ Enter at least one physical amount to reconcile', 'err');
+    return;
+  }
+
+  // Physical totals
+  const physCash  = rcTill + rcCash;    // cash in till + loose cash
+  const physMpesa = rcMpesa;
+  const physTotal = physCash + physMpesa;
+  const totalActualOut = rcExpenses + rcWithdrawn;
+
+  // Variances
+  const cashVariance  = physCash  - expCash;   // positive = surplus, negative = short
+  const mpesaVariance = physMpesa - expMpesa;
+  const totalVariance = physTotal - expTotal;
+
+  // ── Save reconciliation to finance records ─────────────
+  const rcRecord = {
+    type:        'reconciliation',
+    amount:      physTotal,
+    description: 'End-of-day reconcile · ' + today,
+    category:    'reconciliation',
+    date:        today,
+    createdAt:   new Date().toISOString(),
+    createdBy:   currentUser ? currentUser.username : 'system',
+    details: {
+      physCash, physMpesa, rcTill, rcCash, rcMpesa,
+      rcExpenses, rcWithdrawn,
+      expCash, expMpesa,
+      cashVariance, mpesaVariance, totalVariance,
+    }
+  };
+  await dbAdd('finances', rcRecord);
+  scheduleSync();
+
+  // ── Build results panel ─────────────────────────────────
+  const varIcon  = v => v===0 ? '✅' : v>0 ? '⬆️' : '⬇️';
+  const varClass = v => v===0 ? 'rc-ok' : Math.abs(v) <= 100 ? 'rc-warn' : 'rc-bad';
+  const varLbl   = v => v===0 ? 'Exact match' : v>0 ? '+'+fmt(v)+' surplus' : fmt(Math.abs(v))+' short';
+  const varColor = v => v===0 ? 'var(--green)' : Math.abs(v)<=100 ? '#d97706' : 'var(--red)';
+
+  // Insights
+  const insights = [];
+  if (totalVariance === 0) {
+    insights.push({ icon:'🎯', text:'Perfect reconciliation — all money accounted for!', cls:'rc-ok' });
+  } else if (totalVariance > 0) {
+    insights.push({ icon:'⬆️', text:'Surplus of '+fmt(totalVariance)+' — more cash than expected. Check for unrecorded injections or over-counted stock.', cls:'rc-warn' });
+  } else {
+    insights.push({ icon:'⬇️', text:'Shortage of '+fmt(Math.abs(totalVariance))+' — less than expected. Check for unrecorded expenses, theft, or missed M-Pesa reconciliation.', cls:'rc-bad' });
+  }
+  if (rcExpenses > sysExpenses + 50) {
+    insights.push({ icon:'📝', text:'Physical expenses ('+fmt(rcExpenses)+') exceed recorded expenses ('+fmt(sysExpenses)+'). Consider recording the difference in Finance.', cls:'rc-warn' });
+  }
+  if (rcWithdrawn > sysWithdrawn + 50) {
+    insights.push({ icon:'📝', text:'Physical withdrawals ('+fmt(rcWithdrawn)+') exceed recorded withdrawals ('+fmt(sysWithdrawn)+'). Consider recording the difference in Finance.', cls:'rc-warn' });
+  }
+  if (Math.abs(mpesaVariance) > 50) {
+    insights.push({ icon:'📱', text:'M-Pesa variance: '+varLbl(mpesaVariance)+'. Check M-Pesa statement.', cls: varClass(mpesaVariance) });
+  }
+  if (Math.abs(cashVariance) > 50) {
+    insights.push({ icon:'💵', text:'Cash variance: '+varLbl(cashVariance)+'. Recount notes and coins.', cls: varClass(cashVariance) });
+  }
+
+  const html = `
+    <div style="padding:10px 14px 0;">
+
+      <!-- Summary header -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div style="background:var(--surface2);border-radius:var(--r);padding:10px;text-align:center;">
+          <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Expected Total</div>
+          <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmt(expTotal)}</div>
+        </div>
+        <div style="background:${totalVariance===0?'var(--green-light)':Math.abs(totalVariance)<=200?'#fef3c7':'#fff0f0'};border-radius:var(--r);padding:10px;text-align:center;">
+          <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Physical Total</div>
+          <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:${varColor(totalVariance)};">${fmt(physTotal)}</div>
+        </div>
+      </div>
+
+      <!-- Variance badge -->
+      <div style="text-align:center;padding:10px 0;margin-bottom:8px;">
+        <span style="font-size:13px;font-weight:800;padding:6px 16px;border-radius:20px;background:${varColor(totalVariance)+'22'};color:${varColor(totalVariance)};border:1.5px solid ${varColor(totalVariance)};">
+          ${varIcon(totalVariance)} ${totalVariance===0?'Balanced':varLbl(totalVariance)}
+        </span>
+      </div>
+
+      <!-- Detail rows -->
+      <div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:10px;">
+        <div class="rc-result-row ${varClass(cashVariance)}">
+          <div><div style="font-size:12px;font-weight:700;">💵 Cash (Till + Loose)</div><div style="font-size:10px;color:var(--muted);">Expected: ${fmt(expCash)}</div></div>
+          <div style="text-align:right;">
+            <div style="font-size:14px;font-weight:800;font-family:var(--mono);">${fmt(physCash)}</div>
+            <div style="font-size:10px;font-weight:700;color:${varColor(cashVariance)};">${varIcon(cashVariance)} ${varLbl(cashVariance)}</div>
+          </div>
+        </div>
+        <div class="rc-result-row ${varClass(mpesaVariance)}">
+          <div><div style="font-size:12px;font-weight:700;">📱 M-Pesa</div><div style="font-size:10px;color:var(--muted);">Expected: ${fmt(expMpesa)}</div></div>
+          <div style="text-align:right;">
+            <div style="font-size:14px;font-weight:800;font-family:var(--mono);">${fmt(physMpesa)}</div>
+            <div style="font-size:10px;font-weight:700;color:${varColor(mpesaVariance)};">${varIcon(mpesaVariance)} ${varLbl(mpesaVariance)}</div>
+          </div>
+        </div>
+        <div class="rc-result-row">
+          <div><div style="font-size:12px;font-weight:700;">💸 Expenses (Physical)</div><div style="font-size:10px;color:var(--muted);">Recorded: ${fmt(sysExpenses)}</div></div>
+          <div style="text-align:right;">
+            <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--red);">-${fmt(rcExpenses)}</div>
+          </div>
+        </div>
+        <div class="rc-result-row">
+          <div><div style="font-size:12px;font-weight:700;">🏧 Withdrawn (Physical)</div><div style="font-size:10px;color:var(--muted);">Recorded: ${fmt(sysWithdrawn)}</div></div>
+          <div style="text-align:right;">
+            <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:#d97706;">-${fmt(rcWithdrawn)}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Insights -->
+      ${insights.map(i=>`<div class="${i.cls}" style="display:flex;gap:10px;padding:9px 12px;border-radius:var(--r);margin-bottom:6px;font-size:12px;font-weight:600;"><span style="font-size:16px;flex-shrink:0;">${i.icon}</span><span>${i.text}</span></div>`).join('')}
+
+      <div style="text-align:center;padding:8px 0 4px;font-size:10px;color:var(--muted);">Reconciliation saved · ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</div>
+    </div>`;
+
+  const panel = document.getElementById('rc-results');
+  if (panel) {
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  toast('✅ Reconciliation complete', 'ok');
+}
+window.reconcileDay = reconcileDay;
 
 // ===== INIT =====
 initDB();

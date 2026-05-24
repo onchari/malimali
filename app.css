@@ -1354,3 +1354,40 @@ body {
   border-radius: 4px;
   text-transform: uppercase;
 }
+
+/* ── Day tab row layout ─────────────────────────────────────── */
+.day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+}
+.day-row-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+.day-row-sub {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+.day-row-val {
+  font-size: 15px;
+  font-weight: 900;
+  font-family: var(--mono);
+  flex-shrink: 0;
+  margin-left: 10px;
+}
+/* Reconciliation result rows */
+.rc-result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.rc-result-row:last-child { border-bottom: none; }
+.rc-ok    { background: #f0faf4; }
+.rc-warn  { background: #fef3c7; }
+.rc-bad   { background: #fff0f0; }
