@@ -5478,6 +5478,34 @@ window.setShoeMode = setShoeMode;
 
 
 
+async function upsertShoeSize(record) {
+  const all = await dbAll('shoe_sizes');
+  const existing = all.find(s => s.itemCode === record.itemCode && s.size === record.size);
+  if (existing) {
+    const updated = { ...existing, ...record, id: existing.id };
+    await dbPut('shoe_sizes', updated);
+    return updated;
+  } else {
+    record.codeSize = record.itemCode + '_' + record.size;
+    try {
+      const id = await dbAdd('shoe_sizes', record);
+      record.id = id;
+      return record;
+    } catch(e) {
+      if (e.name === 'ConstraintError') {
+        // Unique codeSize violation — find and update existing
+        const byCS = all.find(s => s.codeSize === record.codeSize);
+        if (byCS) {
+          const updated = { ...byCS, ...record, id: byCS.id };
+          await dbPut('shoe_sizes', updated);
+          return updated;
+        }
+      }
+      throw e;
+    }
+  }
+}
+
 async function saveShoeItems(baseCode, baseName, type) {
   if (_shoeState.sizes.size === 0) { toast('⚠️ Select at least one size', 'err'); return false; }
 
@@ -5689,3 +5717,58 @@ async function closeShoeSizeActions() {
   if (sheet) sheet.classList.remove('open');
 }
 window.closeShoeSizeActions = closeShoeSizeActions;
+
+// ── Restored missing shoe functions ─────────────────────────────
+
+
+function getShoeGroups() {
+  const saved = localStorage.getItem(KEY_SHOE_GROUPS);
+  if (!saved) return JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS));
+  try { return JSON.parse(saved); } catch(e) { return JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS)); }
+}
+function _getGroupSizes(g) {
+  const groups = getShoeGroups();
+  if (!groups[g]) return [];
+  const { min, max } = groups[g];
+  return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+}
+function renderShoeGroupButtons() {
+  const groups = getShoeGroups();
+  ['S','M','L'].forEach(g => {
+    const btn = document.getElementById('sg-btn-' + g);
+    const rng = document.getElementById('sg-range-' + g);
+    const hasSelected = _getGroupSizes(g).some(s => _shoeState.sizes.has(s));
+    if (btn) btn.classList.toggle('sg-active', hasSelected || _shoeState.shownGroups.has(g));
+    if (rng && groups[g]) rng.textContent = groups[g].min + '–' + groups[g].max;
+  });
+}
+function renderShoeRows() {
+  const rows = document.getElementById('shoe-rows');
+  if (!rows) return;
+  if (!_shoeState.perSizeMode) { rows.innerHTML = ''; return; }
+  const sorted = _shoeState.sortedSizes;
+  rows.innerHTML = sorted.map(s =>
+    '<div class="shoe-row">' +
+    '<span class="shoe-sz-lbl">' + s + '</span>' +
+    '<input type="number" class="shoe-cell" id="shr-qty-' + s + '" min="0" inputmode="numeric" placeholder="Qty">' +
+    '<input type="number" class="shoe-cell" id="shr-buy-' + s + '" min="0" inputmode="decimal" placeholder="Buy">' +
+    '<input type="number" class="shoe-cell" id="shr-sell-' + s + '" min="0" inputmode="decimal" placeholder="Sell">' +
+    '</div>'
+  ).join('');
+}
+function renderShoeSummary() {
+  const el = UI.el('shoe-selected-summary');
+  if (!el) return;
+  if (_shoeState.sizes.size === 0) { el.innerHTML = ''; return; }
+  const sorted = _shoeState.sortedSizes;
+  el.innerHTML = '<div class="shoe-pills-row">' +
+    sorted.map(s => '<span class="shoe-pill">' + s + '</span>').join('') +
+    '<span style="font-size:11px;color:var(--muted);margin-left:4px;align-self:center;">' +
+    sorted.length + ' size' + (sorted.length>1?'s':'') + ' selected</span></div>';
+  const saveBtn = UI.el('save-btn');
+  const panel   = UI.el('shoe-size-panel');
+  if (saveBtn && panel && panel.style.display !== 'none') {
+    saveBtn.textContent = '+ Save ' + sorted.length + ' shoe size' + (sorted.length>1?'s':'');
+  }
+}
+function togglePerSizeMode() { setShoeMode(_shoeState.perSizeMode ? 'shared' : 'persize'); }
