@@ -3778,18 +3778,16 @@ async function updateDayLiveStats() {
     ].sort((a,b) => new Date(b.time)-new Date(a.time));
 
     if (!txns.length) {
-      sl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:14px 16px;">No transactions yet today</div>';
+      sl.innerHTML = '<div class="day-empty">No transactions yet today</div>';
     } else {
-      sl.innerHTML = txns.map((t,i) =>
-        `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;${i<txns.length-1?'border-bottom:1px solid var(--border);':''}${i%2===0?'background:var(--surface);':'background:#f7faf7;'}">
+      sl.innerHTML = txns.map(t =>
+        `<div class="day-txn-row">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.label)}</div>
-            <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px;">${t.time?fmtTime(t.time):''} · ${t.sub}</div>
+            <div class="day-txn-label">${escapeHtml(t.label)}</div>
+            <div class="day-txn-sub">${t.time ? fmtTime(t.time) : ''} · ${t.sub}</div>
           </div>
-          <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:${t.color};">${t.sign}${fmt(t.amt)}</div>
-          </div>
-          ${t.canVoid && isDayOpen() ? `<button onclick="voidSale(${t.id})" style="font-size:9px;padding:2px 7px;background:var(--red-light);color:var(--red);border:1px solid var(--red);border-radius:4px;cursor:pointer;font-weight:700;flex-shrink:0;">Void</button>` : ''}
+          <div class="day-txn-amt" style="color:${t.color};">${t.sign}${fmt(t.amt)}</div>
+          ${t.canVoid && isDayOpen() ? `<button onclick="voidSale(${t.id})" style="font-size:9px;padding:3px 8px;background:var(--red-light);color:var(--red);border:1px solid var(--red);border-radius:4px;cursor:pointer;font-weight:700;flex-shrink:0;">Void</button>` : ''}
         </div>`
       ).join('');
     }
@@ -3961,21 +3959,35 @@ if ('serviceWorker' in navigator) {
     function onNewWorker(worker) {
       _pendingWorker = worker;
       _showUpdateState('available');
-      const t=document.getElementById('tab-settings');
-      if(t&&!document.getElementById('update-dot')){const d=document.createElement('span');d.id='update-dot';d.style.cssText='position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;';t.style.position='relative';t.appendChild(d);}
+      // Also add red dot on settings tab
+      const t = document.getElementById('tab-settings');
+      if (t && !document.getElementById('update-dot')) {
+        const d = document.createElement('span'); d.id = 'update-dot';
+        d.style.cssText = 'position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;';
+        t.style.position = 'relative'; t.appendChild(d);
+      }
+      // Show the big fullscreen update banner
+      _showUpdateBanner();
     }
     reg.addEventListener('updatefound',()=>{const w=reg.installing;w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)onNewWorker(w);});});
     if(reg.waiting&&navigator.serviceWorker.controller)onNewWorker(reg.waiting);
     setInterval(()=>reg.update().then(()=>_setUpdateLastCheck()).catch(()=>{}), 30*60*1000);
   }).catch(()=>{});
   let _reloading=false;
-  navigator.serviceWorker.addEventListener('controllerchange',()=>{
-    if(_reloading)return;_reloading=true;
-    const bar=document.getElementById('update-progress-bar');
-    const pct=document.getElementById('update-progress-pct');
-    const lbl=document.getElementById('update-progress-label');
-    if(bar)bar.style.width='100%';if(pct)pct.textContent='100%';if(lbl)lbl.textContent='Reloading…';
-    setTimeout(()=>window.location.reload(),600);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_reloading) return; _reloading = true;
+    // Update progress bars (both banner + settings card)
+    ['update-progress-bar','upd-progress-bar'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.width='100%';});
+    ['update-progress-pct','upd-progress-pct'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='100%';});
+    ['update-progress-label','upd-progress-label'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='Reloading…';});
+    // Show success state in banner
+    const btnArea = document.getElementById('upd-btn-area');
+    const progressWrap = document.getElementById('upd-progress-wrap');
+    const successEl = document.getElementById('upd-success');
+    if (btnArea)     btnArea.style.display     = 'none';
+    if (progressWrap)progressWrap.style.display= 'none';
+    if (successEl)   successEl.style.display   = 'block';
+    setTimeout(() => window.location.reload(), 1200);
   });
 }
 
@@ -4340,17 +4352,84 @@ window.addEventListener('unhandledrejection',e=>{
 
 // ── APP UPDATE SYSTEM ─────────────────────────────────────────────
 let _pendingWorker = null;
-function _showUpdateState(state){['current','available','installing'].forEach(s=>{const el=document.getElementById('update-state-'+s);if(el)el.style.display=s===state?'':'none';});}
-function _setUpdateLastCheck(){const el=document.getElementById('update-last-check');if(el)el.textContent='Checked: '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
-function installAppUpdate(){
-  if(!_pendingWorker)return;
-  _showUpdateState('installing');
-  let pct=0;
-  const steps=[{t:20,l:'Downloading…',d:300},{t:45,l:'Installing…',d:500},{t:70,l:'Clearing cache…',d:400},{t:90,l:'Finalising…',d:400}];
-  function run(i){if(i>=steps.length)return;const{t,l,d}=steps[i];setTimeout(()=>{pct=t;const bar=document.getElementById('update-progress-bar');const pctEl=document.getElementById('update-progress-pct');const lblEl=document.getElementById('update-progress-label');if(bar)bar.style.width=pct+'%';if(pctEl)pctEl.textContent=pct+'%';if(lblEl)lblEl.textContent=l;run(i+1);},d);}
-  run(0);
-  _pendingWorker.postMessage({type:'SKIP_WAITING'});
+let _updateBannerDismissed = false;
+
+function _showUpdateState(state) {
+  ['current','available','installing'].forEach(s => {
+    const el = document.getElementById('update-state-' + s);
+    if (el) el.style.display = s === state ? '' : 'none';
+  });
 }
+
+function _setUpdateLastCheck() {
+  const el = document.getElementById('update-last-check');
+  if (el) el.textContent = 'Checked: ' + new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+}
+
+function _showUpdateBanner() {
+  const banner = document.getElementById('app-update-banner');
+  if (!banner) return;
+  // Reset state
+  const progress   = document.getElementById('upd-progress-wrap');
+  const success    = document.getElementById('upd-success');
+  const btnArea    = document.getElementById('upd-btn-area');
+  const installBtn = document.getElementById('upd-install-btn');
+  const laterBtn   = document.getElementById('upd-later-btn');
+  if (progress)   progress.style.display   = 'none';
+  if (success)    success.style.display    = 'none';
+  if (btnArea)    btnArea.style.display    = 'flex';
+  if (installBtn) { installBtn.disabled = false; installBtn.style.opacity = '1'; installBtn.textContent = '⬇️ Install Update Now'; }
+  if (laterBtn)   laterBtn.style.display  = 'block';
+  // Show banner
+  banner.style.display = 'flex';
+}
+
+function dismissAppUpdate() {
+  const banner = document.getElementById('app-update-banner');
+  if (banner) banner.style.display = 'none';
+  _updateBannerDismissed = true;
+  // Keep the dot on settings tab so they can still find it
+  toast('Update ready — tap Settings to install when ready', '');
+}
+
+function applyAppUpdate() {
+  if (!_pendingWorker) return;
+  const installBtn = document.getElementById('upd-install-btn');
+  const laterBtn   = document.getElementById('upd-later-btn');
+  const progress   = document.getElementById('upd-progress-wrap');
+  const bar        = document.getElementById('upd-progress-bar');
+  const pctEl      = document.getElementById('upd-progress-pct');
+  const lblEl      = document.getElementById('upd-progress-label');
+
+  // Hide buttons, show progress
+  if (installBtn) { installBtn.disabled = true; installBtn.style.opacity = '0.4'; }
+  if (laterBtn)   laterBtn.style.display = 'none';
+  if (progress)   progress.style.display = 'block';
+
+  // Animated progress steps
+  const steps = [
+    { pct:15,  lbl:'Downloading update…',     delay:0   },
+    { pct:35,  lbl:'Verifying files…',         delay:400 },
+    { pct:55,  lbl:'Installing…',              delay:700 },
+    { pct:75,  lbl:'Clearing old cache…',      delay:1100},
+    { pct:90,  lbl:'Finalising…',              delay:1500},
+  ];
+  steps.forEach(({pct, lbl, delay}) => {
+    setTimeout(() => {
+      if (bar)   bar.style.width    = pct + '%';
+      if (pctEl) pctEl.textContent  = pct + '%';
+      if (lblEl) lblEl.textContent  = lbl;
+    }, delay);
+  });
+
+  // Trigger the actual SW skip-waiting
+  _pendingWorker.postMessage({ type: 'SKIP_WAITING' });
+  // controllerchange will fire → reloads page; we also update settings card
+  _showUpdateState('installing');
+}
+
+// Legacy alias kept for settings page button
+function installAppUpdate() { applyAppUpdate(); }
 
 // ===================================================================
 // FINANCE MODULE
@@ -4691,7 +4770,7 @@ function _renderSizeGroupFilter() {
 async function reconcileDay() {
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
 
-  // ── Get system figures ──────────────────────────────────
+  // ── System figures ──────────────────────────────────────
   const allSales = await dbAll('sales');
   const allFins  = await dbAll('finances');
   const daySales = allSales.filter(s=>(s.businessDate||s.business_date||(s.date||'').split('T')[0])===today);
@@ -4699,142 +4778,183 @@ async function reconcileDay() {
 
   const sysCashSales  = daySales.filter(s=>!s.paymentMethod||s.paymentMethod==='cash').reduce((a,s)=>a+(s.revenue||0),0);
   const sysMpesaSales = daySales.filter(s=>s.paymentMethod==='mpesa').reduce((a,s)=>a+(s.revenue||0),0);
+  const sysTotalRev   = daySales.reduce((a,s)=>a+(s.revenue||0),0);
+  const sysTotalProfit= daySales.reduce((a,s)=>a+(s.profit||0),0);
   const sysInjected   = dayFins.filter(e=>e.type==='injection'||e.type==='investment').reduce((a,e)=>a+(e.amount||0),0);
-  const sysStockBought= dayFins.filter(e=>e.type==='stock_purchase').reduce((a,e)=>a+(e.amount||0),0);
+  const sysStock      = dayFins.filter(e=>e.type==='stock_purchase').reduce((a,e)=>a+(e.amount||0),0);
   const sysExpenses   = dayFins.filter(e=>e.type==='expense').reduce((a,e)=>a+(e.amount||0),0);
   const sysWithdrawn  = dayFins.filter(e=>e.type==='withdrawal').reduce((a,e)=>a+(e.amount||0),0);
 
-  // Expected cash = cash sales + injections − withdrawals − expenses − stock bought
-  const expCash  = sysCashSales + sysInjected - sysWithdrawn - sysExpenses - sysStockBought;
-  const expMpesa = sysMpesaSales;
-  const expTotal = expCash + expMpesa;
+  // ── Opening balances (user-entered) ────────────────────
+  const opCash  = parseFloat(document.getElementById('op-cash')?.value)  || 0;
+  const opTill  = parseFloat(document.getElementById('op-till')?.value)  || 0;
+  const opMpesa = parseFloat(document.getElementById('op-mpesa')?.value) || 0;
+  const opTotal = opCash + opTill + opMpesa;
 
-  // ── Read physical amounts from form ────────────────────
-  const rcMpesa     = parseFloat(document.getElementById('rc-mpesa').value)    || 0;
-  const rcTill      = parseFloat(document.getElementById('rc-till').value)     || 0;
-  const rcCash      = parseFloat(document.getElementById('rc-cash').value)     || 0;
-  const rcExpenses  = parseFloat(document.getElementById('rc-expenses').value) || 0;
-  const rcWithdrawn = parseFloat(document.getElementById('rc-withdrawn').value)|| 0;
+  // ── Closing balances (user-entered) ────────────────────
+  const rcCash      = parseFloat(document.getElementById('rc-cash')?.value)     || 0;
+  const rcTill      = parseFloat(document.getElementById('rc-till')?.value)     || 0;
+  const rcMpesa     = parseFloat(document.getElementById('rc-mpesa')?.value)    || 0;
+  const rcExpenses  = parseFloat(document.getElementById('rc-expenses')?.value) || 0;
+  const rcWithdrawn = parseFloat(document.getElementById('rc-withdrawn')?.value)|| 0;
+  const rcStock     = parseFloat(document.getElementById('rc-stock')?.value)    || 0;
+  const rcInjected  = parseFloat(document.getElementById('rc-injected')?.value) || 0;
 
-  if (rcMpesa===0 && rcTill===0 && rcCash===0) {
-    toast('⚠️ Enter at least one physical amount to reconcile', 'err');
+  if (rcCash===0 && rcTill===0 && rcMpesa===0) {
+    toast('⚠️ Enter at least one closing balance (Cash, Till, or M-Pesa)', 'err');
     return;
   }
 
-  // Physical totals
-  const physCash  = rcTill + rcCash;    // cash in till + loose cash
-  const physMpesa = rcMpesa;
-  const physTotal = physCash + physMpesa;
-  const totalActualOut = rcExpenses + rcWithdrawn;
+  // ── Derived calculations ────────────────────────────────
+  const physCashNow  = rcCash + rcTill;        // total physical cash right now
+  const physMpesaNow = rcMpesa;
+  const physTotalNow = physCashNow + physMpesaNow;
+
+  // Expected closing cash = opening cash + cash sales + injected − expenses − withdrawn − stock
+  const expCashNow  = opCash + opTill + sysCashSales + sysInjected - sysExpenses - sysWithdrawn - sysStock;
+  const expMpesaNow = opMpesa + sysMpesaSales;
+  const expTotalNow = expCashNow + expMpesaNow;
 
   // Variances
-  const cashVariance  = physCash  - expCash;   // positive = surplus, negative = short
-  const mpesaVariance = physMpesa - expMpesa;
-  const totalVariance = physTotal - expTotal;
+  const cashVariance  = physCashNow  - expCashNow;
+  const mpesaVariance = physMpesaNow - expMpesaNow;
+  const totalVariance = physTotalNow - expTotalNow;
 
-  // ── Save reconciliation to finance records ─────────────
-  const rcRecord = {
-    type:        'reconciliation',
-    amount:      physTotal,
+  // Net movement today (what the business generated/lost in cash)
+  const netMovement = sysTotalRev + rcInjected - rcExpenses - rcWithdrawn - rcStock;
+
+  const margin = sysTotalRev > 0 ? (sysTotalProfit/sysTotalRev*100) : 0;
+
+  // ── Save reconciliation ─────────────────────────────────
+  await dbAdd('finances', {
+    type: 'reconciliation', amount: physTotalNow,
     description: 'End-of-day reconcile · ' + today,
-    category:    'reconciliation',
-    date:        today,
-    createdAt:   new Date().toISOString(),
-    createdBy:   currentUser ? currentUser.username : 'system',
-    details: {
-      physCash, physMpesa, rcTill, rcCash, rcMpesa,
-      rcExpenses, rcWithdrawn,
-      expCash, expMpesa,
-      cashVariance, mpesaVariance, totalVariance,
-    }
-  };
-  await dbAdd('finances', rcRecord);
+    category: 'reconciliation', date: today,
+    createdAt: new Date().toISOString(),
+    createdBy: currentUser ? currentUser.username : 'system',
+    details: { opCash,opTill,opMpesa, rcCash,rcTill,rcMpesa,
+               rcExpenses,rcWithdrawn,rcStock,rcInjected,
+               sysCashSales,sysMpesaSales,sysTotalRev,sysTotalProfit,
+               cashVariance,mpesaVariance,totalVariance }
+  });
   scheduleSync();
 
-  // ── Build results panel ─────────────────────────────────
-  const varIcon  = v => v===0 ? '✅' : v>0 ? '⬆️' : '⬇️';
-  const varClass = v => v===0 ? 'rc-ok' : Math.abs(v) <= 100 ? 'rc-warn' : 'rc-bad';
-  const varLbl   = v => v===0 ? 'Exact match' : v>0 ? '+'+fmt(v)+' surplus' : fmt(Math.abs(v))+' short';
-  const varColor = v => v===0 ? 'var(--green)' : Math.abs(v)<=100 ? '#d97706' : 'var(--red)';
+  // ── Build results ───────────────────────────────────────
+  const varIcon  = v => v===0?'✅':v>0?'⬆️':'⬇️';
+  const varColor = v => v===0?'var(--green)':Math.abs(v)<=200?'#d97706':'var(--red)';
+  const varText  = v => v===0?'Balanced':v>0?'+'+fmt(v)+' surplus':fmt(Math.abs(v))+' short';
+  const varCls   = v => v===0?'rc-ok':Math.abs(v)<=200?'rc-warn':'rc-bad';
 
-  // Insights
+  // Smart insights
   const insights = [];
-  if (totalVariance === 0) {
-    insights.push({ icon:'🎯', text:'Perfect reconciliation — all money accounted for!', cls:'rc-ok' });
+  const ok = totalVariance === 0;
+  if (ok) {
+    insights.push({ icon:'🎯', text:'Perfect — every shilling is accounted for!', cls:'rc-ok' });
   } else if (totalVariance > 0) {
-    insights.push({ icon:'⬆️', text:'Surplus of '+fmt(totalVariance)+' — more cash than expected. Check for unrecorded injections or over-counted stock.', cls:'rc-warn' });
+    insights.push({ icon:'⬆️', text:`Surplus of ${fmt(totalVariance)} more than expected. Possible causes: unrecorded injection, or opening balance was higher than entered.`, cls:'rc-warn' });
   } else {
-    insights.push({ icon:'⬇️', text:'Shortage of '+fmt(Math.abs(totalVariance))+' — less than expected. Check for unrecorded expenses, theft, or missed M-Pesa reconciliation.', cls:'rc-bad' });
+    insights.push({ icon:'⬇️', text:`Short by ${fmt(Math.abs(totalVariance))}. Check: unrecorded expense or withdrawal, cash theft, or opening balance was lower than entered.`, cls:'rc-bad' });
   }
-  if (rcExpenses > sysExpenses + 50) {
-    insights.push({ icon:'📝', text:'Physical expenses ('+fmt(rcExpenses)+') exceed recorded expenses ('+fmt(sysExpenses)+'). Consider recording the difference in Finance.', cls:'rc-warn' });
-  }
-  if (rcWithdrawn > sysWithdrawn + 50) {
-    insights.push({ icon:'📝', text:'Physical withdrawals ('+fmt(rcWithdrawn)+') exceed recorded withdrawals ('+fmt(sysWithdrawn)+'). Consider recording the difference in Finance.', cls:'rc-warn' });
-  }
-  if (Math.abs(mpesaVariance) > 50) {
-    insights.push({ icon:'📱', text:'M-Pesa variance: '+varLbl(mpesaVariance)+'. Check M-Pesa statement.', cls: varClass(mpesaVariance) });
-  }
-  if (Math.abs(cashVariance) > 50) {
-    insights.push({ icon:'💵', text:'Cash variance: '+varLbl(cashVariance)+'. Recount notes and coins.', cls: varClass(cashVariance) });
-  }
+  if (Math.abs(cashVariance)  > 50) insights.push({ icon:'💵', text:`Cash variance: ${varText(cashVariance)}. Recount notes & coins in till and hand.`, cls: varCls(cashVariance) });
+  if (Math.abs(mpesaVariance) > 50) insights.push({ icon:'📱', text:`M-Pesa variance: ${varText(mpesaVariance)}. Check your M-Pesa statement for today.`, cls: varCls(mpesaVariance) });
+  if (rcExpenses > sysExpenses + 100) insights.push({ icon:'📝', text:`Physical expenses (${fmt(rcExpenses)}) exceed recorded expenses (${fmt(sysExpenses)}). Consider logging the difference in Finance → Expense.`, cls:'rc-warn' });
+  if (rcWithdrawn > sysWithdrawn + 100) insights.push({ icon:'📝', text:`Physical withdrawals (${fmt(rcWithdrawn)}) exceed recorded (${fmt(sysWithdrawn)}). Consider logging the difference in Finance → Withdrawal.`, cls:'rc-warn' });
+  if (rcInjected > sysInjected + 100) insights.push({ icon:'📝', text:`Cash injected (${fmt(rcInjected)}) exceeds recorded injections (${fmt(sysInjected)}). Consider logging in Finance → Cash Injection.`, cls:'rc-warn' });
+  if (margin < 10 && sysTotalRev > 0) insights.push({ icon:'⚠️', text:`Low profit margin today: ${margin.toFixed(1)}%. Review pricing or reduce expenses.`, cls:'rc-warn' });
+  if (margin >= 30 && sysTotalRev > 0) insights.push({ icon:'🎉', text:`Excellent margin today: ${margin.toFixed(1)}%! Great performance.`, cls:'rc-ok' });
+  if (netMovement < 0) insights.push({ icon:'🚨', text:`Net cash flow is negative (${fmt(netMovement)}). More went out than came in today.`, cls:'rc-bad' });
 
   const html = `
-    <div style="padding:10px 14px 0;">
+    <div style="padding:12px 14px;">
 
-      <!-- Summary header -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-        <div style="background:var(--surface2);border-radius:var(--r);padding:10px;text-align:center;">
-          <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Expected Total</div>
-          <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmt(expTotal)}</div>
+      <!-- Opening vs Closing summary -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
+        <div style="background:var(--surface2);border-radius:var(--r);padding:9px;text-align:center;">
+          <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:3px;">Opening</div>
+          <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmt(opTotal)}</div>
         </div>
-        <div style="background:${totalVariance===0?'var(--green-light)':Math.abs(totalVariance)<=200?'#fef3c7':'#fff0f0'};border-radius:var(--r);padding:10px;text-align:center;">
-          <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Physical Total</div>
-          <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:${varColor(totalVariance)};">${fmt(physTotal)}</div>
+        <div style="background:var(--surface2);border-radius:var(--r);padding:9px;text-align:center;">
+          <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:3px;">Closing</div>
+          <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmt(physTotalNow)}</div>
+        </div>
+        <div style="background:${netMovement>=0?'var(--green-light)':'var(--red-light)'};border-radius:var(--r);padding:9px;text-align:center;">
+          <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:3px;">Net Move</div>
+          <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:${netMovement>=0?'var(--green)':'var(--red)'};">${netMovement>=0?'+':''}${fmt(netMovement)}</div>
         </div>
       </div>
 
       <!-- Variance badge -->
-      <div style="text-align:center;padding:10px 0;margin-bottom:8px;">
-        <span style="font-size:13px;font-weight:800;padding:6px 16px;border-radius:20px;background:${varColor(totalVariance)+'22'};color:${varColor(totalVariance)};border:1.5px solid ${varColor(totalVariance)};">
-          ${varIcon(totalVariance)} ${totalVariance===0?'Balanced':varLbl(totalVariance)}
+      <div style="text-align:center;margin-bottom:12px;">
+        <span style="display:inline-block;font-size:13px;font-weight:800;padding:7px 18px;
+                     border-radius:20px;background:${varColor(totalVariance)+'20'};
+                     color:${varColor(totalVariance)};border:1.5px solid ${varColor(totalVariance)};">
+          ${varIcon(totalVariance)} ${totalVariance===0?'Fully Balanced':varText(totalVariance)}
         </span>
       </div>
 
-      <!-- Detail rows -->
-      <div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:10px;">
-        <div class="rc-result-row ${varClass(cashVariance)}">
-          <div><div style="font-size:12px;font-weight:700;">💵 Cash (Till + Loose)</div><div style="font-size:10px;color:var(--muted);">Expected: ${fmt(expCash)}</div></div>
-          <div style="text-align:right;">
-            <div style="font-size:14px;font-weight:800;font-family:var(--mono);">${fmt(physCash)}</div>
-            <div style="font-size:10px;font-weight:700;color:${varColor(cashVariance)};">${varIcon(cashVariance)} ${varLbl(cashVariance)}</div>
+      <!-- Detail breakdown -->
+      <div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:12px;">
+
+        <div style="background:var(--surface2);padding:7px 12px;font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">
+          Position Breakdown
+        </div>
+
+        <div class="rc-result-row ${varCls(cashVariance)}">
+          <div>
+            <div style="font-size:12px;font-weight:700;">💵 Cash (Hand + Till)</div>
+            <div style="font-size:10px;color:var(--muted);">Expected: ${fmt(expCashNow)} · Physical: ${fmt(physCashNow)}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:13px;font-weight:800;font-family:var(--mono);">${fmt(physCashNow)}</div>
+            <div style="font-size:10px;font-weight:700;color:${varColor(cashVariance)};">${varIcon(cashVariance)} ${varText(cashVariance)}</div>
           </div>
         </div>
-        <div class="rc-result-row ${varClass(mpesaVariance)}">
-          <div><div style="font-size:12px;font-weight:700;">📱 M-Pesa</div><div style="font-size:10px;color:var(--muted);">Expected: ${fmt(expMpesa)}</div></div>
-          <div style="text-align:right;">
-            <div style="font-size:14px;font-weight:800;font-family:var(--mono);">${fmt(physMpesa)}</div>
-            <div style="font-size:10px;font-weight:700;color:${varColor(mpesaVariance)};">${varIcon(mpesaVariance)} ${varLbl(mpesaVariance)}</div>
+
+        <div class="rc-result-row ${varCls(mpesaVariance)}">
+          <div>
+            <div style="font-size:12px;font-weight:700;">📱 M-Pesa</div>
+            <div style="font-size:10px;color:var(--muted);">Expected: ${fmt(expMpesaNow)} · Physical: ${fmt(physMpesaNow)}</div>
           </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:13px;font-weight:800;font-family:var(--mono);">${fmt(physMpesaNow)}</div>
+            <div style="font-size:10px;font-weight:700;color:${varColor(mpesaVariance)};">${varIcon(mpesaVariance)} ${varText(mpesaVariance)}</div>
+          </div>
+        </div>
+
+        <div style="background:var(--surface2);padding:7px 12px;font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--border);">
+          Today's Sales
+        </div>
+
+        <div class="rc-result-row">
+          <div style="font-size:12px;font-weight:700;">💵 Cash Revenue</div>
+          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--green);">+${fmt(sysCashSales)}</div>
         </div>
         <div class="rc-result-row">
-          <div><div style="font-size:12px;font-weight:700;">💸 Expenses (Physical)</div><div style="font-size:10px;color:var(--muted);">Recorded: ${fmt(sysExpenses)}</div></div>
-          <div style="text-align:right;">
-            <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--red);">-${fmt(rcExpenses)}</div>
-          </div>
+          <div style="font-size:12px;font-weight:700;">📱 M-Pesa Revenue</div>
+          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--green);">+${fmt(sysMpesaSales)}</div>
         </div>
         <div class="rc-result-row">
-          <div><div style="font-size:12px;font-weight:700;">🏧 Withdrawn (Physical)</div><div style="font-size:10px;color:var(--muted);">Recorded: ${fmt(sysWithdrawn)}</div></div>
-          <div style="text-align:right;">
-            <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:#d97706;">-${fmt(rcWithdrawn)}</div>
-          </div>
+          <div style="font-size:12px;font-weight:700;">📈 Profit · ${margin.toFixed(1)}% margin</div>
+          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--green);">+${fmt(sysTotalProfit)}</div>
         </div>
+
+        <div style="background:var(--surface2);padding:7px 12px;font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--border);">
+          Cash Movements
+        </div>
+
+        ${rcInjected>0?`<div class="rc-result-row"><div style="font-size:12px;font-weight:700;">💉 Injected</div><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--green);">+${fmt(rcInjected)}</div></div>`:''}
+        ${rcExpenses>0?`<div class="rc-result-row"><div style="font-size:12px;font-weight:700;">💸 Expenses</div><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--red);">-${fmt(rcExpenses)}</div></div>`:''}
+        ${rcWithdrawn>0?`<div class="rc-result-row"><div style="font-size:12px;font-weight:700;">🏧 Withdrawn</div><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:#d97706;">-${fmt(rcWithdrawn)}</div></div>`:''}
+        ${rcStock>0?`<div class="rc-result-row"><div style="font-size:12px;font-weight:700;">🛍️ Stock Bought</div><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--red);">-${fmt(rcStock)}</div></div>`:''}
       </div>
 
       <!-- Insights -->
-      ${insights.map(i=>`<div class="${i.cls}" style="display:flex;gap:10px;padding:9px 12px;border-radius:var(--r);margin-bottom:6px;font-size:12px;font-weight:600;"><span style="font-size:16px;flex-shrink:0;">${i.icon}</span><span>${i.text}</span></div>`).join('')}
+      <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">💡 Insights</div>
+      ${insights.map(i=>`<div class="${i.cls}" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:var(--r);margin-bottom:5px;font-size:12px;font-weight:600;line-height:1.4;"><span style="font-size:16px;flex-shrink:0;">${i.icon}</span><span>${i.text}</span></div>`).join('')}
 
-      <div style="text-align:center;padding:8px 0 4px;font-size:10px;color:var(--muted);">Reconciliation saved · ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</div>
+      <div style="text-align:center;padding:8px 0 2px;font-size:10px;color:var(--muted);">
+        Saved · ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}
+      </div>
     </div>`;
 
   const panel = document.getElementById('rc-results');
@@ -5587,3 +5707,5 @@ async function viewPastSession(sessionId) {
 }
 window.viewPastSession = viewPastSession;
 window.onCodeInput = onCodeInput;
+window.applyAppUpdate = applyAppUpdate;
+window.dismissAppUpdate = dismissAppUpdate;
