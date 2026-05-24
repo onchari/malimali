@@ -5056,3 +5056,280 @@ function _checkAutoClose() {
 // Check every minute
 setInterval(_checkAutoClose, 60000);
 
+
+// ═══════════════════════════════════════════════════════════
+// INITIALISATION
+// ═══════════════════════════════════════════════════════════
+initDB();
+setTimeout(initFirebase, 800);
+
+// ── Debounced sync ──────────────────────────────────────────
+let _autoSyncTimer = null;
+function scheduleSync() {
+  if (!navigator.onLine || !fbReady || !fbDb) return;
+  clearTimeout(_autoSyncTimer);
+  _autoSyncTimer = setTimeout(() => {
+    forcePushToFirebase(true).catch(() => {});
+  }, 2000);
+}
+
+// ═══════════════════════════════════════════════════════════
+// WINDOW EXPORTS — all onclick= handlers
+// ═══════════════════════════════════════════════════════════
+window.addType = addType;
+window.adjSellQty = adjSellQty;
+window.applyAppUpdate = applyAppUpdate;
+window.attemptLogin = attemptLogin;
+window.cancelEdit = cancelEdit;
+window.clearNotifs = clearNotifs;
+window.closePastSessionSheet = closePastSessionSheet;
+window.closeProfileSheet = closeProfileSheet;
+window.closeSellModal = closeSellModal;
+window.closeSheet = closeSheet;
+window.closeUserMenu = closeUserMenu;
+window.confirmCloseDay = confirmCloseDay;
+window.confirmLogout = confirmLogout;
+window.confirmRestock = confirmRestock;
+window.confirmSale = confirmSale;
+window.dashSetPeriod = dashSetPeriod;
+window.deleteItem = deleteItem;
+window.disconnectFirebase = disconnectFirebase;
+window.dismissAppUpdate = dismissAppUpdate;
+window.dismissInstall = dismissInstall;
+window.editItem = editItem;
+window.filterFinance = filterFinance;
+window.forcePushToFirebase = forcePushToFirebase;
+window.installAppUpdate = installAppUpdate;
+window.onCodeInput = onCodeInput;
+window.openSellFromSheet = openSellFromSheet;
+window.pickEmoji = pickEmoji;
+window.pullFromFirebase = pullFromFirebase;
+window.removeAddPhoto = removeAddPhoto;
+window.renderList = renderList;
+window.renderSellPage = renderSellPage;
+window.resetAllData = resetAllData;
+window.runSyncDebug = runSyncDebug;
+window.saveCurrency = saveCurrency;
+window.saveFinanceEntry = saveFinanceEntry;
+window.saveFirebaseConfig = saveFirebaseConfig;
+window.saveItem = saveItem;
+window.searchSell = searchSell;
+window.selectPayment = selectPayment;
+window.showPage = showPage;
+window.showUserProfile = showUserProfile;
+window.toggleNotifPanel = toggleNotifPanel;
+window.toggleRestock = toggleRestock;
+window.toggleUserMenu = toggleUserMenu;
+window.triggerAddPhotoUpload = triggerAddPhotoUpload;
+window.triggerInstall = triggerInstall;
+window.triggerSheetPhotoUpload = triggerSheetPhotoUpload;
+window.updateFinTypeColor = updateFinTypeColor;
+window.updateProfitPreview = updateProfitPreview;
+window.updateSellModal = updateSellModal;
+
+function onTypeChange() {
+  const typeEl     = UI.el('f-type');
+  const type       = typeEl ? typeEl.value : '';
+  const shoePanel  = UI.el('shoe-size-panel');
+  const stdPricing = UI.el('std-pricing-section');
+  const sizeField  = document.getElementById('f-size-field');
+  if (!shoePanel || !stdPricing) return;
+
+  const isShoe = isFootwearType(type);
+  shoePanel.style.display  = isShoe ? 'block' : 'none';
+  stdPricing.style.display = isShoe ? 'none'  : 'block';
+  if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
+
+  if (isShoe) {
+    _shoeState.group      = null; _shoeState.sizes      = new Set(); _shoeState.perSizeMode= false; _shoeState.shownGroups= new Set();
+    renderShoeGroupButtons();
+    const szGrid = UI.el('shoe-sizes-grid');
+    const szWrap = UI.el('shoe-rows-wrap');
+    const szInner = UI.el('sz-grid');
+    if (szGrid)  szGrid.style.display  = 'none';
+    if (szWrap)  szWrap.style.display  = 'none';
+    if (szInner) szInner.innerHTML = '';
+    const sum = UI.el('shoe-selected-summary');
+    if (sum) sum.innerHTML = '';
+  }
+}
+window.onTypeChange = onTypeChange;
+
+async function renderHistoryPage() {
+  const today     = todayDateStr();
+  const todayFull = new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+  // Set today header
+  UI.setText('hist-today-date', todayFull);
+
+  // All data
+  const allSales    = await dbAll('sales');
+  const allFinances = await dbAll('finances');
+
+  // Today's sales
+  const todaySales = allSales.filter(s => (s.businessDate || s.date?.slice(0,10)) === today);
+  const todayRev   = todaySales.reduce((s,x) => s + x.revenue, 0);
+  const todayProf  = todaySales.reduce((s,x) => s + x.profit, 0);
+
+  UI.setText('hist-today-revenue', fmt(todayRev));
+  UI.setText('hist-today-profit',  fmt(todayProf));
+  UI.setText('hist-today-sales',   todaySales.length);
+
+  // Today sales list
+  const todayList = UI.el('hist-today-list');
+  if (todayList) {
+    if (!todaySales.length) {
+      todayList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales today yet.</div>';
+    } else {
+      const sorted = [...todaySales].sort((a,b) => new Date(b.date) - new Date(a.date));
+      todayList.innerHTML = sorted.map(s => `
+        <div class="hist-sale-row">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              ${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize?' · Size '+escapeHtml(s.itemSize):''}
+            </div>
+            <div style="font-size:11px;color:var(--muted);">
+              ${s.qty} × ${fmt(s.actualPrice||s.sellPrice||0)} · ${s.paymentMethod||'cash'} · ${fmtTime(s.date)}
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
+            <div style="font-size:11px;color:var(--green);font-family:var(--mono);">+${fmt(s.profit)}</div>
+          </div>
+        </div>`).join('');
+    }
+  }
+
+  // Past records grouped by date
+  const filterEl = UI.el('hist-period-filter');
+  const days     = filterEl ? parseInt(filterEl.value) || 999 : 30;
+  const cutoff   = new Date();
+  if (!isNaN(days)) cutoff.setDate(cutoff.getDate() - days);
+
+  // Group sales by date (excluding today)
+  const byDate = {};
+  allSales.forEach(s => {
+    const d = s.businessDate || s.date?.slice(0,10) || today;
+    if (d === today) return; // today shown separately
+    if (!isNaN(days) && new Date(d) < cutoff) return;
+    if (!byDate[d]) byDate[d] = { sales: [], revenue: 0, profit: 0 };
+    byDate[d].sales.push(s);
+    byDate[d].revenue += s.revenue;
+    byDate[d].profit  += s.profit;
+  });
+
+  const datesSorted = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
+  const recList = UI.el('hist-records-list');
+  if (recList) {
+    if (!datesSorted.length) {
+      recList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:16px 0;text-align:center;">No historical records in this period.</div>';
+    } else {
+      recList.innerHTML = datesSorted.map(date => {
+        const day   = byDate[date];
+        const label = new Date(date + 'T12:00:00').toLocaleDateString('en-GB',
+                      { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+        const rows  = [...day.sales]
+          .sort((a,b) => new Date(b.date) - new Date(a.date))
+          .slice(0, 5)
+          .map(s => `
+            <div class="hist-sale-row" style="border-top:1px solid var(--border);">
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                  ${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize?' · Sz'+escapeHtml(s.itemSize):''}
+                </div>
+                <div style="font-size:10px;color:var(--muted);">${s.qty} × ${fmt(s.actualPrice||s.sellPrice||0)} · ${fmtTime(s.date)}</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0;font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
+            </div>`).join('');
+        const more  = day.sales.length > 5
+          ? `<div style="font-size:11px;color:var(--muted);padding:6px 0;text-align:center;">+${day.sales.length-5} more sales</div>` : '';
+
+        return `
+          <div class="hist-day-card">
+            <div class="hist-day-header">
+              <div>
+                <div style="font-size:14px;font-weight:800;">${label}</div>
+                <div style="font-size:11px;color:var(--muted);">${day.sales.length} sale${day.sales.length!==1?'s':''}</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(day.revenue)}</div>
+                <div style="font-size:11px;color:var(--green);font-family:var(--mono);">+${fmt(day.profit)}</div>
+              </div>
+            </div>
+            ${rows}${more}
+          </div>`;
+      }).join('');
+    }
+  }
+}
+window.renderHistoryPage = renderHistoryPage;
+
+function selectSizeGroup(g) {
+  const groups = getShoeGroups();
+  const { min, max } = groups[g];
+  const sizes = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+  const grid  = UI.el('sz-grid');
+  if (!grid) return;
+
+  if (!_shoeState.shownGroups.has(g)) {
+    _shoeState.group = g;
+    _shoeState.shownGroups.add(g);
+
+    const block = document.createElement('div');
+    block.id = 'sz-group-block-' + g;
+    block.style.marginBottom = '10px';
+
+    const label = document.createElement('div');
+    label.className = 'sz-group-divider';
+    label.innerHTML = '<span class="sz-group-tag sz-group-' + g + '" style="cursor:pointer;">' +
+      (g==='S'?'Small / Children':g==='M'?'Medium / Teens':'Large / Adults') +
+      ' (' + min + '–' + max + ') ✕</span>';
+    label.onclick = () => deselectSizeGroup(g);
+    block.appendChild(label);
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
+    sizes.forEach(s => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sz-btn' + (_shoeState.sizes.has(s) ? ' sz-active' : '');
+      btn.id = 'sz-' + s;
+      btn.textContent = s;
+      btn.onclick = () => toggleShoeSize(s);
+      row.appendChild(btn);
+    });
+    block.appendChild(row);
+    grid.appendChild(block);
+
+    const szGrid = UI.el('shoe-sizes-grid');
+    if (szGrid) szGrid.style.display = 'block';
+  } else {
+    deselectSizeGroup(g);
+    return;
+  }
+
+  renderShoeGroupButtons();
+  const szWrap = UI.el('shoe-rows-wrap');
+  if (szWrap && _shoeState.sizes.size > 0) szWrap.style.display = 'block';
+  // Rebuild per-size rows if in per-size mode
+  if (_shoeState.perSizeMode) renderShoeRows();
+}
+window.selectSizeGroup = selectSizeGroup;
+
+function setShoeMode(mode) {
+  _shoeState.perSizeMode = (mode === 'persize');
+
+  // Update tab buttons
+  document.getElementById('mode-tab-shared') .classList.toggle('active', !_shoeState.perSizeMode);
+  document.getElementById('mode-tab-persize').classList.toggle('active',  _shoeState.perSizeMode);
+
+  // Show/hide panels
+  const sharedWrap  = document.getElementById('shoe-shared-wrap');
+  const perSizeWrap = document.getElementById('shoe-per-size-wrap');
+  if (sharedWrap)  sharedWrap.style.display  = _shoeState.perSizeMode ? 'none'  : 'block';
+  if (perSizeWrap) perSizeWrap.style.display = _shoeState.perSizeMode ? 'block' : 'none';
+
+  // Rebuild per-size rows when switching to per-size
+  if (_shoeState.perSizeMode) renderShoeRows();
+}
+window.setShoeMode = setShoeMode;
