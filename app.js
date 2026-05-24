@@ -309,6 +309,31 @@ class UI {
 }
 
 
+// ── Core shoe helpers — defined early so all functions can use them ─
+function isFootwearType(typeName) {
+  if (!typeName) return false;
+  const n = typeName.toLowerCase();
+  return n.includes('shoe') || n.includes('footwear') || n.includes('boot') ||
+         n.includes('sandal') || n.includes('slipper') || n.includes('sneaker');
+}
+
+async function getShoeSizes(itemCode) {
+  if (!itemCode) return [];
+  const all = await dbAll('shoe_sizes');
+  return all.filter(s => s.itemCode === itemCode).sort((a, b) => a.size - b.size);
+}
+
+async function enrichShoeItems(items) {
+  const allSz = await dbAll('shoe_sizes');
+  items.forEach(item => {
+    if (item.isShoe) {
+      const sizes = allSz.filter(s => s.itemCode === item.code);
+      item.qty = sizes.reduce((t, s) => t + (s.qty || 0), 0);
+    }
+  });
+}
+
+
 // ═══════════════════════════════════════════════════════════
 // VALIDATION HELPERS
 // ═══════════════════════════════════════════════════════════
@@ -5444,3 +5469,223 @@ function setShoeMode(mode) {
   if (_shoeState.perSizeMode) renderShoeRows();
 }
 window.setShoeMode = setShoeMode;
+
+// ── Restored shoe functions ──────────────────────────────────────
+
+
+
+
+
+
+
+async function saveShoeItems(baseCode, baseName, type) {
+  if (_shoeState.sizes.size === 0) { toast('⚠️ Select at least one size', 'err'); return false; }
+
+  if (!_shoeState.group) {
+    const firstSize = [..._shoeState.sizes][0];
+    _shoeState.group = _shoeState.groupFor(firstSize) || 'S';
+  }
+
+  let sharedQty = 0, sharedBuy = 0, sharedSell = 0;
+  if (!_shoeState.perSizeMode) {
+    sharedQty  = parseInt(UI.el('shoe-shared-qty')?.value  || '0') || 0;
+    sharedBuy  = parseFloat(UI.el('shoe-shared-buy')?.value  || '0') || 0;
+    sharedSell = parseFloat(UI.el('shoe-shared-sell')?.value || '0') || 0;
+    if (sharedQty  <= 0) { toast('⚠️ Enter quantity per size (must be > 0)', 'err'); return false; }
+    if (sharedBuy  <= 0) { toast('⚠️ Enter buying price',  'err'); return false; }
+    if (sharedSell <= 0) { toast('⚠️ Enter selling price', 'err'); return false; }
+    if (sharedSell < sharedBuy) { toast('⚠️ Sell price cannot be less than buy price', 'err'); return false; }
+  }
+
+  const sorted  = _shoeState.sortedSizes;
+  const allItms = await dbAll('items');
+  let product   = allItms.find(i => i.code === baseCode);
+
+  if (!product) {
+    const pid = await dbAdd('items', {
+      code: baseCode, name: baseName || (type + ' ' + baseCode),
+      type, category: _shoeState.group, isShoe: true,
+      buyPrice:  _shoeState.perSizeMode ? 0 : sharedBuy,
+      sellPrice: _shoeState.perSizeMode ? 0 : sharedSell,
+      profit:    _shoeState.perSizeMode ? 0 : sharedSell - sharedBuy,
+      qty: 0, createdAt: new Date().toISOString(),
+    });
+    product = await dbGet('items', pid);
+  } else if (!_shoeState.perSizeMode) {
+    product.buyPrice  = sharedBuy;
+    product.sellPrice = sharedSell;
+    product.profit    = sharedSell - sharedBuy;
+    await dbPut('items', product);
+  }
+
+  let saved = 0;
+  const perSizeErrors = [];
+  for (const size of sorted) {
+    let qty, buy, sell;
+    if (_shoeState.perSizeMode) {
+      qty  = parseInt(UI.el('shr-qty-'  + size)?.value || '0') || 0;
+      buy  = parseFloat(UI.el('shr-buy-'  + size)?.value || '0') || 0;
+      sell = parseFloat(UI.el('shr-sell-' + size)?.value || '0') || 0;
+      if (qty  <= 0) { perSizeErrors.push('Size ' + size + ': qty must be > 0'); continue; }
+      if (buy  <= 0) { perSizeErrors.push('Size ' + size + ': buy price required'); continue; }
+      if (sell <= 0) { perSizeErrors.push('Size ' + size + ': sell price required'); continue; }
+    } else { qty = sharedQty; buy = sharedBuy; sell = sharedSell; }
+
+    await upsertShoeSize({
+      itemCode: baseCode, itemId: product.id,
+      size, sizeGroup: _shoeState.group,
+      qty, buyPrice: buy, sellPrice: sell, profit: sell - buy,
+      codeSize: baseCode + '_' + size,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    });
+    saved++;
+  }
+
+  if (perSizeErrors.length) toast('⚠️ Skipped: ' + perSizeErrors.join(' · '), 'err');
+  if (saved === 0) { toast('⚠️ No sizes saved — fill all required fields', 'err'); return false; }
+
+  const allSz = await getShoeSizes(baseCode);
+  product.qty = allSz.reduce((t, s) => t + s.qty, 0);
+  await dbPut('items', product);
+  fbSyncItem(product);
+
+  if (fbReady && fbDb) {
+    try {
+      const { doc, setDoc } = await waitForFbImports();
+      for (const sz of allSz) {
+        if (!sz.fbId) { sz.fbId = 'sz_' + sz.codeSize; await dbPut('shoe_sizes', sz); }
+        await setDoc(doc(fbDb, 'shoe_sizes', sz.fbId), sanitiseForFirestore({...sz}));
+      }
+    } catch(e) { console.warn('[SYNC] shoe_sizes:', e.message); }
+  }
+  return saved;
+}
+window.saveShoeItems = saveShoeItems;
+
+function deselectSizeGroup(g) {
+  const groups = getShoeGroups();
+  if (!groups[g]) return;
+  const { min, max } = groups[g];
+  for (let s = min; s <= max; s++) _shoeState.sizes.delete(s);
+  const block = document.getElementById('sz-group-block-' + g);
+  if (block) block.remove();
+  _shoeState.shownGroups.delete(g);
+  if (_shoeState.group === g) _shoeState.group      = null;
+  const grid   = UI.el('sz-grid');
+  const szGrid = UI.el('shoe-sizes-grid');
+  if (szGrid && grid && grid.children.length === 0) szGrid.style.display = 'none';
+  const szWrap = UI.el('shoe-rows-wrap');
+  if (szWrap && _shoeState.sizes.size === 0) szWrap.style.display = 'none';
+  renderShoeGroupButtons();
+  renderShoeSummary();
+  renderShoeRows();
+}
+window.deselectSizeGroup = deselectSizeGroup;
+
+function toggleShoeSize(s) {
+  if (_shoeState.sizes.has(s)) _shoeState.sizes.delete(s); else _shoeState.sizes.add(s);
+
+  // Update button appearance
+  document.querySelectorAll('.sz-btn').forEach(b => {
+    b.classList.toggle('sz-active', _shoeState.sizes.has(parseInt(b.textContent)));
+  });
+
+  const szWrap = UI.el('shoe-rows-wrap');
+  if (szWrap) szWrap.style.display = _shoeState.sizes.size > 0 ? 'block' : 'none';
+
+  // If switching to persize and rows already rendered, rebuild them
+  if (_shoeState.perSizeMode) renderShoeRows();
+  renderShoeSummary();
+}
+window.toggleShoeSize = toggleShoeSize;
+
+// ── Shoe size action handlers ─────────────────────────────────────
+async function openShoeSizeRestock(itemId, size) {
+  const item = await dbGet('items', itemId);
+  if (!item) { toast('Item not found', 'err'); return; }
+  const sizes  = await getShoeSizes(item.code);
+  const sizeRec = sizes.find(s => s.size === size);
+  if (!sizeRec) { toast('Size record not found', 'err'); return; }
+  showPage('add');
+  setTimeout(() => {
+    UI.el('f-type').value  = item.type  || '';
+    UI.el('f-code').value  = item.code  || '';
+    UI.el('f-name').value  = item.name  || '';
+    UI.el('edit-id').value = 'shoe_restock_' + itemId + '_' + size;
+    UI.el('f-qty').value   = '';
+    UI.el('f-buy').value   = sizeRec.buyPrice  || '';
+    UI.el('f-sell').value  = sizeRec.sellPrice || '';
+    onTypeChange();
+    ['f-code','f-type','f-name','f-size','f-buy','f-sell'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.disabled = true; el.style.opacity = '0.45'; el.style.cursor = 'not-allowed'; }
+    });
+    const qtyEl = UI.el('f-qty');
+    if (qtyEl) { qtyEl.disabled = false; qtyEl.style.opacity = '1'; qtyEl.style.cursor = ''; qtyEl.focus(); }
+    UI.el('save-btn').textContent = '📦 Add to Stock — Size ' + size + ' (currently ' + (sizeRec.qty||0) + ')';
+    UI.el('form-mode-label').textContent = '📦 Restock Size ' + size + ' · Current: ' + (sizeRec.qty||0);
+    UI.el('cancel-edit-btn').style.display = 'block';
+  }, 100);
+}
+window.openShoeSizeRestock = openShoeSizeRestock;
+
+async function openShoeSizeEdit(itemId, size) {
+  const item = await dbGet('items', itemId);
+  if (!item) { toast('Item not found', 'err'); return; }
+  const sizes   = await getShoeSizes(item.code);
+  const sizeRec = sizes.find(s => s.size === size);
+  if (!sizeRec) { toast('Size record not found', 'err'); return; }
+  showPage('add');
+  setTimeout(() => {
+    UI.el('f-type').value  = item.type  || '';
+    UI.el('f-code').value  = item.code  || '';
+    UI.el('f-name').value  = item.name  || '';
+    UI.el('f-size').value  = size;
+    UI.el('f-qty').value   = sizeRec.qty   ?? '';
+    UI.el('f-buy').value   = sizeRec.buyPrice  || '';
+    UI.el('f-sell').value  = sizeRec.sellPrice || '';
+    UI.el('edit-id').value = 'shoe_edit_' + itemId + '_' + size;
+    onTypeChange();
+    ['f-code','f-type','f-name','f-size'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.disabled = true; el.style.opacity = '0.45'; el.style.cursor = 'not-allowed'; }
+    });
+    UI.el('save-btn').textContent = '💾 Save Size ' + size;
+    UI.el('form-mode-label').textContent = '✏️ Edit Size ' + size + ' — ' + item.code;
+    UI.el('cancel-edit-btn').style.display = 'block';
+    updateProfitPreview();
+  }, 100);
+}
+window.openShoeSizeEdit = openShoeSizeEdit;
+
+async function openSellShoeModal(itemId, size) {
+  const item = await dbGet('items', itemId);
+  if (!item) { toast('Item not found', 'err'); return; }
+  const sizes   = await getShoeSizes(item.code);
+  const sizeRec = sizes.find(s => s.size === size);
+  if (!sizeRec || sizeRec.qty <= 0) { toast('Size ' + size + ' is out of stock', 'err'); return; }
+  _isShoeSale   = true;
+  _sellShoeItem = item;
+  _sellShoeSize = sizeRec;
+  currentSellItemId = itemId;
+  const t = getTypeObj(item.type);
+  const el = id => document.getElementById(id);
+  if (el('sm-icon'))  { el('sm-icon').textContent = t.emoji; el('sm-icon').style.background = t.color || 'var(--surface2)'; }
+  if (el('sm-name'))  el('sm-name').textContent  = item.name + ' (Size ' + size + ')';
+  if (el('sm-meta'))  el('sm-meta').textContent  = item.code + ' · Size ' + size;
+  if (el('sm-stock')) el('sm-stock').textContent = sizeRec.qty;
+  if (el('sm-sell'))  el('sm-sell').textContent  = fmt(sizeRec.sellPrice || item.sellPrice || 0);
+  if (el('sm-cur'))   el('sm-cur').textContent   = currency;
+  if (el('sm-qty'))   { el('sm-qty').value = 1; el('sm-qty').max = sizeRec.qty; }
+  if (el('sm-actual')) el('sm-actual').value = '';
+  const sellModal = document.getElementById('sell-modal');
+  if (sellModal) sellModal.classList.add('open');
+  updateSellModal();
+}
+window.openSellShoeModal = openSellShoeModal;
+
+async function closeShoeSizeActions() {
+  const sheet = document.getElementById('shoe-size-action-sheet');
+  if (sheet) sheet.classList.remove('open');
+}
+window.closeShoeSizeActions = closeShoeSizeActions;
