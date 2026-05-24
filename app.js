@@ -1371,7 +1371,6 @@ async function renderList() {
       <p>${allItems.length ? 'No items match your search.' : 'No items yet.\nTap ➕ Add Item to get started.'}</p>
     </div>`;
     return;
-    return;
   }
 
   // Sales index for profit display
@@ -2288,7 +2287,10 @@ function showSplash(name, sell, profit) {
 
 // ===== MAKE A SALE =====
 let currentSellItemId = null;
-let _selectedPayment = 'cash'; // cash | mpesa
+let _selectedPayment  = 'cash';  // cash | mpesa
+let _isShoeSale       = false;
+let _sellShoeItem     = null;
+let _sellShoeSize     = null;    // full sizeRec object
 
 async function searchSell() {
   try {
@@ -3557,9 +3559,7 @@ async function confirmCloseDay() {
   scheduleSync();
 }
 
-function cancelCloseDay() {
-  document.getElementById('day-summary-sheet').classList.remove('open');
-}
+// cancelCloseDay: handled by day reconciliation flow below
 
 // ── BANNER LIVE CLOCK — refresh duration display every minute ────────
 let _bannerClockTimer = null;
