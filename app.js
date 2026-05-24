@@ -4761,7 +4761,7 @@ function renderDayState() {
   const isOpen = activeDay && (activeDay.status === 'OPEN');
 
   // All step divs
-  const steps = ['open','opening_form','close_btn','closing_form','reconciled'];
+  const steps = ['open','opening-form','close-btn','closing-form','reconciled'];
   steps.forEach(s => {
     const el = document.getElementById('day-step-' + s);
     if (el) el.style.display = 'none';
@@ -4866,14 +4866,16 @@ async function reconcileDay() {
   const withdrawn = parseFloat(document.getElementById('cl-withdrawn')?.value)  || 0;
 
   if (cash === 0 && till === 0 && mpesa === 0) {
-    toast('⚠️ Enter at least Cash, Till or M-Pesa closing balance', 'err'); return;
+    toast('⚠️ Enter at least Cash at Hand, Till, or M-Pesa', 'err'); return;
   }
 
-  // System figures
+  // ── System figures (this day only) ──────────────────────
   const allSales = await dbAll('sales');
   const allFins  = await dbAll('finances');
-  const daySales = allSales.filter(s => (s.businessDate||s.business_date||(s.date||'').split('T')[0]) === today);
-  const dayFins  = allFins.filter(e  => (e.date||(e.createdAt||'').split('T')[0]) === today && e.type !== 'reconciliation');
+  const daySales = allSales.filter(s =>
+    (s.businessDate||s.business_date||(s.date||'').split('T')[0]) === today);
+  const dayFins  = allFins.filter(e =>
+    (e.date||(e.createdAt||'').split('T')[0]) === today && e.type !== 'reconciliation');
 
   const sysCashRev   = daySales.filter(s=>!s.paymentMethod||s.paymentMethod==='cash').reduce((a,s)=>a+(s.revenue||0),0);
   const sysMpesaRev  = daySales.filter(s=>s.paymentMethod==='mpesa').reduce((a,s)=>a+(s.revenue||0),0);
@@ -4882,37 +4884,54 @@ async function reconcileDay() {
   const salesCount   = daySales.length;
   const margin       = sysTotalRev > 0 ? (sysTotalProf/sysTotalRev*100) : 0;
 
-  // Day Money formula
-  const dayMoney    = injected + cash + till + mpesa + expenses + withdrawn;
-  const opTotal     = data.opening.total || 0;
-  const expDayMoney = opTotal + sysTotalRev + injected;
-  const variance    = dayMoney - expDayMoney;
+  // ── THE TWO FORMULAS ────────────────────────────────────
+  //
+  // CORRECT DAY MONEY
+  // = what you SHOULD have in hand right now
+  // = Opening + Sales + Injected − Expenses − Withdrawn
+  //
+  const opTotal    = (data.opening.cash||0) + (data.opening.till||0) + (data.opening.mpesa||0);
+  const correctDay = opTotal + sysTotalRev + injected - expenses - withdrawn;
 
-  // Cash analysis
-  const expCash  = data.opening.cash + data.opening.till + sysCashRev + injected - expenses - withdrawn;
-  const physCash = cash + till;
-  const cashVar  = physCash - expCash;
-  const expMpesa = data.opening.mpesa + sysMpesaRev;
-  const mpesaVar = mpesa - expMpesa;
-  const netMove  = sysTotalRev + injected - expenses - withdrawn;
+  // ACTUAL DAY MONEY
+  // = what you physically hold right now
+  // = Cash at Hand + Amount in Till + M-Pesa Float
+  const actualDay  = cash + till + mpesa;
 
-  // Build full state
+  // VARIANCE = Actual − Correct
+  // Zero = perfect balance
+  // Positive = surplus (more cash than expected)
+  // Negative = shortage (less cash than expected)
+  const variance   = actualDay - correctDay;
+
+  // ── Per-pocket expected closing (for detail view) ────────
+  // What should be in each pocket right now:
+  const expCash  = (data.opening.cash||0) + (data.opening.till||0) + sysCashRev  + injected - expenses - withdrawn;
+  const expMpesa = (data.opening.mpesa||0) + sysMpesaRev;
+  const physCash  = cash + till;
+  const physMpesa = mpesa;
+  const cashVar   = physCash  - expCash;
+  const mpesaVar  = physMpesa - expMpesa;
+  const netMove   = sysTotalRev + injected - expenses - withdrawn;
+
+  // ── Save state ───────────────────────────────────────────
   const reconciled = {
     step: 'reconciled', date: today,
     lockedAt: data.lockedAt, opening: data.opening,
     reconciledAt: new Date().toISOString(),
-    closing: { injected, cash, till, mpesa, expenses, withdrawn, dayMoney },
-    system:  { sysCashRev, sysMpesaRev, sysTotalRev, sysTotalProf, salesCount, margin },
-    analysis:{ expDayMoney, variance, cashVar, mpesaVar, netMove }
+    closing:  { injected, cash, till, mpesa, expenses, withdrawn },
+    system:   { sysCashRev, sysMpesaRev, sysTotalRev, sysTotalProf, salesCount, margin },
+    analysis: {
+      opTotal, correctDay, actualDay, variance,
+      expCash, expMpesa, physCash, physMpesa, cashVar, mpesaVar, netMove
+    }
   };
   _saveDayRecon(today, reconciled);
 
-  // Close the actual business day record
   await _doCloseDay();
 
-  // Save finance reconciliation record
   await dbAdd('finances', {
-    type:'reconciliation', amount:dayMoney,
+    type:'reconciliation', amount:actualDay,
     description:'Day reconcile · '+today, category:'reconciliation', date:today,
     createdAt:new Date().toISOString(), createdBy:currentUser?currentUser.username:'system',
     details: reconciled
@@ -4972,56 +4991,148 @@ function _renderReconcileInsights(data, today) {
   const cl = data.closing;
   const sy = data.system;
   const an = data.analysis;
+
   const absV = Math.abs(an.variance);
   const isOk = absV <= 5;
   const isWn = !isOk && absV <= 300;
   const vc   = isOk ? 'var(--green)' : isWn ? '#d97706' : 'var(--red)';
   const vi   = isOk ? '✅' : an.variance > 0 ? '⬆️' : '⬇️';
-  const vl   = isOk ? 'Balanced' : an.variance > 0 ? '+'+fmt(an.variance)+' surplus' : fmt(absV)+' short';
-  const clf  = v => Math.abs(v)<=5?'rc-ok':Math.abs(v)<=300?'rc-warn':'rc-bad';
-  const f2   = v => v === 0 ? '—' : fmt(v);
-  const row  = (ic, lbl, val, col) =>
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);">' +
-      '<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:15px;">'+ic+'</span><span style="font-size:12px;font-weight:700;color:var(--text);">'+lbl+'</span></div>' +
-      '<span style="font-size:13px;font-weight:900;font-family:var(--mono);color:'+col+';">'+val+'</span>' +
-    '</div>';
+  const vl   = isOk ? 'Balanced'
+             : an.variance > 0 ? '+'+fmt(an.variance)+' surplus'
+             : fmt(absV)+' short';
+  const clf  = v => Math.abs(v) <= 5 ? 'rc-ok' : Math.abs(v) <= 300 ? 'rc-warn' : 'rc-bad';
 
-  // Insights
+  // ── Per-pocket row ─────────────────────────────────────
+  const pocketRow = (icon, lbl, opening, expected, physical) => {
+    const v   = physical - expected;
+    const cls = clf(v);
+    const vs  = Math.abs(v) <= 5 ? '✅' : v > 0 ? '⬆️ +'+fmt(v) : '⬇️ -'+fmt(Math.abs(v));
+    const vc2 = Math.abs(v) <= 5 ? 'var(--green)' : v > 0 ? '#d97706' : 'var(--red)';
+    return '<div class="'+cls+'" style="padding:10px 12px;border-bottom:1px solid var(--border);">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">' +
+        '<div style="display:flex;align-items:center;gap:7px;">' +
+          '<span style="font-size:15px;">'+icon+'</span>' +
+          '<span style="font-size:12px;font-weight:800;color:var(--text);">'+lbl+'</span>' +
+        '</div>' +
+        '<span style="font-size:11px;font-weight:800;color:'+vc2+';">'+vs+'</span>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;text-align:center;">' +
+        '<div style="background:var(--surface2);border-radius:var(--r);padding:5px 4px;">' +
+          '<div style="font-size:12px;font-weight:900;font-family:var(--mono);color:var(--muted);">'+fmt(opening)+'</div>' +
+          '<div style="font-size:9px;color:var(--muted);margin-top:1px;font-weight:600;text-transform:uppercase;">Opening</div>' +
+        '</div>' +
+        '<div style="background:#eef4ff;border-radius:var(--r);padding:5px 4px;">' +
+          '<div style="font-size:12px;font-weight:900;font-family:var(--mono);color:var(--accent);">'+fmt(expected)+'</div>' +
+          '<div style="font-size:9px;color:var(--muted);margin-top:1px;font-weight:600;text-transform:uppercase;">Expected</div>' +
+        '</div>' +
+        '<div style="background:'+(Math.abs(v)<=5?'var(--green-light)':Math.abs(v)<=300?'#fef3c7':'var(--red-light)')+';border-radius:var(--r);padding:5px 4px;">' +
+          '<div style="font-size:12px;font-weight:900;font-family:var(--mono);color:'+vc2+';">'+fmt(physical)+'</div>' +
+          '<div style="font-size:9px;color:var(--muted);margin-top:1px;font-weight:600;text-transform:uppercase;">Physical</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  };
+
+  // ── Insights ──────────────────────────────────────────
   const ins = [];
-  if (isOk)           ins.push({i:'🎯',c:'rc-ok',  t:'Perfect — every shilling accounted for!'});
-  else if(an.variance>0) ins.push({i:'⬆️',c:'rc-warn',t:'Surplus of '+fmt(an.variance)+'. Check for unrecorded injection or double-count.'});
-  else                ins.push({i:'⬇️',c:'rc-bad',  t:'Short by '+fmt(absV)+'. Check for unrecorded expense, withdrawal, or missing sale.'});
-  if(Math.abs(an.cashVar)>50)  ins.push({i:'💵',c:clf(an.cashVar),  t:'Cash variance: '+(an.cashVar>0?'+':'')+fmt(an.cashVar)+'. Recount notes & coins.'});
-  if(Math.abs(an.mpesaVar)>50) ins.push({i:'📱',c:clf(an.mpesaVar), t:'M-Pesa variance: '+(an.mpesaVar>0?'+':'')+fmt(an.mpesaVar)+'. Check M-Pesa statement.'});
-  if(sy.margin<10&&sy.sysTotalRev>0) ins.push({i:'📉',c:'rc-warn',t:'Low margin today: '+sy.margin.toFixed(1)+'%.'});
-  else if(sy.margin>=30&&sy.sysTotalRev>0) ins.push({i:'🎉',c:'rc-ok',t:'Great margin today: '+sy.margin.toFixed(1)+'%!'});
-  if(an.netMove<0) ins.push({i:'🚨',c:'rc-bad',t:'Net movement negative ('+fmt(an.netMove)+'). Spent more than earned.'});
+  if (isOk) {
+    ins.push({i:'🎯',c:'rc-ok',  t:'Perfect — every shilling accounted for!'});
+  } else if (an.variance > 0) {
+    ins.push({i:'⬆️',c:'rc-warn',t:'Surplus of '+fmt(an.variance)+'. More cash than expected. Check for unrecorded injection, or a deposit not captured.'});
+  } else {
+    ins.push({i:'⬇️',c:'rc-bad', t:'Short by '+fmt(absV)+'. Less cash than expected. Check for unrecorded expense, undeclared withdrawal, or theft.'});
+  }
+  if (Math.abs(an.cashVar)  > 50 && Math.abs(an.mpesaVar) <= 50)
+    ins.push({i:'💵',c:clf(an.cashVar),  t:'Cash discrepancy ('+fmt(Math.abs(an.cashVar))+'). M-Pesa is balanced — issue is in physical cash.'});
+  if (Math.abs(an.mpesaVar) > 50 && Math.abs(an.cashVar)  <= 50)
+    ins.push({i:'📱',c:clf(an.mpesaVar), t:'M-Pesa discrepancy ('+fmt(Math.abs(an.mpesaVar))+'). Cash is balanced — check M-Pesa statement.'});
+  if (Math.abs(an.cashVar)  > 50 && Math.abs(an.mpesaVar) > 50)
+    ins.push({i:'⚠️',c:'rc-bad',         t:'Both Cash and M-Pesa are off. Recount everything carefully.'});
+  if (cl.expenses > 0 && sy.sysTotalRev > 0 && cl.expenses > sy.sysTotalRev * 0.35)
+    ins.push({i:'💸',c:'rc-warn',t:'Expenses ('+fmt(cl.expenses)+') are '+((cl.expenses/sy.sysTotalRev)*100).toFixed(0)+'% of revenue — high for today.'});
+  if (sy.margin < 10 && sy.sysTotalRev > 0)
+    ins.push({i:'📉',c:'rc-warn',t:'Low margin: '+sy.margin.toFixed(1)+'%. Review prices or costs.'});
+  else if (sy.margin >= 30 && sy.sysTotalRev > 0)
+    ins.push({i:'🎉',c:'rc-ok', t:'Great margin: '+sy.margin.toFixed(1)+'%!'});
+  if (an.netMove < 0)
+    ins.push({i:'🚨',c:'rc-bad',t:'Net movement is negative ('+fmt(an.netMove)+'). Business paid out more than it earned today.'});
+  if (sy.salesCount === 0)
+    ins.push({i:'😴',c:'rc-warn',t:'No sales recorded today.'});
 
   el.innerHTML =
-    '<div class="day-section-label">📊 Summary</div>' +
-    '<div class="day-card day-card-green" style="padding:0;margin-bottom:8px;">' +
-      row('💵','Cash Sales',    '+'+fmt(sy.sysCashRev),  'var(--green)') +
-      row('📱','M-Pesa Sales',  '+'+fmt(sy.sysMpesaRev), 'var(--green)') +
-      row('🛒','Total Revenue',  fmt(sy.sysTotalRev),     'var(--accent2)') +
-      row('📈','Profit · '+sy.margin.toFixed(1)+'%', fmt(sy.sysTotalProf), sy.sysTotalProf>=0?'var(--green)':'var(--red)') +
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f0faf4;">' +
-      '<span style="font-size:12px;font-weight:800;color:var(--green);">Net Movement</span>' +
-      '<span style="font-size:15px;font-weight:900;font-family:var(--mono);color:'+(an.netMove>=0?'var(--green)':'var(--red)')+';">'+(an.netMove>=0?'+':'')+fmt(an.netMove)+'</span>' +
-    '</div></div>' +
-
-    '<div class="day-section-label">⚖️ Reconciliation</div>' +
-    '<div class="day-card" style="padding:0;margin-bottom:8px;">' +
-      row('📦','Expected Day Money', fmt(an.expDayMoney), 'var(--text)') +
-      row('💰','Physical Day Money', fmt(cl.dayMoney),    'var(--text)') +
-      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:'+(isOk?'var(--green-light)':isWn?'#fef3c7':'var(--red-light)')+';">' +
-        '<span style="font-size:13px;font-weight:800;color:'+vc+';">Variance</span>' +
-        '<span style="font-size:16px;font-weight:900;font-family:var(--mono);color:'+vc+';">'+vi+' '+vl+'</span>' +
+    // ── Sales summary ──────────────────────────────────
+    '<div class="day-section-label">📊 Today Summary</div>' +
+    '<div style="border:1.5px solid #a8d8b5;border-radius:var(--r-lg);overflow:hidden;margin-bottom:8px;">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;text-align:center;background:var(--surface);">' +
+        '<div style="padding:10px 4px;border-right:1px solid var(--border);"><div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--green);">'+sy.salesCount+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Sales</div></div>' +
+        '<div style="padding:10px 4px;border-right:1px solid var(--border);"><div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--green);">'+fmt(sy.sysTotalRev)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Revenue</div></div>' +
+        '<div style="padding:10px 4px;border-right:1px solid var(--border);"><div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--green);">'+fmt(sy.sysTotalProf)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Profit</div></div>' +
+        '<div style="padding:10px 4px;"><div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--accent);">'+sy.margin.toFixed(1)+'%</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Margin</div></div>' +
+      '</div>' +
+      (cl.injected > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>💉 Injected</span><span style="font-weight:800;color:var(--green);">+'+fmt(cl.injected)+'</span></div>' : '') +
+      (cl.expenses  > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>💸 Expenses</span><span style="font-weight:800;color:var(--red);">-'+fmt(cl.expenses)+'</span></div>' : '') +
+      (cl.withdrawn > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>🏧 Withdrawn</span><span style="font-weight:800;color:#d97706;">-'+fmt(cl.withdrawn)+'</span></div>' : '') +
+      '<div style="display:flex;justify-content:space-between;padding:9px 12px;border-top:1px solid #a8d8b5;background:#f0faf4;font-size:12px;font-weight:800;">' +
+        '<span style="color:var(--green);">Net Movement</span>' +
+        '<span style="font-family:var(--mono);color:'+(an.netMove>=0?'var(--green)':'var(--red)')+';">'+(an.netMove>=0?'+':'')+fmt(an.netMove)+'</span>' +
       '</div>' +
     '</div>' +
 
+    // ── The two money totals ────────────────────────────
+    '<div class="day-section-label">⚖️ Day Money Check</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
+      '<div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;">' +
+        '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Should Have</div>' +
+        '<div style="font-size:10px;color:var(--muted);line-height:2;margin-bottom:8px;">' +
+          'Opening: <b>'+fmt(an.opTotal)+'</b><br>+ Sales: <b>'+fmt(sy.sysTotalRev)+'</b>' +
+          (cl.injected>0?'<br>+ Injected: <b>'+fmt(cl.injected)+'</b>':'') +
+          (cl.expenses>0?'<br>− Expenses: <b>'+fmt(cl.expenses)+'</b>':'') +
+          (cl.withdrawn>0?'<br>− Withdrawn: <b>'+fmt(cl.withdrawn)+'</b>':'') +
+        '</div>' +
+        '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--accent);border-top:1px solid var(--border);padding-top:8px;">'+fmt(an.correctDay)+'</div>' +
+      '</div>' +
+      '<div style="background:'+(isOk?'var(--green-light)':isWn?'#fef3c7':'var(--red-light)')+';border:1.5px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';border-radius:var(--r-lg);padding:12px 14px;">' +
+        '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Actually Have</div>' +
+        '<div style="font-size:10px;color:var(--muted);line-height:2;margin-bottom:8px;">' +
+          'Cash: <b>'+fmt(cl.cash)+'</b><br>Till: <b>'+fmt(cl.till)+'</b><br>M-Pesa: <b>'+fmt(cl.mpesa)+'</b>' +
+        '</div>' +
+        '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:'+vc+';border-top:1px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';padding-top:8px;">'+fmt(an.actualDay)+'</div>' +
+      '</div>' +
+    '</div>' +
+      '<div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;">' +
+        '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Correct Day Money</div>' +
+        '<div style="font-size:10px;color:var(--muted);line-height:1.8;margin-bottom:8px;">' +
+          'Opening: '+fmt(an.opTotal)+'<br>' +
+          '+ Sales: '+fmt(sy.sysTotalRev)+(cl.injected>0?'<br>+ Injected: '+fmt(cl.injected):'')+(cl.expenses>0?'<br>+ Expenses: '+fmt(cl.expenses):'')+(cl.withdrawn>0?'<br>+ Withdrawn: '+fmt(cl.withdrawn):'') +
+        '</div>' +
+        '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--text);border-top:1px solid var(--border);padding-top:8px;">'+fmt(an.correctDay)+'</div>' +
+      '</div>' +
+      '<div style="background:'+(isOk?'var(--green-light)':isWn?'#fef3c7':'var(--red-light)')+';border:1.5px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';border-radius:var(--r-lg);padding:12px 14px;">' +
+        '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Actual Day Money</div>' +
+        '<div style="font-size:10px;color:var(--muted);line-height:1.8;margin-bottom:8px;">' +
+          'Cash: '+fmt(cl.cash)+'<br>Till: '+fmt(cl.till)+'<br>M-Pesa: '+fmt(cl.mpesa) +
+          (cl.expenses>0?'<br>+ Expenses: '+fmt(cl.expenses):'') +
+          (cl.withdrawn>0?'<br>+ Withdrawn: '+fmt(cl.withdrawn):'') +
+        '</div>' +
+        '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:'+vc+';border-top:1px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';padding-top:8px;">'+fmt(an.actualDay)+'</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:'+(isOk?'var(--green-light)':isWn?'#fef3c7':'var(--red-light)')+';border:1.5px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';border-radius:var(--r-lg);margin-bottom:8px;">' +
+      '<span style="font-size:13px;font-weight:800;color:'+vc+';">Variance</span>' +
+      '<span style="font-size:20px;font-weight:900;font-family:var(--mono);color:'+vc+';">'+vi+' '+vl+'</span>' +
+    '</div>' +
+
+    // ── Per-pocket detail ───────────────────────────────
+    '<div class="day-section-label">🔍 Pocket Detail</div>' +
+    '<div style="border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;margin-bottom:8px;">' +
+      pocketRow('💵', 'Cash (Hand + Till)', (o.cash||0)+(o.till||0), an.expCash,  an.physCash) +
+      pocketRow('📱', 'M-Pesa Float',        o.mpesa||0,              an.expMpesa, an.physMpesa) +
+    '</div>' +
+
+    // ── Insights ─────────────────────────────────────────
     '<div class="day-section-label">💡 Insights</div>' +
     ins.map(i=>'<div class="'+i.c+'" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:var(--r);margin-bottom:5px;font-size:12px;font-weight:600;line-height:1.4;"><span style="font-size:16px;flex-shrink:0;">'+i.i+'</span><span>'+i.t+'</span></div>').join('') +
-    '<div style="text-align:center;font-size:10px;color:var(--muted);padding:6px 0;">Closed & reconciled at '+new Date(data.reconciledAt||0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'</div>';
+    '<div style="text-align:center;font-size:10px;color:var(--muted);padding:6px 0;">Reconciled at '+new Date(data.reconciledAt||0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'</div>';
 }
 
 // ── dayStartOver ─────────────────────────────────────────────────
