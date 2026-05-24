@@ -1738,7 +1738,7 @@
      ============================================================== -->
 <div class="page" id="page-day">
 
-  <!-- ── Date / Open-Day banner ─────────────────────────────── -->
+  <!-- ── Day status banner ──────────────────────────────────── -->
   <div id="day-banner" class="day-banner-card">
     <div class="day-banner-inner">
       <div>
@@ -1753,26 +1753,42 @@
     <div id="day-action-area"></div>
   </div>
 
-  <div id="day-live">
+  <!-- ── KPIs (always visible) ──────────────────────────────── -->
+  <div class="day-kpi-grid">
+    <div class="day-kpi day-kpi-green">
+      <div id="day-sales-count" class="day-kpi-val">0</div>
+      <div class="day-kpi-lbl">Sales</div>
+    </div>
+    <div class="day-kpi day-kpi-green">
+      <div id="day-revenue" class="day-kpi-val day-kpi-sm">0</div>
+      <div class="day-kpi-lbl">Revenue</div>
+    </div>
+    <div class="day-kpi day-kpi-green">
+      <div id="day-profit" class="day-kpi-val day-kpi-sm">0</div>
+      <div class="day-kpi-lbl">Profit</div>
+    </div>
+    <div class="day-kpi">
+      <div id="day-margin-pct" class="day-kpi-val day-kpi-sm" style="color:var(--accent);">0%</div>
+      <div class="day-kpi-lbl">Margin</div>
+    </div>
+  </div>
 
-    <!-- ══════════════════════════════════════════════════════
-         SECTION 1 — OPENING BALANCES
-         User enters what was in each pot at start of day
-         ══════════════════════════════════════════════════════ -->
-    <div class="day-section-label">🌅 Opening Balances</div>
-    <div class="day-card" style="border-width:2px;border-color:#a8d8b5;overflow:hidden;">
-
+  <!-- ═══════════════════════════════════════════════════════
+       STATE A — OPENING FORM (shown when no opening recorded)
+       ══════════════════════════════════════════════════════ -->
+  <div id="day-state-opening">
+    <div class="day-section-label">🌅 Record Opening Balances</div>
+    <div class="day-card" style="border:2px solid var(--green);overflow:hidden;">
       <div class="day-recon-header" style="background:var(--green);">
-        <div class="day-recon-header-title">What did you start the day with?</div>
-        <div class="day-recon-header-sub">Enter the opening amounts in each location</div>
+        <div class="day-recon-header-title">What do you have at the start of today?</div>
+        <div class="day-recon-header-sub">These will be locked once you tap Start Day</div>
       </div>
-
       <div class="day-recon-fields">
         <div class="day-recon-row">
           <span class="day-recon-emoji">💵</span>
           <div class="day-recon-info">
             <div class="day-recon-field-label">Cash at Hand</div>
-            <div class="day-recon-field-sub">Loose cash / float at start of day</div>
+            <div class="day-recon-field-sub">Loose notes &amp; coins (float)</div>
           </div>
           <input id="op-cash" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
@@ -1780,178 +1796,145 @@
           <span class="day-recon-emoji">🏧</span>
           <div class="day-recon-info">
             <div class="day-recon-field-label">Amount in Till</div>
-            <div class="day-recon-field-sub">Cash inside the register / till drawer</div>
+            <div class="day-recon-field-sub">Cash inside the register</div>
           </div>
           <input id="op-till" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <div class="day-recon-row" style="border-bottom:none;">
           <span class="day-recon-emoji">📱</span>
           <div class="day-recon-info">
-            <div class="day-recon-field-label">Amount in M-Pesa</div>
-            <div class="day-recon-field-sub">M-Pesa float / till at start of day</div>
+            <div class="day-recon-field-label">M-Pesa Float</div>
+            <div class="day-recon-field-sub">M-Pesa till balance</div>
           </div>
           <input id="op-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
+        <button onclick="lockOpeningBalances()" class="day-recon-btn" style="background:var(--green);">
+          🌅 Start Day — Lock Opening Balances
+        </button>
       </div>
     </div>
+  </div>
 
-    <!-- ══════════════════════════════════════════════════════
-         SECTION 2 — SYSTEM SALES SUMMARY (read-only)
-         Auto-calculated from sales records
-         ══════════════════════════════════════════════════════ -->
-    <div class="day-section-label">📊 Today's Sales (System)</div>
-    <div class="day-kpi-grid">
-      <div class="day-kpi day-kpi-green">
-        <div id="day-sales-count" class="day-kpi-val">0</div>
-        <div class="day-kpi-lbl">Sales</div>
-      </div>
-      <div class="day-kpi day-kpi-green">
-        <div id="day-revenue" class="day-kpi-val day-kpi-sm">0</div>
-        <div class="day-kpi-lbl">Revenue</div>
-      </div>
-      <div class="day-kpi day-kpi-green">
-        <div id="day-profit" class="day-kpi-val day-kpi-sm">0</div>
-        <div class="day-kpi-lbl">Profit</div>
-      </div>
-      <div class="day-kpi">
-        <div id="day-margin-pct" class="day-kpi-val day-kpi-sm accent">0%</div>
-        <div class="day-kpi-lbl">Margin</div>
-      </div>
+  <!-- ═══════════════════════════════════════════════════════
+       STATE B — OPENING LOCKED, CLOSING FORM
+       ══════════════════════════════════════════════════════ -->
+  <div id="day-state-closing" style="display:none;">
+
+    <!-- Locked opening summary -->
+    <div class="day-section-label">🌅 Opening Balances <span style="color:var(--green);font-size:9px;margin-left:4px;">● LOCKED</span></div>
+    <div class="day-card" style="border-color:#a8d8b5;background:#f0faf4;">
+      <div id="day-opening-summary" style="padding:10px 14px;"></div>
     </div>
 
-    <div class="day-card day-card-green">
-      <div class="day-row" style="border-bottom:1px solid #e2f0e6;">
-        <div class="day-row-info">
-          <span class="day-row-label">💵 Cash Sales</span>
-          <span id="day-cash-sales-count" class="day-row-sub"></span>
-        </div>
-        <span id="day-cash-sales" class="day-row-val green">0</span>
-      </div>
-      <div class="day-row" style="border-bottom:1px solid #e2f0e6;">
-        <div class="day-row-info">
-          <span class="day-row-label">📱 M-Pesa Sales</span>
-          <span id="day-mpesa-sales-count" class="day-row-sub"></span>
-        </div>
-        <span id="day-mpesa-sales" class="day-row-val green">0</span>
-      </div>
-      <div class="day-row day-row-total day-row-total-green">
-        <span class="day-row-total-label">Total Revenue</span>
-        <span id="day-total-in" class="day-row-total-val green">0</span>
-      </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════════════════
-         SECTION 3 — RECORD THE DAY
-         User enters what physically happened today
-         ══════════════════════════════════════════════════════ -->
-    <div class="day-section-label">📝 Record the Day</div>
-    <div class="day-card" style="border-width:2px;border-color:var(--accent);overflow:hidden;">
-
+    <!-- Closing form -->
+    <div class="day-section-label" style="margin-top:8px;">🌙 Record Closing Balances</div>
+    <div class="day-card" style="border:2px solid var(--accent);overflow:hidden;">
       <div class="day-recon-header">
-        <div class="day-recon-header-title">Enter what physically happened today</div>
-        <div class="day-recon-header-sub">Cash in hand, till, M-Pesa, and any money in or out</div>
+        <div class="day-recon-header-title">Count and enter end-of-day amounts</div>
+        <div class="day-recon-header-sub">Day Money = Injected + Cash at Hand + Till + M-Pesa + Expenses + Withdrawn</div>
       </div>
-
       <div class="day-recon-fields">
-
-        <div class="day-recon-section-divider">💰 Closing Positions</div>
-
+        <div class="day-recon-row">
+          <span class="day-recon-emoji">💉</span>
+          <div class="day-recon-info">
+            <div class="day-recon-field-label">Cash Injected</div>
+            <div class="day-recon-field-sub">Extra money added to the business today</div>
+          </div>
+          <input id="cl-injected" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+        </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">💵</span>
           <div class="day-recon-info">
-            <div class="day-recon-field-label">Cash at Hand (now)</div>
-            <div class="day-recon-field-sub">Loose cash / float right now</div>
+            <div class="day-recon-field-label">Cash at Hand</div>
+            <div class="day-recon-field-sub">Loose notes &amp; coins right now</div>
           </div>
-          <input id="rc-cash" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-cash" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">🏧</span>
           <div class="day-recon-info">
-            <div class="day-recon-field-label">Amount in Till (now)</div>
+            <div class="day-recon-field-label">Amount in Till</div>
             <div class="day-recon-field-sub">Cash in the register right now</div>
           </div>
-          <input id="rc-till" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-till" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">📱</span>
           <div class="day-recon-info">
-            <div class="day-recon-field-label">Amount in M-Pesa (now)</div>
-            <div class="day-recon-field-sub">M-Pesa till / float balance now</div>
+            <div class="day-recon-field-label">M-Pesa Float</div>
+            <div class="day-recon-field-sub">M-Pesa till balance right now</div>
           </div>
-          <input id="rc-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
-
-        <div class="day-recon-section-divider">💸 Money Out Today</div>
-
         <div class="day-recon-row">
           <span class="day-recon-emoji">💸</span>
           <div class="day-recon-info">
             <div class="day-recon-field-label">Expenses Paid</div>
-            <div class="day-recon-field-sub">Cash paid out for running costs</div>
+            <div class="day-recon-field-sub">Cash paid out for costs today</div>
           </div>
-          <input id="rc-expenses" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-expenses" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
-        <div class="day-recon-row">
+        <div class="day-recon-row" style="border-bottom:none;">
           <span class="day-recon-emoji">🏧</span>
           <div class="day-recon-info">
             <div class="day-recon-field-label">Amount Withdrawn</div>
-            <div class="day-recon-field-sub">Cash taken out by owner</div>
+            <div class="day-recon-field-sub">Cash taken by owner today</div>
           </div>
-          <input id="rc-withdrawn" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-withdrawn" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
-        <div class="day-recon-row">
-          <span class="day-recon-emoji">🛍️</span>
-          <div class="day-recon-info">
-            <div class="day-recon-field-label">Stock Purchased</div>
-            <div class="day-recon-field-sub">Cash spent buying goods today</div>
-          </div>
-          <input id="rc-stock" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
-        </div>
-
-        <div class="day-recon-section-divider">💉 Money In Today</div>
-
-        <div class="day-recon-row" style="border-bottom:none;">
-          <span class="day-recon-emoji">💉</span>
-          <div class="day-recon-info">
-            <div class="day-recon-field-label">Cash Injected</div>
-            <div class="day-recon-field-sub">Extra cash added to the business</div>
-          </div>
-          <input id="rc-injected" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
-        </div>
-
         <button onclick="reconcileDay()" class="day-recon-btn">
-          🔍 Reconcile &amp; Get Insights
+          🔍 Reconcile &amp; Lock Day
         </button>
       </div>
-
-      <!-- Results appear here -->
-      <div id="rc-results" style="display:none;border-top:2px solid var(--border);"></div>
     </div>
+  </div>
 
-  </div><!-- /day-live -->
+  <!-- ═══════════════════════════════════════════════════════
+       STATE C — RECONCILED (insights only, no forms)
+       ══════════════════════════════════════════════════════ -->
+  <div id="day-state-reconciled" style="display:none;">
+    <div id="day-reconcile-insights"></div>
+    <button onclick="dayStartOver()" class="day-recon-btn"
+            style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);margin-top:4px;">
+      🔄 Start Over (clear today's reconciliation)
+    </button>
+  </div>
 
   <!-- ── Past Sessions ──────────────────────────────────────── -->
-  <div class="day-section-label" style="margin-top:4px;">📅 Past Sessions</div>
+  <div class="day-section-label" style="margin-top:8px;">📅 Past Sessions</div>
   <div id="day-sessions-list" style="margin-bottom:80px;">
     <div class="day-empty">No past sessions yet</div>
   </div>
 
-  <!-- hidden compat IDs still referenced by JS -->
-  <span id="day-purchases"       style="display:none;"></span>
-  <span id="day-injected"        style="display:none;"></span>
-  <span id="day-injected-desc"   style="display:none;"></span>
+  <!-- hidden compat -->
+  <span id="day-purchases" style="display:none;"></span>
+  <span id="day-live"      style="display:none;"></span>
+  <span id="day-cash-sales" style="display:none;"></span>
+  <span id="day-cash-sales-count" style="display:none;"></span>
+  <span id="day-mpesa-sales" style="display:none;"></span>
+  <span id="day-mpesa-sales-count" style="display:none;"></span>
+  <span id="day-total-in" style="display:none;"></span>
+  <span id="day-injected" style="display:none;"></span>
+  <span id="day-injected-desc" style="display:none;"></span>
   <span id="day-stock-purchased" style="display:none;"></span>
   <span id="day-stock-purchased-desc" style="display:none;"></span>
-  <span id="day-expenses"        style="display:none;"></span>
-  <span id="day-expenses-desc"   style="display:none;"></span>
-  <span id="day-withdrawn"       style="display:none;"></span>
-  <span id="day-withdrawn-desc"  style="display:none;"></span>
-  <span id="day-total-out"       style="display:none;"></span>
-  <span id="day-cash-at-hand"    style="display:none;"></span>
-  <span id="day-mpesa-balance"   style="display:none;"></span>
-  <span id="day-net-flow"        style="display:none;"></span>
-  <span id="day-sales-list"      style="display:none;"></span>
-  <span id="day-net-flow-row"    style="display:none;"></span>
+  <span id="day-expenses" style="display:none;"></span>
+  <span id="day-expenses-desc" style="display:none;"></span>
+  <span id="day-withdrawn" style="display:none;"></span>
+  <span id="day-withdrawn-desc" style="display:none;"></span>
+  <span id="day-total-out" style="display:none;"></span>
+  <span id="day-cash-at-hand" style="display:none;"></span>
+  <span id="day-mpesa-balance" style="display:none;"></span>
+  <span id="day-net-flow" style="display:none;"></span>
+  <span id="day-net-flow-row" style="display:none;"></span>
+  <span id="day-sales-list" style="display:none;"></span>
+  <span id="rc-results" style="display:none;"></span>
+  <span id="rc-injected" style="display:none;"></span>
+  <span id="rc-cash" style="display:none;"></span>
+  <span id="rc-till" style="display:none;"></span>
+  <span id="rc-mpesa" style="display:none;"></span>
+  <span id="rc-expenses" style="display:none;"></span>
+  <span id="rc-withdrawn" style="display:none;"></span>
 
 </div><!-- /page-day -->
 

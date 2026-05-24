@@ -664,7 +664,7 @@ function showPage(id) {
   if (tabEl) tabEl.classList.add('active');
   if (id === 'dash') renderDashboard();
   if (id === 'list') renderList();
-  if (id === 'day') { updateDayBanner(); updateDayLiveStats(); renderDaySessionsList(); }
+  if (id === 'day') { updateDayBanner(); updateDayLiveStats(); renderDaySessionsList(); renderDayState(); }
   if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
   if (id === 'history') { renderHistoryPage(); }
   if (id === 'finance')  { renderFinancePage(); }
@@ -4765,207 +4765,309 @@ function _renderSizeGroupFilter() {
 
 
 // ═══════════════════════════════════════════════════════════
-// DAY RECONCILIATION
+// DAY RECONCILIATION — STATE MACHINE
+// 3 states stored in localStorage, keyed by date:
+//   STATE A: no data        → show opening form
+//   STATE B: opening locked → show closing form + locked opening
+//   STATE C: reconciled     → show insights only, hide all forms
 // ═══════════════════════════════════════════════════════════
-async function reconcileDay() {
-  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
 
-  // ── System figures ──────────────────────────────────────
-  const allSales = await dbAll('sales');
-  const allFins  = await dbAll('finances');
-  const daySales = allSales.filter(s=>(s.businessDate||s.business_date||(s.date||'').split('T')[0])===today);
-  const dayFins  = allFins.filter(e=>(e.date||(e.createdAt||'').split('T')[0])===today);
+const DAY_RECON_KEY = date => 'mgs_recon_' + date;
 
-  const sysCashSales  = daySales.filter(s=>!s.paymentMethod||s.paymentMethod==='cash').reduce((a,s)=>a+(s.revenue||0),0);
-  const sysMpesaSales = daySales.filter(s=>s.paymentMethod==='mpesa').reduce((a,s)=>a+(s.revenue||0),0);
-  const sysTotalRev   = daySales.reduce((a,s)=>a+(s.revenue||0),0);
-  const sysTotalProfit= daySales.reduce((a,s)=>a+(s.profit||0),0);
-  const sysInjected   = dayFins.filter(e=>e.type==='injection'||e.type==='investment').reduce((a,e)=>a+(e.amount||0),0);
-  const sysStock      = dayFins.filter(e=>e.type==='stock_purchase').reduce((a,e)=>a+(e.amount||0),0);
-  const sysExpenses   = dayFins.filter(e=>e.type==='expense').reduce((a,e)=>a+(e.amount||0),0);
-  const sysWithdrawn  = dayFins.filter(e=>e.type==='withdrawal').reduce((a,e)=>a+(e.amount||0),0);
+function _getDayRecon(date) {
+  try { return JSON.parse(localStorage.getItem(DAY_RECON_KEY(date)) || 'null'); }
+  catch(e) { return null; }
+}
+function _saveDayRecon(date, data) {
+  localStorage.setItem(DAY_RECON_KEY(date), JSON.stringify(data));
+}
+function _clearDayRecon(date) {
+  localStorage.removeItem(DAY_RECON_KEY(date));
+}
 
-  // ── Opening balances (user-entered) ────────────────────
-  const opCash  = parseFloat(document.getElementById('op-cash')?.value)  || 0;
-  const opTill  = parseFloat(document.getElementById('op-till')?.value)  || 0;
-  const opMpesa = parseFloat(document.getElementById('op-mpesa')?.value) || 0;
-  const opTotal = opCash + opTill + opMpesa;
+// ── Show the correct state on page load / navigation ────────────
+function renderDayState() {
+  const today = activeDay
+    ? (activeDay.businessDate || activeDay.business_date)
+    : todayDateStr();
+  const data = _getDayRecon(today);
 
-  // ── Closing balances (user-entered) ────────────────────
-  const rcCash      = parseFloat(document.getElementById('rc-cash')?.value)     || 0;
-  const rcTill      = parseFloat(document.getElementById('rc-till')?.value)     || 0;
-  const rcMpesa     = parseFloat(document.getElementById('rc-mpesa')?.value)    || 0;
-  const rcExpenses  = parseFloat(document.getElementById('rc-expenses')?.value) || 0;
-  const rcWithdrawn = parseFloat(document.getElementById('rc-withdrawn')?.value)|| 0;
-  const rcStock     = parseFloat(document.getElementById('rc-stock')?.value)    || 0;
-  const rcInjected  = parseFloat(document.getElementById('rc-injected')?.value) || 0;
+  const stateOpening    = document.getElementById('day-state-opening');
+  const stateClosing    = document.getElementById('day-state-closing');
+  const stateReconciled = document.getElementById('day-state-reconciled');
+  if (!stateOpening) return;
 
-  if (rcCash===0 && rcTill===0 && rcMpesa===0) {
-    toast('⚠️ Enter at least one closing balance (Cash, Till, or M-Pesa)', 'err');
+  if (!data) {
+    // STATE A — no data yet, show opening form
+    stateOpening.style.display    = '';
+    stateClosing.style.display    = 'none';
+    stateReconciled.style.display = 'none';
+
+  } else if (data.state === 'opening_locked') {
+    // STATE B — opening locked, show closing form
+    stateOpening.style.display    = 'none';
+    stateClosing.style.display    = '';
+    stateReconciled.style.display = 'none';
+    _renderOpeningSummary(data);
+
+  } else if (data.state === 'reconciled') {
+    // STATE C — fully reconciled, show insights only
+    stateOpening.style.display    = 'none';
+    stateClosing.style.display    = 'none';
+    stateReconciled.style.display = '';
+    _renderReconcileInsights(data, today);
+  }
+}
+
+// ── Lock opening balances → STATE B ─────────────────────────────
+function lockOpeningBalances() {
+  const cash  = parseFloat(document.getElementById('op-cash')?.value)  || 0;
+  const till  = parseFloat(document.getElementById('op-till')?.value)  || 0;
+  const mpesa = parseFloat(document.getElementById('op-mpesa')?.value) || 0;
+
+  if (cash === 0 && till === 0 && mpesa === 0) {
+    toast('⚠️ Enter at least one opening balance', 'err');
     return;
   }
 
-  // ── Derived calculations ────────────────────────────────
-  const physCashNow  = rcCash + rcTill;        // total physical cash right now
-  const physMpesaNow = rcMpesa;
-  const physTotalNow = physCashNow + physMpesaNow;
+  const today = activeDay
+    ? (activeDay.businessDate || activeDay.business_date)
+    : todayDateStr();
 
-  // Expected closing cash = opening cash + cash sales + injected − expenses − withdrawn − stock
-  const expCashNow  = opCash + opTill + sysCashSales + sysInjected - sysExpenses - sysWithdrawn - sysStock;
-  const expMpesaNow = opMpesa + sysMpesaSales;
-  const expTotalNow = expCashNow + expMpesaNow;
+  _saveDayRecon(today, {
+    state: 'opening_locked',
+    date:  today,
+    lockedAt: new Date().toISOString(),
+    opening: { cash, till, mpesa, total: cash + till + mpesa }
+  });
 
-  // Variances
-  const cashVariance  = physCashNow  - expCashNow;
-  const mpesaVariance = physMpesaNow - expMpesaNow;
-  const totalVariance = physTotalNow - expTotalNow;
+  toast('🌅 Opening balances locked', 'ok');
+  renderDayState();
+}
+window.lockOpeningBalances = lockOpeningBalances;
 
-  // Net movement today (what the business generated/lost in cash)
-  const netMovement = sysTotalRev + rcInjected - rcExpenses - rcWithdrawn - rcStock;
+// ── Render locked opening summary (inside closing state) ─────────
+function _renderOpeningSummary(data) {
+  const el = document.getElementById('day-opening-summary');
+  if (!el || !data.opening) return;
+  const o = data.opening;
+  const fmt2 = v => (v||0) === 0 ? '—' : fmt(v);
+  el.innerHTML =
+    `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">` +
+    `<div style="text-align:center;"><div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmt2(o.cash)}</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">💵 Cash</div></div>` +
+    `<div style="text-align:center;"><div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmt2(o.till)}</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">🏧 Till</div></div>` +
+    `<div style="text-align:center;"><div style="font-size:16px;font-weight:900;font-family:var(--mono);color:#6366f1;">${fmt2(o.mpesa)}</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">📱 M-Pesa</div></div>` +
+    `</div>` +
+    `<div style="border-top:1px solid #a8d8b5;margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;align-items:center;">` +
+    `<span style="font-size:11px;color:var(--muted);">Locked at ${new Date(data.lockedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span>` +
+    `<span style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--green);">Total: ${fmt(o.total)}</span>` +
+    `</div>`;
+}
 
-  const margin = sysTotalRev > 0 ? (sysTotalProfit/sysTotalRev*100) : 0;
+// ── Reconcile → STATE C ──────────────────────────────────────────
+async function reconcileDay() {
+  const today = activeDay
+    ? (activeDay.businessDate || activeDay.business_date)
+    : todayDateStr();
+  const data = _getDayRecon(today);
+  if (!data || data.state !== 'opening_locked') {
+    toast('⚠️ Record opening balances first', 'err'); return;
+  }
 
-  // ── Save reconciliation ─────────────────────────────────
+  const injected  = parseFloat(document.getElementById('cl-injected')?.value)  || 0;
+  const cash      = parseFloat(document.getElementById('cl-cash')?.value)       || 0;
+  const till      = parseFloat(document.getElementById('cl-till')?.value)       || 0;
+  const mpesa     = parseFloat(document.getElementById('cl-mpesa')?.value)      || 0;
+  const expenses  = parseFloat(document.getElementById('cl-expenses')?.value)   || 0;
+  const withdrawn = parseFloat(document.getElementById('cl-withdrawn')?.value)  || 0;
+
+  if (cash === 0 && till === 0 && mpesa === 0) {
+    toast('⚠️ Enter at least one closing balance (Cash, Till, or M-Pesa)', 'err'); return;
+  }
+
+  // System sales for today
+  const allSales = await dbAll('sales');
+  const allFins  = await dbAll('finances');
+  const daySales = allSales.filter(s => (s.businessDate||s.business_date||(s.date||'').split('T')[0]) === today);
+  const dayFins  = allFins.filter(e => (e.date||(e.createdAt||'').split('T')[0]) === today && e.type !== 'reconciliation');
+
+  const sysCashRev   = daySales.filter(s => !s.paymentMethod||s.paymentMethod==='cash').reduce((a,s)=>a+(s.revenue||0),0);
+  const sysMpesaRev  = daySales.filter(s => s.paymentMethod==='mpesa').reduce((a,s)=>a+(s.revenue||0),0);
+  const sysTotalRev  = daySales.reduce((a,s)=>a+(s.revenue||0),0);
+  const sysTotalProf = daySales.reduce((a,s)=>a+(s.profit||0),0);
+  const salesCount   = daySales.length;
+  const margin       = sysTotalRev > 0 ? (sysTotalProf/sysTotalRev*100) : 0;
+
+  // Day Money formula
+  const dayMoney    = injected + cash + till + mpesa + expenses + withdrawn;
+  const opening     = data.opening;
+  const opTotal     = opening.total || 0;
+
+  // Expected Day Money = opening total + sales revenue + injected
+  const expDayMoney = opTotal + sysTotalRev + injected;
+  const variance    = dayMoney - expDayMoney;
+
+  // Cash position analysis
+  const expCashClose  = opening.cash + opening.till + sysCashRev + injected - expenses - withdrawn;
+  const physCashClose = cash + till;
+  const cashVar       = physCashClose - expCashClose;
+  const expMpesaClose = opening.mpesa + sysMpesaRev;
+  const mpesaVar      = mpesa - expMpesaClose;
+  const netMovement   = sysTotalRev + injected - expenses - withdrawn;
+
+  // Save state C
+  const reconciled = {
+    state: 'reconciled',
+    date:  today,
+    reconciledAt: new Date().toISOString(),
+    opening,
+    closing: { injected, cash, till, mpesa, expenses, withdrawn, dayMoney },
+    system: { sysCashRev, sysMpesaRev, sysTotalRev, sysTotalProf, salesCount, margin },
+    analysis: { expDayMoney, variance, cashVar, mpesaVar, netMovement }
+  };
+  _saveDayRecon(today, reconciled);
+
+  // Also save to finances
   await dbAdd('finances', {
-    type: 'reconciliation', amount: physTotalNow,
-    description: 'End-of-day reconcile · ' + today,
+    type: 'reconciliation', amount: dayMoney,
+    description: 'Day reconcile · ' + today,
     category: 'reconciliation', date: today,
     createdAt: new Date().toISOString(),
     createdBy: currentUser ? currentUser.username : 'system',
-    details: { opCash,opTill,opMpesa, rcCash,rcTill,rcMpesa,
-               rcExpenses,rcWithdrawn,rcStock,rcInjected,
-               sysCashSales,sysMpesaSales,sysTotalRev,sysTotalProfit,
-               cashVariance,mpesaVariance,totalVariance }
+    details: reconciled
   });
   scheduleSync();
 
-  // ── Build results ───────────────────────────────────────
-  const varIcon  = v => v===0?'✅':v>0?'⬆️':'⬇️';
-  const varColor = v => v===0?'var(--green)':Math.abs(v)<=200?'#d97706':'var(--red)';
-  const varText  = v => v===0?'Balanced':v>0?'+'+fmt(v)+' surplus':fmt(Math.abs(v))+' short';
-  const varCls   = v => v===0?'rc-ok':Math.abs(v)<=200?'rc-warn':'rc-bad';
-
-  // Smart insights
-  const insights = [];
-  const ok = totalVariance === 0;
-  if (ok) {
-    insights.push({ icon:'🎯', text:'Perfect — every shilling is accounted for!', cls:'rc-ok' });
-  } else if (totalVariance > 0) {
-    insights.push({ icon:'⬆️', text:`Surplus of ${fmt(totalVariance)} more than expected. Possible causes: unrecorded injection, or opening balance was higher than entered.`, cls:'rc-warn' });
-  } else {
-    insights.push({ icon:'⬇️', text:`Short by ${fmt(Math.abs(totalVariance))}. Check: unrecorded expense or withdrawal, cash theft, or opening balance was lower than entered.`, cls:'rc-bad' });
-  }
-  if (Math.abs(cashVariance)  > 50) insights.push({ icon:'💵', text:`Cash variance: ${varText(cashVariance)}. Recount notes & coins in till and hand.`, cls: varCls(cashVariance) });
-  if (Math.abs(mpesaVariance) > 50) insights.push({ icon:'📱', text:`M-Pesa variance: ${varText(mpesaVariance)}. Check your M-Pesa statement for today.`, cls: varCls(mpesaVariance) });
-  if (rcExpenses > sysExpenses + 100) insights.push({ icon:'📝', text:`Physical expenses (${fmt(rcExpenses)}) exceed recorded expenses (${fmt(sysExpenses)}). Consider logging the difference in Finance → Expense.`, cls:'rc-warn' });
-  if (rcWithdrawn > sysWithdrawn + 100) insights.push({ icon:'📝', text:`Physical withdrawals (${fmt(rcWithdrawn)}) exceed recorded (${fmt(sysWithdrawn)}). Consider logging the difference in Finance → Withdrawal.`, cls:'rc-warn' });
-  if (rcInjected > sysInjected + 100) insights.push({ icon:'📝', text:`Cash injected (${fmt(rcInjected)}) exceeds recorded injections (${fmt(sysInjected)}). Consider logging in Finance → Cash Injection.`, cls:'rc-warn' });
-  if (margin < 10 && sysTotalRev > 0) insights.push({ icon:'⚠️', text:`Low profit margin today: ${margin.toFixed(1)}%. Review pricing or reduce expenses.`, cls:'rc-warn' });
-  if (margin >= 30 && sysTotalRev > 0) insights.push({ icon:'🎉', text:`Excellent margin today: ${margin.toFixed(1)}%! Great performance.`, cls:'rc-ok' });
-  if (netMovement < 0) insights.push({ icon:'🚨', text:`Net cash flow is negative (${fmt(netMovement)}). More went out than came in today.`, cls:'rc-bad' });
-
-  const html = `
-    <div style="padding:12px 14px;">
-
-      <!-- Opening vs Closing summary -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
-        <div style="background:var(--surface2);border-radius:var(--r);padding:9px;text-align:center;">
-          <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:3px;">Opening</div>
-          <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmt(opTotal)}</div>
-        </div>
-        <div style="background:var(--surface2);border-radius:var(--r);padding:9px;text-align:center;">
-          <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:3px;">Closing</div>
-          <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmt(physTotalNow)}</div>
-        </div>
-        <div style="background:${netMovement>=0?'var(--green-light)':'var(--red-light)'};border-radius:var(--r);padding:9px;text-align:center;">
-          <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:3px;">Net Move</div>
-          <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:${netMovement>=0?'var(--green)':'var(--red)'};">${netMovement>=0?'+':''}${fmt(netMovement)}</div>
-        </div>
-      </div>
-
-      <!-- Variance badge -->
-      <div style="text-align:center;margin-bottom:12px;">
-        <span style="display:inline-block;font-size:13px;font-weight:800;padding:7px 18px;
-                     border-radius:20px;background:${varColor(totalVariance)+'20'};
-                     color:${varColor(totalVariance)};border:1.5px solid ${varColor(totalVariance)};">
-          ${varIcon(totalVariance)} ${totalVariance===0?'Fully Balanced':varText(totalVariance)}
-        </span>
-      </div>
-
-      <!-- Detail breakdown -->
-      <div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:12px;">
-
-        <div style="background:var(--surface2);padding:7px 12px;font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">
-          Position Breakdown
-        </div>
-
-        <div class="rc-result-row ${varCls(cashVariance)}">
-          <div>
-            <div style="font-size:12px;font-weight:700;">💵 Cash (Hand + Till)</div>
-            <div style="font-size:10px;color:var(--muted);">Expected: ${fmt(expCashNow)} · Physical: ${fmt(physCashNow)}</div>
-          </div>
-          <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:13px;font-weight:800;font-family:var(--mono);">${fmt(physCashNow)}</div>
-            <div style="font-size:10px;font-weight:700;color:${varColor(cashVariance)};">${varIcon(cashVariance)} ${varText(cashVariance)}</div>
-          </div>
-        </div>
-
-        <div class="rc-result-row ${varCls(mpesaVariance)}">
-          <div>
-            <div style="font-size:12px;font-weight:700;">📱 M-Pesa</div>
-            <div style="font-size:10px;color:var(--muted);">Expected: ${fmt(expMpesaNow)} · Physical: ${fmt(physMpesaNow)}</div>
-          </div>
-          <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:13px;font-weight:800;font-family:var(--mono);">${fmt(physMpesaNow)}</div>
-            <div style="font-size:10px;font-weight:700;color:${varColor(mpesaVariance)};">${varIcon(mpesaVariance)} ${varText(mpesaVariance)}</div>
-          </div>
-        </div>
-
-        <div style="background:var(--surface2);padding:7px 12px;font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--border);">
-          Today's Sales
-        </div>
-
-        <div class="rc-result-row">
-          <div style="font-size:12px;font-weight:700;">💵 Cash Revenue</div>
-          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--green);">+${fmt(sysCashSales)}</div>
-        </div>
-        <div class="rc-result-row">
-          <div style="font-size:12px;font-weight:700;">📱 M-Pesa Revenue</div>
-          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--green);">+${fmt(sysMpesaSales)}</div>
-        </div>
-        <div class="rc-result-row">
-          <div style="font-size:12px;font-weight:700;">📈 Profit · ${margin.toFixed(1)}% margin</div>
-          <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--green);">+${fmt(sysTotalProfit)}</div>
-        </div>
-
-        <div style="background:var(--surface2);padding:7px 12px;font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--border);">
-          Cash Movements
-        </div>
-
-        ${rcInjected>0?`<div class="rc-result-row"><div style="font-size:12px;font-weight:700;">💉 Injected</div><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--green);">+${fmt(rcInjected)}</div></div>`:''}
-        ${rcExpenses>0?`<div class="rc-result-row"><div style="font-size:12px;font-weight:700;">💸 Expenses</div><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--red);">-${fmt(rcExpenses)}</div></div>`:''}
-        ${rcWithdrawn>0?`<div class="rc-result-row"><div style="font-size:12px;font-weight:700;">🏧 Withdrawn</div><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:#d97706;">-${fmt(rcWithdrawn)}</div></div>`:''}
-        ${rcStock>0?`<div class="rc-result-row"><div style="font-size:12px;font-weight:700;">🛍️ Stock Bought</div><div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--red);">-${fmt(rcStock)}</div></div>`:''}
-      </div>
-
-      <!-- Insights -->
-      <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">💡 Insights</div>
-      ${insights.map(i=>`<div class="${i.cls}" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:var(--r);margin-bottom:5px;font-size:12px;font-weight:600;line-height:1.4;"><span style="font-size:16px;flex-shrink:0;">${i.icon}</span><span>${i.text}</span></div>`).join('')}
-
-      <div style="text-align:center;padding:8px 0 2px;font-size:10px;color:var(--muted);">
-        Saved · ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}
-      </div>
-    </div>`;
-
-  const panel = document.getElementById('rc-results');
-  if (panel) {
-    panel.innerHTML = html;
-    panel.style.display = 'block';
-    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-  toast('✅ Reconciliation complete', 'ok');
+  toast('✅ Day reconciled & locked', 'ok');
+  renderDayState();
 }
 window.reconcileDay = reconcileDay;
+
+// ── Render the full insights view (STATE C) ──────────────────────
+function _renderReconcileInsights(data, today) {
+  const el = document.getElementById('day-reconcile-insights');
+  if (!el || !data.closing || !data.system) return;
+
+  const o  = data.opening;
+  const cl = data.closing;
+  const sy = data.system;
+  const an = data.analysis;
+  const absVar  = Math.abs(an.variance);
+  const isOk    = absVar <= 5;
+  const isWarn  = !isOk && absVar <= 300;
+  const varClr  = isOk ? 'var(--green)' : isWarn ? '#d97706' : 'var(--red)';
+  const varIcon = isOk ? '✅' : an.variance > 0 ? '⬆️' : '⬇️';
+  const varLbl  = isOk ? 'Balanced' : an.variance > 0 ? '+'+fmt(an.variance)+' surplus' : fmt(absVar)+' short';
+  const clsFor  = v => Math.abs(v)<=5?'rc-ok':Math.abs(v)<=300?'rc-warn':'rc-bad';
+  const fmt2    = v => v === 0 ? '—' : fmt(v);
+
+  const row = (icon, label, val, color) =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:15px;width:22px;text-align:center;">${icon}</span>
+        <span style="font-size:12px;font-weight:700;color:var(--text);">${label}</span>
+      </div>
+      <span style="font-size:13px;font-weight:900;font-family:var(--mono);color:${color};">${val}</span>
+    </div>`;
+
+  const insights = [];
+  if (isOk) {
+    insights.push({ icon:'🎯', cls:'rc-ok', text:'Perfect — every shilling accounted for. Day Money = '+fmt(cl.dayMoney)+'.' });
+  } else if (an.variance > 0) {
+    insights.push({ icon:'⬆️', cls:'rc-warn', text:'Surplus of '+fmt(an.variance)+'. More cash than expected — check for unrecorded injection or double-count.' });
+  } else {
+    insights.push({ icon:'⬇️', cls:'rc-bad', text:'Short by '+fmt(absVar)+'. Less than expected — check for unrecorded expense, withdrawal, or missing transaction.' });
+  }
+  if (Math.abs(an.cashVar) > 50) {
+    const cv = an.cashVar;
+    insights.push({ icon:'💵', cls:clsFor(cv), text:'Cash variance: '+(cv>0?'+':'')+fmt(cv)+'. Physical cash ('+fmt(cl.cash+cl.till)+') vs expected ('+fmt(cl.cash+cl.till-cv)+'). Recount.' });
+  }
+  if (Math.abs(an.mpesaVar) > 50) {
+    const mv = an.mpesaVar;
+    insights.push({ icon:'📱', cls:clsFor(mv), text:'M-Pesa variance: '+(mv>0?'+':'')+fmt(mv)+'. Float ('+fmt(cl.mpesa)+') vs expected ('+fmt(cl.mpesa-mv)+'). Check M-Pesa statement.' });
+  }
+  if (cl.expenses > 0 && sy.sysTotalRev > 0 && cl.expenses > sy.sysTotalRev * 0.35) {
+    insights.push({ icon:'⚠️', cls:'rc-warn', text:'Expenses ('+fmt(cl.expenses)+') are '+((cl.expenses/sy.sysTotalRev)*100).toFixed(0)+'% of revenue — high for today.' });
+  }
+  if (sy.margin < 10 && sy.sysTotalRev > 0) {
+    insights.push({ icon:'📉', cls:'rc-warn', text:'Low margin: '+sy.margin.toFixed(1)+'%. Consider reviewing prices or cutting costs.' });
+  } else if (sy.margin >= 30 && sy.sysTotalRev > 0) {
+    insights.push({ icon:'🎉', cls:'rc-ok', text:'Great margin today: '+sy.margin.toFixed(1)+'%!' });
+  }
+  if (an.netMovement < 0) {
+    insights.push({ icon:'🚨', cls:'rc-bad', text:'Net position negative ('+fmt(an.netMovement)+'). Business spent more than it earned today.' });
+  }
+  if (sy.salesCount === 0) {
+    insights.push({ icon:'😴', cls:'rc-warn', text:'No sales recorded today.' });
+  }
+
+  el.innerHTML =
+    // Opening & Closing side-by-side
+    `<div class="day-section-label">🌅 Opening vs 🌙 Closing</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <div class="day-card" style="border-color:#a8d8b5;background:#f0faf4;padding:10px 12px;">
+        <div style="font-size:9px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Opening</div>
+        <div style="font-size:11px;color:var(--text);line-height:1.8;">
+          💵 ${fmt2(o.cash)}<br>🏧 ${fmt2(o.till)}<br>📱 ${fmt2(o.mpesa)}
+        </div>
+        <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--green);margin-top:6px;border-top:1px solid #a8d8b5;padding-top:6px;">${fmt(o.total)}</div>
+      </div>
+      <div class="day-card" style="border-color:var(--accent);padding:10px 12px;">
+        <div style="font-size:9px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Closing</div>
+        <div style="font-size:11px;color:var(--text);line-height:1.8;">
+          💵 ${fmt2(cl.cash)}<br>🏧 ${fmt2(cl.till)}<br>📱 ${fmt2(cl.mpesa)}
+          ${cl.injected>0?'<br>💉 +'+fmt(cl.injected):''}
+          ${cl.expenses>0?'<br>💸 -'+fmt(cl.expenses):''}
+          ${cl.withdrawn>0?'<br>🏧 -'+fmt(cl.withdrawn):''}
+        </div>
+        <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent);margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">Day Money: ${fmt(cl.dayMoney)}</div>
+      </div>
+    </div>
+
+    <div class="day-section-label">📊 Sales Summary</div>
+    <div class="day-card day-card-green" style="padding:0;">
+      ${row('💵','Cash Sales',       '+'+fmt(sy.sysCashRev),  'var(--green)')}
+      ${row('📱','M-Pesa Sales',     '+'+fmt(sy.sysMpesaRev), 'var(--green)')}
+      ${row('🛒','Total Revenue',    fmt(sy.sysTotalRev),     'var(--accent2)')}
+      ${row('📈','Profit · '+sy.margin.toFixed(1)+'%', fmt(sy.sysTotalProf), sy.sysTotalProf>=0?'var(--green)':'var(--red)')}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:#f0faf4;">
+        <span style="font-size:11px;font-weight:800;color:var(--green);">Net Movement</span>
+        <span style="font-size:15px;font-weight:900;font-family:var(--mono);color:${an.netMovement>=0?'var(--green)':'var(--red)'};">${an.netMovement>=0?'+':''}${fmt(an.netMovement)}</span>
+      </div>
+    </div>
+
+    <div class="day-section-label">⚖️ Reconciliation</div>
+    <div class="day-card" style="padding:0;">
+      ${row('📦','Expected Day Money', fmt(an.expDayMoney), 'var(--text)')}
+      ${row('💰','Physical Day Money', fmt(cl.dayMoney),    'var(--text)')}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:${isOk?'var(--green-light)':isWarn?'#fef3c7':'var(--red-light)'};">
+        <span style="font-size:13px;font-weight:800;color:${varClr};">Variance</span>
+        <span style="font-size:16px;font-weight:900;font-family:var(--mono);color:${varClr};">${varIcon} ${varLbl}</span>
+      </div>
+    </div>
+
+    <div class="day-section-label">💡 Insights</div>
+    ${insights.map(i=>`<div class="${i.cls}" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:var(--r);margin-bottom:5px;font-size:12px;font-weight:600;line-height:1.4;"><span style="font-size:16px;flex-shrink:0;">${i.icon}</span><span>${i.text}</span></div>`).join('')}
+
+    <div style="text-align:center;font-size:10px;color:var(--muted);padding:8px 0 0;">
+      Reconciled at ${new Date(data.reconciledAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}
+    </div>`;
+}
+
+// ── Start Over — clear today's reconciliation ────────────────────
+function dayStartOver() {
+  const today = activeDay
+    ? (activeDay.businessDate || activeDay.business_date)
+    : todayDateStr();
+  if (!confirm('Clear today\'s reconciliation and start over? This cannot be undone.')) return;
+  _clearDayRecon(today);
+  // Clear all inputs
+  ['op-cash','op-till','op-mpesa','cl-injected','cl-cash','cl-till','cl-mpesa','cl-expenses','cl-withdrawn']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  toast('Reconciliation cleared', '');
+  renderDayState();
+}
+window.dayStartOver = dayStartOver;
 
 // ===== INIT =====
 initDB();
@@ -5709,3 +5811,5 @@ window.viewPastSession = viewPastSession;
 window.onCodeInput = onCodeInput;
 window.applyAppUpdate = applyAppUpdate;
 window.dismissAppUpdate = dismissAppUpdate;
+
+window.renderDayState = renderDayState;
