@@ -1319,6 +1319,7 @@ async function renderList() {
   allItems = await dbAll('items');
   const search = (UI.el('search')?.value || '').toLowerCase();
   renderTypeChips();
+  _renderSizeGroupFilter();
 
   // Filter non-shoe items normally
   let filtered = allItems.filter(item => {
@@ -1392,51 +1393,70 @@ async function renderList() {
         continue;
       }
 
-      // Group header (not tappable separately — just a label divider)
+      // ── Aggregates for the group header ──────────────────────
+      const groupTotalPcs  = sizes.reduce((s,sz)=>s+(sz.qty||0), 0);
+      const groupSoldPcs   = sizes.reduce((s,sz)=>s+(salesBySize[item.code+'_'+sz.size]||0), 0);
+      const groupBuyCost   = sizes.reduce((s,sz)=>s+((sz.buyPrice||item.buyPrice||item.buy||0)*(sz.qty||0)), 0);
+      let _grpRevenue = 0;
+      allSales.filter(s=>s.itemCode===item.code).forEach(s=>{ _grpRevenue += s.revenue||0; });
+      const allOut     = sizes.every(sz=>sz.qty<=0);
+      const hasOut     = sizes.some(sz=>sz.qty<=0);
+      const isExpanded = (UI.el('search')?.value||'').length > 0 || (_expandedShoeGroups&&_expandedShoeGroups.has(item.code));
+
       cards.push(`
-        <div class="shoe-group-header">
-          <div class="shoe-group-icon" style="background:${t.color || '#1e3a5f'};">${t.emoji}</div>
-          <div class="shoe-group-info">
-            <span class="shoe-group-code">${escapeHtml(item.code)}</span>
-            <span class="shoe-group-name">${escapeHtml(item.name || '')}</span>
+        <div class="shoe-group-header" onclick="toggleShoeGroup('${escapeHtml(item.code)}')" style="cursor:pointer;">
+          <div class="shoe-group-icon" style="background:${t.color||'#1e3a5f'};">${t.emoji}</div>
+          <div class="shoe-group-info" style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="shoe-group-code">${escapeHtml(item.code)}</span>
+              ${allOut?'<span style="font-size:9px;background:var(--red);color:white;padding:1px 6px;border-radius:10px;font-weight:700;">OUT</span>':hasOut?'<span style="font-size:9px;background:#d97706;color:white;padding:1px 6px;border-radius:10px;font-weight:700;">PARTIAL</span>':''}
+            </div>
+            <span class="shoe-group-name">${escapeHtml(item.name||'')}</span>
+            <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;">
+              <span>📦 ${groupTotalPcs} pcs</span><span>🛒 ${groupSoldPcs} sold</span>
+              <span>💸 ${fmt(groupBuyCost)}</span><span style="color:var(--accent2);">💰 ${fmt(_grpRevenue)}</span>
+            </div>
           </div>
-          <span class="tag tag-cyan" style="font-size:10px;flex-shrink:0;">${escapeHtml(item.type)}</span>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+            <span class="tag tag-cyan" style="font-size:10px;">${escapeHtml(item.type)}</span>
+            <span style="font-size:16px;color:var(--muted);transition:transform .2s;display:inline-block;transform:rotate(${isExpanded?180:0}deg);">▼</span>
+          </div>
         </div>`);
 
-      // One row per size
-      sizes.forEach(sz => {
-        const price       = sz.sellPrice || item.sellPrice || 0;
-        const buy         = sz.buyPrice  || item.buyPrice  || 0;
-        const isOut       = sz.qty <= 0;
-        const isLow       = !isOut && sz.qty <= LOW_STOCK_LEVEL;
-        const stockColor  = isOut ? 'tag-red' : isLow ? 'tag-amber' : 'tag-green';
-        const stockLabel  = isOut ? '✕ Out'   : sz.qty + ' prs';
-        const soldQty     = salesBySize[item.code + '_' + sz.size] || 0;
-
-        cards.push(`
-          <div class="item-card shoe-size-row" onclick="openShoeSizeCard('${escapeHtml(item.code)}',${sz.size})">
-            <div class="item-top">
-              <!-- Big green size number -->
-              <div class="shoe-size-badge ${isOut ? 'out' : isLow ? 'low' : ''}">${sz.size}</div>
-              <div class="item-body">
-                <!-- Item name + group label only — no "Size XX" text -->
-                <div class="item-code">${escapeHtml(item.name || item.code)}</div>
-                <div class="item-tags">
-                  ${sz.sizeGroup ? `<span class="tag tag-gray">${sz.sizeGroup==='S'?'Children':sz.sizeGroup==='M'?'Teens':'Adults'}</span>` : ''}
-                  <span class="tag ${stockColor}">${stockLabel}</span>
-                  <span class="tag tag-gray">${soldQty} sold</span>
+      if (!isExpanded) { cards.push('<div style="height:4px;"></div>'); }
+      else {
+        const activeSgf = window._activeSizeGroupFilter||'all';
+        const filteredSizes = activeSgf==='all' ? sizes : sizes.filter(sz=>sz.sizeGroup===activeSgf);
+        filteredSizes.forEach(sz => {
+          const price      = sz.sellPrice||item.sellPrice||0;
+          const buy        = sz.buyPrice||item.buyPrice||0;
+          const isOut      = sz.qty<=0;
+          const isLow      = !isOut&&sz.qty<=LOW_STOCK_LEVEL;
+          const stockColor = isOut?'tag-red':isLow?'tag-amber':'tag-green';
+          const stockLabel = isOut?'✕ Out':sz.qty+' prs';
+          const soldQty    = salesBySize[item.code+'_'+sz.size]||0;
+          cards.push(`
+            <div class="item-card shoe-size-row${isOut?' shoe-out-card':''}" onclick="openShoeSizeCard('${escapeHtml(item.code)}',${sz.size})">
+              ${isOut?'<div class="out-of-stock-overlay"><span>⛔ OUT OF STOCK · RESTOCK</span></div>':''}
+              <div class="item-top">
+                <div class="shoe-size-badge ${isOut?'out':isLow?'low':''}">${sz.size}</div>
+                <div class="item-body">
+                  <div class="item-code">${escapeHtml(item.name||item.code)}</div>
+                  <div class="item-tags">
+                    ${sz.sizeGroup?`<span class="tag tag-gray">${sz.sizeGroup==='S'?'Children':sz.sizeGroup==='M'?'Teens':'Adults'}</span>`:''}
+                    <span class="tag ${stockColor}">${stockLabel}</span>
+                    <span class="tag tag-gray">${soldQty} sold</span>
+                  </div>
+                </div>
+                <div class="item-right">
+                  <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent2);">${fmt(price)}</div>
+                  <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px;">Buy: ${fmt(buy)}</div>
                 </div>
               </div>
-              <div class="item-right">
-                <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent2);">${fmt(price)}</div>
-                <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px;">Buy: ${fmt(buy)}</div>
-              </div>
-            </div>
-          </div>`);
-      });
-
-      // Spacer between shoe groups
-      cards.push('<div style="height:6px;"></div>');
+            </div>`);
+        });
+        cards.push('<div style="height:6px;"></div>');
+      }
 
     } else {
       // ── STANDARD ITEM — single card ───────────────────────────────
@@ -1447,12 +1467,13 @@ async function renderList() {
       const buyPrice   = item.buyPrice  || item.buy  || 0;
 
       cards.push(`
-        <div class="item-card" onclick="openSheet(${item.id})">
+        <div class="item-card${item.qty<=0?' shoe-out-card':''}" onclick="openSheet(${item.id})">
+          ${item.qty<=0 ? '<div class="out-of-stock-overlay"><span>⛔ OUT OF STOCK · RESTOCK</span></div>' : ''}
           <div class="item-top">
-            <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
+            <div class="item-icon" style="background:${t.color||'var(--surface2)'};">${t.emoji}</div>
             <div class="item-body">
-              <div class="item-code">${escapeHtml(item.code)}${(item.variant||item.size) ? ' · ' + escapeHtml(item.variant||item.size) : ''}</div>
-              <div class="item-name">${escapeHtml(item.name || '')}</div>
+              <div class="item-code">${escapeHtml(item.code)}${(item.variant||item.size)?' · '+escapeHtml(item.variant||item.size):''}</div>
+              <div class="item-name">${escapeHtml(item.name||'')}</div>
               <div class="item-tags">
                 <span class="tag tag-cyan">${escapeHtml(item.type)}</span>
                 <span class="tag tag-gray">${soldQty} sold</span>
@@ -1639,10 +1660,10 @@ async function openSheet(id) {
   const photo = getItemPhoto(id);
   const photoImg = document.getElementById('sh-photo-img');
   const photoFallback = document.getElementById('sh-photo-fallback');
-  const photoPan = document.getElementById('sh-photo-pan');
+  const photoPan = document.getElementById('sh-photo-pan') || document.getElementById('sh-photo-area-inner');
   if (photo) {
     photoImg.src = photo;
-    if (photoPan) photoPan.style.display = 'block';
+    if (photoPan) { const panEl=document.getElementById('sh-photo-pan'); if(panEl) panEl.style.display='block'; }
     photoFallback.style.display = 'none';
   } else {
     if (photoPan) photoPan.style.display = 'none';
@@ -4280,7 +4301,8 @@ async function renderFinancePage() {
   const sales   = allSales.filter(s   => _finInRange(s.businessDate || (s.date||'').split('T')[0], range));
 
   // ── Compute KPIs ──────────────────────────────────────────
-  const invested  = entries.filter(e=>e.type==='investment').reduce((s,e)=>s+e.amount,0);
+  const invested  = entries.filter(e=>e.type==='investment'||e.type==='injection').reduce((s,e)=>s+e.amount,0);
+  const stockBought= entries.filter(e=>e.type==='stock_purchase').reduce((s,e)=>s+e.amount,0);
   const expenses  = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
   const withdrawn = entries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+e.amount,0);
 
@@ -4416,11 +4438,13 @@ function renderFinList(entries) {
     return;
   }
   const typeConfig = {
-    investment: { icon:'💵', color:'var(--green)',   label:'Investment'   },
-    expense:    { icon:'💸', color:'var(--red)',     label:'Expense'      },
-    withdrawal: { icon:'🏧', color:'#d97706',        label:'Withdrawal'   },
-    revenue:    { icon:'🛒', color:'var(--accent2)', label:'Sale Revenue' },
-    other:      { icon:'📝', color:'var(--muted)',   label:'Other'        },
+    injection:     { icon:'💉', color:'var(--green)',   label:'Cash Injection' },
+    investment:    { icon:'💵', color:'var(--green)',   label:'Investment'     },
+    stock_purchase:{ icon:'🛍️', color:'#1d4ed8',        label:'Stock Purchase' },
+    expense:       { icon:'💸', color:'var(--red)',     label:'Expense'        },
+    withdrawal:    { icon:'🏧', color:'#d97706',        label:'Withdrawal'     },
+    revenue:       { icon:'🛒', color:'var(--accent2)', label:'Sale Revenue'   },
+    other:         { icon:'📝', color:'var(--muted)',   label:'Other'          },
   };
   list.innerHTML = entries.map(e => {
     const cfg   = typeConfig[e.type] || typeConfig.other;
@@ -4455,7 +4479,8 @@ async function saveFinanceEntry() {
   const date   = document.getElementById('fin-date').value || todayDateStr();
   const cat    = (document.getElementById('fin-category')?.value) || 'general';
 
-  if (!type)                   return Validate.fail('Select a transaction type', 'fin-type');
+  const validTypes = ['injection','investment','stock_purchase','expense','withdrawal','other'];
+  if (!type || !validTypes.includes(type)) return Validate.fail('Select a transaction type', 'fin-type');
   if (!amount || amount <= 0)  return Validate.fail('Enter a valid amount (must be > 0)', 'fin-amount');
   if (amount > 99999999)       return Validate.fail('Amount too large — check the value', 'fin-amount');
   if (!desc)                   return Validate.fail('Enter a description for this transaction', 'fin-desc');
@@ -4506,15 +4531,53 @@ function filterFinance(type) {
 function updateFinTypeColor() {
   const sel = document.getElementById('fin-type');
   if (!sel) return;
-  const colors = { investment:'#dcfce7', expense:'#fee2e2', withdrawal:'#fef3c7', other:'var(--surface2)' };
+  const colors = {
+    injection:'#dcfce7', investment:'#dcfce7',
+    stock_purchase:'#dbeafe', expense:'#fee2e2',
+    withdrawal:'#fef3c7', other:'var(--surface2)'
+  };
   sel.style.background = colors[sel.value] || '';
-  // Auto-set category to 'stock' for investments
   const catEl = document.getElementById('fin-category');
   if (catEl) {
-    if (sel.value === 'investment') catEl.value = 'stock';
-    else if (sel.value === 'expense') catEl.value = 'general';
-    else catEl.value = 'general';
+    const autoCat = {
+      injection:'owner_capital', investment:'owner_capital',
+      stock_purchase:'stock', expense:'general',
+      withdrawal:'cash_drawer', other:'general'
+    };
+    catEl.value = autoCat[sel.value] || 'general';
   }
+}
+
+
+// ── Shoe group expand/collapse ────────────────────────────────────
+let _expandedShoeGroups = new Set();
+window._activeSizeGroupFilter = 'all';
+
+function toggleShoeGroup(code) {
+  if (_expandedShoeGroups.has(code)) {
+    _expandedShoeGroups.delete(code);
+  } else {
+    _expandedShoeGroups.add(code);
+  }
+  renderList();
+}
+window.toggleShoeGroup = toggleShoeGroup;
+
+function setSizeGroupFilter(group) {
+  window._activeSizeGroupFilter = group;
+  document.querySelectorAll('[id^="sgf-"]').forEach(b=>b.classList.remove('active'));
+  const btn = document.getElementById('sgf-'+group);
+  if (btn) btn.classList.add('active');
+  renderList();
+}
+window.setSizeGroupFilter = setSizeGroupFilter;
+
+function _renderSizeGroupFilter() {
+  const wrap = document.getElementById('shoe-size-filter');
+  if (!wrap) return;
+  // Show only when a shoe type is active or search has results with shoes
+  const hasShoe = allItems.some(i=>i.isShoe && (activeTypeFilter==='all'||i.type===activeTypeFilter));
+  wrap.style.display = hasShoe ? 'flex' : 'none';
 }
 
 // ===== INIT =====

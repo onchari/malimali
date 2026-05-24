@@ -223,12 +223,14 @@
     <span class="icon"><i class="fa-solid fa-house"></i></span>Dashboard
   </button>
   <button class="nav-btn" onclick="showPage('list')" id="tab-list">
-    <span class="icon"><i class="fa-solid fa-boxes-stacked"></i></span>Inventory
+    <span class="icon"><i class="fa-solid fa-boxes-stacked"></i></span>Stock
   </button>
   <button class="nav-btn" onclick="showPage('add')" id="tab-add">
-    <span class="icon"><i class="fa-solid fa-plus"></i></span>Add items
+    <span class="icon"><i class="fa-solid fa-plus"></i></span>Add
   </button>
-  
+  <button class="nav-btn" onclick="showPage('day')" id="tab-day">
+    <span class="icon"><i class="fa-solid fa-calendar-day"></i></span>Day
+  </button>
   <button class="nav-btn" onclick="showPage('history')" id="tab-history">
     <span class="icon"><i class="fa-solid fa-clock-rotate-left"></i></span>History
   </button>
@@ -317,33 +319,35 @@
     <button onclick="dashSetPeriod('all')"    id="dash-period-all"    class="fin-filter-btn">All Time</button>
   </div>
 
-    <!-- ── Today snapshot ───────────────────────────────────────── -->
-  <div id="d-today-wrap" style="margin:0 12px 8px;display:none;">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Today at a Glance</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;" id="d-today-grid"></div>
-
-    
-        <div class="stat-val" id="d-stock-val" style="font-size:14px;color:var(--text2);">0</div>
-        <div class="stat-lbl">Cost Value</div>
-      
+  <!-- ── Row 1: Revenue · Profit · Margin ────────────────────── -->
+  <div class="stats-row" style="grid-template-columns:1fr 1fr 1fr;gap:6px;">
+    <div class="stat-box green">
+      <div class="stat-val" id="d-revenue" style="font-size:15px;">0</div>
+      <div class="stat-lbl">💰 Revenue</div>
+    </div>
+    <div class="stat-box cyan">
+      <div class="stat-val" id="d-profit-earned" style="font-size:15px;">0</div>
+      <div class="stat-lbl">📈 Profit</div>
+    </div>
+    <div class="stat-box purple">
+      <div class="stat-val" id="d-margin" style="font-size:15px;">0%</div>
+      <div class="stat-lbl">📊 Margin</div>
+    </div>
   </div>
 
   <!-- ── Row 2: Items · Pieces · Sold · Sales# ────────────────── -->
   <div class="stats-row" style="gap:6px;">
     <div class="stat-box amber">
-     
-      <div class="stat-lbl">Items in stock</div>
-       <div class="stat-val" id="d-items" style="font-size:18px;">0</div>
+      <div class="stat-val" id="d-items" style="font-size:18px;">0</div>
+      <div class="stat-lbl">SKUs</div>
     </div>
     <div class="stat-box cyan">
-      
-      <div class="stat-lbl">PcsIn Stock</div>
       <div class="stat-val" id="d-qty" style="font-size:18px;">0</div>
+      <div class="stat-lbl">In Stock</div>
     </div>
     <div class="stat-box green">
-      
-      <div class="stat-lbl">Items Sold</div>
       <div class="stat-val" id="d-total-sold" style="font-size:18px;">0</div>
+      <div class="stat-lbl">Sales</div>
     </div>
     <div class="stat-box purple">
       <div class="stat-val" id="d-pieces-sold" style="font-size:18px;">0</div>
@@ -354,9 +358,21 @@
   <!-- ── Alert strip ──────────────────────────────────────────── -->
   <div id="d-alerts" style="padding:0 12px;"></div>
 
- 
+  <!-- ── 7-day revenue spark line ─────────────────────────────── -->
+  <div id="d-sparkline-wrap" style="margin:0 12px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">7-Day Revenue</span>
+      <span id="d-spark-total" style="font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent);"></span>
+    </div>
+    <div id="d-sparkline" style="display:flex;align-items:flex-end;gap:3px;height:48px;"></div>
+    <div id="d-sparkline-labels" style="display:flex;gap:3px;margin-top:4px;"></div>
+  </div>
 
-
+  <!-- ── Today snapshot ───────────────────────────────────────── -->
+  <div id="d-today-wrap" style="margin:0 12px 8px;display:none;">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Today at a Glance</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;" id="d-today-grid"></div>
+  </div>
 
   <!-- ── Stock health ─────────────────────────────────────────── -->
   <div style="margin:0 12px 8px;">
@@ -366,8 +382,14 @@
         <div class="stat-val" id="d-stock-val" style="font-size:14px;color:var(--text2);">0</div>
         <div class="stat-lbl">Cost Value</div>
       </div>
-      
-      
+      <div class="stat-box amber" style="padding:10px 8px;">
+        <div class="stat-val" id="d-retail-total" style="font-size:14px;">0</div>
+        <div class="stat-lbl">Retail Value</div>
+      </div>
+      <div class="stat-box green" style="padding:10px 8px;">
+        <div class="stat-val" id="d-potential-profit" style="font-size:14px;">0</div>
+        <div class="stat-lbl">Pot. Profit</div>
+      </div>
     </div>
     <!-- Stock progress bar: sold vs remaining -->
     <div id="d-stock-bar-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:10px 12px;display:none;">
@@ -431,6 +453,14 @@
 
   <!-- Type filter chips — populated by renderTypeChips() -->
   <div class="chips" id="type-chips"></div>
+
+  <!-- Shoe size-group filter — only shown when shoe type is active -->
+  <div id="shoe-size-filter" style="display:none;padding:0 12px 8px;display:flex;gap:6px;flex-wrap:wrap;">
+    <button onclick="setSizeGroupFilter('all')"  id="sgf-all"  class="fin-filter-btn active">All Sizes</button>
+    <button onclick="setSizeGroupFilter('S')"    id="sgf-S"    class="fin-filter-btn">S · Children</button>
+    <button onclick="setSizeGroupFilter('M')"    id="sgf-M"    class="fin-filter-btn">M · Teens</button>
+    <button onclick="setSizeGroupFilter('L')"    id="sgf-L"    class="fin-filter-btn">L · Adults</button>
+  </div>
 
   <!-- Item cards injected here -->
   <div id="item-list"></div>
@@ -718,10 +748,18 @@
         <label class="add-label">Type <span class="add-required">*</span></label>
         <select class="add-select" id="fin-type" onchange="updateFinTypeColor()">
           <option value="">Select type…</option>
-          <option value="investment">💵 Investment (money in)</option>
-          <option value="expense">💸 Expense (running cost)</option>
-          <option value="withdrawal">🏧 Withdrawal (owner draw)</option>
-          <option value="other">📝 Other</option>
+          <optgroup label="── Money In ──">
+            <option value="injection">💉 Cash Injection (owner capital)</option>
+            <option value="investment">💵 Investment (external)</option>
+          </optgroup>
+          <optgroup label="── Money Out ──">
+            <option value="stock_purchase">🛍️ Stock Purchase (buy goods)</option>
+            <option value="expense">💸 Operating Expense</option>
+            <option value="withdrawal">🏧 Cash Withdrawal (owner draw)</option>
+          </optgroup>
+          <optgroup label="── Other ──">
+            <option value="other">📝 Other / Adjustment</option>
+          </optgroup>
         </select>
       </div>
       <div class="add-field">
@@ -744,13 +782,15 @@
         <label class="add-label">Category</label>
         <select class="add-select" id="fin-category">
           <option value="general">General</option>
-          <option value="stock">Stock Purchase</option>
+          <option value="stock">Stock / Goods</option>
           <option value="rent">Rent / Utilities</option>
           <option value="transport">Transport</option>
-          <option value="salaries">Salaries</option>
+          <option value="salaries">Salaries / Wages</option>
           <option value="marketing">Marketing</option>
           <option value="tax">Tax / Levy</option>
-          <option value="equipment">Equipment</option>
+          <option value="equipment">Equipment / Tools</option>
+          <option value="cash_drawer">Cash Drawer</option>
+          <option value="owner_capital">Owner Capital</option>
           <option value="other">Other</option>
         </select>
       </div>
@@ -1247,21 +1287,20 @@
       </div>
     </div>
 
-    <!-- Cancel / Confirm -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-      <button onclick="closeSellModal()"
-              style="padding:15px;background:transparent;border:1.5px solid var(--border);
-                     border-radius:var(--r);font-size:15px;font-weight:700;
-                     color:var(--muted);cursor:pointer;font-family:var(--sans);">
-        Cancel
-      </button>
-      <button id="confirm-sale-btn" onclick="confirmSale()"
-              style="padding:15px;background:var(--accent);color:white;border:none;
-                     border-radius:var(--r);font-size:15px;font-weight:800;
-                     cursor:pointer;font-family:var(--sans);">
-        ✅ Confirm Sale
-      </button>
-    </div>
+    <!-- Confirm Sale — large green, full width -->
+    <button id="confirm-sale-btn" onclick="confirmSale()"
+            style="width:100%;padding:18px;background:#1e7a3e;color:white;border:none;
+                   border-radius:var(--r);font-size:18px;font-weight:900;
+                   cursor:pointer;font-family:var(--sans);letter-spacing:.5px;
+                   box-shadow:0 4px 14px rgba(30,122,62,.4);margin-bottom:8px;">
+      ✅ Confirm Sale
+    </button>
+    <button onclick="closeSellModal()"
+            style="width:100%;padding:12px;background:transparent;border:1.5px solid var(--border);
+                   border-radius:var(--r);font-size:14px;font-weight:600;
+                   color:var(--muted);cursor:pointer;font-family:var(--sans);">
+      Cancel
+    </button>
   </div>
 </div><!-- /sell-modal -->
 
@@ -1279,71 +1318,69 @@
     <!-- Handle -->
     <div class="sheet-handle" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:3;flex-shrink:0;"></div>
 
-    <!-- ── Photo area — fixed height ────────────────────────── -->
-    <div id="sh-photo-area" style="width:100%;height:200px;position:relative;background:var(--surface2);border-radius:16px 16px 0 0;overflow:hidden;flex-shrink:0;">
 
-      <div id="sh-photo-pan" style="display:none;width:100%;height:100%;overflow:hidden;touch-action:none;position:absolute;inset:0;">
-        <img id="sh-photo-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;user-select:none;-webkit-user-drag:none;">
-      </div>
 
-      <div id="sh-photo-fallback" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:56px;">
-        <span id="sh-icon"></span>
-      </div>
-
-      <div id="sh-out-badge" style="display:none;position:absolute;inset:0;pointer-events:none;overflow:hidden;">
-        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);white-space:nowrap;font-size:22px;font-weight:900;color:white;background:rgba(192,57,43,.75);padding:6px 28px;border-radius:6px;">OUT OF STOCK</div>
-      </div>
-
-      <div id="sh-type-badge" style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,.45);color:white;font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;z-index:2;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
-
-      <button id="sh-photo-btn" onclick="triggerSheetPhotoUpload(event)" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,.4);color:white;border:1px solid rgba(255,255,255,.3);border-radius:6px;font-size:10px;font-weight:700;padding:4px 8px;cursor:pointer;z-index:2;">📷</button>
-
-      <!-- Name overlay -->
-      <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,.82),transparent);padding:10px 12px 8px;z-index:2;">
-        <div id="sh-code" style="font-size:18px;font-weight:900;color:white;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
-        <div id="sh-name" style="font-size:12px;color:rgba(255,255,255,.75);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
-      </div>
-    </div>
-
-    <!-- ── Sell button strip ─────────────────────────────────── -->
-    <div style="padding:10px 12px 0;flex-shrink:0;">
-      <button id="sh-sell-btn" onclick="openSellFromSheet()"
-              style="width:100%;padding:14px;background:#1e7a3e;color:white;border:none;
-                     border-radius:var(--r);font-size:16px;font-weight:900;cursor:pointer;
-                     font-family:var(--sans);letter-spacing:.5px;">
-        SELL
+    <!-- ── Action strip: Edit (left) · X close (right) ─────── -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px 0;flex-shrink:0;position:absolute;top:0;left:0;right:0;z-index:10;">
+      <button class="btn-edit" onclick="editItem()"
+              style="background:rgba(0,0,0,.38);color:white;border:none;border-radius:6px;
+                     font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer;font-family:var(--sans);">
+        ✏️ Edit
+      </button>
+      <button onclick="closeSheet()"
+              style="background:rgba(0,0,0,.38);color:white;border:none;border-radius:50%;
+                     width:32px;height:32px;font-size:18px;font-weight:700;cursor:pointer;
+                     display:flex;align-items:center;justify-content:center;line-height:1;">
+        ✕
       </button>
     </div>
 
     <!-- ── Scrollable info panel ─────────────────────────────── -->
-    <div style="flex:1;overflow-y:auto;padding:10px 12px 16px;-webkit-overflow-scrolling:touch;">
+    <div style="flex:1;overflow-y:auto;padding:0 0 20px;-webkit-overflow-scrolling:touch;">
 
-      <!-- Code + Size row -->
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-        <span class="tag tag-cyan" id="sh-type" style="font-size:10px;padding:2px 8px;flex-shrink:0;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;">Code</div>
-          <div id="sh-code-large" style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+      <!-- Photo block — full width at top -->
+      <div id="sh-photo-area-inner" style="width:100%;height:200px;position:relative;background:var(--surface2);overflow:hidden;flex-shrink:0;">
+        <div id="sh-photo-pan" style="display:none;width:100%;height:100%;overflow:hidden;touch-action:none;position:absolute;inset:0;">
+          <img id="sh-photo-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;user-select:none;-webkit-user-drag:none;">
         </div>
-        <span class="tag tag-purple" id="sh-size" style="font-size:10px;padding:2px 8px;flex-shrink:0;max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+        <div id="sh-photo-fallback" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:64px;">
+          <span id="sh-icon"></span>
+        </div>
+        <div id="sh-out-badge" style="display:none;position:absolute;inset:0;pointer-events:none;overflow:hidden;">
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);white-space:nowrap;font-size:18px;font-weight:900;color:white;background:rgba(192,57,43,.82);padding:6px 24px;border-radius:6px;letter-spacing:1px;">⛔ OUT OF STOCK · RESTOCK</div>
+        </div>
+        <div id="sh-type-badge" style="position:absolute;bottom:8px;left:10px;background:rgba(0,0,0,.45);color:white;font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;z-index:2;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+        <button id="sh-photo-btn" onclick="triggerSheetPhotoUpload(event)" style="position:absolute;bottom:8px;right:10px;background:rgba(0,0,0,.4);color:white;border:1px solid rgba(255,255,255,.3);border-radius:6px;font-size:10px;font-weight:700;padding:4px 8px;cursor:pointer;z-index:2;">📷</button>
+        <div style="position:absolute;top:38px;left:0;right:0;text-align:center;padding:0 10px;">
+          <div id="sh-code" style="font-size:17px;font-weight:900;color:white;font-family:var(--mono);text-shadow:0 1px 4px rgba(0,0,0,.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+          <div id="sh-name" style="font-size:12px;color:rgba(255,255,255,.8);text-shadow:0 1px 3px rgba(0,0,0,.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;"></div>
+        </div>
       </div>
 
-      <!-- 4 stat boxes in one row -->
-      <div id="sh-price-cols" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
-        <div class="sh-stat-box"><div class="sh-stat-lbl">Buy</div><div class="sh-stat-val muted" id="sh-buy"></div></div>
-        <div class="sh-stat-box"><div class="sh-stat-lbl">Sell</div><div class="sh-stat-val accent2" id="sh-sell"></div></div>
-        <div class="sh-stat-box accent-bg"><div class="sh-stat-lbl">Stock</div><div class="sh-stat-val accent" id="sh-qty"></div></div>
-        <div class="sh-stat-box"><div class="sh-stat-lbl">Sold</div><div class="sh-stat-val green" id="sh-sold">0</div></div>
+      <!-- SELL button — large, centre ─────────────────────────── -->
+      <div style="padding:10px 12px 6px;flex-shrink:0;">
+        <button id="sh-sell-btn" onclick="openSellFromSheet()"
+                style="width:100%;padding:16px;background:#1e7a3e;color:white;border:none;
+                       border-radius:var(--r);font-size:18px;font-weight:900;cursor:pointer;
+                       font-family:var(--sans);letter-spacing:.5px;box-shadow:0 4px 12px rgba(30,122,62,.35);">
+          💰 SELL
+        </button>
       </div>
 
-      <!-- Shoe size selector — only for shoe items -->
-      <div id="sh-shoe-sizes" style="display:none;margin-bottom:10px;"></div>
-
-      <!-- Selected size bar -->
-      <div id="sh-selected-size-bar" style="display:none;padding:8px 12px;margin-bottom:8px;background:var(--green-light);border:1.5px solid var(--green);border-radius:var(--r);font-size:12px;font-weight:700;color:var(--green);text-align:center;"></div>
+      <!-- Icon action row: Delete · Restock · (separator) -->
+      <div id="sh-action-row" style="display:flex;gap:8px;padding:0 12px 8px;justify-content:center;">
+        <button class="btn-del" onclick="deleteItem()"
+                style="flex:1;padding:10px 6px;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:3px;border-radius:var(--r);max-width:80px;">
+          <i class="fa-solid fa-trash" style="font-size:16px;"></i>Delete
+        </button>
+        <button onclick="toggleRestock()"
+                style="flex:1;max-width:80px;padding:10px 6px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:var(--r);font-size:11px;font-weight:700;cursor:pointer;font-family:var(--sans);display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <i class="fa-solid fa-boxes-stacked" style="font-size:16px;"></i>Restock
+        </button>
+      </div>
 
       <!-- Inline restock panel -->
-      <div id="restock-panel" style="display:none;margin-bottom:10px;background:var(--accent-light);border:1.5px solid #a8d8b5;border-radius:var(--r);padding:12px;">
+      <div id="restock-panel" style="display:none;margin:0 12px 10px;background:var(--accent-light);border:1.5px solid #a8d8b5;border-radius:var(--r);padding:12px;">
         <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">📦 Add Stock</div>
         <div style="display:flex;gap:8px;align-items:center;">
           <input id="restock-qty" type="number" min="1" placeholder="Qty to add" inputmode="numeric"
@@ -1352,26 +1389,29 @@
         </div>
       </div>
 
-      <!-- Action buttons — Delete · Restock · Edit -->
-      <div id="sh-action-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px;">
-        <button class="btn-del" onclick="deleteItem()" style="padding:10px 4px;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px;">
-          <i class="fa-solid fa-trash" style="font-size:14px;"></i>Delete
-        </button>
-        <button onclick="toggleRestock()" style="padding:10px 4px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:var(--r);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);display:flex;flex-direction:column;align-items:center;gap:2px;">
-          <i class="fa-solid fa-boxes-stacked" style="font-size:14px;"></i>Restock
-        </button>
-        <button class="btn-edit" onclick="editItem()" style="padding:10px 4px;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px;">
-          <i class="fa-solid fa-pen-to-square" style="font-size:14px;"></i>Edit
-        </button>
+      <!-- Stat boxes -->
+      <div id="sh-price-cols" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin:0 12px 10px;">
+        <div class="sh-stat-box"><div class="sh-stat-lbl">Buy</div><div class="sh-stat-val muted" id="sh-buy"></div></div>
+        <div class="sh-stat-box"><div class="sh-stat-lbl">Sell</div><div class="sh-stat-val accent2" id="sh-sell"></div></div>
+        <div class="sh-stat-box accent-bg"><div class="sh-stat-lbl">Stock</div><div class="sh-stat-val accent" id="sh-qty"></div></div>
+        <div class="sh-stat-box"><div class="sh-stat-lbl">Sold</div><div class="sh-stat-val green" id="sh-sold">0</div></div>
       </div>
 
-      <!-- Close button — always visible -->
-      <button onclick="closeSheet()"
-              style="width:100%;padding:14px;background:var(--surface2);color:var(--text2);
-                     border:1.5px solid var(--border);border-radius:var(--r);font-size:15px;
-                     font-weight:700;cursor:pointer;font-family:var(--sans);">
-        Close
-      </button>
+      <!-- Code + size row -->
+      <div style="display:flex;align-items:center;gap:8px;margin:0 12px 10px;">
+        <span class="tag tag-cyan" id="sh-type" style="font-size:10px;padding:2px 8px;flex-shrink:0;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+        <div id="sh-code-large" style="font-size:15px;font-weight:900;font-family:var(--mono);color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+        <span class="tag tag-purple" id="sh-size" style="font-size:10px;padding:2px 8px;flex-shrink:0;"></span>
+      </div>
+
+      <!-- Shoe size selector -->
+      <div id="sh-shoe-sizes" style="display:none;margin:0 12px 10px;"></div>
+      <div id="sh-selected-size-bar" style="display:none;padding:8px 12px;margin:0 12px 8px;background:var(--green-light);border:1.5px solid var(--green);border-radius:var(--r);font-size:12px;font-weight:700;color:var(--green);text-align:center;"></div>
+
+      <!-- hidden compat IDs -->
+      <span id="sh-total" style="display:none;"></span>
+      <span id="sh-revenue" style="display:none;"></span>
+      <span id="sh-profit-made" style="display:none;"></span>
 
     </div><!-- /info-panel -->
   </div>
