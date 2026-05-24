@@ -1088,19 +1088,22 @@ body {
 .fin-filter-btn {
   font-size: 11px;
   font-weight: 700;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
+  padding: 5px 10px;
+  border: 1.5px solid var(--border);
   border-radius: 20px;
-  background: var(--surface2);
-  color: var(--muted);
+  background: white;
+  color: var(--text2);
   cursor: pointer;
   font-family: var(--sans);
   white-space: nowrap;
+  transition: all .12s;
 }
+.fin-filter-btn:active { opacity: .8; }
 .fin-filter-btn.active {
   background: var(--accent);
   border-color: var(--accent);
   color: white;
+  font-weight: 800;
 }
 
 /* ================================================================
