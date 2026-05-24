@@ -664,7 +664,7 @@ function showPage(id) {
   if (tabEl) tabEl.classList.add('active');
   if (id === 'dash') renderDashboard();
   if (id === 'list') renderList();
-  if (id === 'day') { updateDayBanner(); updateDayLiveStats(); renderDaySessionsList(); renderDayState(); }
+  if (id === 'day') { updateDayLiveStats(); renderDaySessionsList(); renderDayState(); }
   if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
   if (id === 'history') { renderHistoryPage(); }
   if (id === 'finance')  { renderFinancePage(); }
@@ -3631,8 +3631,7 @@ function updateDayBanner() {
     sub.textContent   = 'Opened ' + fmtTime(opened_at)
       + ' · ' + dur + ' running'
       + (reopened_count > 0 ? ' · Reopened ' + reopened_count + 'x' : '');
-    actionArea.innerHTML = '<button onclick="closeDay()" style="' + BTN + 'background:var(--red);color:white;"><i class="fa-solid fa-moon"></i> Close Day</button>';
-    if (liveSection) liveSection.style.display = 'block';
+    if (actionArea) actionArea.innerHTML = '';  // Day tab handles its own buttons now
     setDayMode(true);
     updateDayLiveStats();
   } else if (status === 'CLOSED') {
@@ -3645,8 +3644,7 @@ function updateDayBanner() {
     sub.textContent   = closed_at
       ? 'Closed at ' + fmtTime(closed_at) + (auto_closed ? ' · auto' : '') + (reopened_count > 0 ? ' · Opened ' + (reopened_count + 1) + 'x today' : '') + ' · Tap to reopen'
       : 'Tap Open Day to begin — ' + fmtFullDate(todayDateStr());
-    actionArea.innerHTML = '<button onclick="openDay()" style="' + BTN + 'background:var(--accent);color:white;"><i class="fa-solid fa-sun"></i> Open Day</button>';
-    if (liveSection) liveSection.style.display = 'block';  // still show cash summary when closed
+    if (actionArea) actionArea.innerHTML = '';
     setDayMode(false);
     updateDayLiveStats();
   } else if (status === 'LOCKED') {
@@ -3657,8 +3655,7 @@ function updateDayBanner() {
     title.textContent = 'Archived Day';
     title.style.color = 'var(--muted)';
     sub.textContent   = fmtFullDate((activeDay.businessDate || activeDay.business_date)) + ' — read only';
-    actionArea.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:10px 0;">This day is read-only. A new day will appear automatically tomorrow.</div>';
-    if (liveSection) liveSection.style.display = 'block';
+    if (actionArea) actionArea.innerHTML = '';
     setDayMode(false);
     updateDayLiveStats();
   }
@@ -4471,38 +4468,25 @@ function _finInRange(date, range) {
 }
 
 async function renderFinancePage() {
-  // Default date
   const dateEl = document.getElementById('fin-date');
   if (dateEl && !dateEl.value) dateEl.value = todayDateStr();
 
   const allEntries = await dbAll('finances');
   const allSales   = await dbAll('sales');
-  const range      = _finDateRange();
 
-  // Filter entries and sales by period
-  const entries = allEntries.filter(e => _finInRange(e.date || (e.createdAt||'').split('T')[0], range));
-  const sales   = allSales.filter(s   => _finInRange(s.businessDate || (s.date||'').split('T')[0], range));
+  // Only manual finance entries (exclude auto-generated revenue + reconciliation)
+  const manualTypes = ['injection','investment','stock_purchase','expense','withdrawal','other'];
+  const manualEntries = allEntries.filter(e => manualTypes.includes(e.type));
 
-  // ── Compute KPIs ──────────────────────────────────────────
-  const invested  = entries.filter(e=>e.type==='investment'||e.type==='injection').reduce((s,e)=>s+e.amount,0);
-  const stockBought= entries.filter(e=>e.type==='stock_purchase').reduce((s,e)=>s+e.amount,0);
-  const expenses  = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
-  const withdrawn = entries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+e.amount,0);
+  // ── KPIs (all time) ──────────────────────────────────────
+  const invested  = manualEntries.filter(e=>e.type==='injection'||e.type==='investment').reduce((s,e)=>s+e.amount,0);
+  const expenses  = manualEntries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  const withdrawn = manualEntries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+e.amount,0);
+  const revenue   = allSales.reduce((s,x)=>s+(x.revenue||0),0);
+  const profit    = allSales.reduce((s,x)=>s+(x.profit||0),0);
+  const margin    = revenue > 0 ? (profit/revenue*100) : 0;
+  const net       = invested + revenue - expenses - withdrawn;
 
-  // Revenue: prefer finance revenue entries, fall back to raw sales
-  const revEntries = entries.filter(e=>e.type==='revenue'&&e.category==='sales');
-  const revenue = revEntries.length
-    ? revEntries.reduce((s,e)=>s+e.amount,0)
-    : sales.reduce((s,s2)=>s+(s2.revenue||0),0);
-  const profit  = revEntries.length
-    ? revEntries.reduce((s,e)=>s+(e.profit||0),0)
-    : sales.reduce((s,s2)=>s+(s2.profit||0),0);
-  const margin  = revenue > 0 ? ((profit / revenue) * 100) : 0;
-  const net     = invested + revenue - expenses - withdrawn;
-  const salesCount = sales.length;
-  const avgSale    = salesCount > 0 ? revenue / salesCount : 0;
-
-  // ── Update KPI tiles ──────────────────────────────────────
   const setT = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=fmt(v); };
   setT('fin-revenue',  revenue);
   setT('fin-profit',   profit);
@@ -4515,62 +4499,33 @@ async function renderFinancePage() {
     marginEl.textContent = margin.toFixed(1) + '%';
     marginEl.style.color = margin >= 20 ? 'var(--green)' : margin >= 0 ? 'var(--text)' : 'var(--red)';
   }
-
   const netEl  = document.getElementById('fin-net');
   const netKpi = document.getElementById('fin-net-kpi');
-  if (netEl) {
-    netEl.textContent = (net >= 0 ? '' : '-') + fmt(Math.abs(net));
-    netEl.style.color = net >= 0 ? 'var(--green)' : 'var(--red)';
-  }
-  if (netKpi) {
-    netKpi.className = 'fin-kpi ' + (net >= 0 ? 'green' : 'red');
-  }
+  if (netEl)  { netEl.textContent = (net>=0?'':'-')+fmt(Math.abs(net)); netEl.style.color = net>=0?'var(--green)':'var(--red)'; }
+  if (netKpi) { netKpi.className = 'fin-kpi '+(net>=0?'green':'red'); }
 
-  // ── Insights ──────────────────────────────────────────────
-  const insights = [];
-  if (salesCount > 0)   insights.push({ icon:'🛒', text: salesCount + ' sale' + (salesCount!==1?'s':'') + ' · avg ' + fmt(avgSale) });
-  if (margin < 0)       insights.push({ icon:'🚨', text: 'Selling below cost — margin is negative!', color:'var(--red)' });
-  else if (margin < 10) insights.push({ icon:'⚠️', text: 'Low margin (' + margin.toFixed(1) + '%) — consider reviewing prices', color:'#d97706' });
-  else if (margin >= 40)insights.push({ icon:'🎯', text: 'Strong margin: ' + margin.toFixed(1) + '%', color:'var(--green)' });
-  if (expenses > revenue && revenue > 0) insights.push({ icon:'⚠️', text: 'Expenses exceed revenue this period', color:'var(--red)' });
-  if (withdrawn > profit && profit > 0)  insights.push({ icon:'⚠️', text: 'Withdrawals exceed profit — watch cash flow', color:'#d97706' });
-  // Top expense category
-  const expEntries = entries.filter(e=>e.type==='expense');
-  if (expEntries.length > 0) {
-    const catTotals = {};
-    expEntries.forEach(e => { const c=e.category||'general'; catTotals[c]=(catTotals[c]||0)+e.amount; });
-    const topCat = Object.entries(catTotals).sort((a,b)=>b[1]-a[1])[0];
-    if (topCat) insights.push({ icon:'💸', text: 'Biggest expense: ' + topCat[0] + ' (' + fmt(topCat[1]) + ')' });
+  // ── Transaction list ─────────────────────────────────────
+  let listEntries;
+  if (_finFilter === 'all') {
+    listEntries = manualEntries;
+  } else if (_finFilter === 'investment') {
+    listEntries = manualEntries.filter(e=>e.type==='injection'||e.type==='investment');
+  } else if (_finFilter === 'expense') {
+    listEntries = manualEntries.filter(e=>e.type==='expense'||e.type==='withdrawal'||e.type==='stock_purchase');
+  } else {
+    listEntries = manualEntries.filter(e=>e.type===_finFilter);
   }
-
-  const insightsEl = document.getElementById('fin-insights');
-  if (insightsEl) {
-    if (insights.length) {
-      insightsEl.innerHTML = insights.map(i =>
-        '<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-bottom:6px;font-size:12px;font-weight:600;color:' + (i.color||'var(--text2)') + ';">' +
-          '<span style="font-size:16px;">' + i.icon + '</span>' + escapeHtml(i.text) +
-        '</div>'
-      ).join('');
-    } else {
-      insightsEl.innerHTML = '';
-    }
-  }
-
-  // ── 7-day cash flow bar chart ─────────────────────────────
-  _renderFinChart(allEntries, allSales);
-
-  // ── Filter transaction list ───────────────────────────────
-  const periodEntries = _finFilter === 'all' ? allEntries : allEntries.filter(e=>e.type===_finFilter);
-  const sorted = [...periodEntries].sort((a,b)=>new Date(b.date||b.createdAt)-new Date(a.date||a.createdAt));
+  const sorted = [...listEntries].sort((a,b)=>new Date(b.date||b.createdAt)-new Date(a.date||a.createdAt));
 
   const summaryLine = document.getElementById('fin-summary-line');
   if (summaryLine) {
-    const total = periodEntries.reduce((s,e)=>s+e.amount,0);
-    summaryLine.textContent = periodEntries.length + ' record' + (periodEntries.length!==1?'s':'') + ' · Total: ' + fmt(total);
+    const total = listEntries.reduce((s,e)=>s+e.amount,0);
+    summaryLine.textContent = sorted.length + ' entr'+(sorted.length===1?'y':'ies')+' · '+fmt(total);
   }
 
   renderFinList(sorted);
 }
+
 
 function _renderFinChart(allEntries, allSales) {
   const chartWrap = document.getElementById('fin-chart-wrap');
@@ -4617,42 +4572,36 @@ function renderFinList(entries) {
   const list = document.getElementById('fin-list');
   if (!list) return;
   if (!entries.length) {
-    list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);font-size:14px;">No transactions found.<br><span style="font-size:12px;">Record your first investment, expense or withdrawal above.</span></div>';
+    list.innerHTML = '<div style="text-align:center;padding:28px 16px;color:var(--muted);font-size:13px;">No entries yet.<br><span style="font-size:11px;">Use the form above to record a transaction.</span></div>';
     return;
   }
-  const typeConfig = {
-    injection:     { icon:'💉', color:'var(--green)',   label:'Cash Injection' },
-    investment:    { icon:'💵', color:'var(--green)',   label:'Investment'     },
-    stock_purchase:{ icon:'🛍️', color:'#1d4ed8',        label:'Stock Purchase' },
-    expense:       { icon:'💸', color:'var(--red)',     label:'Expense'        },
-    withdrawal:    { icon:'🏧', color:'#d97706',        label:'Withdrawal'     },
-    revenue:       { icon:'🛒', color:'var(--accent2)', label:'Sale Revenue'   },
-    other:         { icon:'📝', color:'var(--muted)',   label:'Other'          },
+  const cfgMap = {
+    injection:     { icon:'💉', color:'var(--green)', label:'Injection',      out:false },
+    investment:    { icon:'💵', color:'var(--green)', label:'Investment',     out:false },
+    stock_purchase:{ icon:'🛍️', color:'#1d4ed8',      label:'Stock Purchase', out:true  },
+    expense:       { icon:'💸', color:'var(--red)',   label:'Expense',        out:true  },
+    withdrawal:    { icon:'🏧', color:'#d97706',      label:'Withdrawal',     out:true  },
+    other:         { icon:'📝', color:'var(--muted)', label:'Other',          out:false },
   };
-  list.innerHTML = entries.map(e => {
-    const cfg   = typeConfig[e.type] || typeConfig.other;
-    const dateStr = (e.date || (e.createdAt||'').split('T')[0]);
-    const fdate = dateStr ? new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—';
-    const isOut = e.type === 'expense' || e.type === 'withdrawal';
-    const sign  = isOut ? '-' : (e.type === 'revenue' || e.type === 'investment' ? '+' : '');
-    const catBadge = e.category && e.category !== 'general' && e.category !== 'other' && e.category !== 'sales'
-      ? '<span style="font-size:9px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1px 6px;margin-left:6px;color:var(--muted);font-weight:600;">' + escapeHtml(e.category) + '</span>' : '';
-    const addedBy = e.createdBy ? ' · ' + e.createdBy : '';
-    return '<div class="fin-entry" style="border-left:3px solid ' + cfg.color + ';">' +
-      '<div style="display:flex;align-items:center;gap:10px;">' +
-        '<span style="font-size:22px;flex-shrink:0;">' + cfg.icon + '</span>' +
-        '<div style="flex:1;min-width:0;">' +
-          '<div style="font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(e.description||cfg.label) + catBadge + '</div>' +
-          '<div style="font-size:11px;color:var(--muted);margin-top:2px;">' + cfg.label + ' · ' + fdate + addedBy + '</div>' +
-          (e.type==='revenue'&&e.profit!=null ? '<div style="font-size:10px;color:' + (e.profit>=0?'var(--green)':'var(--red)') + ';font-weight:700;">Profit: ' + (e.profit>=0?'+':'') + fmt(e.profit) + '</div>' : '') +
-        '</div>' +
-        '<div style="text-align:right;flex-shrink:0;">' +
-          '<div style="font-size:16px;font-weight:900;font-family:var(--mono);color:' + cfg.color + ';">' + sign + fmt(e.amount) + '</div>' +
-          (currentUser&&currentUser.role==='super' ? '<button onclick="deleteFinanceEntry(' + e.id + ')" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 0;display:block;">✕ delete</button>' : '') +
-        '</div>' +
+  const rows = entries.map((e, i) => {
+    const c  = cfgMap[e.type] || cfgMap.other;
+    const ds = e.date || (e.createdAt||'').split('T')[0];
+    const fd = ds ? new Date(ds+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '—';
+    const bg = i % 2 === 0 ? 'var(--surface)' : '#f7faf7';
+    const delBtn = (currentUser&&currentUser.role==='super')
+      ? '<button onclick="deleteFinanceEntry('+e.id+')" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;flex-shrink:0;">✕</button>'
+      : '';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:'+bg+';border-bottom:1px solid var(--border);">' +
+      '<span style="font-size:18px;flex-shrink:0;">'+c.icon+'</span>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(e.description||c.label)+'</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:1px;">'+c.label+' · '+fd+'</div>' +
       '</div>' +
+      '<div style="font-size:14px;font-weight:900;font-family:var(--mono);color:'+c.color+';flex-shrink:0;">'+(c.out?'-':'+')+fmt(e.amount)+'</div>' +
+      delBtn +
     '</div>';
-  }).join('');
+  });
+  list.innerHTML = '<div style="border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;">' + rows.join('') + '</div>';
 }
 
 async function saveFinanceEntry() {
@@ -4686,9 +4635,13 @@ async function saveFinanceEntry() {
     } catch(e) { console.warn('[SYNC] finance entry:', e.message); }
   }
 
-  // Clear form (keep type and date for fast back-to-back entry)
+  // Clear form after save
+  document.getElementById('fin-type').value   = '';
   document.getElementById('fin-amount').value = '';
   document.getElementById('fin-desc').value   = '';
+  document.getElementById('fin-date').value   = todayDateStr();
+  const ftEl = document.getElementById('fin-type');
+  if (ftEl) ftEl.style.background = '';
 
   renderFinancePage();
   scheduleSync();
@@ -4705,9 +4658,11 @@ async function deleteFinanceEntry(id) {
 
 function filterFinance(type) {
   _finFilter = type;
-  document.querySelectorAll('.fin-filter-btn').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById('fin-filter-' + type);
-  if (btn) btn.classList.add('active');
+  // Only 3 filter buttons: all, investment, expense
+  ['all','investment','expense'].forEach(t => {
+    const b = document.getElementById('fin-filter-' + t);
+    if (b) b.classList.toggle('active', t === type);
+  });
   renderFinancePage();
 }
 
@@ -4765,11 +4720,13 @@ function _renderSizeGroupFilter() {
 
 
 // ═══════════════════════════════════════════════════════════
-// DAY RECONCILIATION — STATE MACHINE
-// 3 states stored in localStorage, keyed by date:
-//   STATE A: no data        → show opening form
-//   STATE B: opening locked → show closing form + locked opening
-//   STATE C: reconciled     → show insights only, hide all forms
+// DAY RECONCILIATION — FLOW CONTROLLER
+// Steps keyed by date in localStorage:
+//   no data        → step: open  (show Open Day btn)
+//   opened_only    → step: opening_form (show opening balances form)
+//   opening_locked → step: close_btn (show Close Day btn)
+//   closing_form   → step: closing_form (show closing form)
+//   reconciled     → step: reconciled (insights only)
 // ═══════════════════════════════════════════════════════════
 
 const DAY_RECON_KEY = date => 'mgs_recon_' + date;
@@ -4779,100 +4736,127 @@ function _getDayRecon(date) {
   catch(e) { return null; }
 }
 function _saveDayRecon(date, data) {
-  localStorage.setItem(DAY_RECON_KEY(date), JSON.stringify(data));
+  try { localStorage.setItem(DAY_RECON_KEY(date), JSON.stringify(data)); } catch(e) {}
 }
 function _clearDayRecon(date) {
-  localStorage.removeItem(DAY_RECON_KEY(date));
+  try { localStorage.removeItem(DAY_RECON_KEY(date)); } catch(e) {}
 }
 
-// ── Show the correct state on page load / navigation ────────────
+// ── Show correct step ────────────────────────────────────────────
 function renderDayState() {
   const today = activeDay
     ? (activeDay.businessDate || activeDay.business_date)
     : todayDateStr();
-  const data = _getDayRecon(today);
 
-  const stateOpening    = document.getElementById('day-state-opening');
-  const stateClosing    = document.getElementById('day-state-closing');
-  const stateReconciled = document.getElementById('day-state-reconciled');
-  if (!stateOpening) return;
+  // Update header
+  const titleEl = document.getElementById('day-banner-title');
+  const subEl   = document.getElementById('day-banner-sub');
+  const iconEl  = document.getElementById('day-banner-icon');
+  if (titleEl) titleEl.textContent = fmtFullDate(today);
+  if (subEl)   subEl.textContent   = today;
+  if (iconEl)  iconEl.textContent  = '📅';
 
-  if (!data) {
-    // STATE A — no data yet, show opening form
-    stateOpening.style.display    = '';
-    stateClosing.style.display    = 'none';
-    stateReconciled.style.display = 'none';
+  const data  = _getDayRecon(today);
+  const step  = data ? data.step : 'open';
+  const isOpen = activeDay && (activeDay.status === 'OPEN');
 
-  } else if (data.state === 'opening_locked') {
-    // STATE B — opening locked, show closing form
-    stateOpening.style.display    = 'none';
-    stateClosing.style.display    = '';
-    stateReconciled.style.display = 'none';
+  // All step divs
+  const steps = ['open','opening_form','close_btn','closing_form','reconciled'];
+  steps.forEach(s => {
+    const el = document.getElementById('day-step-' + s);
+    if (el) el.style.display = 'none';
+  });
+  const openLocked = document.getElementById('day-opening-locked');
+  if (openLocked) openLocked.style.display = 'none';
+
+  // Determine which step to show
+  if (step === 'reconciled') {
+    if (openLocked) openLocked.style.display = '';
     _renderOpeningSummary(data);
-
-  } else if (data.state === 'reconciled') {
-    // STATE C — fully reconciled, show insights only
-    stateOpening.style.display    = 'none';
-    stateClosing.style.display    = 'none';
-    stateReconciled.style.display = '';
+    const el = document.getElementById('day-step-reconciled');
+    if (el) el.style.display = '';
     _renderReconcileInsights(data, today);
+
+  } else if (step === 'closing_form') {
+    if (openLocked) openLocked.style.display = '';
+    _renderOpeningSummary(data);
+    const el = document.getElementById('day-step-closing-form');
+    if (el) el.style.display = '';
+
+  } else if (step === 'opening_locked' || (data && data.opening)) {
+    if (openLocked) openLocked.style.display = '';
+    _renderOpeningSummary(data);
+    const el = document.getElementById('day-step-close-btn');
+    if (el) el.style.display = '';
+
+  } else if (step === 'opening_form' || isOpen) {
+    const el = document.getElementById('day-step-opening-form');
+    if (el) el.style.display = '';
+
+  } else {
+    // Default: show Open Day button
+    const el = document.getElementById('day-step-open');
+    if (el) el.style.display = '';
   }
 }
+window.renderDayState = renderDayState;
 
-// ── Lock opening balances → STATE B ─────────────────────────────
+// ── openDay: existing logic + advance to opening form ────────────
+// Wrap the existing openDay to also advance the state
+const _origOpenDay = openDay;
+openDay = async function() {
+  await _origOpenDay();
+  const today = todayDateStr();
+  const data  = _getDayRecon(today);
+  if (!data) {
+    _saveDayRecon(today, { step: 'opening_form', date: today });
+  }
+  renderDayState();
+};
+window.openDay = openDay;
+
+// ── lockOpeningBalances ──────────────────────────────────────────
 function lockOpeningBalances() {
   const cash  = parseFloat(document.getElementById('op-cash')?.value)  || 0;
   const till  = parseFloat(document.getElementById('op-till')?.value)  || 0;
   const mpesa = parseFloat(document.getElementById('op-mpesa')?.value) || 0;
-
   if (cash === 0 && till === 0 && mpesa === 0) {
-    toast('⚠️ Enter at least one opening balance', 'err');
-    return;
+    toast('⚠️ Enter at least one opening balance', 'err'); return;
   }
-
-  const today = activeDay
-    ? (activeDay.businessDate || activeDay.business_date)
-    : todayDateStr();
-
+  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
   _saveDayRecon(today, {
-    state: 'opening_locked',
-    date:  today,
+    step: 'opening_locked', date: today,
     lockedAt: new Date().toISOString(),
     opening: { cash, till, mpesa, total: cash + till + mpesa }
   });
-
   toast('🌅 Opening balances locked', 'ok');
   renderDayState();
 }
 window.lockOpeningBalances = lockOpeningBalances;
 
-// ── Render locked opening summary (inside closing state) ─────────
-function _renderOpeningSummary(data) {
-  const el = document.getElementById('day-opening-summary');
-  if (!el || !data.opening) return;
-  const o = data.opening;
-  const fmt2 = v => (v||0) === 0 ? '—' : fmt(v);
-  el.innerHTML =
-    `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">` +
-    `<div style="text-align:center;"><div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmt2(o.cash)}</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">💵 Cash</div></div>` +
-    `<div style="text-align:center;"><div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmt2(o.till)}</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">🏧 Till</div></div>` +
-    `<div style="text-align:center;"><div style="font-size:16px;font-weight:900;font-family:var(--mono);color:#6366f1;">${fmt2(o.mpesa)}</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">📱 M-Pesa</div></div>` +
-    `</div>` +
-    `<div style="border-top:1px solid #a8d8b5;margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;align-items:center;">` +
-    `<span style="font-size:11px;color:var(--muted);">Locked at ${new Date(data.lockedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span>` +
-    `<span style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--green);">Total: ${fmt(o.total)}</span>` +
-    `</div>`;
+// ── initCloseDay: show closing form ─────────────────────────────
+function initCloseDay() {
+  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
+  const data  = _getDayRecon(today) || {};
+  _saveDayRecon(today, { ...data, step: 'closing_form' });
+  renderDayState();
 }
+window.initCloseDay = initCloseDay;
 
-// ── Reconcile → STATE C ──────────────────────────────────────────
+// ── cancelCloseDay (from closing form Cancel btn) ────────────────
+function cancelCloseDay() {
+  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
+  const data  = _getDayRecon(today) || {};
+  _saveDayRecon(today, { ...data, step: 'opening_locked' });
+  renderDayState();
+}
+window.cancelCloseDay = cancelCloseDay;
+
+// ── reconcileDay: save closing, compute insights, lock ───────────
 async function reconcileDay() {
-  const today = activeDay
-    ? (activeDay.businessDate || activeDay.business_date)
-    : todayDateStr();
-  const data = _getDayRecon(today);
-  if (!data || data.state !== 'opening_locked') {
-    toast('⚠️ Record opening balances first', 'err'); return;
-  }
+  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
+  const data  = _getDayRecon(today);
+  if (!data || !data.opening) { toast('⚠️ Record opening balances first', 'err'); return; }
 
   const injected  = parseFloat(document.getElementById('cl-injected')?.value)  || 0;
   const cash      = parseFloat(document.getElementById('cl-cash')?.value)       || 0;
@@ -4882,17 +4866,17 @@ async function reconcileDay() {
   const withdrawn = parseFloat(document.getElementById('cl-withdrawn')?.value)  || 0;
 
   if (cash === 0 && till === 0 && mpesa === 0) {
-    toast('⚠️ Enter at least one closing balance (Cash, Till, or M-Pesa)', 'err'); return;
+    toast('⚠️ Enter at least Cash, Till or M-Pesa closing balance', 'err'); return;
   }
 
-  // System sales for today
+  // System figures
   const allSales = await dbAll('sales');
   const allFins  = await dbAll('finances');
   const daySales = allSales.filter(s => (s.businessDate||s.business_date||(s.date||'').split('T')[0]) === today);
-  const dayFins  = allFins.filter(e => (e.date||(e.createdAt||'').split('T')[0]) === today && e.type !== 'reconciliation');
+  const dayFins  = allFins.filter(e  => (e.date||(e.createdAt||'').split('T')[0]) === today && e.type !== 'reconciliation');
 
-  const sysCashRev   = daySales.filter(s => !s.paymentMethod||s.paymentMethod==='cash').reduce((a,s)=>a+(s.revenue||0),0);
-  const sysMpesaRev  = daySales.filter(s => s.paymentMethod==='mpesa').reduce((a,s)=>a+(s.revenue||0),0);
+  const sysCashRev   = daySales.filter(s=>!s.paymentMethod||s.paymentMethod==='cash').reduce((a,s)=>a+(s.revenue||0),0);
+  const sysMpesaRev  = daySales.filter(s=>s.paymentMethod==='mpesa').reduce((a,s)=>a+(s.revenue||0),0);
   const sysTotalRev  = daySales.reduce((a,s)=>a+(s.revenue||0),0);
   const sysTotalProf = daySales.reduce((a,s)=>a+(s.profit||0),0);
   const salesCount   = daySales.length;
@@ -4900,916 +4884,175 @@ async function reconcileDay() {
 
   // Day Money formula
   const dayMoney    = injected + cash + till + mpesa + expenses + withdrawn;
-  const opening     = data.opening;
-  const opTotal     = opening.total || 0;
-
-  // Expected Day Money = opening total + sales revenue + injected
+  const opTotal     = data.opening.total || 0;
   const expDayMoney = opTotal + sysTotalRev + injected;
   const variance    = dayMoney - expDayMoney;
 
-  // Cash position analysis
-  const expCashClose  = opening.cash + opening.till + sysCashRev + injected - expenses - withdrawn;
-  const physCashClose = cash + till;
-  const cashVar       = physCashClose - expCashClose;
-  const expMpesaClose = opening.mpesa + sysMpesaRev;
-  const mpesaVar      = mpesa - expMpesaClose;
-  const netMovement   = sysTotalRev + injected - expenses - withdrawn;
+  // Cash analysis
+  const expCash  = data.opening.cash + data.opening.till + sysCashRev + injected - expenses - withdrawn;
+  const physCash = cash + till;
+  const cashVar  = physCash - expCash;
+  const expMpesa = data.opening.mpesa + sysMpesaRev;
+  const mpesaVar = mpesa - expMpesa;
+  const netMove  = sysTotalRev + injected - expenses - withdrawn;
 
-  // Save state C
+  // Build full state
   const reconciled = {
-    state: 'reconciled',
-    date:  today,
+    step: 'reconciled', date: today,
+    lockedAt: data.lockedAt, opening: data.opening,
     reconciledAt: new Date().toISOString(),
-    opening,
     closing: { injected, cash, till, mpesa, expenses, withdrawn, dayMoney },
-    system: { sysCashRev, sysMpesaRev, sysTotalRev, sysTotalProf, salesCount, margin },
-    analysis: { expDayMoney, variance, cashVar, mpesaVar, netMovement }
+    system:  { sysCashRev, sysMpesaRev, sysTotalRev, sysTotalProf, salesCount, margin },
+    analysis:{ expDayMoney, variance, cashVar, mpesaVar, netMove }
   };
   _saveDayRecon(today, reconciled);
 
-  // Also save to finances
+  // Close the actual business day record
+  await _doCloseDay();
+
+  // Save finance reconciliation record
   await dbAdd('finances', {
-    type: 'reconciliation', amount: dayMoney,
-    description: 'Day reconcile · ' + today,
-    category: 'reconciliation', date: today,
-    createdAt: new Date().toISOString(),
-    createdBy: currentUser ? currentUser.username : 'system',
+    type:'reconciliation', amount:dayMoney,
+    description:'Day reconcile · '+today, category:'reconciliation', date:today,
+    createdAt:new Date().toISOString(), createdBy:currentUser?currentUser.username:'system',
     details: reconciled
   });
   scheduleSync();
 
-  toast('✅ Day reconciled & locked', 'ok');
+  toast('✅ Day closed & reconciled', 'ok');
   renderDayState();
+  renderDaySessionsList();
 }
 window.reconcileDay = reconcileDay;
 
-// ── Render the full insights view (STATE C) ──────────────────────
+// ── Internal: close the business day record ──────────────────────
+async function _doCloseDay() {
+  if (!activeDay) return;
+  const now      = new Date();
+  const today    = activeDay.businessDate || activeDay.business_date;
+  const allSales = await dbAll('sales');
+  const daySales = allSales.filter(s=>(s.businessDate||s.business_date)===today);
+  const items    = await dbAll('items');
+  activeDay.status       = 'CLOSED';
+  activeDay.closed_at    = now.toISOString();
+  activeDay.salesCount   = daySales.length;
+  activeDay.revenue      = daySales.reduce((s,x)=>s+x.revenue,0);
+  activeDay.profit       = daySales.reduce((s,x)=>s+x.profit,0);
+  activeDay.itemsSold    = daySales.reduce((s,x)=>s+x.qty,0);
+  activeDay.closingStockCost = items.reduce((s,i)=>s+i.buy*i.qty,0);
+  await dbPut('business_days', activeDay);
+  setDayMode(false);
+  renderDashboard();
+}
+
+// ── Render locked opening summary ───────────────────────────────
+function _renderOpeningSummary(data) {
+  const el = document.getElementById('day-opening-summary');
+  if (!el || !data || !data.opening) return;
+  const o   = data.opening;
+  const f   = v => v ? fmt(v) : '—';
+  const t   = new Date(data.lockedAt||0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  el.innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">' +
+      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);">'+f(o.cash)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">💵 Cash</div></div>' +
+      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);">'+f(o.till)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">🏧 Till</div></div>' +
+      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);color:#6366f1;">'+f(o.mpesa)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">📱 M-Pesa</div></div>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #a8d8b5;padding-top:8px;">' +
+      '<span style="font-size:10px;color:var(--muted);">Locked '+t+'</span>' +
+      '<span style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--green);">Total: '+fmt(o.total||0)+'</span>' +
+    '</div>';
+}
+
+// ── Render reconcile insights ────────────────────────────────────
 function _renderReconcileInsights(data, today) {
   const el = document.getElementById('day-reconcile-insights');
-  if (!el || !data.closing || !data.system) return;
-
+  if (!el || !data || !data.closing) return;
   const o  = data.opening;
   const cl = data.closing;
   const sy = data.system;
   const an = data.analysis;
-  const absVar  = Math.abs(an.variance);
-  const isOk    = absVar <= 5;
-  const isWarn  = !isOk && absVar <= 300;
-  const varClr  = isOk ? 'var(--green)' : isWarn ? '#d97706' : 'var(--red)';
-  const varIcon = isOk ? '✅' : an.variance > 0 ? '⬆️' : '⬇️';
-  const varLbl  = isOk ? 'Balanced' : an.variance > 0 ? '+'+fmt(an.variance)+' surplus' : fmt(absVar)+' short';
-  const clsFor  = v => Math.abs(v)<=5?'rc-ok':Math.abs(v)<=300?'rc-warn':'rc-bad';
-  const fmt2    = v => v === 0 ? '—' : fmt(v);
+  const absV = Math.abs(an.variance);
+  const isOk = absV <= 5;
+  const isWn = !isOk && absV <= 300;
+  const vc   = isOk ? 'var(--green)' : isWn ? '#d97706' : 'var(--red)';
+  const vi   = isOk ? '✅' : an.variance > 0 ? '⬆️' : '⬇️';
+  const vl   = isOk ? 'Balanced' : an.variance > 0 ? '+'+fmt(an.variance)+' surplus' : fmt(absV)+' short';
+  const clf  = v => Math.abs(v)<=5?'rc-ok':Math.abs(v)<=300?'rc-warn':'rc-bad';
+  const f2   = v => v === 0 ? '—' : fmt(v);
+  const row  = (ic, lbl, val, col) =>
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);">' +
+      '<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:15px;">'+ic+'</span><span style="font-size:12px;font-weight:700;color:var(--text);">'+lbl+'</span></div>' +
+      '<span style="font-size:13px;font-weight:900;font-family:var(--mono);color:'+col+';">'+val+'</span>' +
+    '</div>';
 
-  const row = (icon, label, val, color) =>
-    `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:15px;width:22px;text-align:center;">${icon}</span>
-        <span style="font-size:12px;font-weight:700;color:var(--text);">${label}</span>
-      </div>
-      <span style="font-size:13px;font-weight:900;font-family:var(--mono);color:${color};">${val}</span>
-    </div>`;
-
-  const insights = [];
-  if (isOk) {
-    insights.push({ icon:'🎯', cls:'rc-ok', text:'Perfect — every shilling accounted for. Day Money = '+fmt(cl.dayMoney)+'.' });
-  } else if (an.variance > 0) {
-    insights.push({ icon:'⬆️', cls:'rc-warn', text:'Surplus of '+fmt(an.variance)+'. More cash than expected — check for unrecorded injection or double-count.' });
-  } else {
-    insights.push({ icon:'⬇️', cls:'rc-bad', text:'Short by '+fmt(absVar)+'. Less than expected — check for unrecorded expense, withdrawal, or missing transaction.' });
-  }
-  if (Math.abs(an.cashVar) > 50) {
-    const cv = an.cashVar;
-    insights.push({ icon:'💵', cls:clsFor(cv), text:'Cash variance: '+(cv>0?'+':'')+fmt(cv)+'. Physical cash ('+fmt(cl.cash+cl.till)+') vs expected ('+fmt(cl.cash+cl.till-cv)+'). Recount.' });
-  }
-  if (Math.abs(an.mpesaVar) > 50) {
-    const mv = an.mpesaVar;
-    insights.push({ icon:'📱', cls:clsFor(mv), text:'M-Pesa variance: '+(mv>0?'+':'')+fmt(mv)+'. Float ('+fmt(cl.mpesa)+') vs expected ('+fmt(cl.mpesa-mv)+'). Check M-Pesa statement.' });
-  }
-  if (cl.expenses > 0 && sy.sysTotalRev > 0 && cl.expenses > sy.sysTotalRev * 0.35) {
-    insights.push({ icon:'⚠️', cls:'rc-warn', text:'Expenses ('+fmt(cl.expenses)+') are '+((cl.expenses/sy.sysTotalRev)*100).toFixed(0)+'% of revenue — high for today.' });
-  }
-  if (sy.margin < 10 && sy.sysTotalRev > 0) {
-    insights.push({ icon:'📉', cls:'rc-warn', text:'Low margin: '+sy.margin.toFixed(1)+'%. Consider reviewing prices or cutting costs.' });
-  } else if (sy.margin >= 30 && sy.sysTotalRev > 0) {
-    insights.push({ icon:'🎉', cls:'rc-ok', text:'Great margin today: '+sy.margin.toFixed(1)+'%!' });
-  }
-  if (an.netMovement < 0) {
-    insights.push({ icon:'🚨', cls:'rc-bad', text:'Net position negative ('+fmt(an.netMovement)+'). Business spent more than it earned today.' });
-  }
-  if (sy.salesCount === 0) {
-    insights.push({ icon:'😴', cls:'rc-warn', text:'No sales recorded today.' });
-  }
+  // Insights
+  const ins = [];
+  if (isOk)           ins.push({i:'🎯',c:'rc-ok',  t:'Perfect — every shilling accounted for!'});
+  else if(an.variance>0) ins.push({i:'⬆️',c:'rc-warn',t:'Surplus of '+fmt(an.variance)+'. Check for unrecorded injection or double-count.'});
+  else                ins.push({i:'⬇️',c:'rc-bad',  t:'Short by '+fmt(absV)+'. Check for unrecorded expense, withdrawal, or missing sale.'});
+  if(Math.abs(an.cashVar)>50)  ins.push({i:'💵',c:clf(an.cashVar),  t:'Cash variance: '+(an.cashVar>0?'+':'')+fmt(an.cashVar)+'. Recount notes & coins.'});
+  if(Math.abs(an.mpesaVar)>50) ins.push({i:'📱',c:clf(an.mpesaVar), t:'M-Pesa variance: '+(an.mpesaVar>0?'+':'')+fmt(an.mpesaVar)+'. Check M-Pesa statement.'});
+  if(sy.margin<10&&sy.sysTotalRev>0) ins.push({i:'📉',c:'rc-warn',t:'Low margin today: '+sy.margin.toFixed(1)+'%.'});
+  else if(sy.margin>=30&&sy.sysTotalRev>0) ins.push({i:'🎉',c:'rc-ok',t:'Great margin today: '+sy.margin.toFixed(1)+'%!'});
+  if(an.netMove<0) ins.push({i:'🚨',c:'rc-bad',t:'Net movement negative ('+fmt(an.netMove)+'). Spent more than earned.'});
 
   el.innerHTML =
-    // Opening & Closing side-by-side
-    `<div class="day-section-label">🌅 Opening vs 🌙 Closing</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-      <div class="day-card" style="border-color:#a8d8b5;background:#f0faf4;padding:10px 12px;">
-        <div style="font-size:9px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Opening</div>
-        <div style="font-size:11px;color:var(--text);line-height:1.8;">
-          💵 ${fmt2(o.cash)}<br>🏧 ${fmt2(o.till)}<br>📱 ${fmt2(o.mpesa)}
-        </div>
-        <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--green);margin-top:6px;border-top:1px solid #a8d8b5;padding-top:6px;">${fmt(o.total)}</div>
-      </div>
-      <div class="day-card" style="border-color:var(--accent);padding:10px 12px;">
-        <div style="font-size:9px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Closing</div>
-        <div style="font-size:11px;color:var(--text);line-height:1.8;">
-          💵 ${fmt2(cl.cash)}<br>🏧 ${fmt2(cl.till)}<br>📱 ${fmt2(cl.mpesa)}
-          ${cl.injected>0?'<br>💉 +'+fmt(cl.injected):''}
-          ${cl.expenses>0?'<br>💸 -'+fmt(cl.expenses):''}
-          ${cl.withdrawn>0?'<br>🏧 -'+fmt(cl.withdrawn):''}
-        </div>
-        <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent);margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">Day Money: ${fmt(cl.dayMoney)}</div>
-      </div>
-    </div>
+    '<div class="day-section-label">📊 Summary</div>' +
+    '<div class="day-card day-card-green" style="padding:0;margin-bottom:8px;">' +
+      row('💵','Cash Sales',    '+'+fmt(sy.sysCashRev),  'var(--green)') +
+      row('📱','M-Pesa Sales',  '+'+fmt(sy.sysMpesaRev), 'var(--green)') +
+      row('🛒','Total Revenue',  fmt(sy.sysTotalRev),     'var(--accent2)') +
+      row('📈','Profit · '+sy.margin.toFixed(1)+'%', fmt(sy.sysTotalProf), sy.sysTotalProf>=0?'var(--green)':'var(--red)') +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f0faf4;">' +
+      '<span style="font-size:12px;font-weight:800;color:var(--green);">Net Movement</span>' +
+      '<span style="font-size:15px;font-weight:900;font-family:var(--mono);color:'+(an.netMove>=0?'var(--green)':'var(--red)')+';">'+(an.netMove>=0?'+':'')+fmt(an.netMove)+'</span>' +
+    '</div></div>' +
 
-    <div class="day-section-label">📊 Sales Summary</div>
-    <div class="day-card day-card-green" style="padding:0;">
-      ${row('💵','Cash Sales',       '+'+fmt(sy.sysCashRev),  'var(--green)')}
-      ${row('📱','M-Pesa Sales',     '+'+fmt(sy.sysMpesaRev), 'var(--green)')}
-      ${row('🛒','Total Revenue',    fmt(sy.sysTotalRev),     'var(--accent2)')}
-      ${row('📈','Profit · '+sy.margin.toFixed(1)+'%', fmt(sy.sysTotalProf), sy.sysTotalProf>=0?'var(--green)':'var(--red)')}
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:#f0faf4;">
-        <span style="font-size:11px;font-weight:800;color:var(--green);">Net Movement</span>
-        <span style="font-size:15px;font-weight:900;font-family:var(--mono);color:${an.netMovement>=0?'var(--green)':'var(--red)'};">${an.netMovement>=0?'+':''}${fmt(an.netMovement)}</span>
-      </div>
-    </div>
+    '<div class="day-section-label">⚖️ Reconciliation</div>' +
+    '<div class="day-card" style="padding:0;margin-bottom:8px;">' +
+      row('📦','Expected Day Money', fmt(an.expDayMoney), 'var(--text)') +
+      row('💰','Physical Day Money', fmt(cl.dayMoney),    'var(--text)') +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:'+(isOk?'var(--green-light)':isWn?'#fef3c7':'var(--red-light)')+';">' +
+        '<span style="font-size:13px;font-weight:800;color:'+vc+';">Variance</span>' +
+        '<span style="font-size:16px;font-weight:900;font-family:var(--mono);color:'+vc+';">'+vi+' '+vl+'</span>' +
+      '</div>' +
+    '</div>' +
 
-    <div class="day-section-label">⚖️ Reconciliation</div>
-    <div class="day-card" style="padding:0;">
-      ${row('📦','Expected Day Money', fmt(an.expDayMoney), 'var(--text)')}
-      ${row('💰','Physical Day Money', fmt(cl.dayMoney),    'var(--text)')}
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:${isOk?'var(--green-light)':isWarn?'#fef3c7':'var(--red-light)'};">
-        <span style="font-size:13px;font-weight:800;color:${varClr};">Variance</span>
-        <span style="font-size:16px;font-weight:900;font-family:var(--mono);color:${varClr};">${varIcon} ${varLbl}</span>
-      </div>
-    </div>
-
-    <div class="day-section-label">💡 Insights</div>
-    ${insights.map(i=>`<div class="${i.cls}" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:var(--r);margin-bottom:5px;font-size:12px;font-weight:600;line-height:1.4;"><span style="font-size:16px;flex-shrink:0;">${i.icon}</span><span>${i.text}</span></div>`).join('')}
-
-    <div style="text-align:center;font-size:10px;color:var(--muted);padding:8px 0 0;">
-      Reconciled at ${new Date(data.reconciledAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}
-    </div>`;
+    '<div class="day-section-label">💡 Insights</div>' +
+    ins.map(i=>'<div class="'+i.c+'" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:var(--r);margin-bottom:5px;font-size:12px;font-weight:600;line-height:1.4;"><span style="font-size:16px;flex-shrink:0;">'+i.i+'</span><span>'+i.t+'</span></div>').join('') +
+    '<div style="text-align:center;font-size:10px;color:var(--muted);padding:6px 0;">Closed & reconciled at '+new Date(data.reconciledAt||0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'</div>';
 }
 
-// ── Start Over — clear today's reconciliation ────────────────────
+// ── dayStartOver ─────────────────────────────────────────────────
 function dayStartOver() {
-  const today = activeDay
-    ? (activeDay.businessDate || activeDay.business_date)
-    : todayDateStr();
-  if (!confirm('Clear today\'s reconciliation and start over? This cannot be undone.')) return;
+  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
+  if (!confirm('Clear today\'s reconciliation and start over?')) return;
   _clearDayRecon(today);
-  // Clear all inputs
   ['op-cash','op-till','op-mpesa','cl-injected','cl-cash','cl-till','cl-mpesa','cl-expenses','cl-withdrawn']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  toast('Reconciliation cleared', '');
+  toast('Cleared', '');
   renderDayState();
 }
 window.dayStartOver = dayStartOver;
 
-// ===== INIT =====
-initDB();
-setTimeout(initFirebase, 800);
-
-// ===== AUTO SYNC =====
-let autoSyncTimer = null;
-let pendingSyncTimer = null;
-
-// Debounced sync — runs 2s after last change, avoids hammering Firebase
-function scheduleSync() {
-  if (!navigator.onLine || !fbReady || !fbDb) return;
-  clearTimeout(pendingSyncTimer);
-  pendingSyncTimer = setTimeout(async () => {
-    try {
-      await forcePushToFirebase(true);
-      await pullFromFirebase(true);
-    } catch(e) { /* auto sync failed silently */ setFbStatus('error'); console.warn('[AutoSync]', e.message); }
-  }, 2000);
-}
-
-// Expose so all data-change functions can call it
-window.scheduleSync = scheduleSync;
-
-function startAutoSync() {
-  if (autoSyncTimer) clearInterval(autoSyncTimer);
-  // Also run every 2 minutes as a heartbeat
-  autoSyncTimer = setInterval(async () => {
-    if (!fbReady || !fbDb || !navigator.onLine) return;
-    try {
-      await forcePushToFirebase(true);
-      await pullFromFirebase(true);
-      setFbStatus('on');
-    } catch(e) { setFbStatus('error'); }
-  }, 2 * 60 * 1000);
-}
-
-// Auto sync immediately when internet comes back online
-window.addEventListener('online', async () => {
-  if (!fbReady || !fbDb) return;
-  toast('📶 Back online — syncing…', '');
-  setFbStatus('syncing');
-  try {
-    await forcePushToFirebase(true);
-    await pullFromFirebase(true);
-    setFbStatus('on');
-    toast('✅ Synced!', 'ok');
-  } catch(e) { setFbStatus('error'); }
-});
-
-window.addEventListener('offline', () => {
-  toast('📴 Offline — changes saved locally', '');
-  setFbStatus('off');
-});
-
-// Start auto sync after Firebase connects
-const _origInitFirebase = initFirebase;
-initFirebase = async function() {
-  await _origInitFirebase();
-  if (fbReady) startAutoSync();
-};
-// ===================================================================
-// SHOE INVENTORY SYSTEM
-// ===================================================================
-
-const SHOE_GROUP_DEFAULTS = {
-  S: { min: 20, max: 28, label: 'Small (Children)'  },
-  M: { min: 29, max: 36, label: 'Medium (Teens)'    },
-  L: { min: 37, max: 45, label: 'Large (Adults)'    },
-};
-
-function getShoeGroups() {
-  const saved = localStorage.getItem(KEY_SHOE_GROUPS);
-  if (!saved) return JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS));
-  try { return JSON.parse(saved); } catch(e) { return JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS)); }
-}
-
-function isFootwearType(typeName) {
-  if (!typeName) return false;
-  const t = typeName.toLowerCase();
-  return t.includes('shoe') || t.includes('footwear') || t.includes('sandal') || t.includes('boot') || t.includes('sneaker');
-}
-
-// Get all size records for a shoe code
-async function getShoeSizes(itemCode) {
-  const all = await dbAll('shoe_sizes');
-  return all.filter(s => s.itemCode === itemCode).sort((a,b) => a.size - b.size);
-}
-
-// Upsert a shoe size record
-async function upsertShoeSize(record) {
-  const all = await dbAll('shoe_sizes');
-  const existing = all.find(s => s.itemCode === record.itemCode && s.size === record.size);
-  if (existing) {
-    const updated = { ...existing, ...record, id: existing.id };
-    await dbPut('shoe_sizes', updated);
-    return updated;
-  } else {
-    record.codeSize = record.itemCode + '_' + record.size;
-    try {
-      const id = await dbAdd('shoe_sizes', record);
-      record.id = id;
-      return record;
-    } catch(e) {
-      if (e.name === 'ConstraintError') {
-        // Unique codeSize violation — find and update existing
-        const byCS = all.find(s => s.codeSize === record.codeSize);
-        if (byCS) {
-          const updated = { ...byCS, ...record, id: byCS.id };
-          await dbPut('shoe_sizes', updated);
-          return updated;
-        }
-      }
-      throw e;
+// ── Auto-close at 11:59 PM ───────────────────────────────────────
+function _checkAutoClose() {
+  const now = new Date();
+  if (now.getHours() === 23 && now.getMinutes() === 59) {
+    const today = todayDateStr();
+    const data  = _getDayRecon(today);
+    // Only auto-close if day is open but not yet reconciled
+    if (activeDay && activeDay.status === 'OPEN' && (!data || data.step !== 'reconciled')) {
+      toast('🌙 Auto-closing day at 11:59 PM…', '');
+      // Move to closing_form step so user sees it's needed on next open
+      _saveDayRecon(today, { ...(data||{}), step: 'closing_form', date: today, autoClosedAt: now.toISOString() });
+      _doCloseDay();
+      renderDayState();
+      renderDaySessionsList();
     }
   }
 }
+// Check every minute
+setInterval(_checkAutoClose, 60000);
 
-// Enrich shoe items: compute virtual qty + size chip HTML from shoe_sizes
-async function enrichShoeItems(items) {
-  const shoeCodes = items.filter(i => i.isShoe).map(i => i.code);
-  if (!shoeCodes.length) return;
-  const allSizes = await dbAll('shoe_sizes');
-  for (const item of items) {
-    if (!item.isShoe) continue;
-    const sizes = allSizes.filter(s => s.itemCode === item.code).sort((a,b) => a.size - b.size);
-    item.qty = sizes.reduce((t,s) => t + (s.qty||0), 0);
-    item._sizeSummary = sizes.filter(s=>s.qty>0).map(s => {
-      const sc = s.qty <= OUT_STOCK_LEVEL ? 'out' : s.qty <= LOW_STOCK_LEVEL ? 'low' : '';
-      return '<span class="shoe-size-chip' + (sc?' '+sc:'') + '">' + s.size + '×' + s.qty + '</span>';
-    }).join('');
-  }
-}
-
-// ── SHOE ADD FORM GLOBALS ─────────────────────────────────────────
-// _shoeSizes and _shownGroups are now properties of _shoeState instance
-let _isShoeSale   = false;
-let _sellShoeItem = null;
-let _sellShoeSize = null;
-
-// Called when type dropdown changes
-function onTypeChange() {
-  const typeEl     = UI.el('f-type');
-  const type       = typeEl ? typeEl.value : '';
-  const shoePanel  = UI.el('shoe-size-panel');
-  const stdPricing = UI.el('std-pricing-section');
-  const sizeField  = document.getElementById('f-size-field');
-  if (!shoePanel || !stdPricing) return;
-
-  const isShoe = isFootwearType(type);
-  shoePanel.style.display  = isShoe ? 'block' : 'none';
-  stdPricing.style.display = isShoe ? 'none'  : 'block';
-  if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
-
-  if (isShoe) {
-    _shoeState.group      = null; _shoeState.sizes      = new Set(); _shoeState.perSizeMode= false; _shoeState.shownGroups= new Set();
-    renderShoeGroupButtons();
-    const szGrid = UI.el('shoe-sizes-grid');
-    const szWrap = UI.el('shoe-rows-wrap');
-    const szInner = UI.el('sz-grid');
-    if (szGrid)  szGrid.style.display  = 'none';
-    if (szWrap)  szWrap.style.display  = 'none';
-    if (szInner) szInner.innerHTML = '';
-    const sum = UI.el('shoe-selected-summary');
-    if (sum) sum.innerHTML = '';
-  }
-}
-
-function renderShoeGroupButtons() {
-  const groups = getShoeGroups();
-  ['S','M','L'].forEach(g => {
-    const btn = document.getElementById('sg-btn-' + g);
-    const rng = document.getElementById('sg-range-' + g);
-    const hasSelected = _getGroupSizes(g).some(s => _shoeState.sizes.has(s));
-    if (btn) btn.classList.toggle('sg-active', hasSelected || _shoeState.shownGroups.has(g));
-    if (rng && groups[g]) rng.textContent = groups[g].min + '–' + groups[g].max;
-  });
-}
-
-function _getGroupSizes(g) {
-  const groups = getShoeGroups();
-  if (!groups[g]) return [];
-  const { min, max } = groups[g];
-  return Array.from({ length: max - min + 1 }, (_, i) => min + i);
-}
-
-function selectSizeGroup(g) {
-  const groups = getShoeGroups();
-  const { min, max } = groups[g];
-  const sizes = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-  const grid  = UI.el('sz-grid');
-  if (!grid) return;
-
-  if (!_shoeState.shownGroups.has(g)) {
-    _shoeState.group = g;
-    _shoeState.shownGroups.add(g);
-
-    const block = document.createElement('div');
-    block.id = 'sz-group-block-' + g;
-    block.style.marginBottom = '10px';
-
-    const label = document.createElement('div');
-    label.className = 'sz-group-divider';
-    label.innerHTML = '<span class="sz-group-tag sz-group-' + g + '" style="cursor:pointer;">' +
-      (g==='S'?'Small / Children':g==='M'?'Medium / Teens':'Large / Adults') +
-      ' (' + min + '–' + max + ') ✕</span>';
-    label.onclick = () => deselectSizeGroup(g);
-    block.appendChild(label);
-
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
-    sizes.forEach(s => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'sz-btn' + (_shoeState.sizes.has(s) ? ' sz-active' : '');
-      btn.id = 'sz-' + s;
-      btn.textContent = s;
-      btn.onclick = () => toggleShoeSize(s);
-      row.appendChild(btn);
-    });
-    block.appendChild(row);
-    grid.appendChild(block);
-
-    const szGrid = UI.el('shoe-sizes-grid');
-    if (szGrid) szGrid.style.display = 'block';
-  } else {
-    deselectSizeGroup(g);
-    return;
-  }
-
-  renderShoeGroupButtons();
-  const szWrap = UI.el('shoe-rows-wrap');
-  if (szWrap && _shoeState.sizes.size > 0) szWrap.style.display = 'block';
-  // Rebuild per-size rows if in per-size mode
-  if (_shoeState.perSizeMode) renderShoeRows();
-}
-
-function deselectSizeGroup(g) {
-  const groups = getShoeGroups();
-  if (!groups[g]) return;
-  const { min, max } = groups[g];
-  for (let s = min; s <= max; s++) _shoeState.sizes.delete(s);
-  const block = document.getElementById('sz-group-block-' + g);
-  if (block) block.remove();
-  _shoeState.shownGroups.delete(g);
-  if (_shoeState.group === g) _shoeState.group      = null;
-  const grid   = UI.el('sz-grid');
-  const szGrid = UI.el('shoe-sizes-grid');
-  if (szGrid && grid && grid.children.length === 0) szGrid.style.display = 'none';
-  const szWrap = UI.el('shoe-rows-wrap');
-  if (szWrap && _shoeState.sizes.size === 0) szWrap.style.display = 'none';
-  renderShoeGroupButtons();
-  renderShoeSummary();
-  renderShoeRows();
-}
-
-function toggleShoeSize(s) {
-  if (_shoeState.sizes.has(s)) _shoeState.sizes.delete(s); else _shoeState.sizes.add(s);
-
-  // Update button appearance
-  document.querySelectorAll('.sz-btn').forEach(b => {
-    b.classList.toggle('sz-active', _shoeState.sizes.has(parseInt(b.textContent)));
-  });
-
-  const szWrap = UI.el('shoe-rows-wrap');
-  if (szWrap) szWrap.style.display = _shoeState.sizes.size > 0 ? 'block' : 'none';
-
-  // If switching to persize and rows already rendered, rebuild them
-  if (_shoeState.perSizeMode) renderShoeRows();
-  renderShoeSummary();
-}
-
-function renderShoeSummary() {
-  const el = UI.el('shoe-selected-summary');
-  if (!el) return;
-  if (_shoeState.sizes.size === 0) { el.innerHTML = ''; return; }
-  const sorted = _shoeState.sortedSizes;
-  el.innerHTML = '<div class="shoe-pills-row">' +
-    sorted.map(s => '<span class="shoe-pill">' + s + '</span>').join('') +
-    '<span style="font-size:11px;color:var(--muted);margin-left:4px;align-self:center;">' +
-    sorted.length + ' size' + (sorted.length>1?'s':'') + ' selected</span></div>';
-  const saveBtn = UI.el('save-btn');
-  const panel   = UI.el('shoe-size-panel');
-  if (saveBtn && panel && panel.style.display !== 'none') {
-    saveBtn.textContent = '+ Save ' + sorted.length + ' shoe size' + (sorted.length>1?'s':'');
-  }
-}
-
-function renderShoeRows() {
-  const rows = document.getElementById('shoe-rows');
-  if (!rows) return;
-  if (!_shoeState.perSizeMode) { rows.innerHTML = ''; return; }
-  const sorted = _shoeState.sortedSizes;
-  rows.innerHTML = sorted.map(s =>
-    '<div class="shoe-row">' +
-    '<span class="shoe-sz-lbl">' + s + '</span>' +
-    '<input type="number" class="shoe-cell" id="shr-qty-' + s + '" min="0" inputmode="numeric" placeholder="Qty">' +
-    '<input type="number" class="shoe-cell" id="shr-buy-' + s + '" min="0" inputmode="decimal" placeholder="Buy">' +
-    '<input type="number" class="shoe-cell" id="shr-sell-' + s + '" min="0" inputmode="decimal" placeholder="Sell">' +
-    '</div>'
-  ).join('');
-}
-
-// Switch between Shared (all sizes) and Per-Size pricing modes
-function setShoeMode(mode) {
-  _shoeState.perSizeMode = (mode === 'persize');
-
-  // Update tab buttons
-  document.getElementById('mode-tab-shared') .classList.toggle('active', !_shoeState.perSizeMode);
-  document.getElementById('mode-tab-persize').classList.toggle('active',  _shoeState.perSizeMode);
-
-  // Show/hide panels
-  const sharedWrap  = document.getElementById('shoe-shared-wrap');
-  const perSizeWrap = document.getElementById('shoe-per-size-wrap');
-  if (sharedWrap)  sharedWrap.style.display  = _shoeState.perSizeMode ? 'none'  : 'block';
-  if (perSizeWrap) perSizeWrap.style.display = _shoeState.perSizeMode ? 'block' : 'none';
-
-  // Rebuild per-size rows when switching to per-size
-  if (_shoeState.perSizeMode) renderShoeRows();
-}
-
-// Keep old togglePerSizeMode as alias so any lingering calls don't break
-function togglePerSizeMode() { setShoeMode(_shoeState.perSizeMode ? 'shared' : 'persize'); }
-
-// Save shoe items: one parent + one shoe_sizes record per size
-async function saveShoeItems(baseCode, baseName, type) {
-  if (_shoeState.sizes.size === 0) { toast('⚠️ Select at least one size', 'err'); return false; }
-
-  if (!_shoeState.group) {
-    const firstSize = [..._shoeState.sizes][0];
-    _shoeState.group = _shoeState.groupFor(firstSize) || 'S';
-  }
-
-  let sharedQty = 0, sharedBuy = 0, sharedSell = 0;
-  if (!_shoeState.perSizeMode) {
-    sharedQty  = parseInt(UI.el('shoe-shared-qty')?.value  || '0') || 0;
-    sharedBuy  = parseFloat(UI.el('shoe-shared-buy')?.value  || '0') || 0;
-    sharedSell = parseFloat(UI.el('shoe-shared-sell')?.value || '0') || 0;
-    if (sharedQty  <= 0) { toast('⚠️ Enter quantity per size (must be > 0)', 'err'); return false; }
-    if (sharedBuy  <= 0) { toast('⚠️ Enter buying price',  'err'); return false; }
-    if (sharedSell <= 0) { toast('⚠️ Enter selling price', 'err'); return false; }
-    if (sharedSell < sharedBuy) { toast('⚠️ Sell price cannot be less than buy price', 'err'); return false; }
-  }
-
-  const sorted  = _shoeState.sortedSizes;
-  const allItms = await dbAll('items');
-  let product   = allItms.find(i => i.code === baseCode);
-
-  if (!product) {
-    const pid = await dbAdd('items', {
-      code: baseCode, name: baseName || (type + ' ' + baseCode),
-      type, category: _shoeState.group, isShoe: true,
-      buyPrice:  _shoeState.perSizeMode ? 0 : sharedBuy,
-      sellPrice: _shoeState.perSizeMode ? 0 : sharedSell,
-      profit:    _shoeState.perSizeMode ? 0 : sharedSell - sharedBuy,
-      qty: 0, createdAt: new Date().toISOString(),
-    });
-    product = await dbGet('items', pid);
-  } else if (!_shoeState.perSizeMode) {
-    product.buyPrice  = sharedBuy;
-    product.sellPrice = sharedSell;
-    product.profit    = sharedSell - sharedBuy;
-    await dbPut('items', product);
-  }
-
-  let saved = 0;
-  const perSizeErrors = [];
-  for (const size of sorted) {
-    let qty, buy, sell;
-    if (_shoeState.perSizeMode) {
-      qty  = parseInt(UI.el('shr-qty-'  + size)?.value || '0') || 0;
-      buy  = parseFloat(UI.el('shr-buy-'  + size)?.value || '0') || 0;
-      sell = parseFloat(UI.el('shr-sell-' + size)?.value || '0') || 0;
-      if (qty  <= 0) { perSizeErrors.push('Size ' + size + ': quantity must be ≥ 1'); continue; }
-      if (buy  <= 0) { perSizeErrors.push('Size ' + size + ': buying price required'); continue; }
-      if (sell <= 0) { perSizeErrors.push('Size ' + size + ': selling price required'); continue; }
-      if (sell < buy) { perSizeErrors.push('Size ' + size + ': sell price (' + fmt(sell) + ') below buy price (' + fmt(buy) + ')'); continue; }
-    } else { qty = sharedQty; buy = sharedBuy; sell = sharedSell; }
-
-    await upsertShoeSize({
-      itemCode: baseCode, itemId: product.id,
-      size, sizeGroup: _shoeState.group,
-      qty, buyPrice: buy, sellPrice: sell, profit: sell - buy,
-      codeSize: baseCode + '_' + size,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-    });
-    saved++;
-  }
-
-  if (perSizeErrors.length) toast('⚠️ Skipped: ' + perSizeErrors.join(' · '), 'err');
-  if (saved === 0) { toast('⚠️ No sizes saved — fill all required fields', 'err'); return false; }
-
-  const allSz = await getShoeSizes(baseCode);
-  product.qty = allSz.reduce((t, s) => t + s.qty, 0);
-  await dbPut('items', product);
-  fbSyncItem(product);
-
-  if (fbReady && fbDb) {
-    try {
-      const { doc, setDoc } = await waitForFbImports();
-      for (const sz of allSz) {
-        if (!sz.fbId) { sz.fbId = 'sz_' + sz.codeSize; await dbPut('shoe_sizes', sz); }
-        await setDoc(doc(fbDb, 'shoe_sizes', sz.fbId), sanitiseForFirestore({...sz}));
-      }
-    } catch(e) { console.warn('[SYNC] shoe_sizes:', e.message); }
-  }
-  return saved;
-}
-
-
-// ===================================================================
-// HISTORY PAGE — automated daily timeline
-// Replaces the old "Day" tab. No manual open/close.
-// Groups all sales and activities by calendar date automatically.
-// ===================================================================
-
-async function renderHistoryPage() {
-  const today     = todayDateStr();
-  const todayFull = new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-
-  // Set today header
-  UI.setText('hist-today-date', todayFull);
-
-  // All data
-  const allSales    = await dbAll('sales');
-  const allFinances = await dbAll('finances');
-
-  // Today's sales
-  const todaySales = allSales.filter(s => (s.businessDate || s.date?.slice(0,10)) === today);
-  const todayRev   = todaySales.reduce((s,x) => s + x.revenue, 0);
-  const todayProf  = todaySales.reduce((s,x) => s + x.profit, 0);
-
-  UI.setText('hist-today-revenue', fmt(todayRev));
-  UI.setText('hist-today-profit',  fmt(todayProf));
-  UI.setText('hist-today-sales',   todaySales.length);
-
-  // Today sales list
-  const todayList = UI.el('hist-today-list');
-  if (todayList) {
-    if (!todaySales.length) {
-      todayList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales today yet.</div>';
-    } else {
-      const sorted = [...todaySales].sort((a,b) => new Date(b.date) - new Date(a.date));
-      todayList.innerHTML = sorted.map(s => `
-        <div class="hist-sale-row">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-              ${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize?' · Size '+escapeHtml(s.itemSize):''}
-            </div>
-            <div style="font-size:11px;color:var(--muted);">
-              ${s.qty} × ${fmt(s.actualPrice||s.sellPrice||0)} · ${s.paymentMethod||'cash'} · ${fmtTime(s.date)}
-            </div>
-          </div>
-          <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
-            <div style="font-size:11px;color:var(--green);font-family:var(--mono);">+${fmt(s.profit)}</div>
-          </div>
-        </div>`).join('');
-    }
-  }
-
-  // Past records grouped by date
-  const filterEl = UI.el('hist-period-filter');
-  const days     = filterEl ? parseInt(filterEl.value) || 999 : 30;
-  const cutoff   = new Date();
-  if (!isNaN(days)) cutoff.setDate(cutoff.getDate() - days);
-
-  // Group sales by date (excluding today)
-  const byDate = {};
-  allSales.forEach(s => {
-    const d = s.businessDate || s.date?.slice(0,10) || today;
-    if (d === today) return; // today shown separately
-    if (!isNaN(days) && new Date(d) < cutoff) return;
-    if (!byDate[d]) byDate[d] = { sales: [], revenue: 0, profit: 0 };
-    byDate[d].sales.push(s);
-    byDate[d].revenue += s.revenue;
-    byDate[d].profit  += s.profit;
-  });
-
-  const datesSorted = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
-  const recList = UI.el('hist-records-list');
-  if (recList) {
-    if (!datesSorted.length) {
-      recList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:16px 0;text-align:center;">No historical records in this period.</div>';
-    } else {
-      recList.innerHTML = datesSorted.map(date => {
-        const day   = byDate[date];
-        const label = new Date(date + 'T12:00:00').toLocaleDateString('en-GB',
-                      { weekday:'short', day:'numeric', month:'short', year:'numeric' });
-        const rows  = [...day.sales]
-          .sort((a,b) => new Date(b.date) - new Date(a.date))
-          .slice(0, 5)
-          .map(s => `
-            <div class="hist-sale-row" style="border-top:1px solid var(--border);">
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                  ${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize?' · Sz'+escapeHtml(s.itemSize):''}
-                </div>
-                <div style="font-size:10px;color:var(--muted);">${s.qty} × ${fmt(s.actualPrice||s.sellPrice||0)} · ${fmtTime(s.date)}</div>
-              </div>
-              <div style="text-align:right;flex-shrink:0;font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
-            </div>`).join('');
-        const more  = day.sales.length > 5
-          ? `<div style="font-size:11px;color:var(--muted);padding:6px 0;text-align:center;">+${day.sales.length-5} more sales</div>` : '';
-
-        return `
-          <div class="hist-day-card">
-            <div class="hist-day-header">
-              <div>
-                <div style="font-size:14px;font-weight:800;">${label}</div>
-                <div style="font-size:11px;color:var(--muted);">${day.sales.length} sale${day.sales.length!==1?'s':''}</div>
-              </div>
-              <div style="text-align:right;">
-                <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(day.revenue)}</div>
-                <div style="font-size:11px;color:var(--green);font-family:var(--mono);">+${fmt(day.profit)}</div>
-              </div>
-            </div>
-            ${rows}${more}
-          </div>`;
-      }).join('');
-    }
-  }
-}
-window.renderHistoryPage = renderHistoryPage;
-
-// ── Window exports — all onclick= handlers ──────────────────────
-window.addType = addType;
-window.adjSellQty = adjSellQty;
-window.attemptLogin = attemptLogin;
-window.cancelEdit = cancelEdit;
-window.checkSession = checkSession;
-window.clearNotifs = clearNotifs;
-window.closePastSessionSheet = closePastSessionSheet;
-window.closeProfileSheet = closeProfileSheet;
-window.closeSellModal = closeSellModal;
-window.closeSheet = closeSheet;
-window.closeUserMenu = closeUserMenu;
-window.confirmRestock = confirmRestock;
-window.confirmSale = confirmSale;
-window.deleteItem = deleteItem;
-window.disconnectFirebase = disconnectFirebase;
-window.dismissInstall = dismissInstall;
-window.editItem = editItem;
-window.filterFinance = filterFinance;
-window.forcePushToFirebase = forcePushToFirebase;
-window.installAppUpdate = installAppUpdate;
-window.openSellFromSheet = openSellFromSheet;
-window.pickEmoji = pickEmoji;
-window.pullFromFirebase = pullFromFirebase;
-window.removeAddPhoto = removeAddPhoto;
-window.resetAllData = resetAllData;
-window.runSyncDebug = runSyncDebug;
-window.saveFinanceEntry = saveFinanceEntry;
-window.saveFirebaseConfig = saveFirebaseConfig;
-window.saveItem = saveItem;
-window.selectPayment = selectPayment;
-window.selectSizeGroup = selectSizeGroup;
-window.setShoeMode = setShoeMode;
-window.showPage = showPage;
-window.showUserProfile = showUserProfile;
-window.toggleNotifPanel = toggleNotifPanel;
-window.toggleRestock = toggleRestock;
-window.toggleUserMenu = toggleUserMenu;
-window.triggerAddPhotoUpload = triggerAddPhotoUpload;
-window.triggerInstall = triggerInstall;
-window.triggerSheetPhotoUpload = triggerSheetPhotoUpload;
-
-// ── Additional exports (missing from original) ──────────────────────
-window.cancelCloseDay      = cancelCloseDay;
-window.confirmCloseDay     = confirmCloseDay;
-window.confirmLogout       = confirmLogout;
-window.closeDay            = closeDay;
-window.openDay             = openDay;
-window.deleteSale          = deleteSale;
-window.deleteFinanceEntry  = deleteFinanceEntry;
-window.deleteType          = deleteType;
-window.deselectSizeGroup   = deselectSizeGroup;
-window.exitRestockMode     = exitRestockMode;
-window.onTypeChange        = onTypeChange;
-window.openSheet           = openSheet;
-window.renderList          = renderList;
-window.renderSellPage      = renderSellPage;
-window.saveCurrency        = saveCurrency;
-window.searchSell          = searchSell;
-window.selectExistingItem  = selectExistingItem;
-window.setTypeFilter       = setTypeFilter;
-window.toggleShoeSize      = toggleShoeSize;
-window.updateFinTypeColor  = updateFinTypeColor;
-window.finSetPeriod        = finSetPeriod;
-window.dashSetPeriod       = dashSetPeriod;
-window.updateProfitPreview = updateProfitPreview;
-window.updateSellModal     = updateSellModal;
-window.voidSale            = voidSale;
-
-// ── Missing functions (called but never defined) ─────────────────────
-
-function closeShoeSizeActions() {
-  const sheet = document.getElementById('shoe-size-action-sheet');
-  if (sheet) sheet.classList.remove('open');
-}
-window.closeShoeSizeActions = closeShoeSizeActions;
-
-async function openShoeSizeRestock(itemId, size) {
-  closeShoeSizeActions();
-  const item = await dbGet('items', itemId);
-  if (!item) { toast('Item not found', 'err'); return; }
-  const sizes = await getShoeSizes(item.code);
-  const sizeRec = sizes.find(s => s.size === size);
-  if (!sizeRec) { toast('Size record not found', 'err'); return; }
-  showPage('add');
-  setTimeout(() => {
-    UI.el('f-type').value = item.type || '';
-    UI.el('f-code').value = item.code || '';
-    UI.el('f-name').value = item.name || '';
-    UI.el('edit-id').value = 'shoe_restock_' + itemId + '_' + size;  // restock = ADD to qty
-    UI.el('f-qty').value = '';
-    UI.el('f-buy').value  = sizeRec.buyPrice  || '';
-    UI.el('f-sell').value = sizeRec.sellPrice || '';
-    onTypeChange();
-    const shoePanel  = UI.el('shoe-size-panel');
-    const stdPricing = UI.el('std-pricing-section');
-    const sizeField  = document.getElementById('f-size-field');
-    if (shoePanel)  shoePanel.style.display  = 'none';
-    if (stdPricing) stdPricing.style.display = 'block';
-    if (sizeField)  sizeField.style.display  = 'block';
-    ['f-code','f-type','f-name','f-size','f-buy','f-sell'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) { el.disabled=true; el.style.opacity='0.45'; el.style.cursor='not-allowed'; }
-    });
-    const qtyEl = UI.el('f-qty');
-    if (qtyEl) { qtyEl.disabled=false; qtyEl.style.opacity='1'; qtyEl.style.cursor=''; qtyEl.focus(); }
-    // Show current stock so user knows what they're adding to
-    UI.el('save-btn').textContent = '📦 Add to Stock — Size ' + size + ' (currently ' + (sizeRec.qty || 0) + ')';
-    UI.el('form-mode-label').textContent = '📦 Restock Size ' + size + ' · Current: ' + (sizeRec.qty || 0);
-    UI.el('cancel-edit-btn').style.display = 'block';
-  }, 100);
-}
-window.openShoeSizeRestock = openShoeSizeRestock;
-
-async function openShoeSizeEdit(itemId, size) {
-  closeShoeSizeActions();
-  const item = await dbGet('items', itemId);
-  if (!item) { toast('Item not found', 'err'); return; }
-  const sizes = await getShoeSizes(item.code);
-  const sizeRec = sizes.find(s => s.size === size);
-  if (!sizeRec) { toast('Size record not found', 'err'); return; }
-  showPage('add');
-  setTimeout(() => {
-    UI.el('f-type').value  = item.type || '';
-    UI.el('f-code').value  = item.code || '';
-    UI.el('f-name').value  = item.name || '';
-    UI.el('f-size').value  = size;
-    UI.el('f-qty').value   = sizeRec.qty ?? '';
-    UI.el('f-buy').value   = sizeRec.buyPrice  || '';
-    UI.el('f-sell').value  = sizeRec.sellPrice || '';
-    UI.el('edit-id').value = 'shoe_edit_' + itemId + '_' + size;
-    onTypeChange();
-    const shoePanel  = UI.el('shoe-size-panel');
-    const stdPricing = UI.el('std-pricing-section');
-    const sizeField  = document.getElementById('f-size-field');
-    if (shoePanel)  shoePanel.style.display  = 'none';
-    if (stdPricing) stdPricing.style.display = 'block';
-    if (sizeField)  sizeField.style.display  = 'block';
-    ['f-code','f-type','f-name','f-size'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) { el.disabled=true; el.style.opacity='0.45'; el.style.cursor='not-allowed'; }
-    });
-    UI.el('save-btn').textContent = '💾 Save Size ' + size;
-    UI.el('form-mode-label').textContent = '✏️ Edit Size ' + size + ' — ' + item.code;
-    UI.el('cancel-edit-btn').style.display = 'block';
-    updateProfitPreview();
-  }, 100);
-}
-window.openShoeSizeEdit = openShoeSizeEdit;
-
-async function openSellShoeModal(itemId, size) {
-  closeShoeSizeActions();
-  closeSheet();
-  const item = await dbGet('items', itemId);
-  if (!item) { toast('Item not found', 'err'); return; }
-  const sizes = await getShoeSizes(item.code);
-  const sizeRec = sizes.find(s => s.size === size);
-  if (!sizeRec || sizeRec.qty <= 0) { toast('Size ' + size + ' is out of stock', 'err'); return; }
-  _isShoeSale   = true;
-  _sellShoeItem = item;
-  _sellShoeSize = sizeRec;  // must be the full sizeRec object, not just the size number
-  currentSellItemId = itemId;
-  const t = types.find(t => t.name === item.type) || { emoji:'👟', color:'var(--surface2)' };
-  const el = id => document.getElementById(id);
-  if (el('sm-icon'))  { el('sm-icon').textContent = t.emoji; el('sm-icon').style.background = t.color || 'var(--surface2)'; }
-  if (el('sm-name'))  el('sm-name').textContent  = item.name + ' (Size ' + size + ')';
-  if (el('sm-meta'))  el('sm-meta').textContent  = item.code + ' · Size ' + size;
-  if (el('sm-stock')) el('sm-stock').textContent = sizeRec.qty;
-  if (el('sm-sell'))  el('sm-sell').textContent  = fmt(sizeRec.sellPrice || item.sellPrice || 0);
-  if (el('sm-cur'))   el('sm-cur').textContent   = currency;
-  if (el('sm-qty'))   { el('sm-qty').value = 1; el('sm-qty').max = sizeRec.qty; }
-  if (el('sm-actual')) el('sm-actual').value = '';
-  const tpEl = el('sm-total-profit');
-  if (tpEl) tpEl.textContent = '';
-  const sellModal = document.getElementById('sell-modal');
-  if (sellModal) sellModal.classList.add('open');
-  updateSellModal();
-}
-window.openSellShoeModal = openSellShoeModal;
-
-async function viewPastSession(sessionId) {
-  const session = await dbGet('business_days', sessionId);
-  if (!session) { toast('Session not found', 'err'); return; }
-  const content = document.getElementById('past-session-content');
-  if (!content) return;
-  const sales = await dbAll('sales');
-  const sessionSales = sales.filter(s => s.businessDate === session.businessDate);
-  const totalRev = sessionSales.reduce((t, s) => t + (s.revenue || 0), 0);
-  const totalProfit = sessionSales.reduce((t, s) => t + (s.profit || 0), 0);
-  content.innerHTML = `
-    <div style="font-size:17px;font-weight:800;margin-bottom:4px;">${session.businessDate || 'Session'}</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">
-      ${session.openedAt ? 'Opened: ' + new Date(session.openedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : ''}
-      ${session.closedAt ? ' · Closed: ' + new Date(session.closedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : ''}
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
-      <div class="sh-stat-box"><div class="sh-stat-lbl">Revenue</div><div class="sh-stat-val accent2">${fmt(totalRev)}</div></div>
-      <div class="sh-stat-box accent-bg"><div class="sh-stat-lbl">Profit</div><div class="sh-stat-val green">${fmt(totalProfit)}</div></div>
-      <div class="sh-stat-box"><div class="sh-stat-lbl">Sales</div><div class="sh-stat-val">${sessionSales.length}</div></div>
-      <div class="sh-stat-box"><div class="sh-stat-lbl">Notes</div><div class="sh-stat-val" style="font-size:11px;">${session.notes || '—'}</div></div>
-    </div>
-    ${sessionSales.length > 0 ? `
-      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Sales</div>
-      ${sessionSales.map(s => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
-          <div><strong>${escapeHtml(s.code||'')}</strong>${s.size?' · '+s.size:''}<span style="color:var(--muted);font-size:11px;margin-left:6px;">×${s.qty}</span></div>
-          <div style="font-weight:700;color:var(--accent);">${fmt(s.revenue||0)}</div>
-        </div>`).join('')}
-    ` : '<div style="color:var(--muted);font-size:13px;text-align:center;padding:16px;">No sales this session</div>'}
-    <button onclick="closePastSessionSheet()" style="width:100%;margin-top:16px;padding:13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans);color:var(--text2);">Close</button>
-  `;
-  const sheet = document.getElementById('past-session-sheet');
-  if (sheet) sheet.classList.add('open');
-}
-window.viewPastSession = viewPastSession;
-window.onCodeInput = onCodeInput;
-window.applyAppUpdate = applyAppUpdate;
-window.dismissAppUpdate = dismissAppUpdate;
-
-window.renderDayState = renderDayState;

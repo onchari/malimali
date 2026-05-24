@@ -774,35 +774,26 @@
      ============================================================== -->
 <div class="page" id="page-finance">
 
-  <!-- ── Period selector ──────────────────────────────────── -->
-  <div style="display:flex;gap:6px;padding:10px 12px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch;">
-    <button onclick="finSetPeriod('today')"  id="fin-period-today"  class="fin-filter-btn active">Today</button>
-    <button onclick="finSetPeriod('week')"   id="fin-period-week"   class="fin-filter-btn">This Week</button>
-    <button onclick="finSetPeriod('month')"  id="fin-period-month"  class="fin-filter-btn">This Month</button>
-    <button onclick="finSetPeriod('all')"    id="fin-period-all"    class="fin-filter-btn">All Time</button>
-  </div>
-
-  <!-- ── Row 1: Revenue · Profit · Margin ─────────────────── -->
-  <div class="fin-kpi-row" style="grid-template-columns:1fr 1fr 1fr;">
+  <!-- ── KPI summary ────────────────────────────────────────── -->
+  <div class="fin-kpi-row" style="grid-template-columns:1fr 1fr 1fr;padding:10px 12px 6px;">
     <div class="fin-kpi" style="background:#fff0f0;border-color:#fca5a5;">
       <div class="fin-kpi-val" style="color:var(--accent2);" id="fin-revenue">0</div>
-      <div class="fin-kpi-lbl">🛒 Revenue</div>
+      <div class="fin-kpi-lbl">Revenue</div>
     </div>
     <div class="fin-kpi green">
       <div class="fin-kpi-val" id="fin-profit">0</div>
-      <div class="fin-kpi-lbl">📈 Profit</div>
+      <div class="fin-kpi-lbl">Profit</div>
     </div>
-    <div class="fin-kpi cyan">
-      <div class="fin-kpi-val" id="fin-margin">0%</div>
-      <div class="fin-kpi-lbl">📊 Margin</div>
+    <div class="fin-kpi" id="fin-net-kpi">
+      <div class="fin-kpi-val" id="fin-net">0</div>
+      <div class="fin-kpi-lbl">Net</div>
     </div>
   </div>
 
-  <!-- ── Row 2: Invested · Expenses · Withdrawn · Net ─────── -->
-  <div class="fin-kpi-row">
+  <div class="fin-kpi-row" style="padding:0 12px 8px;">
     <div class="fin-kpi green">
       <div class="fin-kpi-val" id="fin-invested">0</div>
-      <div class="fin-kpi-lbl">💵 Invested</div>
+      <div class="fin-kpi-lbl">💉 Injected</div>
     </div>
     <div class="fin-kpi red">
       <div class="fin-kpi-val" id="fin-expenses">0</div>
@@ -812,97 +803,86 @@
       <div class="fin-kpi-val" id="fin-withdrawn">0</div>
       <div class="fin-kpi-lbl">🏧 Withdrawn</div>
     </div>
-    <div class="fin-kpi" id="fin-net-kpi">
-      <div class="fin-kpi-val" id="fin-net">0</div>
-      <div class="fin-kpi-lbl">⚖️ Net</div>
+    <div class="fin-kpi cyan">
+      <div class="fin-kpi-val" id="fin-margin">0%</div>
+      <div class="fin-kpi-lbl">Margin</div>
     </div>
   </div>
 
-  <!-- ── Insights bar ──────────────────────────────────────── -->
-  <div id="fin-insights" style="margin:0 12px 8px;"></div>
+  <!-- ── Record entry ────────────────────────────────────────── -->
+  <div class="sec-label" style="padding:0 14px;margin-bottom:4px;">➕ Record</div>
+  <div style="margin:0 12px 10px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:12px;">
 
-  <!-- ── Mini cash-flow bar chart ─────────────────────────── -->
-  <div id="fin-chart-wrap" style="margin:0 12px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;display:none;">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Daily Cash Flow</div>
-    <div id="fin-chart" style="display:flex;align-items:flex-end;gap:3px;height:60px;"></div>
-    <div id="fin-chart-labels" style="display:flex;gap:3px;margin-top:4px;"></div>
-  </div>
-
-  <!-- ── Record entry ──────────────────────────────────────── -->
-  <div class="sec-label" style="padding:0 16px;margin-bottom:6px;">➕ Record Transaction</div>
-  <div class="card" style="margin:0 12px 12px;padding:14px;">
-    <div class="add-row-2" style="margin-bottom:10px;">
-      <div class="add-field">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <div>
         <label class="add-label">Type <span class="add-required">*</span></label>
         <select class="add-select" id="fin-type" onchange="updateFinTypeColor()">
-          <option value="">Select type…</option>
-          <optgroup label="── Money In ──">
-            <option value="injection">💉 Cash Injection (owner capital)</option>
-            <option value="investment">💵 Investment (external)</option>
-          </optgroup>
-          <optgroup label="── Money Out ──">
-            <option value="stock_purchase">🛍️ Stock Purchase (buy goods)</option>
-            <option value="expense">💸 Operating Expense</option>
-            <option value="withdrawal">🏧 Cash Withdrawal (owner draw)</option>
-          </optgroup>
-          <optgroup label="── Other ──">
-            <option value="other">📝 Other / Adjustment</option>
-          </optgroup>
+          <option value="">Select…</option>
+          <option value="injection">💉 Cash Injection</option>
+          <option value="investment">💵 Investment</option>
+          <option value="stock_purchase">🛍️ Stock Purchase</option>
+          <option value="expense">💸 Expense</option>
+          <option value="withdrawal">🏧 Withdrawal</option>
+          <option value="other">📝 Other</option>
         </select>
       </div>
-      <div class="add-field">
+      <div>
         <label class="add-label">Amount <span class="add-required">*</span></label>
         <input class="add-input add-mono" id="fin-amount" type="number"
-               min="0" inputmode="decimal" placeholder="0.00">
+               min="0" inputmode="decimal" placeholder="0">
       </div>
     </div>
-    <div class="add-field" style="margin-bottom:10px;">
+
+    <div style="margin-bottom:8px;">
       <label class="add-label">Description <span class="add-required">*</span></label>
       <input class="add-input" id="fin-desc" type="text" maxlength="200"
-             placeholder="e.g. Restock from supplier, Rent, Airtime, Owner draw">
+             placeholder="What is this for?">
     </div>
-    <div class="add-row-2" style="margin-bottom:12px;">
-      <div class="add-field">
-        <label class="add-label">Date <span class="add-required">*</span></label>
-        <input class="add-input" id="fin-date" type="date">
-      </div>
-      <div class="add-field">
-        <label class="add-label">Category</label>
-        <select class="add-select" id="fin-category">
-          <option value="general">General</option>
-          <option value="stock">Stock / Goods</option>
-          <option value="rent">Rent / Utilities</option>
-          <option value="transport">Transport</option>
-          <option value="salaries">Salaries / Wages</option>
-          <option value="marketing">Marketing</option>
-          <option value="tax">Tax / Levy</option>
-          <option value="equipment">Equipment / Tools</option>
-          <option value="cash_drawer">Cash Drawer</option>
-          <option value="owner_capital">Owner Capital</option>
-          <option value="other">Other</option>
-        </select>
-      </div>
+
+    <div style="margin-bottom:10px;">
+      <label class="add-label">Date</label>
+      <input class="add-input" id="fin-date" type="date">
     </div>
+
+    <!-- hidden compat -->
+    <select id="fin-category" style="display:none;">
+      <option value="general">General</option>
+      <option value="stock">Stock / Goods</option>
+      <option value="rent">Rent / Utilities</option>
+      <option value="transport">Transport</option>
+      <option value="salaries">Salaries / Wages</option>
+      <option value="marketing">Marketing</option>
+      <option value="tax">Tax / Levy</option>
+      <option value="equipment">Equipment / Tools</option>
+      <option value="cash_drawer">Cash Drawer</option>
+      <option value="owner_capital">Owner Capital</option>
+      <option value="other">Other</option>
+    </select>
+
     <button onclick="saveFinanceEntry()"
-            style="width:100%;padding:14px;background:var(--accent);color:white;border:none;
-                   border-radius:var(--r-lg);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);">
-      <i class="fa-solid fa-plus"></i> Save Entry
+            style="width:100%;padding:13px;background:var(--accent);color:white;border:none;
+                   border-radius:var(--r);font-size:14px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+      Save Entry
     </button>
   </div>
 
-  <!-- ── Transaction history ───────────────────────────────── -->
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px;margin-bottom:6px;">
+  <!-- ── Transactions ────────────────────────────────────────── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 14px;margin-bottom:4px;">
     <span class="sec-label" style="padding:0;margin:0;">📋 Transactions</span>
-    <div style="display:flex;gap:5px;flex-wrap:wrap;">
+    <div style="display:flex;gap:4px;">
       <button onclick="filterFinance('all')"        id="fin-filter-all"        class="fin-filter-btn active">All</button>
-      <button onclick="filterFinance('revenue')"    id="fin-filter-revenue"    class="fin-filter-btn">🛒 Sales</button>
-      <button onclick="filterFinance('investment')" id="fin-filter-investment" class="fin-filter-btn">💵 In</button>
-      <button onclick="filterFinance('expense')"    id="fin-filter-expense"    class="fin-filter-btn">💸 Expenses</button>
-      <button onclick="filterFinance('withdrawal')" id="fin-filter-withdrawal" class="fin-filter-btn">🏧 Out</button>
+      <button onclick="filterFinance('investment')" id="fin-filter-investment" class="fin-filter-btn">💉 In</button>
+      <button onclick="filterFinance('expense')"    id="fin-filter-expense"    class="fin-filter-btn">💸 Out</button>
     </div>
   </div>
-  <div id="fin-summary-line" style="padding:0 12px 6px;font-size:12px;color:var(--muted);"></div>
+  <div id="fin-summary-line" style="padding:0 14px 4px;font-size:11px;color:var(--muted);"></div>
   <div id="fin-list" style="padding:0 12px 80px;"></div>
+
+  <!-- hidden compat IDs -->
+  <span id="fin-insights"    style="display:none;"></span>
+  <span id="fin-chart-wrap"  style="display:none;"></span>
+  <span id="fin-chart"       style="display:none;"></span>
+  <span id="fin-chart-labels" style="display:none;"></span>
 
 </div><!-- /page-finance -->
 
@@ -1738,23 +1718,19 @@
      ============================================================== -->
 <div class="page" id="page-day">
 
-  <!-- ── Day status banner ──────────────────────────────────── -->
-  <div id="day-banner" class="day-banner-card">
-    <div class="day-banner-inner">
+  <!-- ── Date header (always visible) ────────────────────── -->
+  <div id="day-header-bar" class="day-banner-card" style="margin-bottom:8px;">
+    <div class="day-banner-inner" style="margin-bottom:0;">
       <div>
         <div id="day-banner-title" class="day-banner-title"></div>
         <div id="day-banner-sub"   class="day-banner-sub"></div>
       </div>
-      <div class="day-banner-right">
-        <span id="day-status-badge" class="day-status-badge">LOADING</span>
-        <span id="day-banner-icon"  class="day-banner-icon">📅</span>
-      </div>
+      <span id="day-banner-icon" class="day-banner-icon">📅</span>
     </div>
-    <div id="day-action-area"></div>
   </div>
 
-  <!-- ── KPIs (always visible) ──────────────────────────────── -->
-  <div class="day-kpi-grid">
+  <!-- ── Sales KPIs (always visible) ─────────────────────── -->
+  <div class="day-kpi-grid" style="margin-bottom:10px;">
     <div class="day-kpi day-kpi-green">
       <div id="day-sales-count" class="day-kpi-val">0</div>
       <div class="day-kpi-lbl">Sales</div>
@@ -1773,15 +1749,22 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════
-       STATE A — OPENING FORM (shown when no opening recorded)
-       ══════════════════════════════════════════════════════ -->
-  <div id="day-state-opening">
-    <div class="day-section-label">🌅 Record Opening Balances</div>
+  <!-- ══════════════════════════════════════════════════════
+       STEP 1 — OPEN DAY + RECORD OPENING BALANCES
+       Shown when no opening recorded yet for today
+       ═════════════════════════════════════════════════════= -->
+  <div id="day-step-open" style="display:none;">
+    <button onclick="openDay()" class="day-recon-btn" style="background:var(--green);margin-bottom:10px;">
+      🌅 Open Day
+    </button>
+  </div>
+
+  <div id="day-step-opening-form" style="display:none;">
+    <div class="day-section-label">🌅 Opening Balances</div>
     <div class="day-card" style="border:2px solid var(--green);overflow:hidden;">
       <div class="day-recon-header" style="background:var(--green);">
-        <div class="day-recon-header-title">What do you have at the start of today?</div>
-        <div class="day-recon-header-sub">These will be locked once you tap Start Day</div>
+        <div class="day-recon-header-title">Record what you have at the start of today</div>
+        <div class="day-recon-header-sub">This will be locked once saved</div>
       </div>
       <div class="day-recon-fields">
         <div class="day-recon-row">
@@ -1809,36 +1792,48 @@
           <input id="op-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <button onclick="lockOpeningBalances()" class="day-recon-btn" style="background:var(--green);">
-          🌅 Start Day — Lock Opening Balances
+          💾 Save &amp; Lock Opening
         </button>
       </div>
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════
-       STATE B — OPENING LOCKED, CLOSING FORM
-       ══════════════════════════════════════════════════════ -->
-  <div id="day-state-closing" style="display:none;">
-
-    <!-- Locked opening summary -->
+  <!-- ══════════════════════════════════════════════════════
+       LOCKED OPENING SUMMARY (visible in steps 2 & 3)
+       ═════════════════════════════════════════════════════= -->
+  <div id="day-opening-locked" style="display:none;">
     <div class="day-section-label">🌅 Opening Balances <span style="color:var(--green);font-size:9px;margin-left:4px;">● LOCKED</span></div>
-    <div class="day-card" style="border-color:#a8d8b5;background:#f0faf4;">
-      <div id="day-opening-summary" style="padding:10px 14px;"></div>
+    <div class="day-card" style="border-color:#a8d8b5;background:#f0faf4;padding:0;overflow:hidden;">
+      <div id="day-opening-summary" style="padding:12px 14px;"></div>
     </div>
+  </div>
 
-    <!-- Closing form -->
-    <div class="day-section-label" style="margin-top:8px;">🌙 Record Closing Balances</div>
-    <div class="day-card" style="border:2px solid var(--accent);overflow:hidden;">
-      <div class="day-recon-header">
-        <div class="day-recon-header-title">Count and enter end-of-day amounts</div>
-        <div class="day-recon-header-sub">Day Money = Injected + Cash at Hand + Till + M-Pesa + Expenses + Withdrawn</div>
+  <!-- ══════════════════════════════════════════════════════
+       STEP 2 — DAY IS OPEN, SHOW CLOSE BUTTON
+       ═════════════════════════════════════════════════════= -->
+  <div id="day-step-close-btn" style="display:none;">
+    <button onclick="initCloseDay()" class="day-recon-btn" style="background:var(--red);margin:8px 0;">
+      🌙 Close Day
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 3 — RECORD CLOSING BALANCES
+       Shown when Close Day clicked
+       ═════════════════════════════════════════════════════= -->
+  <div id="day-step-closing-form" style="display:none;">
+    <div class="day-section-label" style="margin-top:6px;">🌙 Closing Balances</div>
+    <div class="day-card" style="border:2px solid #d97706;overflow:hidden;">
+      <div class="day-recon-header" style="background:#d97706;">
+        <div class="day-recon-header-title">Count and record end-of-day amounts</div>
+        <div class="day-recon-header-sub">Day Money = Injected + Cash + Till + M-Pesa + Expenses + Withdrawn</div>
       </div>
       <div class="day-recon-fields">
         <div class="day-recon-row">
           <span class="day-recon-emoji">💉</span>
           <div class="day-recon-info">
             <div class="day-recon-field-label">Cash Injected</div>
-            <div class="day-recon-field-sub">Extra money added to the business today</div>
+            <div class="day-recon-field-sub">Extra money added today</div>
           </div>
           <input id="cl-injected" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
@@ -1846,7 +1841,7 @@
           <span class="day-recon-emoji">💵</span>
           <div class="day-recon-info">
             <div class="day-recon-field-label">Cash at Hand</div>
-            <div class="day-recon-field-sub">Loose notes &amp; coins right now</div>
+            <div class="day-recon-field-sub">Loose notes &amp; coins now</div>
           </div>
           <input id="cl-cash" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
@@ -1854,7 +1849,7 @@
           <span class="day-recon-emoji">🏧</span>
           <div class="day-recon-info">
             <div class="day-recon-field-label">Amount in Till</div>
-            <div class="day-recon-field-sub">Cash in the register right now</div>
+            <div class="day-recon-field-sub">Cash in register now</div>
           </div>
           <input id="cl-till" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
@@ -1862,7 +1857,7 @@
           <span class="day-recon-emoji">📱</span>
           <div class="day-recon-info">
             <div class="day-recon-field-label">M-Pesa Float</div>
-            <div class="day-recon-field-sub">M-Pesa till balance right now</div>
+            <div class="day-recon-field-sub">M-Pesa balance now</div>
           </div>
           <input id="cl-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
@@ -1870,7 +1865,7 @@
           <span class="day-recon-emoji">💸</span>
           <div class="day-recon-info">
             <div class="day-recon-field-label">Expenses Paid</div>
-            <div class="day-recon-field-sub">Cash paid out for costs today</div>
+            <div class="day-recon-field-sub">Cash paid out for costs</div>
           </div>
           <input id="cl-expenses" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
@@ -1878,37 +1873,43 @@
           <span class="day-recon-emoji">🏧</span>
           <div class="day-recon-info">
             <div class="day-recon-field-label">Amount Withdrawn</div>
-            <div class="day-recon-field-sub">Cash taken by owner today</div>
+            <div class="day-recon-field-sub">Cash taken by owner</div>
           </div>
           <input id="cl-withdrawn" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <button onclick="reconcileDay()" class="day-recon-btn">
-          🔍 Reconcile &amp; Lock Day
+          🔍 Reconcile &amp; Close Day
+        </button>
+        <button onclick="cancelCloseDay()" style="width:100%;padding:11px;background:transparent;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);color:var(--muted);margin-top:-4px;">
+          Cancel
         </button>
       </div>
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════
-       STATE C — RECONCILED (insights only, no forms)
-       ══════════════════════════════════════════════════════ -->
-  <div id="day-state-reconciled" style="display:none;">
+  <!-- ══════════════════════════════════════════════════════
+       STEP 4 — RECONCILED / CLOSED (insights only)
+       ═════════════════════════════════════════════════════= -->
+  <div id="day-step-reconciled" style="display:none;">
     <div id="day-reconcile-insights"></div>
-    <button onclick="dayStartOver()" class="day-recon-btn"
-            style="background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);margin-top:4px;">
-      🔄 Start Over (clear today's reconciliation)
+    <button onclick="dayStartOver()"
+            style="width:100%;padding:11px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);color:var(--muted);margin-top:4px;">
+      🔄 Start Over
     </button>
   </div>
 
-  <!-- ── Past Sessions ──────────────────────────────────────── -->
+  <!-- ── Past Sessions ──────────────────────────────────── -->
   <div class="day-section-label" style="margin-top:8px;">📅 Past Sessions</div>
   <div id="day-sessions-list" style="margin-bottom:80px;">
     <div class="day-empty">No past sessions yet</div>
   </div>
 
-  <!-- hidden compat -->
+  <!-- hidden compat IDs -->
   <span id="day-purchases" style="display:none;"></span>
   <span id="day-live"      style="display:none;"></span>
+  <span id="day-banner"    style="display:none;"></span>
+  <span id="day-status-badge" style="display:none;"></span>
+  <span id="day-action-area"  style="display:none;"></span>
   <span id="day-cash-sales" style="display:none;"></span>
   <span id="day-cash-sales-count" style="display:none;"></span>
   <span id="day-mpesa-sales" style="display:none;"></span>
@@ -1928,13 +1929,17 @@
   <span id="day-net-flow" style="display:none;"></span>
   <span id="day-net-flow-row" style="display:none;"></span>
   <span id="day-sales-list" style="display:none;"></span>
-  <span id="rc-results" style="display:none;"></span>
-  <span id="rc-injected" style="display:none;"></span>
-  <span id="rc-cash" style="display:none;"></span>
-  <span id="rc-till" style="display:none;"></span>
-  <span id="rc-mpesa" style="display:none;"></span>
-  <span id="rc-expenses" style="display:none;"></span>
+  <span id="rc-results"   style="display:none;"></span>
+  <span id="rc-injected"  style="display:none;"></span>
+  <span id="rc-cash"      style="display:none;"></span>
+  <span id="rc-till"      style="display:none;"></span>
+  <span id="rc-mpesa"     style="display:none;"></span>
+  <span id="rc-expenses"  style="display:none;"></span>
   <span id="rc-withdrawn" style="display:none;"></span>
+  <!-- compat: these IDs exist in old state machine -->
+  <span id="day-state-opening"    style="display:none;"></span>
+  <span id="day-state-closing"    style="display:none;"></span>
+  <span id="day-state-reconciled" style="display:none;"></span>
 
 </div><!-- /page-day -->
 
