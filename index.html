@@ -441,13 +441,13 @@
      Cards sorted newest-first (by createdAt).
      Clicking a card calls openSheet(item.id).
      ============================================================== -->
-<div class="page" id="page-list">
+<div class="page" id="page-list" style="padding:12px 12px 0;">
 
   <!-- Search bar -->
   <div class="search-wrap">
     <span class="s-icon">🔍</span>
     <input class="search-input" id="search"
-           placeholder="Search by name, code..."
+           placeholder="Search by name, code, size..."
            oninput="renderList()">
   </div>
 
@@ -455,7 +455,7 @@
   <div class="chips" id="type-chips"></div>
 
   <!-- Shoe size-group filter — only shown when shoe type is active -->
-  <div id="shoe-size-filter" style="display:none;padding:0 12px 8px;display:flex;gap:6px;flex-wrap:wrap;">
+  <div id="shoe-size-filter" style="display:none;padding:0 0 8px;display:flex;gap:6px;flex-wrap:wrap;">
     <button onclick="setSizeGroupFilter('all')"  id="sgf-all"  class="fin-filter-btn active">All Sizes</button>
     <button onclick="setSizeGroupFilter('S')"    id="sgf-S"    class="fin-filter-btn">S · Children</button>
     <button onclick="setSizeGroupFilter('M')"    id="sgf-M"    class="fin-filter-btn">M · Teens</button>

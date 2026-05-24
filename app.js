@@ -1339,10 +1339,12 @@ async function renderList() {
   if (!list) return;
 
   if (!filtered.length) {
+    list.style.border = 'none';
     list.innerHTML = `<div class="empty">
       <div class="e-icon">${allItems.length ? '🔍' : '📦'}</div>
       <p>${allItems.length ? 'No items match your search.' : 'No items yet.\nTap ➕ Add Item to get started.'}</p>
     </div>`;
+    return;
     return;
   }
 
@@ -1489,6 +1491,7 @@ async function renderList() {
     }
   }
 
+  list.style.border = '';
   list.innerHTML = cards.join('');
 }
 
