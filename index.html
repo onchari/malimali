@@ -223,14 +223,12 @@
     <span class="icon"><i class="fa-solid fa-house"></i></span>Dashboard
   </button>
   <button class="nav-btn" onclick="showPage('list')" id="tab-list">
-    <span class="icon"><i class="fa-solid fa-boxes-stacked"></i></span>Stock
+    <span class="icon"><i class="fa-solid fa-boxes-stacked"></i></span>Inventory
   </button>
   <button class="nav-btn" onclick="showPage('add')" id="tab-add">
-    <span class="icon"><i class="fa-solid fa-plus"></i></span>Add
+    <span class="icon"><i class="fa-solid fa-plus"></i></span>Add items
   </button>
-  <button class="nav-btn" onclick="showPage('day')" id="tab-day">
-    <span class="icon"><i class="fa-solid fa-calendar-day"></i></span>Day
-  </button>
+  
   <button class="nav-btn" onclick="showPage('history')" id="tab-history">
     <span class="icon"><i class="fa-solid fa-clock-rotate-left"></i></span>History
   </button>
@@ -319,35 +317,33 @@
     <button onclick="dashSetPeriod('all')"    id="dash-period-all"    class="fin-filter-btn">All Time</button>
   </div>
 
-  <!-- ── Row 1: Revenue · Profit · Margin ────────────────────── -->
-  <div class="stats-row" style="grid-template-columns:1fr 1fr 1fr;gap:6px;">
-    <div class="stat-box green">
-      <div class="stat-val" id="d-revenue" style="font-size:15px;">0</div>
-      <div class="stat-lbl">💰 Revenue</div>
-    </div>
-    <div class="stat-box cyan">
-      <div class="stat-val" id="d-profit-earned" style="font-size:15px;">0</div>
-      <div class="stat-lbl">📈 Profit</div>
-    </div>
-    <div class="stat-box purple">
-      <div class="stat-val" id="d-margin" style="font-size:15px;">0%</div>
-      <div class="stat-lbl">📊 Margin</div>
-    </div>
+    <!-- ── Today snapshot ───────────────────────────────────────── -->
+  <div id="d-today-wrap" style="margin:0 12px 8px;display:none;">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Today at a Glance</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;" id="d-today-grid"></div>
+
+    
+        <div class="stat-val" id="d-stock-val" style="font-size:14px;color:var(--text2);">0</div>
+        <div class="stat-lbl">Cost Value</div>
+      
   </div>
 
   <!-- ── Row 2: Items · Pieces · Sold · Sales# ────────────────── -->
   <div class="stats-row" style="gap:6px;">
     <div class="stat-box amber">
-      <div class="stat-val" id="d-items" style="font-size:18px;">0</div>
-      <div class="stat-lbl">SKUs</div>
+     
+      <div class="stat-lbl">Items in stock</div>
+       <div class="stat-val" id="d-items" style="font-size:18px;">0</div>
     </div>
     <div class="stat-box cyan">
+      
+      <div class="stat-lbl">PcsIn Stock</div>
       <div class="stat-val" id="d-qty" style="font-size:18px;">0</div>
-      <div class="stat-lbl">In Stock</div>
     </div>
     <div class="stat-box green">
+      
+      <div class="stat-lbl">Items Sold</div>
       <div class="stat-val" id="d-total-sold" style="font-size:18px;">0</div>
-      <div class="stat-lbl">Sales</div>
     </div>
     <div class="stat-box purple">
       <div class="stat-val" id="d-pieces-sold" style="font-size:18px;">0</div>
@@ -358,21 +354,9 @@
   <!-- ── Alert strip ──────────────────────────────────────────── -->
   <div id="d-alerts" style="padding:0 12px;"></div>
 
-  <!-- ── 7-day revenue spark line ─────────────────────────────── -->
-  <div id="d-sparkline-wrap" style="margin:0 12px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;display:none;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">7-Day Revenue</span>
-      <span id="d-spark-total" style="font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent);"></span>
-    </div>
-    <div id="d-sparkline" style="display:flex;align-items:flex-end;gap:3px;height:48px;"></div>
-    <div id="d-sparkline-labels" style="display:flex;gap:3px;margin-top:4px;"></div>
-  </div>
+ 
 
-  <!-- ── Today snapshot ───────────────────────────────────────── -->
-  <div id="d-today-wrap" style="margin:0 12px 8px;display:none;">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Today at a Glance</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;" id="d-today-grid"></div>
-  </div>
+
 
   <!-- ── Stock health ─────────────────────────────────────────── -->
   <div style="margin:0 12px 8px;">
@@ -382,14 +366,8 @@
         <div class="stat-val" id="d-stock-val" style="font-size:14px;color:var(--text2);">0</div>
         <div class="stat-lbl">Cost Value</div>
       </div>
-      <div class="stat-box amber" style="padding:10px 8px;">
-        <div class="stat-val" id="d-retail-total" style="font-size:14px;">0</div>
-        <div class="stat-lbl">Retail Value</div>
-      </div>
-      <div class="stat-box green" style="padding:10px 8px;">
-        <div class="stat-val" id="d-potential-profit" style="font-size:14px;">0</div>
-        <div class="stat-lbl">Pot. Profit</div>
-      </div>
+      
+      
     </div>
     <!-- Stock progress bar: sold vs remaining -->
     <div id="d-stock-bar-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:10px 12px;display:none;">
