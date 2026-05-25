@@ -1258,10 +1258,10 @@
       </div>
     </div>
 
-    <!-- Sell price + profit boxes -->
+    <!-- Projected price + profit boxes -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
       <div class="detail-box">
-        <div class="detail-key">SELL PRICE</div>
+        <div class="detail-key">PROJECTED PRICE</div>
         <div class="detail-val" id="sm-sell" style="color:var(--accent2);font-size:18px;"></div>
       </div>
       <div class="detail-box">
@@ -1301,7 +1301,7 @@
         Actual Sale Price
         <span style="font-size:11px;font-weight:500;color:var(--muted);
                      background:var(--surface2);padding:2px 8px;border-radius:10px;margin-left:4px;">
-          optional — overrides sell price
+          optional - negotiated price
         </span>
       </div>
       <div style="display:flex;align-items:center;border:2px solid var(--border);
@@ -1314,7 +1314,7 @@
           KES
         </span>
         <input id="sm-actual" type="number"
-               placeholder="Leave blank to use sell price"
+               placeholder="Leave blank to use projected price"
                min="0" inputmode="decimal"
                style="flex:1;border:none;font-size:15px;font-weight:600;
                       font-family:var(--mono);color:var(--text);background:transparent;

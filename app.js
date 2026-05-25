@@ -387,7 +387,8 @@ const Validate = {
   // Sale price check
   salePrice(priceUsed, buyPrice, sellPrice) {
     if (!priceUsed || priceUsed <= 0) return this.fail('Enter a selling price', null);
-    if (priceUsed < buyPrice) return this.fail('Sale price ' + fmt(priceUsed) + ' is below cost price ' + fmt(buyPrice) + ' — selling at a loss is not allowed', null);
+    // The saved sell price is only the projected/default price. The actual
+    // sale price may be lower after bargaining, even below cost if approved.
     return true;
   },
 };
@@ -1135,6 +1136,15 @@ async function saveItem() {
     const name=(UI.el('f-name')?.value||'').trim().replace(/[ \t]+/g,' ')||(type+' '+code);
     if(!type){toast('\u26a0\ufe0f Select an item type','err');return;}
     if(!code){toast('\u26a0\ufe0f Enter item code','err');return;}
+    if (!editIdRaw) {
+      const codeMatches = await findCodeMatchesForSave(code);
+      if (codeMatches.some(i => i.code === code)) {
+        showCodeDropdown(codeMatches, code);
+        toast('\u26a0\ufe0f Item code already exists — select it from the dropdown', 'err');
+        UI.el('f-code')?.focus();
+        return;
+      }
+    }
 
     // SHOE MODE
     if(isFootwearType(type)&&!editIdRaw){
@@ -1278,16 +1288,41 @@ let _codeDropdownActive = false;
 let _editOriginItemId   = null;
 let _editingItemId      = null;  // tracks current edit ID reliably (backup to hidden input)
 
-function onCodeInput() {
+async function findCodeMatchesForSave(code) {
+  const clean = sanitiseCode(code);
+  if (!clean) return [];
+  const source = (allItems && allItems.length) ? allItems : await dbAll('items');
+  const seen = new Set();
+  const unique = [];
+  for (const item of source) {
+    if (!item.code || seen.has(item.code)) continue;
+    seen.add(item.code);
+    unique.push(item);
+  }
+  const exact = unique.filter(i => i.code === clean);
+  const startsWith = unique.filter(i => i.code !== clean && i.code.startsWith(clean));
+  const contains = unique.filter(i => i.code !== clean && !i.code.startsWith(clean) && i.code.includes(clean));
+  const nameMatch = unique.filter(i =>
+    i.name &&
+    i.name.toUpperCase().includes(clean) &&
+    !exact.includes(i) &&
+    !startsWith.includes(i) &&
+    !contains.includes(i)
+  );
+  return [...exact, ...startsWith, ...contains, ...nameMatch].slice(0, 10);
+}
+
+async function onCodeInput() {
   const raw   = UI.el('f-code').value;
-  const clean = raw.toUpperCase().replace(/[^A-Z0-9\-.\s]/g, '').trimStart();
+  const clean = sanitiseCode(raw);
   UI.el('f-code').value = clean;
   if (!clean) { hideCodeDropdown(); return; }
+  const source = (allItems && allItems.length) ? allItems : await dbAll('items');
 
   // De-duplicate by code then search: exact → startsWith → contains
   const seen = new Set();
   const unique = [];
-  for (const item of allItems) {
+  for (const item of source) {
     if (!item.code || seen.has(item.code)) continue;
     seen.add(item.code);
     unique.push(item);
