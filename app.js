@@ -13,6 +13,11 @@ const KEY_CURRENCY    = 'mgs_currency';
 const CODE_MAX_QTY    = 9999;
 const LOW_STOCK_LEVEL = 1;
 const OUT_STOCK_LEVEL = 0;
+const SHOE_GROUP_DEFAULTS = Object.freeze({
+  S: Object.freeze({ min: 20, max: 28 }),
+  M: Object.freeze({ min: 29, max: 36 }),
+  L: Object.freeze({ min: 37, max: 45 }),
+});
 
 function initDB() {
   const req = indexedDB.open(DB_NAME, DB_VER);
@@ -542,6 +547,11 @@ async function migrateData() {
         item.variant = item.size;
         changed = true;
       }
+      // Older shoe parent records accidentally stored S/M/L in category.
+      if (item.isShoe && (!item.category || ['S', 'M', 'L'].includes(item.category))) {
+        item.category = item.type || 'Footwear';
+        changed = true;
+      }
       // Ensure profit is computed
       if (item.buyPrice != null && item.sellPrice != null) {
         const expected = item.sellPrice - item.buyPrice;
@@ -709,9 +719,10 @@ showPage = function(id) {
 
 // ===== TYPES =====
 const DEFAULT_TYPES = [
-  { name: 'Shoes', emoji: '👟', color: '#1e3a5f' },
+  { name: 'Footwear', emoji: '👟', color: '#1e3a5f' },
   { name: 'Clothes', emoji: '👕', color: '#2d1b4e' },
   { name: 'Plastics', emoji: '🪣', color: '#1a3a2a' },
+  { name: 'Gas', emoji: '⛽', color: '#1e7a3e' },
   { name: 'Electronics', emoji: '📱', color: '#1e2a3a' },
   { name: 'Food', emoji: '🍱', color: '#3a2a1a' },
   { name: 'Cosmetics', emoji: '💄', color: '#3a1a2a' },
@@ -724,6 +735,17 @@ async function loadTypes() {
   if (types.length === 0) {
     for (const t of DEFAULT_TYPES) await dbAdd('types', t);
     types = await dbAll('types');
+  }
+  if (!types.some(t => isFootwearType(t.name))) {
+    await dbAdd('types', DEFAULT_TYPES[0]);
+    types = await dbAll('types');
+  }
+  if (!types.some(t => (t.name || '').toLowerCase() === 'gas')) {
+    const gasType = DEFAULT_TYPES.find(t => t.name === 'Gas');
+    if (gasType) {
+      await dbAdd('types', gasType);
+      types = await dbAll('types');
+    }
   }
   renderTypeSelect();
   renderTypeChips();
@@ -5532,7 +5554,7 @@ async function saveShoeItems(baseCode, baseName, type) {
   if (!product) {
     const pid = await dbAdd('items', {
       code: baseCode, name: baseName || (type + ' ' + baseCode),
-      type, category: _shoeState.group, isShoe: true,
+      type, category: type, isShoe: true,
       buyPrice:  _shoeState.perSizeMode ? 0 : sharedBuy,
       sellPrice: _shoeState.perSizeMode ? 0 : sharedSell,
       profit:    _shoeState.perSizeMode ? 0 : sharedSell - sharedBuy,
