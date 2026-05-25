@@ -5435,7 +5435,9 @@ function selectSizeGroup(g) {
 
     const block = document.createElement('div');
     block.id = 'sz-group-block-' + g;
-    block.style.marginBottom = '10px';
+    block.className = 'sz-group-block sz-group-block-' + g;
+    block.style.order = { S: 1, M: 2, L: 3 }[g] || 9;
+    block.style.gridColumn = { S: 1, M: 2, L: 3 }[g] || 'auto';
 
     const label = document.createElement('div');
     label.className = 'sz-group-divider';
@@ -5446,7 +5448,7 @@ function selectSizeGroup(g) {
     block.appendChild(label);
 
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
+    row.className = 'sz-group-sizes';
     sizes.forEach(s => {
       const btn = document.createElement('button');
       btn.type = 'button';
