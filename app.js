@@ -10,6 +10,8 @@ const KEY_SESSION     = 'mg_session';
 const KEY_LAST_PAGE   = 'mg_last_page';
 const KEY_SHOE_GROUPS = 'mgs_shoe_groups';
 const KEY_CURRENCY    = 'mgs_currency';
+const KEY_DELETED_FIN = 'mgs_deleted_finances';
+const KEY_DELETED_SALE = 'mgs_deleted_sales';
 const CODE_MAX_QTY    = 9999;
 const LOW_STOCK_LEVEL = 1;
 const OUT_STOCK_LEVEL = 0;
@@ -1287,6 +1289,9 @@ function clearForm() {
 let _codeDropdownActive = false;
 let _editOriginItemId   = null;
 let _editingItemId      = null;  // tracks current edit ID reliably (backup to hidden input)
+let _selectedShoeSize   = null;
+let _selectedShoeSizes  = new Set();
+let _bulkShoeRestock    = null;
 
 async function findCodeMatchesForSave(code) {
   const clean = sanitiseCode(code);
@@ -1348,21 +1353,8 @@ function showCodeDropdown(items, typedCode) {
   }
   dd.innerHTML = items.map(item => {
     const isExact = item.code === typedCode;
-    const sc = item.qty <= 0 ? 'var(--red)' : item.qty <= LOW_STOCK_LEVEL ? '#d97706' : 'var(--green)';
-    const stockLabel = item.qty <= 0 ? 'Out of stock' : item.qty + ' in stock';
-    const sell = item.sellPrice || item.sell || 0;
     return `<div class="code-dd-item${isExact?' code-dd-exact':''}" onclick="selectExistingItem(${item.id})">
-      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
-        <span style="font-size:14px;">${(getTypeObj(item.type)).emoji}</span>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:12px;font-weight:800;font-family:var(--mono);">${escapeHtml(item.code)}${isExact?'<span class="code-dd-match-badge">exact</span>':''}</div>
-          <div style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name||'')}</div>
-        </div>
-      </div>
-      <div style="text-align:right;flex-shrink:0;">
-        <div style="font-size:11px;font-weight:700;color:${sc};">${stockLabel}</div>
-        <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${fmt(sell)}</div>
-      </div>
+      <div class="code-dd-code">${escapeHtml(item.code)}</div>
     </div>`;
   }).join('');
   dd.style.display = 'block';
@@ -1656,6 +1648,156 @@ window.openShoeSizeCard = openShoeSizeCard;
 
 // ===== DETAIL SHEET =====
 
+async function renderShoeDetailGrid(item) {
+  const wrap = document.getElementById('sh-shoe-sizes');
+  if (!wrap || !item) return;
+
+  const sizes = (await getShoeSizes(item.code))
+    .filter(s => Number.isFinite(Number(s.size)))
+    .sort((a, b) => Number(a.size) - Number(b.size));
+
+  if (!sizes.length) {
+    wrap.style.display = 'none';
+    return;
+  }
+
+  wrap.style.display = 'block';
+  wrap.innerHTML =
+    '<div class="sh-detail-size-grid">' +
+      sizes.map(s => {
+        const n = Number(s.size);
+        const selected = _selectedShoeSizes.has(n);
+        const state = s.qty <= 0 ? ' out' : s.qty <= LOW_STOCK_LEVEL ? ' low' : '';
+        return '<button type="button" class="sh-detail-size-btn' + state + (selected ? ' selected' : '') + '"' +
+          ' data-sh-size="' + n + '" onclick="toggleDetailShoeSize(' + item.id + ',' + n + ')">' + n + '</button>';
+      }).join('') +
+    '</div>';
+
+  _updateDetailShoeSelectionBar(item.id);
+}
+
+function toggleDetailShoeSize(itemId, size) {
+  size = Number(size);
+  if (_selectedShoeSizes.has(size)) _selectedShoeSizes.delete(size);
+  else _selectedShoeSizes.add(size);
+
+  const selected = [..._selectedShoeSizes].sort((a, b) => a - b);
+  _selectedShoeSize = selected.length ? selected[selected.length - 1] : null;
+
+  document.querySelectorAll('#sh-shoe-sizes [data-sh-size]').forEach(btn => {
+    btn.classList.toggle('selected', _selectedShoeSizes.has(Number(btn.dataset.shSize)));
+  });
+  _updateDetailShoeSelectionBar(itemId);
+}
+window.toggleDetailShoeSize = toggleDetailShoeSize;
+
+function _updateDetailShoeSelectionBar(itemId) {
+  const bar = document.getElementById('sh-selected-size-bar');
+  if (!bar) return;
+  const selected = [..._selectedShoeSizes].sort((a, b) => a - b);
+  if (!selected.length) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    return;
+  }
+  bar.style.display = 'block';
+  bar.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+      '<span style="font-family:var(--mono);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + selected.join(', ') + '</span>' +
+      '<button onclick="restockSelectedShoeSizes(' + itemId + ')" style="padding:7px 12px;background:var(--green);color:white;border:none;border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);flex-shrink:0;">Restock</button>' +
+    '</div>';
+}
+
+async function restockSelectedShoeSizes(itemId) {
+  const selected = [..._selectedShoeSizes].sort((a, b) => a - b);
+  if (!selected.length) { toast('Select size first', 'err'); return; }
+  if (selected.length === 1) {
+    closeSheet();
+    openShoeSizeRestock(itemId, selected[0]);
+    return;
+  }
+  openBulkShoeRestockSheet(itemId, selected);
+}
+window.restockSelectedShoeSizes = restockSelectedShoeSizes;
+
+function openBulkShoeRestockSheet(itemId, sizes) {
+  _bulkShoeRestock = { itemId, sizes: [...sizes] };
+  let sheet = document.getElementById('bulk-shoe-restock-sheet');
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'bulk-shoe-restock-sheet';
+    sheet.className = 'sheet-overlay';
+    sheet.innerHTML = '<div class="sheet" id="bulk-shoe-restock-inner"></div>';
+    sheet.addEventListener('click', e => { if (e.target === sheet) closeBulkShoeRestock(); });
+    document.body.appendChild(sheet);
+  }
+
+  const inner = document.getElementById('bulk-shoe-restock-inner');
+  inner.innerHTML =
+    '<div class="sheet-handle"></div>' +
+    '<div class="sheet-title">Restock Sizes</div>' +
+    '<div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent);margin-bottom:12px;">' + sizes.join(', ') + '</div>' +
+    '<input id="bulk-shoe-restock-qty" type="number" min="1" inputmode="numeric" placeholder="Qty to add to each size" ' +
+      'style="width:100%;padding:13px 14px;border:1.5px solid var(--border);border-radius:var(--r);font-size:16px;font-weight:800;font-family:var(--mono);background:var(--bg);outline:none;margin-bottom:12px;">' +
+    '<button onclick="confirmBulkShoeRestock()" style="width:100%;padding:15px;background:var(--green);color:white;border:none;border-radius:var(--r);font-size:15px;font-weight:900;cursor:pointer;font-family:var(--sans);">Add Stock</button>' +
+    '<button onclick="closeBulkShoeRestock()" style="width:100%;padding:13px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;font-family:var(--sans);margin-top:8px;">Cancel</button>';
+
+  sheet.classList.add('open');
+  setTimeout(() => document.getElementById('bulk-shoe-restock-qty')?.focus(), 80);
+}
+
+function closeBulkShoeRestock() {
+  const sheet = document.getElementById('bulk-shoe-restock-sheet');
+  if (sheet) sheet.classList.remove('open');
+}
+window.closeBulkShoeRestock = closeBulkShoeRestock;
+
+async function confirmBulkShoeRestock() {
+  if (!_bulkShoeRestock) return;
+  const qty = parseInt(document.getElementById('bulk-shoe-restock-qty')?.value || '0');
+  if (!Validate.restockQty(qty, 'bulk-shoe-restock-qty')) return;
+
+  const { itemId, sizes } = _bulkShoeRestock;
+  const item = await dbGet('items', itemId);
+  if (!item) { toast('Item not found', 'err'); return; }
+
+  const records = await getShoeSizes(item.code);
+  const changed = [];
+  for (const size of sizes) {
+    const rec = records.find(s => Number(s.size) === Number(size));
+    if (!rec) continue;
+    rec.qty = (rec.qty || 0) + qty;
+    rec.updatedAt = new Date().toISOString();
+    await dbPut('shoe_sizes', rec);
+    changed.push(rec);
+  }
+
+  const fresh = await getShoeSizes(item.code);
+  item.qty = fresh.reduce((t, s) => t + (s.qty || 0), 0);
+  item.updatedAt = new Date().toISOString();
+  await dbPut('items', item);
+  fbSyncItem(item);
+
+  if (fbReady && fbDb) {
+    try {
+      const { doc, setDoc } = await waitForFbImports();
+      for (const rec of changed) {
+        if (!rec.fbId) { rec.fbId = 'sz_' + rec.codeSize; await dbPut('shoe_sizes', rec); }
+        await setDoc(doc(fbDb, 'shoe_sizes', rec.fbId), sanitiseForFirestore({ ...rec }));
+      }
+    } catch(e) { console.warn('[SYNC] bulk shoe restock:', e.message); }
+  }
+
+  scheduleSync();
+  closeBulkShoeRestock();
+  allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
+  renderList(); renderDashboard(); updateHeader();
+  toast('Added ' + qty + ' to ' + changed.length + ' sizes', 'ok');
+  await openSheet(itemId);
+}
+window.confirmBulkShoeRestock = confirmBulkShoeRestock;
+
 function openSellFromSheet() {
   const id = currentDetailId;
   closeSheet();
@@ -1777,6 +1919,7 @@ async function openSheet(id) {
   const sizeSec   = document.getElementById('sh-shoe-sizes');
   const sizebar   = document.getElementById('sh-selected-size-bar');
   _selectedShoeSize = null; // reset selection
+  _selectedShoeSizes = new Set();
 
   if (item.isShoe) {
     const freshSizes = await getShoeSizes(item.code);
@@ -1788,7 +1931,7 @@ async function openSheet(id) {
     set('sh-qty',  totalQty + ' prs');
     if (sizeSec) sizeSec.style.display = 'block';
     if (sizebar) { sizebar.style.display = 'none'; sizebar.textContent = ''; }
-    renderShoeDetailGrid(item);
+    await renderShoeDetailGrid(item);
   } else {
     set('sh-buy',  fmt(item.buy  || 0));
     set('sh-sell', fmt(item.sell || 0));
@@ -2596,7 +2739,7 @@ async function confirmSale() {
       createdAt:   new Date().toISOString(),
       createdBy:   currentUser ? currentUser.username : 'system',
     };
-    await dbAdd('finances', finEntry);
+    finEntry.id = await dbAdd('finances', finEntry);
     // Sync to Firebase
     if (fbReady && fbDb) {
       try {
@@ -2604,6 +2747,7 @@ async function confirmSale() {
         const fbFinId = 'fin_sale_' + newSaleId;
         finEntry.fbId = fbFinId;
         await setDoc(doc(fbDb, 'finances', fbFinId), sanitiseForFirestore({...finEntry}));
+        await dbPut('finances', finEntry);
       } catch(e) { console.warn('[SYNC] finance entry:', e.message); }
     }
   } catch(e) {
@@ -3093,6 +3237,140 @@ function sanitiseForFirestore(obj){
   return out;
 }
 
+function _financeDeleteMarkers() {
+  try { return JSON.parse(localStorage.getItem(KEY_DELETED_FIN) || '[]'); }
+  catch(_) { return []; }
+}
+
+function _financeSignature(entry) {
+  if (!entry) return '';
+  return [
+    entry.type || '',
+    Number(entry.amount || 0).toFixed(2),
+    entry.date || '',
+    entry.createdAt || '',
+    entry.description || '',
+    entry.category || '',
+    entry.saleId || ''
+  ].join('|');
+}
+
+function _rememberDeletedFinance(entry) {
+  const markers = _financeDeleteMarkers()
+    .filter(m => Date.now() - (m.deletedAt || 0) < 30 * 24 * 60 * 60 * 1000);
+  const marker = {
+    fbId: entry && entry.fbId ? entry.fbId : '',
+    sig: _financeSignature(entry),
+    deletedAt: Date.now()
+  };
+  if (!markers.some(m => (marker.fbId && m.fbId === marker.fbId) || (marker.sig && m.sig === marker.sig))) {
+    markers.push(marker);
+  }
+  localStorage.setItem(KEY_DELETED_FIN, JSON.stringify(markers.slice(-250)));
+}
+
+function _isDeletedFinanceRemote(fbId, entry) {
+  const sig = _financeSignature(entry);
+  return _financeDeleteMarkers().some(m =>
+    (fbId && m.fbId && m.fbId === fbId) ||
+    (sig && m.sig && m.sig === sig)
+  );
+}
+
+function _financeRecordsMatch(local, remote) {
+  if (!local || !remote) return false;
+  if (local.fbId && remote.fbId && local.fbId === remote.fbId) return true;
+  if (local.saleId && remote.saleId && String(local.saleId) === String(remote.saleId)) return true;
+  return _financeSignature(local) === _financeSignature(remote);
+}
+
+function _saleDeleteMarkers() {
+  try { return JSON.parse(localStorage.getItem(KEY_DELETED_SALE) || '[]'); }
+  catch(_) { return []; }
+}
+
+function _saleSignature(sale) {
+  if (!sale) return '';
+  return [
+    sale.itemCode || '',
+    sale.itemSize || sale.size || '',
+    Number(sale.qty || 0).toFixed(2),
+    Number(sale.revenue || 0).toFixed(2),
+    Number(sale.profit || 0).toFixed(2),
+    sale.paymentMethod || '',
+    sale.businessDate || '',
+    sale.date || ''
+  ].join('|');
+}
+
+function _rememberDeletedSale(sale) {
+  const markers = _saleDeleteMarkers()
+    .filter(m => Date.now() - (m.deletedAt || 0) < 30 * 24 * 60 * 60 * 1000);
+  const marker = {
+    fbId: sale && sale.fbId ? sale.fbId : '',
+    sig: _saleSignature(sale),
+    deletedAt: Date.now()
+  };
+  if (!markers.some(m => (marker.fbId && m.fbId === marker.fbId) || (marker.sig && m.sig === marker.sig))) {
+    markers.push(marker);
+  }
+  localStorage.setItem(KEY_DELETED_SALE, JSON.stringify(markers.slice(-250)));
+}
+
+function _isDeletedSaleRemote(fbId, sale) {
+  const sig = _saleSignature(sale);
+  return _saleDeleteMarkers().some(m =>
+    (fbId && m.fbId && m.fbId === fbId) ||
+    (sig && m.sig && m.sig === sig)
+  );
+}
+
+function _salesMatch(local, remote) {
+  if (!local || !remote) return false;
+  if (local.fbId && remote.fbId && local.fbId === remote.fbId) return true;
+  return _saleSignature(local) === _saleSignature(remote);
+}
+
+async function fbDeleteFinanceEntry(entry) {
+  if (!fbReady || !fbDb || !entry) return 0;
+  try {
+    const { collection, doc, getDocs, deleteDoc } = await waitForFbImports();
+    const snap = await getDocs(collection(fbDb, 'finances'));
+    const deletes = [];
+    for (const d of snap.docs) {
+      const remote = { ...d.data(), fbId: d.id };
+      if (d.id === entry.fbId || _financeRecordsMatch(entry, remote)) {
+        deletes.push(deleteDoc(doc(fbDb, 'finances', d.id)));
+      }
+    }
+    await Promise.all(deletes);
+    return deletes.length;
+  } catch (e) {
+    console.warn('[SYNC] delete finance:', e.message);
+    return 0;
+  }
+}
+
+async function fbDeleteSale(sale) {
+  if (!fbReady || !fbDb || !sale) return 0;
+  try {
+    const { collection, doc, getDocs, deleteDoc } = await waitForFbImports();
+    const snap = await getDocs(collection(fbDb, 'sales'));
+    const deletes = [];
+    for (const d of snap.docs) {
+      const remote = { ...d.data(), fbId: d.id };
+      if (d.id === sale.fbId || _salesMatch(sale, remote)) {
+        deletes.push(deleteDoc(doc(fbDb, 'sales', d.id)));
+      }
+    }
+    await Promise.all(deletes);
+    return deletes.length;
+  } catch (e) {
+    console.warn('[SYNC] delete sale:', e.message);
+    return 0;
+  }
+}
+
 async function forcePushToFirebase(silent = false) {
   if (!fbReady || !fbDb) { if (!silent) toast('⚠️ Connect Firebase first', 'err'); return; }
   if (!silent) setFbStatus('syncing');
@@ -3171,7 +3449,7 @@ async function pullFromFirebase(silent = false) {
   }
   if (!silent) setFbStatus('syncing');
   try {
-    const { collection, getDocs } = await waitForFbImports();
+    const { collection, doc, getDocs, deleteDoc } = await waitForFbImports();
 
     // Pull items
     console.log('[SYNC] Pulling items from Firebase...');
@@ -3205,6 +3483,10 @@ async function pullFromFirebase(silent = false) {
     for (const d of saleSnap.docs) {
       const data = { ...d.data(), fbId: d.id };
       delete data.id;
+      if (_isDeletedSaleRemote(d.id, data)) {
+        deleteDoc(doc(fbDb, 'sales', d.id)).catch(() => {});
+        continue;
+      }
       const existing = salesByFbId[d.id];
       if (existing) {
         data.id = existing.id;
@@ -3237,6 +3519,10 @@ async function pullFromFirebase(silent = false) {
       const finByFbId = Object.fromEntries(localFin.filter(f=>f.fbId).map(f=>[f.fbId,f]));
       for (const d of finSnap.docs) {
         const data = { ...d.data(), fbId: d.id }; delete data.id;
+        if (_isDeletedFinanceRemote(d.id, data)) {
+          deleteDoc(doc(fbDb, 'finances', d.id)).catch(() => {});
+          continue;
+        }
         const ex = finByFbId[d.id];
         if (ex) { data.id = ex.id; await dbPut('finances', data); }
         else    { try { await dbAdd('finances', data); } catch(_) { /* intentionally ignored */ } }
@@ -3667,6 +3953,15 @@ async function voidSale(saleId) {
   }
 
   // Delete sale record
+  _rememberDeletedSale(sale);
+  await fbDeleteSale(sale);
+  await fbDeleteFinanceEntry({
+    type: 'revenue',
+    saleId: sale.id,
+    amount: sale.revenue,
+    date: sale.businessDate || (sale.date || '').split('T')[0],
+    description: 'Sale: ' + (sale.itemName || sale.itemCode || 'item')
+  });
   await dbDelete('sales', saleId);
 
   // Refresh
@@ -3974,10 +4269,21 @@ async function updateLowStockBadge() {
 async function deleteSale(saleId) {
   try {
   if (!confirm('Delete this sale record? Stock will NOT be restored.')) return;
+  const sale = await dbGet('sales', saleId);
+  if (sale) {
+    _rememberDeletedSale(sale);
+    await fbDeleteSale(sale);
+    await fbDeleteFinanceEntry({
+      type: 'revenue',
+      saleId: sale.id,
+      amount: sale.revenue,
+      date: sale.businessDate || (sale.date || '').split('T')[0],
+      description: 'Sale: ' + (sale.itemName || sale.itemCode || 'item')
+    });
+  }
   await dbDelete('sales', saleId);
   renderSellPage();
   renderDashboard();
-  scheduleSync();
   toast('Sale record deleted', '');
   } catch(e) { console.error("[deleteSale]", e); toast("Error: " + e.message, "err"); }
 }
@@ -4705,7 +5011,7 @@ async function saveFinanceEntry() {
 
   const entry = { type, amount, description: desc, category: cat, date,
     createdAt: new Date().toISOString(), createdBy: currentUser ? currentUser.username : 'system' };
-  await dbAdd('finances', entry);
+  entry.id = await dbAdd('finances', entry);
 
   // Sync to Firebase
   if (fbReady && fbDb) {
@@ -4714,6 +5020,7 @@ async function saveFinanceEntry() {
       const fbId = 'fin_manual_' + Date.now();
       entry.fbId = fbId;
       await setDoc(doc(fbDb, 'finances', fbId), sanitiseForFirestore({...entry}));
+      await dbPut('finances', entry);
     } catch(e) { console.warn('[SYNC] finance entry:', e.message); }
   }
 
@@ -4732,9 +5039,13 @@ async function saveFinanceEntry() {
 
 async function deleteFinanceEntry(id) {
   if (!confirm('Delete this transaction? This cannot be undone.')) return;
+  const entry = await dbGet('finances', id);
+  if (entry) {
+    _rememberDeletedFinance(entry);
+    await fbDeleteFinanceEntry(entry);
+  }
   await dbDelete('finances', id);
   renderFinancePage();
-  scheduleSync();
   toast('Transaction deleted', '');
 }
 
