@@ -784,25 +784,31 @@
 <div class="page" id="page-finance">
 
   <!-- ── KPI summary ────────────────────────────────────────── -->
-  <div class="fin-kpi-row" style="grid-template-columns:1fr;padding:10px 12px 6px;">
-    <div class="fin-kpi fin-extra" style="background:#fff0f0;border-color:#fca5a5;">
-      <div class="fin-kpi-val" style="color:var(--accent2);" id="fin-revenue">0</div>
+  <!-- Row 1: Revenue | Gross Profit | Net Position -->
+  <div class="fin-kpi-row" style="grid-template-columns:1fr 1fr 1fr;padding:10px 12px 4px;">
+    <div class="fin-kpi" style="background:#f0faf4;border-color:#a8d8b5;">
+      <div class="fin-kpi-val" style="color:var(--green);" id="fin-revenue">0</div>
       <div class="fin-kpi-lbl">Revenue</div>
     </div>
-    <div class="fin-kpi green fin-extra">
+    <div class="fin-kpi green">
       <div class="fin-kpi-val" id="fin-profit">0</div>
-      <div class="fin-kpi-lbl">Profit</div>
+      <div class="fin-kpi-lbl">Gross Profit</div>
     </div>
     <div class="fin-kpi" id="fin-net-kpi">
       <div class="fin-kpi-val" id="fin-net">0</div>
-      <div class="fin-kpi-lbl">Sales Pool</div>
+      <div class="fin-kpi-lbl">Net Position</div>
     </div>
   </div>
 
-  <div class="fin-kpi-row" style="grid-template-columns:1fr 1fr 1fr;padding:0 12px 8px;">
+  <!-- Row 2: Injected | Stock Bought | Expenses | Withdrawn -->
+  <div class="fin-kpi-row" style="grid-template-columns:1fr 1fr 1fr 1fr;padding:0 12px 8px;">
     <div class="fin-kpi green">
       <div class="fin-kpi-val" id="fin-invested">0</div>
       <div class="fin-kpi-lbl">💉 Injected</div>
+    </div>
+    <div class="fin-kpi" style="background:#eef0fb;border-color:#c7cdf5;">
+      <div class="fin-kpi-val" style="color:#1d4ed8;" id="fin-margin">0</div>
+      <div class="fin-kpi-lbl">🛍️ Stock Bought</div>
     </div>
     <div class="fin-kpi red">
       <div class="fin-kpi-val" id="fin-expenses">0</div>
@@ -811,10 +817,6 @@
     <div class="fin-kpi amber">
       <div class="fin-kpi-val" id="fin-withdrawn">0</div>
       <div class="fin-kpi-lbl">🏧 Withdrawn</div>
-    </div>
-    <div class="fin-kpi cyan fin-extra">
-      <div class="fin-kpi-val" id="fin-margin">0%</div>
-      <div class="fin-kpi-lbl">Margin</div>
     </div>
   </div>
 
