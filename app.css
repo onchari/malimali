@@ -277,6 +277,11 @@ body {
 /* PAGES */
 .page { display: none; padding: 16px; padding-bottom: 32px; }
 .page.active { display: block; }
+.dash-extra,
+.day-extra,
+.fin-extra {
+  display: none !important;
+}
 
 /* SECTION LABEL */
 .sec-label {

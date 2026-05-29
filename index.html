@@ -447,7 +447,7 @@
   <div id="d-alerts" style="padding:0 12px;"></div>
 
   <!-- ── 7-day revenue spark line ─────────────────────────────── -->
-  <div id="d-sparkline-wrap" style="margin:0 12px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;display:none;">
+  <div id="d-sparkline-wrap" class="dash-extra" style="margin:0 12px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
       <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">7-Day Revenue</span>
       <span id="d-spark-total" style="font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent);"></span>
@@ -457,13 +457,13 @@
   </div>
 
   <!-- ── Today snapshot ───────────────────────────────────────── -->
-  <div id="d-today-wrap" style="margin:0 12px 8px;display:none;">
+  <div id="d-today-wrap" class="dash-extra" style="margin:0 12px 8px;display:none;">
     <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Today at a Glance</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;" id="d-today-grid"></div>
   </div>
 
   <!-- ── Stock health ─────────────────────────────────────────── -->
-  <div style="margin:0 12px 8px;">
+  <div class="dash-extra" style="margin:0 12px 8px;">
     <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">📦 Stock Health</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
       <div class="stat-box" style="padding:10px 8px;">
@@ -495,22 +495,22 @@
   </div>
 
   <!-- ── Insights ─────────────────────────────────────────────── -->
-  <div id="d-insights" style="margin:0 12px 8px;"></div>
+  <div id="d-insights" class="dash-extra" style="margin:0 12px 8px;"></div>
 
   <!-- ── Top sellers ──────────────────────────────────────────── -->
-  <div style="margin:0 12px 8px;">
+  <div class="dash-extra" style="margin:0 12px 8px;">
     <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">🏆 Top Sellers (period)</div>
     <div id="d-top-sellers"></div>
   </div>
 
   <!-- ── Top items by stock value ─────────────────────────────── -->
-  <div style="margin:0 12px 8px;">
+  <div class="dash-extra" style="margin:0 12px 8px;">
     <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">📦 Highest Stock Value</div>
     <div id="d-top-items"></div>
   </div>
 
   <!-- ── By type breakdown ────────────────────────────────────── -->
-  <div style="margin:0 12px 80px;">
+  <div class="dash-extra" style="margin:0 12px 80px;">
     <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">📂 By Category</div>
     <div id="d-by-type"></div>
   </div>
@@ -590,14 +590,23 @@
                autocomplete="off" spellcheck="false"
                style="text-transform:uppercase;"
                oninput="onCodeInput()"
-               onblur="setTimeout(hideCodeDropdown,180)">
+               >
       </div>
-      <div class="add-field" id="f-size-field">
-        <label class="add-label">Size / Variant</label>
-        <input class="add-input" id="f-size" type="text"
+      <div class="add-field" id="code-match-field">
+        <label class="add-label">Select Code</label>
+        <select class="add-select add-mono" id="code-match-select" disabled
                placeholder="e.g. 42 · L"
                autocomplete="off" spellcheck="false">
+          <option value="">Code match</option>
+        </select>
       </div>
+    </div>
+
+    <div class="add-field" id="f-size-field">
+      <label class="add-label">Size / Variant</label>
+      <input class="add-input" id="f-size" type="text"
+             placeholder="e.g. 42 Â· L"
+             autocomplete="off" spellcheck="false">
     </div>
 
     <div class="add-field">
@@ -775,12 +784,12 @@
 <div class="page" id="page-finance">
 
   <!-- ── KPI summary ────────────────────────────────────────── -->
-  <div class="fin-kpi-row" style="grid-template-columns:1fr 1fr 1fr;padding:10px 12px 6px;">
-    <div class="fin-kpi" style="background:#fff0f0;border-color:#fca5a5;">
+  <div class="fin-kpi-row" style="grid-template-columns:1fr;padding:10px 12px 6px;">
+    <div class="fin-kpi fin-extra" style="background:#fff0f0;border-color:#fca5a5;">
       <div class="fin-kpi-val" style="color:var(--accent2);" id="fin-revenue">0</div>
       <div class="fin-kpi-lbl">Revenue</div>
     </div>
-    <div class="fin-kpi green">
+    <div class="fin-kpi green fin-extra">
       <div class="fin-kpi-val" id="fin-profit">0</div>
       <div class="fin-kpi-lbl">Profit</div>
     </div>
@@ -790,7 +799,7 @@
     </div>
   </div>
 
-  <div class="fin-kpi-row" style="padding:0 12px 8px;">
+  <div class="fin-kpi-row" style="grid-template-columns:1fr 1fr 1fr;padding:0 12px 8px;">
     <div class="fin-kpi green">
       <div class="fin-kpi-val" id="fin-invested">0</div>
       <div class="fin-kpi-lbl">💉 Injected</div>
@@ -803,7 +812,7 @@
       <div class="fin-kpi-val" id="fin-withdrawn">0</div>
       <div class="fin-kpi-lbl">🏧 Withdrawn</div>
     </div>
-    <div class="fin-kpi cyan">
+    <div class="fin-kpi cyan fin-extra">
       <div class="fin-kpi-val" id="fin-margin">0%</div>
       <div class="fin-kpi-lbl">Margin</div>
     </div>
@@ -1730,7 +1739,7 @@
   </div>
 
   <!-- ── Sales KPIs (always visible) ─────────────────────── -->
-  <div class="day-kpi-grid" style="margin-bottom:10px;">
+  <div class="day-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px;">
     <div class="day-kpi day-kpi-green">
       <div id="day-sales-count" class="day-kpi-val">0</div>
       <div class="day-kpi-lbl">Sales</div>
@@ -1743,7 +1752,7 @@
       <div id="day-profit" class="day-kpi-val day-kpi-sm">0</div>
       <div class="day-kpi-lbl">Profit</div>
     </div>
-    <div class="day-kpi">
+    <div class="day-kpi day-extra">
       <div id="day-margin-pct" class="day-kpi-val day-kpi-sm" style="color:var(--accent);">0%</div>
       <div class="day-kpi-lbl">Margin</div>
     </div>
@@ -1899,8 +1908,8 @@
   </div>
 
   <!-- ── Past Sessions ──────────────────────────────────── -->
-  <div class="day-section-label" style="margin-top:8px;">📅 Past Sessions</div>
-  <div id="day-sessions-list" style="margin-bottom:80px;">
+  <div class="day-section-label day-extra" style="margin-top:8px;">📅 Past Sessions</div>
+  <div id="day-sessions-list" class="day-extra" style="margin-bottom:80px;">
     <div class="day-empty">No past sessions yet</div>
   </div>
 

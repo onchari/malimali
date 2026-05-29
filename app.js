@@ -1282,6 +1282,7 @@ function clearForm() {
   const banner = document.getElementById('restock-mode-banner');
   if (banner) banner.style.display = 'none';
 
+  clearCodeMatchSelect();
   hideCodeDropdown();
 }
 
@@ -1321,7 +1322,7 @@ async function onCodeInput() {
   const raw   = UI.el('f-code').value;
   const clean = sanitiseCode(raw);
   UI.el('f-code').value = clean;
-  if (!clean) { hideCodeDropdown(); return; }
+  if (!clean) { clearCodeMatchSelect(); hideCodeDropdown(); return; }
   const source = (allItems && allItems.length) ? allItems : await dbAll('items');
 
   // De-duplicate by code then search: exact → startsWith → contains
@@ -1338,11 +1339,23 @@ async function onCodeInput() {
   const nameMatch  = unique.filter(i => !seen.has('NAME_'+i.code) && i.name && i.name.toUpperCase().includes(clean) && !exact.includes(i) && !startsWith.includes(i) && !contains.includes(i));
   const matches    = [...exact, ...startsWith, ...contains, ...nameMatch].slice(0, 10);
 
-  if (!matches.length) { hideCodeDropdown(); return; }
+  if (!matches.length) { clearCodeMatchSelect('No match'); hideCodeDropdown(); return; }
   showCodeDropdown(matches, clean);
 }
 
 function showCodeDropdown(items, typedCode) {
+  const select = document.getElementById('code-match-select');
+  if (select) {
+    select.onchange = () => selectExistingItemFromDropdown(select.value);
+    select.disabled = !items.length;
+    select.style.opacity = items.length ? '1' : '0.55';
+    select.style.cursor = items.length ? 'pointer' : 'not-allowed';
+    select.innerHTML = '<option value="">Select code</option>' +
+      items.map(item => '<option value="' + item.id + '">' + escapeHtml(item.code) + '</option>').join('');
+    hideCodeDropdown();
+    return;
+  }
+
   let dd = document.getElementById('code-dropdown');
   if (!dd) {
     dd = document.createElement('div');
@@ -1363,6 +1376,22 @@ function showCodeDropdown(items, typedCode) {
 function hideCodeDropdown() {
   const dd = document.getElementById('code-dropdown');
   if (dd) dd.style.display = 'none';
+}
+
+function clearCodeMatchSelect(label = 'Code match') {
+  const select = document.getElementById('code-match-select');
+  if (!select) return;
+  select.innerHTML = '<option value="">' + escapeHtml(label) + '</option>';
+  select.value = '';
+  select.disabled = true;
+  select.style.opacity = '0.55';
+  select.style.cursor = 'not-allowed';
+}
+
+function selectExistingItemFromDropdown(value) {
+  const id = parseInt(value);
+  if (!id) return;
+  selectExistingItem(id);
 }
 
 async function selectExistingItem(itemId) {
@@ -4860,7 +4889,6 @@ async function renderFinancePage() {
   if (dateEl && !dateEl.value) dateEl.value = todayDateStr();
 
   const allEntries = await dbAll('finances');
-  const allSales   = await dbAll('sales');
 
   // Only manual finance entries (exclude auto-generated revenue + reconciliation)
   const manualTypes = ['injection','investment','stock_purchase','expense','withdrawal','other'];
@@ -4868,24 +4896,21 @@ async function renderFinancePage() {
 
   // ── KPIs (all time) ──────────────────────────────────────
   const invested  = manualEntries.filter(e=>e.type==='injection'||e.type==='investment').reduce((s,e)=>s+e.amount,0);
-  const expenses  = manualEntries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  const expenses  = manualEntries.filter(e=>e.type==='expense'||e.type==='stock_purchase').reduce((s,e)=>s+e.amount,0);
   const withdrawn = manualEntries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+e.amount,0);
-  const revenue   = allSales.reduce((s,x)=>s+(x.revenue||0),0);
-  const profit    = allSales.reduce((s,x)=>s+(x.profit||0),0);
-  const margin    = revenue > 0 ? (profit/revenue*100) : 0;
-  const net       = invested + revenue - expenses - withdrawn;
+  const net       = invested - expenses - withdrawn;
 
   const setT = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=fmt(v); };
-  setT('fin-revenue',  revenue);
-  setT('fin-profit',   profit);
+  setT('fin-revenue',  0);
+  setT('fin-profit',   0);
   setT('fin-invested', invested);
   setT('fin-expenses', expenses);
   setT('fin-withdrawn',withdrawn);
 
   const marginEl = document.getElementById('fin-margin');
   if (marginEl) {
-    marginEl.textContent = margin.toFixed(1) + '%';
-    marginEl.style.color = margin >= 20 ? 'var(--green)' : margin >= 0 ? 'var(--text)' : 'var(--red)';
+    marginEl.textContent = '0%';
+    marginEl.style.color = 'var(--text)';
   }
   const netEl  = document.getElementById('fin-net');
   const netKpi = document.getElementById('fin-net-kpi');
@@ -5611,6 +5636,7 @@ window.pullFromFirebase = pullFromFirebase;
 window.removeAddPhoto = removeAddPhoto;
 window.renderList = renderList;
 window.renderSellPage = renderSellPage;
+window.selectExistingItemFromDropdown = selectExistingItemFromDropdown;
 window.resetAllData = resetAllData;
 window.runSyncDebug = runSyncDebug;
 window.saveCurrency = saveCurrency;
