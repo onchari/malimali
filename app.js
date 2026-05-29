@@ -4920,13 +4920,14 @@ async function renderFinancePage() {
 
   const allEntries = await dbAll('finances');
 
-  const poolTypes = ['revenue','injection','investment','stock_purchase','expense','withdrawal','other'];
+  const poolTypes = ['injection','investment','stock_purchase','expense','withdrawal','other'];
   const poolEntries = allEntries.filter(e => poolTypes.includes(e.type));
 
   // ── KPIs (all time) ──────────────────────────────────────
   const invested  = poolEntries.filter(e=>e.type==='injection'||e.type==='investment'||e.type==='stock_purchase').reduce((s,e)=>s+(e.amount||0),0);
-  const salesPool = poolEntries.filter(e=>e.type==='revenue').reduce((s,e)=>s+(e.amount||0),0);
-  const stockCostReleased = poolEntries.filter(e=>e.type==='revenue').reduce((s,e)=>s+(e.costAmount||Math.max(0,(e.amount||0)-(e.profit||0))),0);
+  const revenueEntries = allEntries.filter(e=>e.type==='revenue');
+  const salesPool = revenueEntries.reduce((s,e)=>s+(e.amount||0),0);
+  const stockCostReleased = revenueEntries.reduce((s,e)=>s+(e.costAmount||Math.max(0,(e.amount||0)-(e.profit||0))),0);
   const expenses  = poolEntries.filter(e=>e.type==='expense'||e.type==='other').reduce((s,e)=>s+(e.amount||0),0);
   const withdrawn = poolEntries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+(e.amount||0),0);
   const businessPool = invested - stockCostReleased - expenses;
@@ -5049,20 +5050,15 @@ function renderFinList(entries) {
     return;
   }
   const cfgMap = {
-    revenue:       { icon:'KES', color:'var(--accent2)', label:'Sale to Sales Pool', out:false },
-    injection:     { icon:'💉', color:'var(--green)', label:'Injection',      out:false },
-    investment:    { icon:'💵', color:'var(--green)', label:'Investment',     out:false },
-    stock_purchase:{ icon:'🛍️', color:'#1d4ed8',      label:'Stock Purchase', out:true  },
-    expense:       { icon:'💸', color:'var(--red)',   label:'Expense',        out:true  },
-    withdrawal:    { icon:'🏧', color:'#d97706',      label:'Withdrawal',     out:true  },
-    other:         { icon:'📝', color:'var(--muted)', label:'Other',          out:false },
+    injection:     { icon:'💉', color:'var(--green)', label:'Cash Injection',   out:false },
+    investment:    { icon:'💵', color:'var(--green)', label:'Owner Investment',  out:false },
+    stock_purchase:{ icon:'🛍️', color:'#1d4ed8',      label:'Stock Purchase',   out:true  },
+    expense:       { icon:'💸', color:'var(--red)',   label:'Business Expense', out:true  },
+    withdrawal:    { icon:'🏧', color:'#d97706',      label:'Withdrawal',       out:true  },
+    other:         { icon:'📝', color:'var(--muted)', label:'Other',            out:true  },
   };
   const rows = entries.map((e, i) => {
-    let c  = cfgMap[e.type] || cfgMap.other;
-    if (e.type === 'stock_purchase') c = { ...c, label: 'Stock Investment', out: false };
-    if (e.type === 'expense') c = { ...c, label: 'Business Expense', out: true };
-    if (e.type === 'withdrawal') c = { ...c, label: 'Sales Withdrawal', out: true };
-    if (e.type === 'other') c = { ...c, out: true };
+    const c  = cfgMap[e.type] || cfgMap.other;
     const ds = e.date || (e.createdAt||'').split('T')[0];
     const fd = ds ? new Date(ds+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '—';
     const bg = i % 2 === 0 ? 'var(--surface)' : '#f7faf7';
@@ -5467,6 +5463,26 @@ function _renderOpeningSummary(data) {
 }
 
 // ── Render reconcile insights ────────────────────────────────────
+// ── Simple pocket row: Expected vs Counted + variance ────────────
+function _pocketRowSimple(icon, lbl, expected, physical) {
+  const v   = physical - expected;
+  const isOk = Math.abs(v) <= 5;
+  const isWn = !isOk && Math.abs(v) <= 300;
+  const vc  = isOk ? 'var(--green)' : isWn ? '#d97706' : 'var(--red)';
+  const vs  = isOk ? '✅ Balanced' : v > 0 ? '⬆️ +'+fmt(v) : '⬇️ −'+fmt(Math.abs(v));
+  const bg  = isOk ? 'var(--green-light)' : isWn ? '#fef3c7' : 'var(--red-light)';
+  return '<div style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--border);">' +
+    '<div style="display:flex;align-items:center;gap:8px;">' +
+      '<span style="font-size:16px;">'+icon+'</span>' +
+      '<div>' +
+        '<div style="font-size:12px;font-weight:700;color:var(--text);">'+lbl+'</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:1px;">Expected: <b>'+fmt(expected)+'</b> · Counted: <b>'+fmt(physical)+'</b></div>' +
+      '</div>' +
+    '</div>' +
+    '<span style="font-size:11px;font-weight:800;color:'+vc+';background:'+bg+';padding:3px 8px;border-radius:20px;">'+vs+'</span>' +
+  '</div>';
+}
+
 function _renderReconcileInsights(data, today) {
   const el = document.getElementById('day-reconcile-insights');
   if (!el || !data || !data.closing) return;
@@ -5561,7 +5577,7 @@ function _renderReconcileInsights(data, today) {
       '</div>' +
     '</div>' +
 
-    // ── The two money totals ────────────────────────────
+    // ── Day Money Check ─────────────────────────────────
     '<div class="day-section-label">⚖️ Day Money Check</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
       '<div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;">' +
@@ -5575,27 +5591,9 @@ function _renderReconcileInsights(data, today) {
         '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--accent);border-top:1px solid var(--border);padding-top:8px;">'+fmt(an.correctDay)+'</div>' +
       '</div>' +
       '<div style="background:'+(isOk?'var(--green-light)':isWn?'#fef3c7':'var(--red-light)')+';border:1.5px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';border-radius:var(--r-lg);padding:12px 14px;">' +
-        '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Actually Have</div>' +
+        '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Have</div>' +
         '<div style="font-size:10px;color:var(--muted);line-height:2;margin-bottom:8px;">' +
           'Cash: <b>'+fmt(cl.cash)+'</b><br>Till: <b>'+fmt(cl.till)+'</b><br>M-Pesa: <b>'+fmt(cl.mpesa)+'</b>' +
-        '</div>' +
-        '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:'+vc+';border-top:1px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';padding-top:8px;">'+fmt(an.actualDay)+'</div>' +
-      '</div>' +
-    '</div>' +
-      '<div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;">' +
-        '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Correct Day Money</div>' +
-        '<div style="font-size:10px;color:var(--muted);line-height:1.8;margin-bottom:8px;">' +
-          'Opening: '+fmt(an.opTotal)+'<br>' +
-          '+ Sales: '+fmt(sy.sysTotalRev)+(cl.injected>0?'<br>+ Injected: '+fmt(cl.injected):'')+(cl.expenses>0?'<br>+ Expenses: '+fmt(cl.expenses):'')+(cl.withdrawn>0?'<br>+ Withdrawn: '+fmt(cl.withdrawn):'') +
-        '</div>' +
-        '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--text);border-top:1px solid var(--border);padding-top:8px;">'+fmt(an.correctDay)+'</div>' +
-      '</div>' +
-      '<div style="background:'+(isOk?'var(--green-light)':isWn?'#fef3c7':'var(--red-light)')+';border:1.5px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';border-radius:var(--r-lg);padding:12px 14px;">' +
-        '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Actual Day Money</div>' +
-        '<div style="font-size:10px;color:var(--muted);line-height:1.8;margin-bottom:8px;">' +
-          'Cash: '+fmt(cl.cash)+'<br>Till: '+fmt(cl.till)+'<br>M-Pesa: '+fmt(cl.mpesa) +
-          (cl.expenses>0?'<br>+ Expenses: '+fmt(cl.expenses):'') +
-          (cl.withdrawn>0?'<br>+ Withdrawn: '+fmt(cl.withdrawn):'') +
         '</div>' +
         '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:'+vc+';border-top:1px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';padding-top:8px;">'+fmt(an.actualDay)+'</div>' +
       '</div>' +
@@ -5605,11 +5603,11 @@ function _renderReconcileInsights(data, today) {
       '<span style="font-size:20px;font-weight:900;font-family:var(--mono);color:'+vc+';">'+vi+' '+vl+'</span>' +
     '</div>' +
 
-    // ── Per-pocket detail ───────────────────────────────
+    // ── Pocket Detail (Expected vs Counted) ─────────────
     '<div class="day-section-label">🔍 Pocket Detail</div>' +
     '<div style="border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;margin-bottom:8px;">' +
-      pocketRow('💵', 'Cash (Hand + Till)', (o.cash||0)+(o.till||0), an.expCash,  an.physCash) +
-      pocketRow('📱', 'M-Pesa Float',        o.mpesa||0,              an.expMpesa, an.physMpesa) +
+      _pocketRowSimple('💵', 'Cash (Hand + Till)', an.expCash, an.physCash) +
+      _pocketRowSimple('📱', 'M-Pesa Float', an.expMpesa, an.physMpesa) +
     '</div>' +
 
     // ── Insights ─────────────────────────────────────────
