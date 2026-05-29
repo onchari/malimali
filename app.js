@@ -1126,6 +1126,7 @@ async function saveItem() {
       if(newQty>999999){toast('\u26a0\ufe0f Exceeds max 999,999','err');return;}
       existing.qty=newQty;existing.updatedAt=new Date().toISOString();
       await dbPut('items',existing);fbSyncItem(existing);
+      await recordStockInvestment(existing, addQty * (existing.buyPrice || existing.buy || 0), addQty, 'Restock');
       allItems=await dbAll('items');await enrichShoeItems(allItems);
       renderList();renderDashboard();updateHeader();scheduleSync();
       exitRestockMode();
@@ -1207,6 +1208,7 @@ async function saveItem() {
     }else{
       const newId=await dbAdd('items',item);item.id=newId;
       if(_addFormPhotoData)setItemPhoto(newId,_addFormPhotoData);
+      await recordStockInvestment(item, qty * buy, qty, 'New stock');
       fbSyncItem(item);
       clearForm();clearAddFormPhoto();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
@@ -1413,6 +1415,26 @@ async function selectExistingItem(itemId) {
 function exitRestockMode() {
   _codeDropdownActive = false;
   clearForm();
+}
+
+async function recordStockInvestment(item, amount, qty, sourceLabel) {
+  const value = parseFloat(amount) || 0;
+  if (value <= 0) return null;
+  const entry = {
+    type: 'stock_purchase',
+    amount: value,
+    description: (sourceLabel || 'Stock added') + ': ' + (item.name || item.code || 'Item') +
+      (qty ? ' x ' + qty : ''),
+    category: 'stock',
+    itemCode: item.code || '',
+    qty: qty || 0,
+    date: todayDateStr(),
+    createdAt: new Date().toISOString(),
+    createdBy: currentUser ? currentUser.username : 'system',
+    auto: true,
+  };
+  entry.id = await dbAdd('finances', entry);
+  return entry;
 }
 
 
@@ -1805,6 +1827,12 @@ async function confirmBulkShoeRestock() {
   item.qty = fresh.reduce((t, s) => t + (s.qty || 0), 0);
   item.updatedAt = new Date().toISOString();
   await dbPut('items', item);
+  await recordStockInvestment(
+    item,
+    changed.reduce((sum, rec) => sum + qty * (rec.buyPrice || rec.buy || item.buyPrice || item.buy || 0), 0),
+    qty * changed.length,
+    'Shoe restock'
+  );
   fbSyncItem(item);
 
   if (fbReady && fbDb) {
@@ -2756,6 +2784,7 @@ async function confirmSale() {
     const finEntry = {
       type:        'revenue',
       amount:      revenue,
+      costAmount:  buyPrice * qty,
       profit:      profit,
       description: 'Sale: ' + (item.name || item.code) +
                    (_isShoeSale && _sellShoeSize ? ' (Size ' + _sellShoeSize.size + ')' : '') +
@@ -4263,6 +4292,7 @@ async function confirmRestock() {
     item.qty += qty;
     item.updatedAt = new Date().toISOString();
     await dbPut('items', item);
+    await recordStockInvestment(item, qty * (item.buyPrice || item.buy || 0), qty, 'Restock');
     fbSyncItem(item);
     scheduleSync();
     const qtyEl = document.getElementById('sh-qty');
@@ -4890,20 +4920,50 @@ async function renderFinancePage() {
 
   const allEntries = await dbAll('finances');
 
-  // Only manual finance entries (exclude auto-generated revenue + reconciliation)
-  const manualTypes = ['injection','investment','stock_purchase','expense','withdrawal','other'];
-  const manualEntries = allEntries.filter(e => manualTypes.includes(e.type));
+  const poolTypes = ['revenue','injection','investment','stock_purchase','expense','withdrawal','other'];
+  const poolEntries = allEntries.filter(e => poolTypes.includes(e.type));
 
   // ── KPIs (all time) ──────────────────────────────────────
-  const invested  = manualEntries.filter(e=>e.type==='injection'||e.type==='investment').reduce((s,e)=>s+e.amount,0);
-  const expenses  = manualEntries.filter(e=>e.type==='expense'||e.type==='stock_purchase').reduce((s,e)=>s+e.amount,0);
-  const withdrawn = manualEntries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+e.amount,0);
-  const net       = invested - expenses - withdrawn;
+  const invested  = poolEntries.filter(e=>e.type==='injection'||e.type==='investment'||e.type==='stock_purchase').reduce((s,e)=>s+(e.amount||0),0);
+  const salesPool = poolEntries.filter(e=>e.type==='revenue').reduce((s,e)=>s+(e.amount||0),0);
+  const stockCostReleased = poolEntries.filter(e=>e.type==='revenue').reduce((s,e)=>s+(e.costAmount||Math.max(0,(e.amount||0)-(e.profit||0))),0);
+  const expenses  = poolEntries.filter(e=>e.type==='expense'||e.type==='other').reduce((s,e)=>s+(e.amount||0),0);
+  const withdrawn = poolEntries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+(e.amount||0),0);
+  const businessPool = invested - stockCostReleased - expenses;
+  const net       = salesPool - withdrawn;
 
   const setT = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=fmt(v); };
+  const setLabel = (id, text) => {
+    const el = document.getElementById(id);
+    const lbl = el && el.parentElement ? el.parentElement.querySelector('.fin-kpi-lbl') : null;
+    if (lbl) lbl.textContent = text;
+  };
+  setLabel('fin-net', 'Sales Pool');
+  setLabel('fin-invested', 'Business Pool');
+  setLabel('fin-expenses', 'Business Spent');
+  setLabel('fin-withdrawn', 'Sales Out');
+  const finTypeEl = document.getElementById('fin-type');
+  if (finTypeEl) {
+    const optionLabels = {
+      injection: 'Cash to Business Pool',
+      investment: 'Owner Investment',
+      stock_purchase: 'Stock Added',
+      expense: 'Business Expense',
+      withdrawal: 'Sales Withdrawal',
+      other: 'Other Business Spend'
+    };
+    Object.entries(optionLabels).forEach(([value, label]) => {
+      const opt = finTypeEl.querySelector('option[value="' + value + '"]');
+      if (opt) opt.textContent = label;
+    });
+  }
+  const filterInvestment = document.getElementById('fin-filter-investment');
+  const filterExpense = document.getElementById('fin-filter-expense');
+  if (filterInvestment) filterInvestment.textContent = 'Business';
+  if (filterExpense) filterExpense.textContent = 'Out';
   setT('fin-revenue',  0);
   setT('fin-profit',   0);
-  setT('fin-invested', invested);
+  setT('fin-invested', businessPool);
   setT('fin-expenses', expenses);
   setT('fin-withdrawn',withdrawn);
 
@@ -4920,13 +4980,13 @@ async function renderFinancePage() {
   // ── Transaction list ─────────────────────────────────────
   let listEntries;
   if (_finFilter === 'all') {
-    listEntries = manualEntries;
+    listEntries = poolEntries;
   } else if (_finFilter === 'investment') {
-    listEntries = manualEntries.filter(e=>e.type==='injection'||e.type==='investment');
+    listEntries = poolEntries.filter(e=>e.type==='injection'||e.type==='investment'||e.type==='stock_purchase');
   } else if (_finFilter === 'expense') {
-    listEntries = manualEntries.filter(e=>e.type==='expense'||e.type==='withdrawal'||e.type==='stock_purchase');
+    listEntries = poolEntries.filter(e=>e.type==='expense'||e.type==='withdrawal'||e.type==='other');
   } else {
-    listEntries = manualEntries.filter(e=>e.type===_finFilter);
+    listEntries = poolEntries.filter(e=>e.type===_finFilter);
   }
   const sorted = [...listEntries].sort((a,b)=>new Date(b.date||b.createdAt)-new Date(a.date||a.createdAt));
 
@@ -4989,6 +5049,7 @@ function renderFinList(entries) {
     return;
   }
   const cfgMap = {
+    revenue:       { icon:'KES', color:'var(--accent2)', label:'Sale to Sales Pool', out:false },
     injection:     { icon:'💉', color:'var(--green)', label:'Injection',      out:false },
     investment:    { icon:'💵', color:'var(--green)', label:'Investment',     out:false },
     stock_purchase:{ icon:'🛍️', color:'#1d4ed8',      label:'Stock Purchase', out:true  },
@@ -4997,7 +5058,11 @@ function renderFinList(entries) {
     other:         { icon:'📝', color:'var(--muted)', label:'Other',          out:false },
   };
   const rows = entries.map((e, i) => {
-    const c  = cfgMap[e.type] || cfgMap.other;
+    let c  = cfgMap[e.type] || cfgMap.other;
+    if (e.type === 'stock_purchase') c = { ...c, label: 'Stock Investment', out: false };
+    if (e.type === 'expense') c = { ...c, label: 'Business Expense', out: true };
+    if (e.type === 'withdrawal') c = { ...c, label: 'Sales Withdrawal', out: true };
+    if (e.type === 'other') c = { ...c, out: true };
     const ds = e.date || (e.createdAt||'').split('T')[0];
     const fd = ds ? new Date(ds+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '—';
     const bg = i % 2 === 0 ? 'var(--surface)' : '#f7faf7';
@@ -5943,6 +6008,8 @@ async function saveShoeItems(baseCode, baseName, type) {
   }
 
   let saved = 0;
+  let stockCost = 0;
+  let stockQty = 0;
   const perSizeErrors = [];
   for (const size of sorted) {
     let qty, buy, sell;
@@ -5963,6 +6030,8 @@ async function saveShoeItems(baseCode, baseName, type) {
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     });
     saved++;
+    stockCost += qty * buy;
+    stockQty += qty;
   }
 
   if (perSizeErrors.length) toast('⚠️ Skipped: ' + perSizeErrors.join(' · '), 'err');
@@ -5971,6 +6040,7 @@ async function saveShoeItems(baseCode, baseName, type) {
   const allSz = await getShoeSizes(baseCode);
   product.qty = allSz.reduce((t, s) => t + s.qty, 0);
   await dbPut('items', product);
+  await recordStockInvestment(product, stockCost, stockQty, 'Shoe stock');
   fbSyncItem(product);
 
   if (fbReady && fbDb) {
