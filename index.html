@@ -302,7 +302,7 @@
 
 <!-- ==============================================================
      BOTTOM NAVIGATION BAR
-     5 tabs: Dashboard · Stock · Add · History · Settings
+     Nav: Dashboard · Inventory · Sales · Operations · Settings
      Role-gated: app.js hides tabs based on currentUser.tabs[]
      All tabs accessible without manual day management
      ============================================================== -->
@@ -314,10 +314,7 @@
     <span class="icon"><i class="fa-solid fa-boxes-stacked"></i></span>Inventory
   </button>
   <button class="nav-btn" onclick="showPage('sell')" id="tab-sell">
-    <span class="icon"><i class="fa-solid fa-cash-register"></i></span>Sale
-  </button>
-  <button class="nav-btn" onclick="showPage('history')" id="tab-history">
-    <span class="icon"><i class="fa-solid fa-clock-rotate-left"></i></span>History
+    <span class="icon"><i class="fa-solid fa-cash-register"></i></span>Sales
   </button>
   <button class="nav-btn" onclick="showPage('operations')" id="tab-operations">
     <span class="icon"><i class="fa-solid fa-briefcase"></i></span>Operations
@@ -635,7 +632,7 @@
       <input class="add-input add-mono" id="wish-code" type="text" placeholder="Code optional">
     </div>
     <div class="stock-form-grid">
-      <select class="add-select" id="wish-type"></select>
+      <select class="add-select" id="wish-type" aria-label="Category"></select>
       <input class="add-input add-mono" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="Qty">
     </div>
     <div class="stock-form-grid">
@@ -719,32 +716,31 @@
     <h2 class="add-card-title" id="add-step-item"><span class="add-step-badge">2</span> Item details</h2>
 
     <div class="add-field">
-      <label class="add-label" for="f-code">Item code <span class="add-required">*</span></label>
       <input class="add-input add-mono" id="f-code" type="text"
-             placeholder="e.g. SH001"
+             placeholder="Item code * (e.g. SH001)"
+             aria-label="Item code"
              autocomplete="off" spellcheck="false"
              style="text-transform:uppercase;"
              oninput="onCodeInput()">
     </div>
 
     <div class="add-field" id="code-match-field">
-      <label class="add-label" for="code-match-select">Existing code match</label>
-      <select class="add-select add-mono" id="code-match-select" disabled>
-        <option value="">No matches yet</option>
+      <select class="add-select add-mono" id="code-match-select" disabled aria-label="Existing code match">
+        <option value="">Match existing code…</option>
       </select>
     </div>
 
     <div class="add-field">
-      <label class="add-label" for="f-name">Display name <span class="add-hint">optional</span></label>
       <input class="add-input" id="f-name" type="text"
-             placeholder="e.g. School shoes black"
+             placeholder="Display name (optional)"
+             aria-label="Display name"
              autocomplete="off" spellcheck="false">
     </div>
 
     <div class="add-field" id="f-size-field">
-      <label class="add-label" for="f-size">Size / variant</label>
       <input class="add-input" id="f-size" type="text"
-             placeholder="e.g. 42, Large, or N/A"
+             placeholder="Size / variant (e.g. 42, Large, N/A)"
+             aria-label="Size or variant"
              autocomplete="off" spellcheck="false">
     </div>
   </section>
@@ -804,19 +800,19 @@
           </div>
           <div class="add-row-3">
             <div class="add-field">
-              <label class="add-label">Qty/size <span class="add-required">*</span></label>
               <input class="add-input add-center" id="shoe-shared-qty"
-                     type="number" min="0" inputmode="numeric" placeholder="0">
+                     type="number" min="0" inputmode="numeric" placeholder="Qty/size *"
+                     aria-label="Quantity per size">
             </div>
             <div class="add-field">
-              <label class="add-label">Buy (KES) <span class="add-required">*</span></label>
               <input class="add-input add-center" id="shoe-shared-buy"
-                     type="number" min="0" inputmode="decimal" placeholder="0">
+                     type="number" min="0" inputmode="decimal" placeholder="Buy (KES) *"
+                     aria-label="Buy price">
             </div>
             <div class="add-field">
-              <label class="add-label">Sell (KES) <span class="add-required">*</span></label>
               <input class="add-input add-center" id="shoe-shared-sell"
-                     type="number" min="0" inputmode="decimal" placeholder="0">
+                     type="number" min="0" inputmode="decimal" placeholder="Sell (KES) *"
+                     aria-label="Sell price">
             </div>
           </div>
         </div>
@@ -845,22 +841,24 @@
       <!-- Qty · Buy · Sell in one row -->
       <div class="add-row-3">
         <div class="add-field">
-          <label class="add-label">Qty <span class="add-required">*</span></label>
           <input class="add-input add-center add-mono" id="f-qty" type="number"
-                 placeholder="0" min="0" inputmode="numeric"
+                 placeholder="Qty *" min="0" inputmode="numeric"
+                 aria-label="Quantity"
                  oninput="updateProfitPreview()">
         </div>
         <div class="add-field">
-          <label class="add-label">Buy (<span id="bp-cur">KES</span>) <span class="add-required">*</span></label>
           <input class="add-input add-center" id="f-buy" type="number"
-                 placeholder="0" min="0" inputmode="decimal"
+                 placeholder="Buy (KES) *" min="0" inputmode="decimal"
+                 aria-label="Buy price"
                  oninput="updateProfitPreview()">
+          <span id="bp-cur" style="display:none;">KES</span>
         </div>
         <div class="add-field">
-          <label class="add-label">Sell (<span id="sp-cur">KES</span>) <span class="add-required">*</span></label>
           <input class="add-input add-center" id="f-sell" type="number"
-                 placeholder="0" min="0" inputmode="decimal"
+                 placeholder="Sell (KES) *" min="0" inputmode="decimal"
+                 aria-label="Sell price"
                  oninput="updateProfitPreview()">
+          <span id="sp-cur" style="display:none;">KES</span>
         </div>
       </div>
 
@@ -958,30 +956,28 @@
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
       <div>
-        <label class="add-label">Type <span class="add-required">*</span></label>
-        <select class="add-select" id="fin-type" onchange="updateFinTypeColor()">
-          <option value="">Select…</option>
+        <select class="add-select" id="fin-type" onchange="updateFinTypeColor()" aria-label="Transaction type">
+          <option value="">Transaction type *</option>
           <option value="injection">💉 Cash to Business</option>
           <option value="expense">💸 Business Expense</option>
           <option value="withdrawal">🏧 Personal Withdraw</option>
         </select>
       </div>
       <div>
-        <label class="add-label">Amount <span class="add-required">*</span></label>
         <input class="add-input add-mono" id="fin-amount" type="number"
-               min="0" inputmode="decimal" placeholder="0">
+               min="0" inputmode="decimal" placeholder="Amount (KES) *"
+               aria-label="Amount">
       </div>
     </div>
 
     <div style="margin-bottom:8px;">
-      <label class="add-label">Description <span class="add-required">*</span></label>
       <input class="add-input" id="fin-desc" type="text" maxlength="200"
-             placeholder="What is this for?">
+             placeholder="Description * — what is this for?"
+             aria-label="Description">
     </div>
 
     <div style="margin-bottom:10px;">
-      <label class="add-label">Date</label>
-      <input class="add-input" id="fin-date" type="date">
+      <input class="add-input" id="fin-date" type="date" aria-label="Transaction date" title="Transaction date">
     </div>
 
     <!-- hidden compat -->
@@ -1139,8 +1135,8 @@
 
   <div class="card" style="margin-bottom:8px;">
     <div style="font-size:12px;font-weight:700;margin-bottom:8px;">New sub-category (any depth)</div>
-    <select class="form-select form-select-bold" id="new-sub-parent" style="margin-bottom:8px;">
-      <option value="">— Parent category —</option>
+    <select class="form-select form-select-bold" id="new-sub-parent" style="margin-bottom:8px;" aria-label="Parent category">
+      <option value="">Parent category…</option>
     </select>
     <div class="type-add-row" style="margin-top:0;">
       <input class="type-input" id="new-sub-name" placeholder="Sub-category e.g. School Shoes">
@@ -1171,7 +1167,8 @@
   <div class="card">
     <select class="form-select form-select-bold"
             id="currency-sel"
-            onchange="saveCurrency()">
+            onchange="saveCurrency()"
+            aria-label="Shop currency">
       <option value="KES">KES — Kenyan Shilling</option>
       <option value="TZS">TZS — Tanzanian Shilling</option>
       <option value="UGX">UGX — Ugandan Shilling</option>
@@ -1322,113 +1319,82 @@
 
 
 <!-- ==============================================================
-     PAGE: HISTORY  (id="page-history")
-     Automated daily timeline — no manual open/close
+     PAGE: SALES  (id="page-sell")
+     Sub-tabs: Sell (new sale) · History (records)
      ============================================================== -->
-<div class="page" id="page-history">
-
-  <!-- Today summary header -->
-  <div class="hist-today-header">
-    <div>
-      <div class="hist-today-date" id="hist-today-date"></div>
-      <div class="hist-today-sub">Today's activity</div>
-    </div>
-    <div class="hist-today-stats">
-      <div class="hist-stat">
-        <div class="hist-stat-val" id="hist-today-revenue">KES 0</div>
-        <div class="hist-stat-lbl">Revenue</div>
-      </div>
-      <div class="hist-stat">
-        <div class="hist-stat-val green" id="hist-today-profit">KES 0</div>
-        <div class="hist-stat-lbl">Profit</div>
-      </div>
-      <div class="hist-stat">
-        <div class="hist-stat-val" id="hist-today-sales">0</div>
-        <div class="hist-stat-lbl">Sales</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Today sales list -->
-  <div class="sec-label" style="margin-top:4px;">📋 Today's Sales</div>
-  <div id="hist-today-list" style="padding:0 12px 8px;"></div>
-
-  <!-- Period filter -->
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 16px 6px;">
-    <span class="sec-label" style="padding:0;margin:0;">📅 Past Records</span>
-    <select id="hist-period-filter" class="add-select" style="width:auto;height:34px;font-size:12px;padding:0 28px 0 8px;" onchange="renderHistoryPage()">
-      <option value="7">Last 7 days</option>
-      <option value="30" selected>Last 30 days</option>
-      <option value="90">Last 90 days</option>
-      <option value="all">All time</option>
-    </select>
-  </div>
-
-  <!-- Daily records grouped by date -->
-  <div id="hist-records-list" style="padding:0 12px 80px;"></div>
-
-</div><!-- /page-history -->
-
-
-<!-- ==============================================================
-     PAGE: MAKE A SALE  (id="page-sell")
-     Not in nav — accessed via SELL button on item detail sheet.
-     searchSell() filters items; renderSellPage() shows history.
-     ============================================================== -->
-<div class="page" id="page-sell">
+<div class="page" id="page-sell" style="padding:12px 12px 0;">
 
   <div class="stock-toolbar">
     <div>
-      <div class="stock-title">Sale</div>
-      <div class="stock-sub">Available items and off-stock sales</div>
+      <div class="stock-title">Sales</div>
+      <div class="stock-sub" id="sales-sub">Record sales and view history</div>
     </div>
-    <button class="stock-monitor-btn" onclick="openOffStockSale()" title="Sell item not in stock">
+    <button class="stock-monitor-btn" onclick="openOffStockSale()" title="Sell item not in stock"
+            id="sales-offstock-btn">
       <i class="fa-solid fa-plus"></i>
     </button>
   </div>
 
-  <!-- Fast search -->
-  <div class="search-wrap" style="margin-bottom:10px;">
-    <span class="s-icon">🔍</span>
-    <input class="search-input" id="sell-search"
-           placeholder="Search item by name or code…"
-           oninput="searchSell()"
-           autocomplete="off" spellcheck="false"
-           style="font-size:17px;font-weight:700;">
+  <div class="ops-tabs sales-tabs">
+    <button class="ops-tab active" id="sales-tab-sell" onclick="showSalesTab('sell')">
+      <i class="fa-solid fa-cash-register"></i> Sell
+    </button>
+    <button class="ops-tab" id="sales-tab-history" onclick="showSalesTab('history')">
+      <i class="fa-solid fa-clock-rotate-left"></i> History
+    </button>
   </div>
 
-  <!-- Matching items — populated by searchSell() -->
-  <div id="sell-results"></div>
-
-  <!-- Date range filter -->
-  <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
-    <select id="sales-filter" onchange="renderSellPage()"
-            style="flex:1;padding:10px 12px;border:1.5px solid var(--border);
-                   border-radius:var(--r);font-size:14px;font-weight:600;
-                   font-family:var(--sans);background:var(--surface);
-                   color:var(--text);outline:none;-webkit-appearance:none;">
-      <option value="today">Today</option>
-      <option value="week">This Week</option>
-      <option value="month">This Month</option>
-      <option value="all">All Time</option>
-    </select>
-  </div>
-
-  <!-- Summary tiles -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;">
-    <div class="stat-box green" style="padding:12px;">
-      <div class="stat-val" id="sell-today-rev" style="font-size:16px;">KES 0</div>
-      <div class="stat-lbl">Today Revenue</div>
+  <!-- Sell: search and item results -->
+  <div id="sales-slot-sell" class="ops-slot active">
+    <div class="search-wrap" style="margin-bottom:10px;">
+      <span class="s-icon">🔍</span>
+      <input class="search-input" id="sell-search"
+             placeholder="Search item by name or code…"
+             oninput="searchSell()"
+             autocomplete="off" spellcheck="false"
+             style="font-size:17px;font-weight:700;">
     </div>
-    <div class="stat-box amber" style="padding:12px;">
-      <div class="stat-val" id="sell-today-profit" style="font-size:16px;">KES 0</div>
-      <div class="stat-lbl">Today Profit</div>
-    </div>
+    <div id="sell-results"></div>
   </div>
 
-  <!-- Recent sales history -->
-  <div class="sec-label" style="margin-top:14px;">Recent Sales</div>
-  <div id="sell-history"></div>
+  <!-- History: today summary + past records -->
+  <div id="sales-slot-history" class="ops-slot">
+    <div class="hist-today-header">
+      <div>
+        <div class="hist-today-date" id="hist-today-date"></div>
+        <div class="hist-today-sub">Today's activity</div>
+      </div>
+      <div class="hist-today-stats">
+        <div class="hist-stat">
+          <div class="hist-stat-val" id="hist-today-revenue">KES 0</div>
+          <div class="hist-stat-lbl">Revenue</div>
+        </div>
+        <div class="hist-stat">
+          <div class="hist-stat-val green" id="hist-today-profit">KES 0</div>
+          <div class="hist-stat-lbl">Profit</div>
+        </div>
+        <div class="hist-stat">
+          <div class="hist-stat-val" id="hist-today-sales">0</div>
+          <div class="hist-stat-lbl">Sales</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec-label" style="margin-top:4px;">📋 Today's Sales</div>
+    <div id="hist-today-list" style="padding:0 0 8px;"></div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0 6px;">
+      <span class="sec-label" style="padding:0;margin:0;">📅 Past Records</span>
+      <select id="hist-period-filter" class="add-select" style="width:auto;height:34px;font-size:12px;padding:0 28px 0 8px;" onchange="renderHistoryPage()">
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="all">All time</option>
+      </select>
+    </div>
+
+    <div id="hist-records-list" style="padding:0 0 80px;"></div>
+  </div>
 
 </div><!-- /page-sell -->
 
@@ -1474,9 +1440,6 @@
 
     <!-- Quantity stepper -->
     <div style="margin-bottom:14px;">
-      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;">
-        Quantity to Sell
-      </div>
       <div style="display:flex;align-items:center;border:2px solid var(--border);
                   border-radius:var(--r);overflow:hidden;background:var(--surface);">
         <button onclick="adjSellQty(-1)"
@@ -1485,6 +1448,8 @@
           −
         </button>
         <input id="sm-qty" type="number" min="0"
+               placeholder="Qty to sell"
+               aria-label="Quantity to sell"
                style="flex:1;border:none;text-align:center;font-size:24px;font-weight:800;
                       font-family:var(--mono);color:var(--text);background:transparent;
                       outline:none;padding:10px;"
@@ -1499,13 +1464,6 @@
 
     <!-- Optional price override -->
     <div style="margin-bottom:14px;">
-      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;">
-        Actual Sale Price
-        <span style="font-size:11px;font-weight:500;color:var(--muted);
-                     background:var(--surface2);padding:2px 8px;border-radius:10px;margin-left:4px;">
-          optional - negotiated price
-        </span>
-      </div>
       <div style="display:flex;align-items:center;border:2px solid var(--border);
                   border-radius:var(--r);overflow:hidden;background:var(--surface);">
         <span id="sm-cur"
@@ -1516,7 +1474,8 @@
           KES
         </span>
         <input id="sm-actual" type="number"
-               placeholder="Leave blank to use projected price"
+               placeholder="Actual price (optional)"
+               aria-label="Actual sale price"
                min="0" inputmode="decimal"
                style="flex:1;border:none;font-size:15px;font-weight:600;
                       font-family:var(--mono);color:var(--text);background:transparent;
@@ -1585,7 +1544,7 @@
         <input class="add-input add-mono" id="off-code" type="text" placeholder="Code optional">
       </div>
       <div class="stock-form-grid">
-        <select class="add-select" id="off-type"></select>
+        <select class="add-select" id="off-type" aria-label="Category"></select>
         <input class="add-input" id="off-size" type="text" placeholder="Size / variant optional">
       </div>
       <div class="stock-form-grid">
@@ -1714,9 +1673,9 @@
 
       <!-- Inline restock panel -->
       <div id="restock-panel" style="display:none;margin:0 12px 10px;background:var(--accent-light);border:1.5px solid #a8d8b5;border-radius:var(--r);padding:12px;">
-        <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">📦 Add Stock</div>
         <div style="display:flex;gap:8px;align-items:center;">
-          <input id="restock-qty" type="number" min="1" placeholder="Qty to add" inputmode="numeric"
+          <input id="restock-qty" type="number" min="1" placeholder="Qty to add to stock" inputmode="numeric"
+                 aria-label="Restock quantity"
                  style="flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:15px;font-weight:700;font-family:var(--mono);background:var(--bg);outline:none;">
           <button onclick="confirmRestock()" style="padding:10px 16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:13px;font-weight:800;cursor:pointer;font-family:var(--sans);">Add ✓</button>
         </div>
@@ -1886,7 +1845,7 @@
        id="day-closed-msg">
     Please open the business day to access this section.
   </div>
-  <button onclick="showPage('history')"
+  <button onclick="showPage('operations')"
           style="padding:16px 32px;background:var(--accent);color:white;border:none;
                  border-radius:var(--r);font-size:16px;font-weight:800;
                  cursor:pointer;font-family:var(--sans);">
@@ -2027,27 +1986,21 @@
       <div class="day-recon-fields">
         <div class="day-recon-row">
           <span class="day-recon-emoji">💵</span>
-          <div class="day-recon-info">
-            <div class="day-recon-field-label">Cash at Hand</div>
-            <div class="day-recon-field-sub">Loose notes &amp; coins (float)</div>
-          </div>
-          <input id="op-cash" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="op-cash" type="number" min="0" inputmode="decimal"
+                 placeholder="Cash at hand — loose float" class="day-recon-input day-recon-input-flex"
+                 aria-label="Cash at hand">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">🏧</span>
-          <div class="day-recon-info">
-            <div class="day-recon-field-label">Amount in Till</div>
-            <div class="day-recon-field-sub">Cash inside the register</div>
-          </div>
-          <input id="op-till" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="op-till" type="number" min="0" inputmode="decimal"
+                 placeholder="Amount in till — register cash" class="day-recon-input day-recon-input-flex"
+                 aria-label="Amount in till">
         </div>
         <div class="day-recon-row" style="border-bottom:none;">
           <span class="day-recon-emoji">📱</span>
-          <div class="day-recon-info">
-            <div class="day-recon-field-label">M-Pesa Float</div>
-            <div class="day-recon-field-sub">M-Pesa till balance</div>
-          </div>
-          <input id="op-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="op-mpesa" type="number" min="0" inputmode="decimal"
+                 placeholder="M-Pesa float — till balance" class="day-recon-input day-recon-input-flex"
+                 aria-label="M-Pesa float">
         </div>
         <button onclick="lockOpeningBalances()" class="day-recon-btn" style="background:var(--green);">
           💾 Save &amp; Lock Opening
@@ -2089,51 +2042,39 @@
       <div class="day-recon-fields">
         <div class="day-recon-row">
           <span class="day-recon-emoji">💉</span>
-          <div class="day-recon-info">
-            <div class="day-recon-field-label">Cash Injected</div>
-            <div class="day-recon-field-sub">Extra money added today</div>
-          </div>
-          <input id="cl-injected" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-injected" type="number" min="0" inputmode="decimal"
+                 placeholder="Cash injected — extra added today" class="day-recon-input day-recon-input-flex"
+                 aria-label="Cash injected">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">💵</span>
-          <div class="day-recon-info">
-            <div class="day-recon-field-label">Cash at Hand</div>
-            <div class="day-recon-field-sub">Loose notes &amp; coins now</div>
-          </div>
-          <input id="cl-cash" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-cash" type="number" min="0" inputmode="decimal"
+                 placeholder="Cash at hand — loose notes now" class="day-recon-input day-recon-input-flex"
+                 aria-label="Cash at hand">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">🏧</span>
-          <div class="day-recon-info">
-            <div class="day-recon-field-label">Amount in Till</div>
-            <div class="day-recon-field-sub">Cash in register now</div>
-          </div>
-          <input id="cl-till" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-till" type="number" min="0" inputmode="decimal"
+                 placeholder="Amount in till — register now" class="day-recon-input day-recon-input-flex"
+                 aria-label="Amount in till">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">📱</span>
-          <div class="day-recon-info">
-            <div class="day-recon-field-label">M-Pesa Float</div>
-            <div class="day-recon-field-sub">M-Pesa balance now</div>
-          </div>
-          <input id="cl-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-mpesa" type="number" min="0" inputmode="decimal"
+                 placeholder="M-Pesa float — balance now" class="day-recon-input day-recon-input-flex"
+                 aria-label="M-Pesa float">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">💸</span>
-          <div class="day-recon-info">
-            <div class="day-recon-field-label">Expenses Paid</div>
-            <div class="day-recon-field-sub">Cash paid out for costs</div>
-          </div>
-          <input id="cl-expenses" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-expenses" type="number" min="0" inputmode="decimal"
+                 placeholder="Expenses paid — cash out today" class="day-recon-input day-recon-input-flex"
+                 aria-label="Expenses paid">
         </div>
         <div class="day-recon-row" style="border-bottom:none;">
           <span class="day-recon-emoji">🏧</span>
-          <div class="day-recon-info">
-            <div class="day-recon-field-label">Amount Withdrawn</div>
-            <div class="day-recon-field-sub">Cash taken by owner</div>
-          </div>
-          <input id="cl-withdrawn" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-withdrawn" type="number" min="0" inputmode="decimal"
+                 placeholder="Amount withdrawn — owner take-out" class="day-recon-input day-recon-input-flex"
+                 aria-label="Amount withdrawn">
         </div>
         <button onclick="reconcileDay()" class="day-recon-btn">
           🔍 Reconcile &amp; Close Day
@@ -2240,8 +2181,8 @@
 
     <!-- Notes -->
     <div style="margin-bottom:14px;">
-      <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px;">Notes (optional)</label>
-      <textarea id="ds-notes" rows="2" placeholder="Any notes for today..."
+      <textarea id="ds-notes" rows="2" placeholder="Notes for today (optional)…"
+               aria-label="Session notes"
         style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-family:var(--sans);background:var(--surface2);outline:none;resize:none;box-sizing:border-box;"></textarea>
     </div>
 

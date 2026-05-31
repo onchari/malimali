@@ -134,9 +134,15 @@ function initDB() {
       updateLowStockBadge();
 
       const rawLastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
-      const lastPage = (rawLastPage === 'day' || rawLastPage === 'finance') ? 'operations' : rawLastPage;
-      const allowedPage = currentUser && currentUser.tabs.includes(lastPage)
-        ? lastPage : currentUser.tabs[0];
+      let lastPage = (rawLastPage === 'day' || rawLastPage === 'finance') ? 'operations' : rawLastPage;
+      if (lastPage === 'history') {
+        _activeSalesTab = 'history';
+        lastPage = 'sell';
+      }
+      const allowedPage = currentUser && (
+        currentUser.tabs.includes(lastPage) ||
+        (lastPage === 'sell' && currentUser.tabs.includes('history'))
+      ) ? lastPage : currentUser.tabs[0];
       _origShowPage(allowedPage);
     });
   };
@@ -414,7 +420,7 @@ function collectCategoryDescendantIds(parentId) {
 function populateCategoryParentSelect(selectEl) {
   if (!selectEl) return;
   const cur = selectEl.value;
-  let html = '<option value="">— Parent category —</option>';
+  let html = '<option value="">Parent category…</option>';
   walkCategoryTree((rec, depth) => {
     const indent = depth ? '\u2003'.repeat(depth) + '\u21b3 ' : '';
     html += '<option value="' + rec.id + '">' + indent + escapeHtml((rec.emoji || '📦') + ' ' + rec.name) + '</option>';
@@ -964,6 +970,7 @@ let _operationsMounted = false;
 let _activeOperationsTab = 'day';
 let _inventoryMounted = false;
 let _activeInventoryTab = 'stock';
+let _activeSalesTab = 'sell';
 
 function mountInventoryPage() {
   if (_inventoryMounted) return;
@@ -1013,6 +1020,33 @@ function showInventoryTab(tab) {
   }
 }
 
+function showSalesTab(tab) {
+  _activeSalesTab = tab === 'history' ? 'history' : 'sell';
+  ['sell', 'history'].forEach(name => {
+    const btn = document.getElementById('sales-tab-' + name);
+    const slot = document.getElementById('sales-slot-' + name);
+    if (btn) btn.classList.toggle('active', name === _activeSalesTab);
+    if (slot) slot.classList.toggle('active', name === _activeSalesTab);
+  });
+  const offBtn = document.getElementById('sales-offstock-btn');
+  if (offBtn) offBtn.style.display = _activeSalesTab === 'sell' ? '' : 'none';
+  const sub = document.getElementById('sales-sub');
+  if (sub) {
+    sub.textContent = _activeSalesTab === 'history'
+      ? 'Today and past sales records'
+      : 'Search stock and record a sale';
+  }
+  if (_activeSalesTab === 'sell') {
+    renderSellPage();
+    setTimeout(() => {
+      const el = document.getElementById('sell-search');
+      if (el) el.focus();
+    }, 150);
+  } else {
+    renderHistoryPage();
+  }
+}
+
 function mountOperationsPage() {
   if (_operationsMounted) return;
   const daySlot = document.getElementById('ops-day-slot');
@@ -1057,6 +1091,10 @@ function showPage(id) {
     _activeOperationsTab = id;
     id = 'operations';
   }
+  if (id === 'history') {
+    _activeSalesTab = 'history';
+    id = 'sell';
+  }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   const pageEl = document.getElementById('page-' + id);
@@ -1067,8 +1105,7 @@ function showPage(id) {
   if (id === 'inventory') showInventoryTab(_activeInventoryTab);
   if (id === 'operations') showOperationsTab(_activeOperationsTab);
   if (id === 'day') { updateDayLiveStats(); renderDaySessionsList(); renderDayState(); }
-  if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
-  if (id === 'history') { renderHistoryPage(); }
+  if (id === 'sell') showSalesTab(_activeSalesTab);
   if (id === 'finance')  { renderFinancePage(); }
   if (id === 'settings') { renderCategorySettings(); }
 }
@@ -1078,7 +1115,8 @@ function showPage(id) {
 const _origShowPage = showPage;
 showPage = function(id) {
   const requestedId = id;
-  const allowedId = (id === 'list' || id === 'wishlist' || id === 'add' || id === 'monitor') ? 'inventory' : id;
+  let allowedId = (id === 'list' || id === 'wishlist' || id === 'add' || id === 'monitor') ? 'inventory' : id;
+  if (id === 'history') allowedId = 'sell';
   if (currentUser && !currentUser.tabs.includes(allowedId) && !currentUser.tabs.includes(requestedId)) {
     toast('⛔ Access denied', 'err');
     return;
@@ -1133,7 +1171,7 @@ function renderTypeSelectOptions(selectEl, placeholder) {
   if (!selectEl) return;
   const cur = selectEl.value;
   const items = getOrderedTypesForDropdown();
-  const ph = placeholder || '— Select category —';
+  const ph = placeholder || 'Category…';
   selectEl.innerHTML = '<option value="">' + ph + '</option>' +
     items.map(({ rec: t, depth }) => {
       const prefix = depth ? '\u2003\u21b3 ' : '';
@@ -1220,9 +1258,6 @@ function renderAddTypeCascade(selectedTypeName, opts) {
 
     const step = document.createElement('div');
     step.className = 'add-cascade-step';
-    const label = document.createElement('span');
-    label.className = 'add-cascade-label';
-    label.textContent = depth === 0 ? 'Main category' : 'Sub-category';
     const select = document.createElement('select');
     select.className = 'add-select';
     select.id = depth === 0 ? 'f-type-parent' : ('f-type-sub-' + depth);
@@ -1243,7 +1278,6 @@ function renderAddTypeCascade(selectedTypeName, opts) {
       });
       renderAddTypeCascade(chosen);
     };
-    step.appendChild(label);
     step.appendChild(select);
     wrap.appendChild(step);
 
@@ -1387,12 +1421,11 @@ function renderShoeGroupSettings() {
     const cfg = groups[g] || SHOE_GROUP_DEFAULTS[g];
     const lbl = (cfg && cfg.label) || labels[g];
     return '<div class="sg-setting-row">' +
-      '<div class="sg-setting-label">' + escapeHtml(lbl) + ' <span style="color:var(--muted);font-weight:600;">(' + g + ')</span></div>' +
       '<div class="sg-setting-fields">' +
-        '<input id="sg-label-' + g + '" type="text" class="type-input" placeholder="Display name" value="' + escapeHtml(lbl) + '" style="flex:1;min-width:0;">' +
-        '<input id="sg-min-' + g + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Min" value="' + (cfg?.min ?? '') + '">' +
+        '<input id="sg-label-' + g + '" type="text" class="type-input" placeholder="' + g + ' — display name" value="' + escapeHtml(lbl) + '" style="flex:1;min-width:0;" aria-label="' + g + ' display name">' +
+        '<input id="sg-min-' + g + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Min size" value="' + (cfg?.min ?? '') + '" aria-label="' + g + ' minimum size">' +
         '<span style="color:var(--muted);">–</span>' +
-        '<input id="sg-max-' + g + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Max" value="' + (cfg?.max ?? '') + '">' +
+        '<input id="sg-max-' + g + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Max size" value="' + (cfg?.max ?? '') + '" aria-label="' + g + ' maximum size">' +
       '</div>' +
     '</div>';
   }).join('');
@@ -2461,7 +2494,7 @@ function showCodeDropdown(items, typedCode) {
     select.disabled = !items.length;
     select.style.opacity = items.length ? '1' : '0.55';
     select.style.cursor = items.length ? 'pointer' : 'not-allowed';
-    select.innerHTML = '<option value="">Select code</option>' +
+    select.innerHTML = '<option value="">Match existing code…</option>' +
       items.map(item => '<option value="' + item.id + '">' + escapeHtml(item.code) + '</option>').join('');
     hideCodeDropdown();
     return;
@@ -2489,7 +2522,7 @@ function hideCodeDropdown() {
   if (dd) dd.style.display = 'none';
 }
 
-function clearCodeMatchSelect(label = 'Code match') {
+function clearCodeMatchSelect(label = 'Match existing code…') {
   const select = document.getElementById('code-match-select');
   if (!select) return;
   select.innerHTML = '<option value="">' + escapeHtml(label) + '</option>';
@@ -3874,6 +3907,16 @@ function updateCurrencyUI() {
   if (bp) bp.textContent = currency;
   const sp = document.getElementById('sp-cur');
   if (sp) sp.textContent = currency;
+  const buyEl = document.getElementById('f-buy');
+  const sellEl = document.getElementById('f-sell');
+  if (buyEl) buyEl.placeholder = 'Buy (' + currency + ') *';
+  if (sellEl) sellEl.placeholder = 'Sell (' + currency + ') *';
+  const shBuy = document.getElementById('shoe-shared-buy');
+  const shSell = document.getElementById('shoe-shared-sell');
+  if (shBuy) shBuy.placeholder = 'Buy (' + currency + ') *';
+  if (shSell) shSell.placeholder = 'Sell (' + currency + ') *';
+  const finAmt = document.getElementById('fin-amount');
+  if (finAmt) finAmt.placeholder = 'Amount (' + currency + ') *';
   const sc = document.getElementById('splash-cur');
   if (sc) sc.textContent = currency;
 }
@@ -4126,7 +4169,7 @@ async function confirmOffStockSale() {
   });
   closeOffStockSale();
   await renderStockMonitor();
-  await renderSellPage();
+  await refreshSalesViews();
   try { renderDashboard(); } catch(_) { /* intentionally ignored */ }
   try { if (activeDay) updateDayLiveStats(); } catch(_) { /* intentionally ignored */ }
   scheduleSync();
@@ -4344,7 +4387,7 @@ async function confirmSale() {
   updateHeader();
   updateLowStockBadge();
   scheduleSync();
-  try { renderSellPage(); } catch(_) { /* intentionally ignored */ }
+  try { await refreshSalesViews(); } catch(_) { /* intentionally ignored */ }
   try { if (activeDay) updateDayLiveStats(); } catch(_) { /* intentionally ignored */ }
   // Refresh finance page if it's currently visible
   try {
@@ -4367,51 +4410,13 @@ async function confirmSale() {
 
 async function renderSellPage() {
   try {
-  const sales = await dbAll('sales');
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todaySales = sales.filter(s => s.date.startsWith(todayStr));
-  const todayRev = todaySales.reduce((a, s) => a + s.revenue, 0);
-  const todayProfit = todaySales.reduce((a, s) => a + s.profit, 0);
-  document.getElementById('sell-today-rev').textContent = fmt(todayRev);
-  document.getElementById('sell-today-profit').textContent = fmt(todayProfit);
-  await searchSell();
-
-  // Apply date filter
-  const filterEl = document.getElementById('sales-filter');
-  const period = filterEl ? filterEl.value : 'today';
-  const filtered = filterSalesByPeriod([...sales].sort((a,b) => new Date(b.date)-new Date(a.date)), period).slice(0,100);
-
-  const hist = document.getElementById('sell-history');
-  if (!filtered.length) {
-    hist.innerHTML = '<div class="empty" style="padding:24px 0;"><div class="e-icon" style="font-size:36px;">💸</div><p>No sales for this period</p></div>';
-    return;
-  }
-  const periodRevenue = filtered.reduce((a,s)=>a+s.revenue,0);
-  const periodProfit = filtered.reduce((a,s)=>a+s.profit,0);
-  hist.innerHTML =
-    '<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:2px solid var(--border);margin-bottom:4px;">' +
-    '<span style="font-size:12px;color:var(--muted);">' + filtered.length + ' sales</span>' +
-    '<span style="font-size:12px;font-family:var(--mono);color:var(--accent2);">' + fmt(periodRevenue) + ' · <span style="color:var(--green);">+' + fmt(periodProfit) + '</span></span>' +
-    '</div>' +
-    filtered.map(s => {
-      const t = getTypeObj(s.type || s.itemType);
-      const d = new Date(s.date);
-      const timeStr = d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' +
-                      d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-      return `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);">
-        <div style="font-size:20px;">${t.emoji}</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.itemName} × ${s.qty}</div>
-          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">${timeStr}${s.overridden ? ' · <span style="color:var(--amber);">custom price</span>' : ''}</div>
-        </div>
-        <div style="text-align:right;flex-shrink:0;">
-          <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
-          <div style="font-size:11px;font-family:var(--mono);color:${s.profit>=0?'var(--green)':'var(--red)'};">${s.profit>=0?'+':''}${fmt(s.profit)}</div>
-        </div>
-        <button onclick="deleteSale(${s.id})" style="background:var(--red-light);border:none;color:var(--red);border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px;flex-shrink:0;">🗑</button>
-      </div>`;
-    }).join('');
+    await searchSell();
   } catch(e) { console.error("[renderSellPage]", e); toast("Error: " + e.message, "err"); }
+}
+
+async function refreshSalesViews() {
+  try { await renderSellPage(); } catch(_) { /* intentionally ignored */ }
+  try { await renderHistoryPage(); } catch(_) { /* intentionally ignored */ }
 }
 
 // close sell modal on backdrop click
@@ -4795,8 +4800,16 @@ async function initFirebase() {
     // Unsub old listeners before creating new ones
     if (typeof fbUnsub === 'function')           { fbUnsub(); }
     if (typeof window._fbUnsubSales === 'function') { window._fbUnsubSales(); }
-    if (typeof window._fbUnsubBd    === 'function') { window._fbUnsubBd(); }
-    fbUnsub = null; window._fbUnsubSales = null; window._fbUnsubBd = null;
+    if (typeof window._fbUnsubFin === 'function') { window._fbUnsubFin(); }
+    if (typeof window._fbUnsubWish === 'function') { window._fbUnsubWish(); }
+    if (typeof window._fbUnsubSz === 'function') { window._fbUnsubSz(); }
+    if (typeof window._fbUnsubBd === 'function') { window._fbUnsubBd(); }
+    fbUnsub = null;
+    window._fbUnsubSales = null;
+    window._fbUnsubFin = null;
+    window._fbUnsubWish = null;
+    window._fbUnsubSz = null;
+    window._fbUnsubBd = null;
 
     // ── items listener ───────────────────────────────────────────
     fbUnsub = onSnapshot(collection(fbDb, 'items'), async snap => {
@@ -4842,7 +4855,7 @@ async function initFirebase() {
           const loc = byFbId[c.doc.id];
           if (loc) await dbDelete('sales', loc.id);
         } else {
-          const ex = byFbId[c.doc.id];
+          const ex = byFbId[c.doc.id] || localSales.find(s => _salesMatch(s, data));
           if (ex) { data.id = ex.id; await dbPut('sales', data); }
           else    { try { await dbAdd('sales', data); } catch(_) { /* intentionally ignored */ } }
         }
@@ -4851,10 +4864,130 @@ async function initFirebase() {
       try { renderDashboard(); } catch(_) { /* intentionally ignored */ }
     }, err => { console.error('[FB] sales listener:', err.message); });
 
+    // ── finances listener ────────────────────────────────────────
+    window._fbUnsubFin = onSnapshot(collection(fbDb, 'finances'), async snap => {
+      if (_localWriting) return;
+      const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+      if (!changes.length) return;
+      const localFin = await dbAll('finances');
+      const byFbId = Object.fromEntries(localFin.filter(f => f.fbId).map(f => [f.fbId, f]));
+      let changed = false;
+      for (const c of changes) {
+        const data = { ...c.doc.data(), fbId: c.doc.id };
+        delete data.id;
+        if (c.type === 'removed') {
+          const loc = byFbId[c.doc.id];
+          if (loc) { await dbDelete('finances', loc.id); changed = true; }
+        } else {
+          if (_isDeletedFinanceRemote(c.doc.id, data)) continue;
+          const ex = byFbId[c.doc.id] || localFin.find(f => _financeRecordsMatch(f, data));
+          if (ex) { data.id = ex.id; await dbPut('finances', data); }
+          else { try { await dbAdd('finances', data); } catch(_) { /* intentionally ignored */ } }
+          changed = true;
+        }
+      }
+      if (changed) {
+        try { renderFinancePage(); } catch(_) { /* intentionally ignored */ }
+        try { renderDashboard(); } catch(_) { /* intentionally ignored */ }
+      }
+    }, err => { console.error('[FB] finances listener:', err.message); });
+
+    // ── wishlist listener ────────────────────────────────────────
+    if (db.objectStoreNames.contains('wishlist')) {
+      window._fbUnsubWish = onSnapshot(collection(fbDb, 'wishlist'), async snap => {
+        if (_localWriting) return;
+        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        if (!changes.length) return;
+        const localWish = await dbAll('wishlist');
+        const byFbId = Object.fromEntries(localWish.filter(w => w.fbId).map(w => [w.fbId, w]));
+        let changed = false;
+        for (const c of changes) {
+          const data = { ...c.doc.data(), fbId: c.doc.id };
+          delete data.id;
+          if (c.type === 'removed') {
+            const loc = byFbId[c.doc.id];
+            if (loc) { await dbDelete('wishlist', loc.id); changed = true; }
+          } else {
+            const ex = byFbId[c.doc.id];
+            if (ex) { data.id = ex.id; await dbPut('wishlist', data); }
+            else { try { await dbAdd('wishlist', data); } catch(_) { /* intentionally ignored */ } }
+            changed = true;
+          }
+        }
+        if (changed) {
+          try { renderWishlistPage(); } catch(_) { /* intentionally ignored */ }
+        }
+      }, err => { console.error('[FB] wishlist listener:', err.message); });
+    }
+
+    // ── shoe_sizes listener ──────────────────────────────────────
+    window._fbUnsubSz = onSnapshot(collection(fbDb, 'shoe_sizes'), async snap => {
+      if (_localWriting) return;
+      const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+      if (!changes.length) return;
+      const localSizes = await dbAll('shoe_sizes');
+      const byFbId = Object.fromEntries(localSizes.filter(s => s.fbId).map(s => [s.fbId, s]));
+      const byCS = Object.fromEntries(localSizes.filter(s => s.codeSize).map(s => [s.codeSize, s]));
+      let changed = false;
+      for (const c of changes) {
+        const data = { ...c.doc.data(), fbId: c.doc.id };
+        delete data.id;
+        if (c.type === 'removed') {
+          const loc = byFbId[c.doc.id];
+          if (loc) { await dbDelete('shoe_sizes', loc.id); changed = true; }
+        } else {
+          const ex = byFbId[c.doc.id] || byCS[data.codeSize];
+          if (ex) { data.id = ex.id; await dbPut('shoe_sizes', data); }
+          else { try { await dbAdd('shoe_sizes', data); } catch(_) { /* intentionally ignored */ } }
+          changed = true;
+        }
+      }
+      if (changed) {
+        allItems = await dbAll('items');
+        await enrichShoeItems(allItems);
+        renderList();
+        renderDashboard();
+        updateHeader();
+      }
+    }, err => { console.error('[FB] shoe_sizes listener:', err.message); });
+
+    // ── business_days listener ───────────────────────────────────
+    window._fbUnsubBd = onSnapshot(collection(fbDb, 'business_days'), async snap => {
+      if (_localWriting) return;
+      const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+      if (!changes.length) return;
+      const localBd = await dbAll('business_days');
+      const byFbId = Object.fromEntries(localBd.filter(b => b.fbId).map(b => [b.fbId, b]));
+      const byDate = Object.fromEntries(localBd.map(b => [(b.businessDate || b.business_date), b]));
+      let changed = false;
+      for (const c of changes) {
+        const data = { ...c.doc.data(), fbId: c.doc.id };
+        delete data.id;
+        const dateKey = data.businessDate || data.business_date;
+        if (c.type === 'removed') {
+          const loc = byFbId[c.doc.id] || (dateKey ? byDate[dateKey] : null);
+          if (loc) { await dbDelete('business_days', loc.id); changed = true; }
+        } else {
+          const ex = byFbId[c.doc.id] || (dateKey ? byDate[dateKey] : null);
+          if (ex) { data.id = ex.id; await dbPut('business_days', data); }
+          else { try { await dbAdd('business_days', data); } catch(_) { /* intentionally ignored */ } }
+          changed = true;
+          if (activeDay && ex && ex.id === activeDay.id) {
+            activeDay = await dbGet('business_days', ex.id);
+          }
+        }
+      }
+      if (changed) {
+        try { renderDayState(); } catch(_) { /* intentionally ignored */ }
+        try { renderDaySessionsList(); } catch(_) { /* intentionally ignored */ }
+      }
+    }, err => { console.error('[FB] business_days listener:', err.message); });
+
     setFbStatus('on');
     toast('☁️ Firebase connected', 'ok');
-    // Pull remote data to catch any changes made on other devices
     await pullFromFirebase(true);
+    await normalizeSyncIds();
+    await forcePushToFirebase(true);
 
   } catch(e) {
     setFbStatus('error');
@@ -4887,14 +5020,91 @@ async function saveFirebaseConfig() {
   } catch(e) { console.error("[saveFirebaseConfig]", e); toast("Error: " + e.message, "err"); }
 }
 
+function _fbSlug(s, fallback) {
+  const out = String(s || fallback || 'x').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return out || (fallback || 'x');
+}
+
+function stableItemFbId(item) {
+  const code = _fbSlug(item && item.code, 'x');
+  const variant = item && item.isShoe ? 'shoe' : _fbSlug(item && (item.variant || item.size), 'std');
+  return 'itm_' + code + '_' + variant;
+}
+
+function stableWishFbId(wish) {
+  if (wish && wish.fbId) return wish.fbId;
+  const when = (wish && wish.createdAt || '').replace(/[^0-9]/g, '').slice(0, 14) || '0';
+  const name = _fbSlug(wish && wish.name, 'w').slice(0, 24);
+  return 'wish_' + when + '_' + name;
+}
+
+function stableBusinessDayFbId(bd) {
+  const d = (bd && (bd.businessDate || bd.business_date) || 'unknown').replace(/[^0-9-]/g, '');
+  return 'bd_' + d;
+}
+
+function stableShoeSizeFbId(sz) {
+  if (sz && sz.codeSize) return 'sz_' + _fbSlug(sz.codeSize, 'sz');
+  return 'sz_' + _fbSlug(sz && sz.code) + '_' + String(sz && sz.size != null ? sz.size : 0);
+}
+
+function stableSaleFbId(sale) {
+  if (sale && sale.fbId) return sale.fbId;
+  const ts = (sale && (sale.createdAt || sale.date) || '').replace(/[^0-9]/g, '').slice(0, 17) || '0';
+  const code = _fbSlug(sale && sale.itemCode, 'x');
+  const rev = String(Math.round(Number(sale && sale.revenue || 0) * 100));
+  return 'sale_' + ts + '_' + code + '_' + rev;
+}
+
+async function ensureItemFbId(item) {
+  const stable = stableItemFbId(item);
+  if (item.fbId === stable) return stable;
+  const oldId = item.fbId;
+  item.fbId = stable;
+  await dbPut('items', item);
+  if (fbReady && oldId && oldId !== stable && /^item_/.test(oldId)) {
+    fbDeleteItem(oldId).catch(() => {});
+  }
+  return stable;
+}
+
+async function normalizeSyncIds() {
+  const items = await dbAll('items');
+  for (const item of items) {
+    await ensureItemFbId(item);
+  }
+  const shoeSizes = await dbAll('shoe_sizes');
+  for (const sz of shoeSizes) {
+    const stable = stableShoeSizeFbId(sz);
+    if (sz.fbId !== stable) {
+      sz.fbId = stable;
+      await dbPut('shoe_sizes', sz);
+    }
+  }
+  const bdays = await dbAll('business_days');
+  for (const bd of bdays) {
+    const stable = stableBusinessDayFbId(bd);
+    if (bd.fbId !== stable) {
+      bd.fbId = stable;
+      await dbPut('business_days', bd);
+    }
+  }
+  if (db.objectStoreNames.contains('wishlist')) {
+    const wishes = await dbAll('wishlist');
+    for (const w of wishes) {
+      if (!w.fbId) {
+        w.fbId = stableWishFbId(w);
+        await dbPut('wishlist', w);
+      }
+    }
+  }
+}
+
 async function fbSyncItem(item) {
   if (!fbReady || !fbDb) return;
   try {
     const { doc, setDoc } = await waitForFbImports();
-    if (!item.fbId) {
-      item.fbId = 'item_' + (item.code || 'x').replace(/[^a-zA-Z0-9_-]/g, '_') + '_' + Date.now();
-      await dbPut('items', item);
-    }
+    await ensureItemFbId(item);
     const data = sanitiseForFirestore({ ...item, updatedAt: new Date().toISOString() });
     _localWriting = true;
     await setDoc(doc(fbDb, 'items', item.fbId), data);
@@ -4916,8 +5126,7 @@ async function fbSyncSale(sale) {
   try {
     const { doc, setDoc } = await waitForFbImports();
     if (!sale.fbId) {
-      const safeDate = (sale.date||new Date().toISOString()).replace(/[^0-9]/g,'').slice(0,14);
-      sale.fbId = 'sale_' + safeDate + '_' + (sale.itemCode||'x').replace(/[^a-zA-Z0-9_-]/g,'_') + '_' + (sale.id||Math.random().toString(36).slice(2,6));
+      sale.fbId = stableSaleFbId(sale);
       if (sale.id) await dbPut('sales', sale);
     }
     const data = sanitiseForFirestore({ ...sale });
@@ -5075,6 +5284,7 @@ async function fbDeleteSale(sale) {
 async function forcePushToFirebase(silent = false) {
   if (!fbReady || !fbDb) { if (!silent) toast('⚠️ Connect Firebase first', 'err'); return; }
   if (!silent) setFbStatus('syncing');
+  _localWriting = true;
   const items = await dbAll('items');
   const sales = await dbAll('sales');
   const { doc, setDoc, writeBatch } = await waitForFbImports();
@@ -5083,12 +5293,7 @@ async function forcePushToFirebase(silent = false) {
     let count = 0;
 
     for (const item of items) {
-      // Use stable fbId: prefer existing fbId, else generate from code + createdAt
-      if (!item.fbId) {
-        // Stable ID: code + size — same item always maps to same Firestore doc
-        item.fbId = 'itm_' + (item.code || 'x').toLowerCase().replace(/[^a-z0-9]/g,'') + '_' + (item.size || 'ns').toLowerCase().replace(/[^a-z0-9]/g,'');
-        await dbPut('items', item);
-      }
+      await ensureItemFbId(item);
       batch.set(doc(fbDb, 'items', item.fbId), sanitiseForFirestore({ ...item, updatedAt: new Date().toISOString() }));
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
@@ -5096,7 +5301,7 @@ async function forcePushToFirebase(silent = false) {
 
     for (const sale of sales) {
       if (!sale.fbId) {
-        sale.fbId = 'sale_' + (sale.date || '').replace(/[:.TZ-]/g,'').slice(0,17) + '_' + Math.random().toString(36).slice(2,6);
+        sale.fbId = stableSaleFbId(sale);
         await dbPut('sales', sale);
       }
       batch.set(doc(fbDb, 'sales', sale.fbId), sanitiseForFirestore({ ...sale }));
@@ -5108,7 +5313,8 @@ async function forcePushToFirebase(silent = false) {
     const shoeSizes = await dbAll('shoe_sizes');
     for (const sz of shoeSizes) {
       if (!sz.codeSize) continue;
-      if (!sz.fbId) { sz.fbId = 'sz_' + sz.codeSize; await dbPut('shoe_sizes', sz); }
+      const szStable = stableShoeSizeFbId(sz);
+      if (sz.fbId !== szStable) { sz.fbId = szStable; await dbPut('shoe_sizes', sz); }
       batch.set(doc(fbDb, 'shoe_sizes', sz.fbId), sanitiseForFirestore({...sz}));
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
@@ -5126,7 +5332,10 @@ async function forcePushToFirebase(silent = false) {
     // Push business_days
     const bdays = await dbAll('business_days');
     for (const bd of bdays) {
-      if (!bd.fbId) { bd.fbId = 'bd_' + (bd.business_date||'unknown'); await dbPut('business_days', bd); }
+      if (!bd.fbId || bd.fbId !== stableBusinessDayFbId(bd)) {
+        bd.fbId = stableBusinessDayFbId(bd);
+        await dbPut('business_days', bd);
+      }
       batch.set(doc(fbDb, 'business_days', bd.fbId), sanitiseForFirestore({...bd}));
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
@@ -5136,7 +5345,7 @@ async function forcePushToFirebase(silent = false) {
     const wishlist = db.objectStoreNames.contains('wishlist') ? await dbAll('wishlist') : [];
     for (const w of wishlist) {
       if (!w.fbId) {
-        w.fbId = 'wish_' + (w.createdAt || '').replace(/[:.TZ]/g, '-') + '_' + (w.id || Math.random().toString(36).slice(2, 6));
+        w.fbId = stableWishFbId(w);
         await dbPut('wishlist', w);
       }
       batch.set(doc(fbDb, 'wishlist', w.fbId), sanitiseForFirestore({...w}));
@@ -5151,6 +5360,8 @@ async function forcePushToFirebase(silent = false) {
     setFbStatus('error');
     if (!silent) toast('Sync error: ' + e.message, 'err');
     console.error('[SYNC] push error:', e);
+  } finally {
+    setTimeout(() => { _localWriting = false; }, 2000);
   }
 }
 
@@ -5161,6 +5372,7 @@ async function pullFromFirebase(silent = false) {
     return;
   }
   if (!silent) setFbStatus('syncing');
+  _localWriting = true;
   try {
     const { collection, doc, getDocs, deleteDoc } = await waitForFbImports();
 
@@ -5262,10 +5474,12 @@ async function pullFromFirebase(silent = false) {
       const bdSnap = await getDocs(collection(fbDb, 'business_days'));
       const localBd = await dbAll('business_days');
       const bdByFbId = Object.fromEntries(localBd.filter(b => b.fbId).map(b => [b.fbId, b]));
+      const bdByDate = Object.fromEntries(localBd.map(b => [(b.businessDate || b.business_date), b]));
       for (const d of bdSnap.docs) {
         const data = { ...d.data(), fbId: d.id };
         delete data.id;
-        const ex = bdByFbId[d.id];
+        const dateKey = data.businessDate || data.business_date;
+        const ex = bdByFbId[d.id] || (dateKey ? bdByDate[dateKey] : null);
         if (ex) { data.id = ex.id; await dbPut('business_days', data); }
         else { try { await dbAdd('business_days', data); } catch(_) { /* intentionally ignored */ } }
       }
@@ -5283,11 +5497,18 @@ async function pullFromFirebase(silent = false) {
     setFbStatus('error');
     console.error('[SYNC] Pull error:', e);
     if (!silent) toast('Pull failed: ' + e.message, 'err');
+  } finally {
+    setTimeout(() => { _localWriting = false; }, 1500);
   }
 }
 
 function disconnectFirebase() {
   if (fbUnsub) { fbUnsub(); fbUnsub = null; }
+  if (typeof window._fbUnsubSales === 'function') { window._fbUnsubSales(); window._fbUnsubSales = null; }
+  if (typeof window._fbUnsubFin === 'function') { window._fbUnsubFin(); window._fbUnsubFin = null; }
+  if (typeof window._fbUnsubWish === 'function') { window._fbUnsubWish(); window._fbUnsubWish = null; }
+  if (typeof window._fbUnsubSz === 'function') { window._fbUnsubSz(); window._fbUnsubSz = null; }
+  if (typeof window._fbUnsubBd === 'function') { window._fbUnsubBd(); window._fbUnsubBd = null; }
   fbApp = null; fbDb = null; fbReady = false;
   localStorage.removeItem('fb_config');
   document.getElementById('fb-config-input').value = '';
@@ -6038,7 +6259,7 @@ async function deleteSale(saleId) {
     await _deleteLocalRevenueForSale(saleId);
   }
   await dbDelete('sales', saleId);
-  renderSellPage();
+  refreshSalesViews();
   renderDashboard();
   renderFinancePage();
   toast('Sale record deleted', '');
@@ -6357,7 +6578,7 @@ const USERS = [
     role: 'super',
     roleLabel: 'Super User',
     // Super: access to everything
-    tabs: ['dash','inventory','sell','history','operations','settings']
+    tabs: ['dash','inventory','sell','operations','settings']
   },
   {
     username: 'vanice',
@@ -6367,7 +6588,7 @@ const USERS = [
     role: 'user',
     roleLabel: 'User',
     // User: everything except Settings
-    tabs: ['dash','inventory','sell','history','operations']
+    tabs: ['dash','inventory','sell','operations']
   },
   {
     username: 'trevor',
@@ -6402,9 +6623,16 @@ function applyRoleRestrictions(user) {
   const allTabs = ['dash','inventory','sell','list','wishlist','add','history','operations','finance','day','settings'];
   allTabs.forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
-    if (btn) {
-      btn.style.display = user.tabs.includes(tab) ? '' : 'none';
+    if (!btn) return;
+    if (tab === 'history') {
+      btn.style.display = 'none';
+      return;
     }
+    if (tab === 'sell') {
+      btn.style.display = (user.tabs.includes('sell') || user.tabs.includes('history')) ? '' : 'none';
+      return;
+    }
+    btn.style.display = user.tabs.includes(tab) ? '' : 'none';
   });
 
   // Clerk specific: only show Add page with a simplified header
@@ -6477,8 +6705,13 @@ function attemptLogin() {
 
   // Go to day page if day not open, otherwise last visited page
   const rawLastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
-  const lastPage = (rawLastPage === 'day' || rawLastPage === 'finance') ? 'operations' : rawLastPage;
-  const allowedPage = user.tabs.includes(lastPage) ? lastPage : user.tabs[0];
+  let lastPage = (rawLastPage === 'day' || rawLastPage === 'finance') ? 'operations' : rawLastPage;
+  if (lastPage === 'history') {
+    _activeSalesTab = 'history';
+    lastPage = 'sell';
+  }
+  const allowedPage = (user.tabs.includes(lastPage) || (lastPage === 'sell' && user.tabs.includes('history')))
+    ? lastPage : user.tabs[0];
 
   // Check day status
   // No forced redirect to day — user navigates manually
@@ -7394,13 +7627,20 @@ setInterval(_checkAutoClose, 60000);
 initDB();
 setTimeout(initFirebase, 800);
 
-// ── Debounced sync ──────────────────────────────────────────
+// ── Debounced sync (pull remote, then push local) ───────────
 let _autoSyncTimer = null;
+let _syncRunning = false;
 function scheduleSync() {
   if (!navigator.onLine || !fbReady || !fbDb) return;
   clearTimeout(_autoSyncTimer);
-  _autoSyncTimer = setTimeout(() => {
-    forcePushToFirebase(true).catch(() => {});
+  _autoSyncTimer = setTimeout(async () => {
+    if (_syncRunning) return;
+    _syncRunning = true;
+    try {
+      await pullFromFirebase(true);
+      await forcePushToFirebase(true);
+    } catch (_) { /* intentionally ignored */ }
+    finally { _syncRunning = false; }
   }, 2000);
 }
 
@@ -7457,6 +7697,7 @@ window.searchSell = searchSell;
 window.selectPayment = selectPayment;
 window.showPage = showPage;
 window.showInventoryTab = showInventoryTab;
+window.showSalesTab = showSalesTab;
 window.showOperationsTab = showOperationsTab;
 window.showUserProfile = showUserProfile;
 window.toggleNotifPanel = toggleNotifPanel;
@@ -7634,6 +7875,7 @@ function _histSaleRow(s, mode) {
           <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:800;">Profit</div>
           <div style="font-size:12px;font-weight:800;font-family:var(--mono);color:${profColor};">${profit}</div>
         </div>
+        ${s.id ? `<button type="button" onclick="deleteSale(${s.id})" title="Delete sale" style="background:var(--red-light);border:none;color:var(--red);border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px;flex-shrink:0;margin-left:6px;">🗑</button>` : ''}
       </div>`;
   }
   // compact — used in past records
@@ -7839,7 +8081,8 @@ async function saveShoeItems(baseCode, baseName, type) {
     try {
       const { doc, setDoc } = await waitForFbImports();
       for (const sz of allSz) {
-        if (!sz.fbId) { sz.fbId = 'sz_' + sz.codeSize; await dbPut('shoe_sizes', sz); }
+        const szStable = stableShoeSizeFbId(sz);
+        if (sz.fbId !== szStable) { sz.fbId = szStable; await dbPut('shoe_sizes', sz); }
         await setDoc(doc(fbDb, 'shoe_sizes', sz.fbId), sanitiseForFirestore({...sz}));
       }
     } catch(e) { console.warn('[SYNC] shoe_sizes:', e.message); }

@@ -1102,6 +1102,20 @@ body {
   font-size: 11px;
   min-width: 0;
 }
+.sales-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.sales-tabs .ops-tab {
+  gap: 6px;
+  padding: 11px 8px;
+  font-size: 13px;
+}
+#sales-slot-sell,
+#sales-slot-history {
+  padding-bottom: 12px;
+}
 #firebase-setup-card button[onclick="forcePushToFirebase()"],
 #firebase-setup-card button[onclick="pullFromFirebase()"],
 #firebase-setup-card button[onclick="disconnectFirebase()"] {
@@ -2157,6 +2171,22 @@ body {
 .day-recon-input:focus {
   border-color: var(--accent);
   background: white;
+}
+.day-recon-input-flex {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  text-align: left;
+}
+.day-recon-input-flex::placeholder {
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--muted);
+}
+#sm-qty::placeholder {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
 }
 .day-recon-btn {
   width: 100%;
