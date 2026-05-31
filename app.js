@@ -1,9 +1,9 @@
 // ===================================================================
-// DATABASE SCHEMA  v8  —  Mandela General Stores
+// DATABASE SCHEMA  v11 —  Mandela General Stores
 // ===================================================================
 let db;
 const DB_NAME = 'InventoryApp';
-const DB_VER  = 10;
+const DB_VER  = 11;
 
 // ── APP CONSTANTS ─────────────────────────────────────────────────────
 const KEY_SESSION     = 'mg_session';
@@ -100,6 +100,11 @@ function initDB() {
       wl.createIndex('idx_fbid',       'fbId',      { unique: false });
     }
 
+    // Compressed item/wish photos (JPEG/WebP data URLs). key: "item_12" | "wish_3"
+    if (!d.objectStoreNames.contains('photos')) {
+      d.createObjectStore('photos', { keyPath: 'key' });
+    }
+
     // NOTE: day_sessions store (legacy) intentionally NOT created in v9.
     //       Existing data migrated to business_days by migrateData().
   };
@@ -116,6 +121,7 @@ function initDB() {
     loadTypes().then(async () => {
       updateCurrencyUI();
       await migrateData();
+      await initPhotoStore();
       const sessionRestored = checkSession();
       if (!sessionRestored) return;
 
@@ -970,7 +976,7 @@ function mountInventoryPage() {
   if (!stockSlot || !wishSlot || !addSlot || !stockPage || !wishPage || !addPage) return;
 
   [stockPage, wishPage, addPage].forEach(page => {
-    page.classList.remove('page', 'active');
+    page.classList.remove('active');
     page.classList.add('inv-module');
   });
   stockSlot.appendChild(stockPage);
@@ -1015,8 +1021,8 @@ function mountOperationsPage() {
   const finPage = document.getElementById('page-finance');
   if (!daySlot || !finSlot || !dayPage || !finPage) return;
 
-  dayPage.classList.remove('page', 'active');
-  finPage.classList.remove('page', 'active');
+  dayPage.classList.remove('active');
+  finPage.classList.remove('active');
   dayPage.classList.add('op-module');
   finPage.classList.add('op-module');
   daySlot.appendChild(dayPage);
@@ -1137,15 +1143,166 @@ function renderTypeSelectOptions(selectEl, placeholder) {
     }).join('');
 }
 
+function _activeChildTypes(parentId) {
+  return types
+    .filter(t => t.parentId === parentId && isCategoryActive(t))
+    .sort(_sortTypes);
+}
+
+function _typePathToRoot(typeName) {
+  const rec = getTypeRecord(typeName);
+  if (!rec) return [];
+  return [...getCategoryAncestors(rec).reverse(), rec];
+}
+
+function setAddFormSubtitle(text) {
+  const el = document.getElementById('add-form-sub');
+  if (el) el.textContent = text || 'Category → details → stock → save';
+}
+
+function setSaveBtnLabel(label) {
+  const sb = UI.el('save-btn');
+  if (!sb) return;
+  sb.innerHTML = '<i class="fa-solid fa-check"></i> ' + escapeHtml(label);
+}
+
+function setRestockBanner(show, message) {
+  const banner = document.getElementById('restock-mode-banner');
+  if (!banner) return;
+  if (show) {
+    banner.textContent = message || '📦 Restock mode — enter quantity to add';
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+    banner.textContent = '';
+  }
+}
+
+function resetShoeUiPanels() {
+  _shoeState.perSizeMode = false;
+  if (typeof setShoeMode === 'function') setShoeMode('shared');
+  const modeShared = document.getElementById('mode-tab-shared');
+  const modePerSize = document.getElementById('mode-tab-persize');
+  if (modeShared) modeShared.classList.add('active');
+  if (modePerSize) modePerSize.classList.remove('active');
+  const sharedWrap = document.getElementById('shoe-shared-wrap');
+  const perSizeWrap = document.getElementById('shoe-per-size-wrap');
+  if (sharedWrap) sharedWrap.style.display = 'block';
+  if (perSizeWrap) perSizeWrap.style.display = 'none';
+  const szGrid = UI.el('shoe-sizes-grid');
+  const szWrap = UI.el('shoe-rows-wrap');
+  const szInner = UI.el('sz-grid');
+  if (szGrid) szGrid.style.display = 'none';
+  if (szWrap) szWrap.style.display = 'none';
+  if (szInner) szInner.innerHTML = '';
+  const sum = UI.el('shoe-selected-summary');
+  if (sum) sum.innerHTML = '';
+}
+
+function renderAddTypeCascade(selectedTypeName, opts) {
+  const wrap = document.getElementById('f-type-cascade');
+  const hidden = UI.el('f-type');
+  const breadcrumb = document.getElementById('f-type-breadcrumb');
+  if (!wrap || !hidden) return;
+  const triggerTypeChange = !(opts && opts.skipTypeChange);
+  const selectedName = selectedTypeName != null ? selectedTypeName : (hidden.value || '');
+  const selectedPath = _typePathToRoot(selectedName);
+  const selectedIds = selectedPath.map(x => x.id);
+  let lastSelectedName = '';
+  let parentId = null;
+
+  wrap.innerHTML = '';
+  let depth = 0;
+  while (true) {
+    const children = _activeChildTypes(parentId);
+    if (!children.length) break;
+    const currentId = selectedIds[depth] || '';
+
+    const step = document.createElement('div');
+    step.className = 'add-cascade-step';
+    const label = document.createElement('span');
+    label.className = 'add-cascade-label';
+    label.textContent = depth === 0 ? 'Main category' : 'Sub-category';
+    const select = document.createElement('select');
+    select.className = 'add-select';
+    select.id = depth === 0 ? 'f-type-parent' : ('f-type-sub-' + depth);
+    select.setAttribute('data-depth', String(depth));
+    select.innerHTML =
+      '<option value="">' + (depth === 0 ? 'Choose category…' : 'Choose sub-category…') + '</option>' +
+      children.map(t => (
+        '<option value="' + t.id + '"' + (String(t.id) === String(currentId) ? ' selected' : '') + '>' +
+        (t.emoji || '📦') + ' ' + escapeHtml(t.name) + '</option>'
+      )).join('');
+    select.onchange = () => {
+      let chosen = '';
+      wrap.querySelectorAll('select').forEach(s => {
+        const id = parseInt(s.value, 10);
+        if (!id) return;
+        const rec = getTypeById(id);
+        if (rec) chosen = rec.name;
+      });
+      renderAddTypeCascade(chosen);
+    };
+    step.appendChild(label);
+    step.appendChild(select);
+    wrap.appendChild(step);
+
+    if (!currentId) break;
+    const rec = getTypeById(parseInt(currentId, 10));
+    if (!rec) break;
+    parentId = rec.id;
+    lastSelectedName = rec.name;
+    depth += 1;
+  }
+
+  const nextOptions = _activeChildTypes(parentId);
+  if (lastSelectedName && !nextOptions.length) {
+    hidden.value = lastSelectedName;
+  } else if (nextOptions.length) {
+    hidden.value = '';
+  } else {
+    hidden.value = '';
+  }
+
+  if (breadcrumb) {
+    if (selectedPath.length && hidden.value) {
+      breadcrumb.hidden = false;
+      breadcrumb.textContent = selectedPath.map(t => (t.emoji || '📦') + ' ' + t.name).join(' › ');
+    } else {
+      breadcrumb.hidden = true;
+      breadcrumb.textContent = '';
+    }
+  }
+
+  const locked = hidden.disabled;
+  wrap.classList.toggle('is-locked', locked);
+
+  if (triggerTypeChange) onTypeChange();
+}
+
+function setAddFormType(typeName, opts) {
+  const hidden = UI.el('f-type');
+  if (!hidden) return;
+  hidden.value = typeName || '';
+  renderAddTypeCascade(typeName || '', { skipTypeChange: opts && opts.skipTypeChange });
+}
+
+function setAddTypeLocked(locked) {
+  const hidden = UI.el('f-type');
+  if (hidden) hidden.disabled = !!locked;
+  const wrap = document.getElementById('f-type-cascade');
+  if (wrap) wrap.classList.toggle('is-locked', !!locked);
+}
+
 function renderAllTypeDropdowns() {
-  renderTypeSelectOptions(UI.el('f-type'));
+  renderAddTypeCascade(UI.el('f-type')?.value || '', { skipTypeChange: true });
   renderTypeSelectOptions(document.getElementById('wish-type'), 'Category');
   renderTypeSelectOptions(document.getElementById('off-type'), 'Category');
   renderTypeChips();
 }
 
 function renderTypeSelect() {
-  renderTypeSelectOptions(UI.el('f-type'));
+  renderAddTypeCascade(UI.el('f-type')?.value || '', { skipTypeChange: true });
 }
 
 function renderTypeChips() {
@@ -1396,64 +1553,338 @@ function updateProfitPreview() {
 }
 
 
-// ===== ITEM PHOTO MANAGEMENT =====
-function getItemPhoto(itemId) {
-  return localStorage.getItem('item_photo_' + itemId) || null;
-}
-function setItemPhoto(itemId, dataUrl) {
-  try {
-    localStorage.setItem('item_photo_' + itemId, dataUrl);
-  } catch(e) {
-    toast('⚠️ Storage full, photo not saved', 'err');
-  }
-}
-function removeItemPhoto(itemId) {
-  localStorage.removeItem('item_photo_' + itemId);
+// ===== PHOTO STORAGE & COMPRESSION =====
+// Photos live in IndexedDB ("photos" store) as compressed data URLs (WebP or JPEG).
+// An in-memory cache keeps getItemPhoto/getWishPhoto synchronous for list rendering.
+const PHOTO_PRESETS = Object.freeze({
+  item: Object.freeze({ maxW: 512, maxH: 512, maxBytes: 80000, minQuality: 0.4 }),
+  wish: Object.freeze({ maxW: 480, maxH: 480, maxBytes: 65000, minQuality: 0.4 }),
+});
+const _photoCache = new Map();
+let _photoMimeWebp = null;
+
+function _photoKey(kind, id) { return kind + '_' + id; }
+
+function dataUrlByteLength(dataUrl) {
+  const base64 = (dataUrl || '').split(',')[1] || '';
+  return Math.ceil(base64.length * 3 / 4);
 }
 
-function getWishPhoto(wishId) {
-  return localStorage.getItem('wish_photo_' + wishId) || null;
-}
-function setWishPhoto(wishId, dataUrl) {
-  try {
-    localStorage.setItem('wish_photo_' + wishId, dataUrl);
-  } catch (e) {
-    toast('⚠️ Storage full, photo not saved', 'err');
+function _canvasSupportsMime(mime) {
+  if (mime !== 'image/webp') return true;
+  if (_photoMimeWebp === null) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 2;
+    _photoMimeWebp = c.toDataURL('image/webp', 0.5).startsWith('data:image/webp');
   }
-}
-function removeWishPhoto(wishId) {
-  localStorage.removeItem('wish_photo_' + wishId);
+  return _photoMimeWebp;
 }
 
-function compressImageDataUrl(dataUrl, maxW, quality) {
+function compressImageDataUrl(dataUrl, maxW, maxH, quality, mime) {
+  const maxHeight = maxH || maxW;
+  const outMime = mime || 'image/jpeg';
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const scale = Math.min(1, maxW / img.width);
+      const scale = Math.min(1, maxW / img.width, maxHeight / img.height);
       canvas.width = Math.max(1, Math.round(img.width * scale));
       canvas.height = Math.max(1, Math.round(img.height * scale));
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
+      const useMime = _canvasSupportsMime(outMime) ? outMime : 'image/jpeg';
+      resolve(canvas.toDataURL(useMime, quality));
     };
     img.onerror = () => reject(new Error('Invalid image'));
     img.src = dataUrl;
   });
 }
 
+async function compressImageForStorage(source, presetName) {
+  const preset = PHOTO_PRESETS[presetName] || PHOTO_PRESETS.item;
+  let dataUrl = typeof source === 'string'
+    ? source
+    : await compressImageFile(source, Math.max(preset.maxW, 640), 0.82);
+  const mimes = _canvasSupportsMime('image/webp')
+    ? ['image/webp', 'image/jpeg']
+    : ['image/jpeg'];
+  let best = dataUrl;
+  for (const mime of mimes) {
+    let quality = 0.78;
+    while (quality >= preset.minQuality) {
+      const candidate = await compressImageDataUrl(dataUrl, preset.maxW, preset.maxH, quality, mime);
+      best = candidate;
+      if (dataUrlByteLength(candidate) <= preset.maxBytes) return candidate;
+      quality -= 0.07;
+    }
+  }
+  return best;
+}
+
 function compressImageFile(file, maxW, quality) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = ev => compressImageDataUrl(ev.target.result, maxW, quality).then(resolve).catch(reject);
+    reader.onload = ev => compressImageDataUrl(ev.target.result, maxW, maxW, quality).then(resolve).catch(reject);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+async function initPhotoStore() {
+  if (!db || !db.objectStoreNames.contains('photos')) return;
+  try {
+    const rows = await dbAll('photos');
+    rows.forEach(r => { if (r && r.key && r.dataUrl) _photoCache.set(r.key, r.dataUrl); });
+    await _migrateLegacyLocalStoragePhotos();
+  } catch (e) {
+    console.warn('[initPhotoStore]', e);
+  }
+}
+
+async function _migrateLegacyLocalStoragePhotos() {
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && (k.startsWith('item_photo_') || k.startsWith('wish_photo_'))) keys.push(k);
+  }
+  if (!keys.length) return;
+  for (const k of keys) {
+    const raw = localStorage.getItem(k);
+    if (!raw) { localStorage.removeItem(k); continue; }
+    let storeKey = null;
+    let preset = 'item';
+    if (k.startsWith('item_photo_')) {
+      storeKey = _photoKey('item', k.slice('item_photo_'.length));
+    } else {
+      storeKey = _photoKey('wish', k.slice('wish_photo_'.length));
+      preset = 'wish';
+    }
+    if (_photoCache.has(storeKey)) {
+      localStorage.removeItem(k);
+      continue;
+    }
+    try {
+      await _persistPhoto(storeKey, raw, preset);
+    } catch (_) { /* keep in localStorage if migrate fails */ }
+    localStorage.removeItem(k);
+  }
+}
+
+async function _persistPhoto(key, dataUrl, presetName) {
+  const compressed = await compressImageForStorage(dataUrl, presetName);
+  const mime = (compressed.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg';
+  const record = {
+    key,
+    dataUrl: compressed,
+    mime,
+    bytes: dataUrlByteLength(compressed),
+    updatedAt: new Date().toISOString(),
+  };
+  await dbPut('photos', record);
+  _photoCache.set(key, compressed);
+  return compressed;
+}
+
+function getItemPhoto(itemId) {
+  const key = _photoKey('item', itemId);
+  if (_photoCache.has(key)) return _photoCache.get(key);
+  return localStorage.getItem('item_photo_' + itemId) || null;
+}
+
+async function setItemPhoto(itemId, dataUrl) {
+  if (!dataUrl) return;
+  try {
+    await _persistPhoto(_photoKey('item', itemId), dataUrl, 'item');
+    localStorage.removeItem('item_photo_' + itemId);
+  } catch (e) {
+    console.warn('[setItemPhoto]', e);
+    try {
+      const compressed = await compressImageForStorage(dataUrl, 'item');
+      localStorage.setItem('item_photo_' + itemId, compressed);
+      _photoCache.set(_photoKey('item', itemId), compressed);
+    } catch (_) {
+      toast('Storage full — photo not saved', 'err');
+    }
+  }
+}
+
+async function removeItemPhoto(itemId) {
+  const key = _photoKey('item', itemId);
+  _photoCache.delete(key);
+  localStorage.removeItem('item_photo_' + itemId);
+  if (db && db.objectStoreNames.contains('photos')) {
+    try { await dbDelete('photos', key); } catch (_) { /* intentionally ignored */ }
+  }
+}
+
+function getWishPhoto(wishId) {
+  const key = _photoKey('wish', wishId);
+  if (_photoCache.has(key)) return _photoCache.get(key);
+  return localStorage.getItem('wish_photo_' + wishId) || null;
+}
+
+async function setWishPhoto(wishId, dataUrl) {
+  if (!dataUrl) return;
+  try {
+    await _persistPhoto(_photoKey('wish', wishId), dataUrl, 'wish');
+    localStorage.removeItem('wish_photo_' + wishId);
+  } catch (e) {
+    console.warn('[setWishPhoto]', e);
+    try {
+      const compressed = await compressImageForStorage(dataUrl, 'wish');
+      localStorage.setItem('wish_photo_' + wishId, compressed);
+      _photoCache.set(_photoKey('wish', wishId), compressed);
+    } catch (_) {
+      toast('Storage full — photo not saved', 'err');
+    }
+  }
+}
+
+async function removeWishPhoto(wishId) {
+  const key = _photoKey('wish', wishId);
+  _photoCache.delete(key);
+  localStorage.removeItem('wish_photo_' + wishId);
+  if (db && db.objectStoreNames.contains('photos')) {
+    try { await dbDelete('photos', key); } catch (_) { /* intentionally ignored */ }
+  }
+}
+
+function clearAllPhotoCache() {
+  _photoCache.clear();
 }
 
 function _closeImagePickerSheet() {
   const el = document.getElementById('image-picker-sheet');
   if (el) el.remove();
 }
+
+let _clipboardPastePending = null;
+
+function cancelClipboardScreenshotWait() {
+  if (!_clipboardPastePending) return;
+  document.removeEventListener('visibilitychange', _clipboardPastePending.onVis);
+  window.removeEventListener('focus', _clipboardPastePending.onFocus);
+  window.removeEventListener('pageshow', _clipboardPastePending.onPageShow);
+  if (_clipboardPastePending.timeoutId) clearTimeout(_clipboardPastePending.timeoutId);
+  const el = document.getElementById('clipboard-wait-overlay');
+  if (el) el.remove();
+  _clipboardPastePending = null;
+}
+window.cancelClipboardScreenshotWait = cancelClipboardScreenshotWait;
+
+function _showClipboardWaitOverlay() {
+  let el = document.getElementById('clipboard-wait-overlay');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'clipboard-wait-overlay';
+  el.className = 'clipboard-wait-overlay';
+  el.innerHTML =
+    '<div class="clipboard-wait-card">' +
+      '<div class="clipboard-wait-icon">📋</div>' +
+      '<div class="clipboard-wait-title">Waiting for screenshot</div>' +
+      '<p class="clipboard-wait-text">Open another app, take your screenshot, tap <strong>Done</strong> or <strong>Complete</strong>, then switch back here. The photo will import automatically.</p>' +
+      '<button type="button" class="clipboard-wait-import" id="clipboard-wait-import-btn">Import now</button>' +
+      '<button type="button" class="clipboard-wait-cancel" id="clipboard-wait-cancel-btn">Cancel</button>' +
+    '</div>';
+  el.querySelector('#clipboard-wait-cancel-btn').addEventListener('click', () => {
+    cancelClipboardScreenshotWait();
+    toast('Screenshot import cancelled', 'ok');
+  });
+  el.querySelector('#clipboard-wait-import-btn').addEventListener('click', () => {
+    if (_clipboardPastePending && _clipboardPastePending.tryImport) {
+      _clipboardPastePending.tryImport(true);
+    }
+  });
+  document.body.appendChild(el);
+  return el;
+}
+
+async function pasteImageFromClipboard(options) {
+  const silent = options && options.silent;
+  const preset = (options && options.photoPreset) || 'item';
+  if (!navigator.clipboard || !navigator.clipboard.read) {
+    if (!silent) toast('Clipboard paste not supported — use Gallery and pick your screenshot', 'err');
+    return null;
+  }
+  try {
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      for (const type of item.types) {
+        if (type.startsWith('image/')) {
+          const blob = await item.getType(type);
+          const rough = await compressImageFile(new File([blob], 'screenshot.jpg', { type }), 960, 0.82);
+          return await compressImageForStorage(rough, preset);
+        }
+      }
+    }
+    if (!silent) toast('No image in clipboard yet', 'err');
+    return null;
+  } catch (e) {
+    console.warn('[clipboard]', e);
+    if (!silent) toast('Could not read clipboard — tap Import now when you return, or use Gallery', 'err');
+    return null;
+  }
+}
+window.pasteImageFromClipboard = pasteImageFromClipboard;
+
+function startClipboardScreenshotImport(opts) {
+  cancelClipboardScreenshotWait();
+  const pickOpts = {
+    photoPreset: opts.photoPreset || 'item',
+    onPick: opts.onPick
+  };
+
+  let importing = false;
+  async function tryImport(fromUserTap) {
+    if (!_clipboardPastePending || importing) return;
+    importing = true;
+    try {
+      const dataUrl = await pasteImageFromClipboard({
+        silent: !fromUserTap,
+        photoPreset: pickOpts.photoPreset
+      });
+      if (dataUrl && _clipboardPastePending) {
+        const onPick = _clipboardPastePending.opts.onPick;
+        cancelClipboardScreenshotWait();
+        if (onPick) onPick(dataUrl);
+        toast('Screenshot imported', 'ok');
+        return;
+      }
+      if (fromUserTap) toast('No screenshot in clipboard yet — finish in the other app first', 'err');
+    } finally {
+      importing = false;
+    }
+  }
+
+  const onReturn = () => {
+    if (document.visibilityState && document.visibilityState !== 'visible') return;
+    setTimeout(() => { if (_clipboardPastePending) tryImport(false); }, 350);
+  };
+
+  _clipboardPastePending = {
+    opts: pickOpts,
+    tryImport,
+    onVis: onReturn,
+    onFocus: onReturn,
+    onPageShow: onReturn,
+    timeoutId: setTimeout(() => {
+      if (_clipboardPastePending) {
+        cancelClipboardScreenshotWait();
+        toast('Screenshot import timed out', 'err');
+      }
+    }, 10 * 60 * 1000)
+  };
+
+  document.addEventListener('visibilitychange', onReturn);
+  window.addEventListener('focus', onReturn);
+  window.addEventListener('pageshow', onReturn);
+
+  tryImport(false).then(() => {
+    if (!_clipboardPastePending) return;
+    _showClipboardWaitOverlay();
+    toast('Take screenshot in another app, then return here', 'ok');
+  });
+}
+window.startClipboardScreenshotImport = startClipboardScreenshotImport;
 
 function showImagePickerSheet(opts) {
   _closeImagePickerSheet();
@@ -1466,10 +1897,10 @@ function showImagePickerSheet(opts) {
   sheet.innerHTML =
     '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:20px 18px 32px;" onclick="event.stopPropagation()">' +
       '<div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px;text-align:center;">' + escapeHtml(title) + '</div>' +
-      '<div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:14px;line-height:1.4;">Take a photo, pick from gallery, or paste a screenshot after taking it in another app.</div>' +
+      '<div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:14px;line-height:1.4;">Take a photo, pick from gallery, or screenshot in another app and return here to import.</div>' +
       '<button type="button" data-src="camera" style="' + btnStyle + 'background:var(--accent);color:white;">📸 Take photo</button>' +
       '<button type="button" data-src="gallery" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">🖼️ Choose from gallery</button>' +
-      '<button type="button" data-src="clipboard" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">📋 Import screenshot (clipboard)</button>' +
+      '<button type="button" data-src="clipboard" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">📋 Screenshot from another app</button>' +
       '<button type="button" data-src="cancel" style="width:100%;padding:12px;background:transparent;color:var(--muted);border:none;font-size:14px;cursor:pointer;font-family:var(--sans);">Cancel</button>' +
     '</div>';
   sheet.querySelectorAll('button[data-src]').forEach(btn => {
@@ -1478,8 +1909,7 @@ function showImagePickerSheet(opts) {
       if (src === 'cancel') { _closeImagePickerSheet(); return; }
       _closeImagePickerSheet();
       if (src === 'clipboard') {
-        const dataUrl = await pasteImageFromClipboard();
-        if (dataUrl && opts.onPick) opts.onPick(dataUrl);
+        startClipboardScreenshotImport(opts);
         return;
       }
       const input = document.createElement('input');
@@ -1490,7 +1920,8 @@ function showImagePickerSheet(opts) {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         try {
-          const dataUrl = await compressImageFile(file, opts.maxW || 800, opts.quality || 0.75);
+          const rough = await compressImageFile(file, 960, 0.82);
+          const dataUrl = await compressImageForStorage(rough, opts.photoPreset || 'item');
           if (opts.onPick) opts.onPick(dataUrl);
         } catch (err) {
           toast('Could not load image', 'err');
@@ -1503,39 +1934,13 @@ function showImagePickerSheet(opts) {
 }
 window.showImagePickerSheet = showImagePickerSheet;
 
-async function pasteImageFromClipboard() {
-  if (!navigator.clipboard || !navigator.clipboard.read) {
-    toast('Clipboard paste not supported here — use Gallery and select your screenshot', 'err');
-    return null;
-  }
-  try {
-    const items = await navigator.clipboard.read();
-    for (const item of items) {
-      for (const type of item.types) {
-        if (type.startsWith('image/')) {
-          const blob = await item.getType(type);
-          return await compressImageFile(new File([blob], 'screenshot.jpg', { type }), 800, 0.75);
-        }
-      }
-    }
-    toast('No image in clipboard — take a screenshot, then tap Import screenshot', 'err');
-    return null;
-  } catch (e) {
-    console.warn('[clipboard]', e);
-    toast('Could not read clipboard — allow access or use Gallery', 'err');
-    return null;
-  }
-}
-window.pasteImageFromClipboard = pasteImageFromClipboard;
-
 function triggerPhotoUpload(itemId, event) {
   event.stopPropagation();
   showImagePickerSheet({
     title: 'Item photo',
-    maxW: 600,
-    quality: 0.72,
-    onPick: dataUrl => {
-      setItemPhoto(itemId, dataUrl);
+    photoPreset: 'item',
+    onPick: async dataUrl => {
+      await setItemPhoto(itemId, dataUrl);
       renderList();
       toast('Photo saved', 'ok');
     }
@@ -1548,8 +1953,9 @@ let _addFormPhotoData = null;
 function triggerAddPhotoUpload() {
   showImagePickerSheet({
     title: 'Item photo',
-    onPick: dataUrl => {
-      _addFormPhotoData = dataUrl;
+    photoPreset: 'item',
+    onPick: async dataUrl => {
+      _addFormPhotoData = await compressImageForStorage(dataUrl, 'item');
       const photoImg = document.getElementById('add-photo-img');
       const placeholder = document.getElementById('add-photo-placeholder');
       const removeBtn = document.getElementById('add-photo-remove');
@@ -1582,8 +1988,9 @@ function updateWishPhotoPreview() {
 function triggerWishPhotoUpload() {
   showImagePickerSheet({
     title: 'Wishlist photo',
-    onPick: dataUrl => {
-      _wishFormPhotoData = dataUrl;
+    photoPreset: 'wish',
+    onPick: async dataUrl => {
+      _wishFormPhotoData = await compressImageForStorage(dataUrl, 'wish');
       updateWishPhotoPreview();
       toast('Photo attached', 'ok');
     }
@@ -1591,7 +1998,7 @@ function triggerWishPhotoUpload() {
 }
 window.triggerWishPhotoUpload = triggerWishPhotoUpload;
 
-function removeWishPhoto(event) {
+function removeWishFormPhoto(event) {
   if (event) event.stopPropagation();
   _wishFormPhotoData = null;
   updateWishPhotoPreview();
@@ -1601,7 +2008,7 @@ function clearWishPhotoForm() {
   _wishFormPhotoData = null;
   updateWishPhotoPreview();
 }
-window.removeWishPhoto = removeWishPhoto;
+window.removeWishFormPhoto = removeWishFormPhoto;
 
 function removeAddPhoto(event) {
   event.stopPropagation();
@@ -1614,6 +2021,20 @@ function removeAddPhoto(event) {
   if (removeBtn) removeBtn.style.display = 'none';
 }
 
+function applyAddFormPhotoPreview(dataUrl) {
+  if (!dataUrl) {
+    clearAddFormPhoto();
+    return;
+  }
+  _addFormPhotoData = dataUrl;
+  const photoImg = document.getElementById('add-photo-img');
+  const placeholder = document.getElementById('add-photo-placeholder');
+  const removeBtn = document.getElementById('add-photo-remove');
+  if (photoImg) { photoImg.src = dataUrl; photoImg.style.display = 'block'; }
+  if (placeholder) placeholder.style.display = 'none';
+  if (removeBtn) removeBtn.style.display = 'block';
+}
+
 function clearAddFormPhoto() {
   _addFormPhotoData = null;
   const el = document.getElementById('add-photo-img');
@@ -1624,61 +2045,90 @@ function clearAddFormPhoto() {
   if (rb) rb.style.display = 'none';
 }
 
-// ===== SAVE ITEM =====
-// Legacy shims — delegates to _overlay singleton
-function showSaving(label) {
-  const overlay = document.getElementById('saving-overlay');
-  const arc     = document.getElementById('saving-arc');
-  const lbl     = document.getElementById('saving-label');
-  const btn     = UI.el('save-btn');
-  if (!overlay) return;
+let _currentWishDetailId = null;
+let _wishStockingFromId = null;
 
-  // Gray out save button
-  if (btn) { btn.disabled = true; btn.style.opacity = '0.45'; btn.style.pointerEvents = 'none'; }
-
-  // Reset arc
-  const circumference = 213.6;
-  if (arc) { arc.style.strokeDashoffset = circumference; }
-  if (lbl) lbl.textContent = label || 'Saving…';
-
-  overlay.style.display = 'flex';
-
-  // Animate arc 0 → 85% over ~1.5s (final 15% completes on hideSaving)
-  let progress = 0;
-  const target = 85;
-  const steps  = 30;
-  const stepSize = target / steps;
-  clearInterval(_savingTimer);
-  _savingTimer = setInterval(() => {
-    progress = Math.min(progress + stepSize, target);
-    if (arc) arc.style.strokeDashoffset = circumference * (1 - progress / 100);
-    if (progress >= target) clearInterval(_savingTimer);
-  }, 50);
+async function markWishlistStockedById(wishId, itemId) {
+  if (!wishId || !db.objectStoreNames.contains('wishlist')) return;
+  const wish = await dbGet('wishlist', wishId);
+  if (!wish) return;
+  wish.status = 'stocked';
+  wish.stockedAt = new Date().toISOString();
+  wish.stockedItemId = itemId || null;
+  await dbPut('wishlist', wish);
 }
 
-function hideSaving() {
-  clearInterval(_savingTimer);
-
-  const overlay = document.getElementById('saving-overlay');
-  const arc     = document.getElementById('saving-arc');
-  const btn     = UI.el('save-btn');
-
-  // Snap arc to 100%
-  if (arc) arc.style.strokeDashoffset = 0;
-
-  // Re-enable button IMMEDIATELY so user can retry on validation fail
-  if (btn) {
-    btn.disabled = false;
-    btn.style.opacity = '';
-    btn.style.pointerEvents = '';
+async function openWishlistDetail(wishId) {
+  const wish = await dbGet('wishlist', wishId);
+  if (!wish) {
+    toast('Wishlist item not found', 'err');
+    return;
   }
-
-  // Hide overlay after short pause so user sees the complete circle
-  setTimeout(() => {
-    if (overlay) overlay.style.display = 'none';
-  }, 350);
+  _currentWishDetailId = wishId;
+  const sheet = document.getElementById('wishlist-detail-sheet');
+  const photo = getWishPhoto(wishId);
+  const photoImg = document.getElementById('wd-photo-img');
+  const photoEmpty = document.getElementById('wd-photo-empty');
+  if (photo && photoImg) {
+    photoImg.src = photo;
+    photoImg.style.display = 'block';
+    if (photoEmpty) photoEmpty.style.display = 'none';
+  } else {
+    if (photoImg) { photoImg.src = ''; photoImg.style.display = 'none'; }
+    if (photoEmpty) photoEmpty.style.display = 'flex';
+  }
+  const nameEl = document.getElementById('wd-name');
+  const codeEl = document.getElementById('wd-code');
+  const metaEl = document.getElementById('wd-meta');
+  const noteEl = document.getElementById('wd-note');
+  if (nameEl) nameEl.textContent = wish.name || wish.code || 'Prospective item';
+  if (codeEl) codeEl.textContent = wish.code ? 'Code: ' + wish.code : 'No code';
+  if (metaEl) {
+    const parts = [];
+    if (wish.type) parts.push(wish.type);
+    if (wish.qty) parts.push('Target qty: ' + wish.qty);
+    if (wish.estimatedCost) parts.push('Est. buy: ' + fmt(wish.estimatedCost));
+    metaEl.textContent = parts.length ? parts.join(' · ') : 'No extra details';
+  }
+  if (noteEl) {
+    if (wish.note) {
+      noteEl.textContent = wish.note;
+      noteEl.style.display = 'block';
+    } else {
+      noteEl.textContent = '';
+      noteEl.style.display = 'none';
+    }
+  }
+  if (sheet) sheet.classList.add('open');
 }
+window.openWishlistDetail = openWishlistDetail;
 
+function closeWishlistDetail() {
+  const sheet = document.getElementById('wishlist-detail-sheet');
+  if (sheet) sheet.classList.remove('open');
+  _currentWishDetailId = null;
+}
+window.closeWishlistDetail = closeWishlistDetail;
+
+function wishlistDetailStock() {
+  const id = _currentWishDetailId;
+  closeWishlistDetail();
+  if (id) startWishlistRestock(id);
+}
+window.wishlistDetailStock = wishlistDetailStock;
+
+async function wishlistDetailDelete() {
+  const id = _currentWishDetailId;
+  if (!id) return;
+  const wish = await dbGet('wishlist', id);
+  const label = wish ? (wish.name || wish.code || 'this item') : 'this item';
+  if (!confirm('Remove "' + label + '" from wishlist?')) return;
+  closeWishlistDetail();
+  await deleteWishlistItem(id);
+}
+window.wishlistDetailDelete = wishlistDetailDelete;
+
+// ===== SAVE ITEM =====
 async function saveItem() {
   _overlay.show('Saving…');
   try {
@@ -1758,8 +2208,9 @@ async function saveItem() {
         item.updatedBy=currentUser?currentUser.username:'system';
         await dbPut('items',item);fbSyncItem(item);
       }
-      ['f-code','f-type','f-name','f-size'].forEach(id=>{const el=document.getElementById(id);if(el){el.disabled=false;el.style.opacity='';el.style.cursor='';}});
-      const banner=document.getElementById('restock-mode-banner');if(banner)banner.style.display='none';
+      ['f-code','f-name','f-size'].forEach(id=>{const el=document.getElementById(id);if(el){el.disabled=false;el.style.opacity='';el.style.cursor='';}});
+      setAddTypeLocked(false);
+      setRestockBanner(false);
       clearForm();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
       renderList();renderDashboard();updateHeader();scheduleSync();
@@ -1790,7 +2241,12 @@ async function saveItem() {
     const type=UI.el('f-type')?.value||'';
     const code=sanitiseCode(UI.el('f-code')?.value||'');
     const name=(UI.el('f-name')?.value||'').trim().replace(/[ \t]+/g,' ')||(type+' '+code);
-    if(!type){toast('\u26a0\ufe0f Select an item type','err');return;}
+    if (!type) {
+      toast('Select a category (and sub-category if shown)', 'err');
+      const firstCat = document.getElementById('f-type-parent') || document.querySelector('#f-type-cascade select');
+      if (firstCat) firstCat.focus();
+      return;
+    }
     if(!code){toast('\u26a0\ufe0f Enter item code','err');return;}
     if (!editIdRaw) {
       const codeMatches = await findCodeMatchesForSave(code);
@@ -1803,12 +2259,20 @@ async function saveItem() {
     }
 
     // SHOE MODE
-    if(isFootwearType(type)&&!editIdRaw){
-      const savedCount=await saveShoeItems(code,name,type);
-      if(!savedCount)return;
-      clearForm();clearAddFormPhoto();
+    if (isFootwearType(type) && !editIdRaw) {
+      const savedCount = await saveShoeItems(code, name, type);
+      if (!savedCount) return;
+      if (_wishStockingFromId) {
+        const stocked = (await dbAll('items')).find(i => i.code === code);
+        if (stocked) await markWishlistStockedById(_wishStockingFromId, stocked.id);
+        _wishStockingFromId = null;
+      }
+      clearForm();
+      clearAddFormPhoto();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
       renderList();renderDashboard();updateHeader();scheduleSync();
+      await renderWishlistPage();
+      await renderStockMonitorSummary();
       toast('\u2705 '+savedCount+' shoe size(s) saved!','ok');return;
     }
 
@@ -1852,7 +2316,7 @@ async function saveItem() {
         fbId:      original ? original.fbId : undefined,
       });
       await dbPut('items', saved);
-      if(_addFormPhotoData)setItemPhoto(saved.id,_addFormPhotoData);
+      if (_addFormPhotoData) await setItemPhoto(saved.id, _addFormPhotoData);
       fbSyncItem(saved);
       clearForm();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
@@ -1860,9 +2324,14 @@ async function saveItem() {
       toast('\u2705 Item updated!','ok');showPage('list');
     }else{
       const newId=await dbAdd('items',item);item.id=newId;
-      if(_addFormPhotoData)setItemPhoto(newId,_addFormPhotoData);
+      if (_addFormPhotoData) await setItemPhoto(newId, _addFormPhotoData);
+      if (_wishStockingFromId) {
+        await markWishlistStockedById(_wishStockingFromId, newId);
+        _wishStockingFromId = null;
+      } else {
+        await markWishlistStockedForItem(item);
+      }
       await recordStockInvestment(item, qty * buy, qty, 'New stock');
-      await markWishlistStockedForItem(item);
       fbSyncItem(item);
       clearForm();clearAddFormPhoto();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
@@ -1886,7 +2355,7 @@ async function saveItem() {
 function clearForm() {
   UI.el('edit-id').value   = '';
   _editingItemId = null;  // clear JS-side edit tracker
-  UI.el('f-type').value    = '';
+  setAddFormType('', { skipTypeChange: true });
   UI.el('f-code').value    = '';
   UI.el('f-name').value    = '';
   UI.el('f-size').value    = '';
@@ -1895,48 +2364,34 @@ function clearForm() {
   UI.el('f-sell').value    = '';
   const pp = UI.el('profit-preview');
   if (pp) pp.style.display = 'none';
-  const sb = UI.el('save-btn');
-  if (sb) sb.textContent = '+ Add to Inventory';
+  setSaveBtnLabel('Add to inventory');
   const ml = UI.el('form-mode-label');
-  if (ml) ml.textContent = 'New Item';
+  if (ml) ml.textContent = 'New item';
+  setAddFormSubtitle();
   const ce = UI.el('cancel-edit-btn');
   if (ce) ce.style.display = 'none';
 
   // Re-enable any locked fields
-  ['f-code','f-type','f-name','f-size','f-qty','f-buy','f-sell'].forEach(id => {
+  ['f-code','f-name','f-size','f-qty','f-buy','f-sell'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.disabled = false; el.style.opacity = ''; el.style.cursor = ''; }
   });
+  setAddTypeLocked(false);
 
-  // Reset shoe state
-  _shoeState.reset(); // ShoeState class handles all shoe form state
-
-  // Reset mode tabs to default (shared)
-  const modeShared  = document.getElementById('mode-tab-shared');
-  const modePerSize = document.getElementById('mode-tab-persize');
-  if (modeShared)  modeShared.classList.add('active');
-  if (modePerSize) modePerSize.classList.remove('active');
+  _shoeState.reset();
+  resetShoeUiPanels();
   const shoePanel  = UI.el('shoe-size-panel');
   const stdPricing = UI.el('std-pricing-section');
   const sizeField  = document.getElementById('f-size-field');
   if (shoePanel)  shoePanel.style.display  = 'none';
   if (stdPricing) stdPricing.style.display = 'block';
   if (sizeField)  sizeField.style.display  = 'block';
-  const szGrid  = UI.el('shoe-sizes-grid');
-  const szWrap  = UI.el('shoe-rows-wrap');
-  const szInner = UI.el('sz-grid');
-  if (szGrid)  szGrid.style.display  = 'none';
-  if (szWrap)  szWrap.style.display  = 'none';
-  if (szInner) szInner.innerHTML = '';
-  const sum = UI.el('shoe-selected-summary');
-  if (sum) sum.innerHTML = '';
   ['shoe-shared-qty','shoe-shared-buy','shoe-shared-sell'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
 
-  // Hide restock banner
-  const banner = document.getElementById('restock-mode-banner');
-  if (banner) banner.style.display = 'none';
+  setRestockBanner(false);
+  _wishStockingFromId = null;
 
   clearCodeMatchSelect();
   hideCodeDropdown();
@@ -2386,7 +2841,7 @@ async function renderStockMonitor() {
       : '<span class="tag tag-blue">Not accounted</span>';
     const restockAction = row.kind === 'out'
       ? 'restockFromMonitor(' + row.itemId + (row.size ? ',' + row.size : '') + ')'
-      : 'startWishlistRestock(' + row.wishId + ')';
+      : 'openWishlistDetail(' + row.wishId + ')';
     const deleteBtn = row.kind !== 'out'
       ? '<button class="stock-monitor-action delete" onclick="event.stopPropagation();deleteWishlistItem(' + row.wishId + ')" title="Remove"><i class="fa-solid fa-trash"></i></button>'
       : '';
@@ -2435,7 +2890,7 @@ async function renderWishlistPage() {
     const thumb = photo
       ? '<img src="' + photo + '" alt="" class="wish-list-thumb">'
       : '<div class="wish-list-thumb wish-list-thumb-empty">📷</div>';
-    return '<div class="stock-monitor-row prospective" onclick="startWishlistRestock(' + row.wishId + ')" role="button" tabindex="0">' +
+    return '<div class="stock-monitor-row prospective" onclick="openWishlistDetail(' + row.wishId + ')" role="button" tabindex="0">' +
       thumb +
       '<div class="stock-monitor-body">' +
         '<div class="stock-monitor-name">' + escapeHtml(row.name) + '</div>' +
@@ -2450,8 +2905,8 @@ async function renderWishlistPage() {
         '</div>' +
       '</div>' +
       '<div class="stock-monitor-actions">' +
-        '<button class="stock-monitor-action restock" onclick="event.stopPropagation();startWishlistRestock(' + row.wishId + ')" title="Restock"><i class="fa-solid fa-boxes-stacked"></i></button>' +
-        '<button class="stock-monitor-action delete" onclick="event.stopPropagation();deleteWishlistItem(' + row.wishId + ')" title="Remove"><i class="fa-solid fa-trash"></i></button>' +
+        '<button class="stock-monitor-action restock" onclick="event.stopPropagation();openWishlistDetail(' + row.wishId + ')" title="View"><i class="fa-solid fa-eye"></i></button>' +
+        '<button class="stock-monitor-action restock" onclick="event.stopPropagation();startWishlistRestock(' + row.wishId + ')" title="Stock it"><i class="fa-solid fa-boxes-stacked"></i></button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -2481,7 +2936,7 @@ async function saveWishlistItem() {
     createdBy: currentUser ? currentUser.username : 'system'
   };
   entry.id = await dbAdd('wishlist', entry);
-  if (_wishFormPhotoData) setWishPhoto(entry.id, _wishFormPhotoData);
+  if (_wishFormPhotoData) await setWishPhoto(entry.id, _wishFormPhotoData);
   ['wish-name','wish-code','wish-qty','wish-cost','wish-note'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
@@ -2494,7 +2949,7 @@ async function saveWishlistItem() {
 }
 
 async function deleteWishlistItem(id) {
-  removeWishPhoto(id);
+  await removeWishPhoto(id);
   await dbDelete('wishlist', id);
   scheduleSync();
   await renderWishlistPage();
@@ -2539,19 +2994,23 @@ async function restockFromMonitor(itemId, size) {
 async function startWishlistRestock(wishId) {
   const wish = await dbGet('wishlist', wishId);
   if (!wish) return;
+  _wishStockingFromId = wishId;
+  closeWishlistDetail();
   closeStockMonitor();
   clearForm();
+  _wishStockingFromId = wishId;
   showPage('add');
+  const photo = getWishPhoto(wishId);
   setTimeout(() => {
-    const typeEl = UI.el('f-type');
-    if (typeEl && wish.type) {
-      typeEl.value = wish.type;
-      onTypeChange();
-    }
+    if (wish.type) setAddFormType(wish.type);
     if (UI.el('f-code')) UI.el('f-code').value = wish.code || '';
     if (UI.el('f-name')) UI.el('f-name').value = wish.name || '';
     if (UI.el('f-qty')) UI.el('f-qty').value = wish.qty || 1;
     if (UI.el('f-buy')) UI.el('f-buy').value = wish.estimatedCost || '';
+    if (photo) applyAddFormPhotoPreview(photo);
+    else clearAddFormPhoto();
+    setAddFormSubtitle('From wishlist — check details and save to stock');
+    setSaveBtnLabel('Add to inventory');
     updateProfitPreview();
   }, 80);
 }
@@ -2813,56 +3272,26 @@ function openSellFromSheet() {
 
 function triggerSheetPhotoUpload(event) {
   event.stopPropagation();
-  // Show choice: camera or gallery
-  const menu = document.createElement('div');
-  menu.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center;';
-  menu.innerHTML = `<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:20px 18px 32px;">
-    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px;text-align:center;">Add Photo</div>
-    <button onclick="this.closest('[style*=fixed]').remove();_capturePhoto(${currentDetailId},'camera')" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:700;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">📸 Take Photo</button>
-    <button onclick="this.closest('[style*=fixed]').remove();_capturePhoto(${currentDetailId},'gallery')" style="width:100%;padding:16px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--r);font-size:16px;font-weight:700;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">🖼️ Choose from Gallery</button>
-    <button onclick="this.closest('[style*=fixed]').remove()" style="width:100%;padding:13px;background:transparent;color:var(--muted);border:none;font-size:15px;cursor:pointer;font-family:var(--sans);">Cancel</button>
-  </div>`;
-  document.body.appendChild(menu);
-}
-
-function _capturePhoto(itemId, source) {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  if (source === 'camera') input.capture = 'environment';
-  input.onchange = e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxW = 800;
-        const scale = Math.min(1, maxW / img.width);
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        const compressed = canvas.toDataURL('image/jpeg', 0.75);
-        setItemPhoto(itemId, compressed);
-        // Update sheet photo live
-        const photoImg = document.getElementById('sh-photo-img');
-        const fallback = document.getElementById('sh-photo-fallback');
-        const panWrap = document.getElementById('sh-photo-pan');
-        if (photoImg) { photoImg.src = compressed; }
-        if (panWrap) panWrap.style.display = 'block';
-        if (fallback) fallback.style.display = 'none';
-        if (typeof window._resetPhotoPan === 'function') window._resetPhotoPan();
-        const btn = document.getElementById('sh-photo-btn');
-        if (btn) btn.textContent = '📷 Photo';
-        renderList();
-        toast('📸 Photo saved!', 'ok');
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-  input.click();
+  const itemId = currentDetailId;
+  showImagePickerSheet({
+    title: 'Item photo',
+    photoPreset: 'item',
+    onPick: async dataUrl => {
+      await setItemPhoto(itemId, dataUrl);
+      const photoImg = document.getElementById('sh-photo-img');
+      const fallback = document.getElementById('sh-photo-fallback');
+      const panWrap = document.getElementById('sh-photo-pan');
+      const saved = getItemPhoto(itemId);
+      if (photoImg && saved) { photoImg.src = saved; }
+      if (panWrap) panWrap.style.display = 'block';
+      if (fallback) fallback.style.display = 'none';
+      if (typeof window._resetPhotoPan === 'function') window._resetPhotoPan();
+      const btn = document.getElementById('sh-photo-btn');
+      if (btn) btn.textContent = '📷 Photo';
+      renderList();
+      toast('Photo saved', 'ok');
+    }
+  });
 }
 
 async function openSheet(id) {
@@ -3012,6 +3441,7 @@ async function deleteItem() {
   if (itemSales.length > 0) msg += '\n\n⚠️ This item has ' + itemSales.length + ' sale record(s). The sales history will remain but the item cannot be restocked.';
   if (!confirm(msg)) return;
   await dbDelete('items', currentDetailId);
+  await removeItemPhoto(currentDetailId);
   if (toDelete && toDelete.fbId) fbDeleteItem(toDelete.fbId);
   closeSheet();
   allItems = await dbAll('items');
@@ -3037,7 +3467,7 @@ async function editItem() {
     if (!sizeRec) { toast('Size record not found', 'err'); return; }
     _editingItemId = null;  // shoe edits use shoe_edit_ prefix, not _editingItemId
     UI.el('edit-id').value = 'shoe_edit_' + item.id + '_' + size;
-    UI.el('f-type').value  = item.type || '';
+    setAddFormType(item.type || '', { skipTypeChange: true });
     UI.el('f-code').value  = item.code || '';
     UI.el('f-name').value  = item.name || '';
     UI.el('f-size').value  = size;
@@ -3045,17 +3475,18 @@ async function editItem() {
     UI.el('f-buy').value   = sizeRec.buyPrice  || item.defaultBuy  || '';
     UI.el('f-sell').value  = sizeRec.sellPrice || item.defaultSell || '';
     showPage('add');
-    ['f-code','f-type','f-name','f-size'].forEach(id => {
+    ['f-code','f-name','f-size'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.disabled=true; el.style.opacity='0.45'; el.style.cursor='not-allowed'; }
     });
+    setAddTypeLocked(true);
     const shoePanel  = UI.el('shoe-size-panel');
     const stdPricing = UI.el('std-pricing-section');
     const sizeField  = document.getElementById('f-size-field');
     if (shoePanel)  shoePanel.style.display  = 'none';
     if (stdPricing) stdPricing.style.display = 'block';
     if (sizeField)  sizeField.style.display  = 'block';
-    UI.el('save-btn').textContent = '💾 Save Size ' + size;
+    setSaveBtnLabel('Save size ' + size);
     UI.el('form-mode-label').textContent = '✏️ Edit · ' + item.code + ' Size ' + size;
     UI.el('cancel-edit-btn').style.display = 'block';
     _editOriginItemId = item.id;
@@ -3067,7 +3498,7 @@ async function editItem() {
   _editingItemId = item.id;   // store reliably in JS variable
   showPage('add');
   UI.el('edit-id').value = item.id;
-  UI.el('f-type').value  = item.type  || '';
+  setAddFormType(item.type || '', { skipTypeChange: true });
   UI.el('f-code').value  = item.code  || '';
   UI.el('f-name').value  = item.name  || '';
   UI.el('f-size').value  = item.variant || item.size || '';   // normalized field name
@@ -3075,25 +3506,18 @@ async function editItem() {
   UI.el('f-buy').value   = item.buyPrice  || item.buy  || '';  // normalized field name
   UI.el('f-sell').value  = item.sellPrice || item.sell || '';  // normalized field name
   // Lock code and type — identifying fields
-  ['f-code','f-type'].forEach(id => {
+  ['f-code'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.disabled=true; el.style.opacity='0.45'; el.style.cursor='not-allowed'; }
   });
-  UI.el('save-btn').textContent = '💾 Save Changes';
+  setAddTypeLocked(true);
+  setSaveBtnLabel('Save changes');
   UI.el('form-mode-label').textContent = '✏️ Edit · ' + (item.name || item.code);
   UI.el('cancel-edit-btn').style.display = 'block';
   _editOriginItemId = item.id;
   updateProfitPreview();
   const existingPhoto = getItemPhoto(item.id);
-  if (existingPhoto) {
-    _addFormPhotoData = existingPhoto;
-    const photoImg    = document.getElementById('add-photo-img');
-    const placeholder = document.getElementById('add-photo-placeholder');
-    const removeBtn   = document.getElementById('add-photo-remove');
-    if (photoImg)    { photoImg.src = existingPhoto; photoImg.style.display = 'block'; }
-    if (placeholder) placeholder.style.display = 'none';
-    if (removeBtn)   removeBtn.style.display = 'block';
-  }
+  if (existingPhoto) applyAddFormPhotoPreview(existingPhoto);
   } catch(e) { console.error("[editItem]", e); toast("Error: " + e.message, "err"); }
 }
 
@@ -4102,7 +4526,7 @@ async function resetAllData() {
 
     // ── 1. Clear IndexedDB using store.clear() ────────────────────
     // This is atomic and reliable — clears entire store in one op
-    const stores = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances', 'wishlist'];
+    const stores = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances', 'wishlist', 'photos'];
     await new Promise((resolve, reject) => {
       const tx = db.transaction(
         stores.filter(s => db.objectStoreNames.contains(s)),
@@ -4146,6 +4570,7 @@ async function resetAllData() {
     // ── 3. Reset in-memory state ──────────────────────────────────
     allItems = [];
     activeDay = null;
+    clearAllPhotoCache();
 
     // ── 4. Reset localStorage (keep session + preferences) ───────
     const keep = {
@@ -4174,7 +4599,7 @@ async function resetAllData() {
   }
 }
 
-const _DATA_STORES = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances', 'wishlist'];
+const _DATA_STORES = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances', 'wishlist', 'photos'];
 const _FB_COLLECTIONS = ['items', 'sales', 'business_days', 'shoe_sizes', 'finances', 'wishlist'];
 
 function _clearAllDayReconKeys() {
@@ -5650,6 +6075,10 @@ const _detailSheet = document.getElementById('detail-sheet');
 if (_detailSheet) _detailSheet.addEventListener('click', function(e) {
   if (e.target === this) closeSheet();
 });
+const _wishDetailSheet = document.getElementById('wishlist-detail-sheet');
+if (_wishDetailSheet) _wishDetailSheet.addEventListener('click', function(e) {
+  if (e.target === this) closeWishlistDetail();
+});
 const _daySummarySheet = document.getElementById('day-summary-sheet');
 if (_daySummarySheet) _daySummarySheet.addEventListener('click', function(e) {
   if (e.target === this) cancelCloseDay();
@@ -7014,7 +7443,6 @@ window.renderList = renderList;
 window.renderSellPage = renderSellPage;
 window.selectExistingItemFromDropdown = selectExistingItemFromDropdown;
 window.resetAllData = resetAllData;
-window.reconcileFinances = reconcileFinances;
 window.clearLocalDataAndPull = clearLocalDataAndPull;
 window.clearCloudDataAndPush = clearCloudDataAndPush;
 window.clearBothLocalAndCloud = clearBothLocalAndCloud;
@@ -7061,16 +7489,13 @@ function onTypeChange() {
   if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
 
   if (isShoe) {
-    _shoeState.group      = null; _shoeState.sizes      = new Set(); _shoeState.perSizeMode= false; _shoeState.shownGroups= new Set();
+    _shoeState.group = null;
+    _shoeState.sizes = new Set();
+    _shoeState.shownGroups = new Set();
+    resetShoeUiPanels();
     renderShoeGroupButtons();
-    const szGrid = UI.el('shoe-sizes-grid');
-    const szWrap = UI.el('shoe-rows-wrap');
-    const szInner = UI.el('sz-grid');
-    if (szGrid)  szGrid.style.display  = 'none';
-    if (szWrap)  szWrap.style.display  = 'none';
-    if (szInner) szInner.innerHTML = '';
-    const sum = UI.el('shoe-selected-summary');
-    if (sum) sum.innerHTML = '';
+  } else {
+    resetShoeUiPanels();
   }
 }
 window.onTypeChange = onTypeChange;
@@ -7301,14 +7726,6 @@ function setShoeMode(mode) {
 }
 window.setShoeMode = setShoeMode;
 
-// ── Restored shoe functions ──────────────────────────────────────
-
-
-
-
-
-
-
 async function upsertShoeSize(record) {
   const all = await dbAll('shoe_sizes');
   const existing = all.find(s => s.itemCode === record.itemCode && s.size === record.size);
@@ -7414,6 +7831,10 @@ async function saveShoeItems(baseCode, baseName, type) {
   await markWishlistStockedForItem(product);
   fbSyncItem(product);
 
+  if (_addFormPhotoData && product?.id) {
+    await setItemPhoto(product.id, _addFormPhotoData);
+  }
+
   if (fbReady && fbDb) {
     try {
       const { doc, setDoc } = await waitForFbImports();
@@ -7473,7 +7894,7 @@ async function openShoeSizeRestock(itemId, size) {
   if (!sizeRec) { toast('Size record not found', 'err'); return; }
   showPage('add');
   setTimeout(() => {
-    UI.el('f-type').value  = item.type  || '';
+    setAddFormType(item.type || '', { skipTypeChange: true });
     UI.el('f-code').value  = item.code  || '';
     UI.el('f-name').value  = item.name  || '';
     UI.el('edit-id').value = 'shoe_restock_' + itemId + '_' + size;
@@ -7488,17 +7909,19 @@ async function openShoeSizeRestock(itemId, size) {
     if (shoePanel) shoePanel.style.display = 'none';
     if (stdPricing) stdPricing.style.display = 'block';
     if (sizeField) sizeField.style.display = 'block';
-    ['f-code','f-type','f-name','f-size'].forEach(id => {
+    ['f-code','f-name','f-size'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.disabled = true; el.style.opacity = '0.45'; el.style.cursor = 'not-allowed'; }
     });
+    setAddTypeLocked(true);
     const qtyEl = UI.el('f-qty');
     if (qtyEl) { qtyEl.disabled = false; qtyEl.style.opacity = '1'; qtyEl.style.cursor = ''; qtyEl.focus(); }
     ['f-buy','f-sell'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.disabled = false; el.style.opacity = '1'; el.style.cursor = ''; }
     });
-    UI.el('save-btn').textContent = '📦 Add to Stock — Size ' + size + ' (currently ' + (sizeRec.qty||0) + ')';
+    setSaveBtnLabel('Add stock — size ' + size);
+    setRestockBanner(true, '📦 Restock size ' + size + ' · current stock: ' + (sizeRec.qty || 0));
     UI.el('form-mode-label').textContent = '📦 Restock Size ' + size + ' · Current: ' + (sizeRec.qty||0);
     UI.el('cancel-edit-btn').style.display = 'block';
   }, 100);
@@ -7513,7 +7936,7 @@ async function openShoeSizeEdit(itemId, size) {
   if (!sizeRec) { toast('Size record not found', 'err'); return; }
   showPage('add');
   setTimeout(() => {
-    UI.el('f-type').value  = item.type  || '';
+    setAddFormType(item.type || '', { skipTypeChange: true });
     UI.el('f-code').value  = item.code  || '';
     UI.el('f-name').value  = item.name  || '';
     UI.el('f-size').value  = size;
@@ -7522,11 +7945,12 @@ async function openShoeSizeEdit(itemId, size) {
     UI.el('f-sell').value  = sizeRec.sellPrice || '';
     UI.el('edit-id').value = 'shoe_edit_' + itemId + '_' + size;
     onTypeChange();
-    ['f-code','f-type','f-name','f-size'].forEach(id => {
+    ['f-code','f-name','f-size'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.disabled = true; el.style.opacity = '0.45'; el.style.cursor = 'not-allowed'; }
     });
-    UI.el('save-btn').textContent = '💾 Save Size ' + size;
+    setAddTypeLocked(true);
+    setSaveBtnLabel('Save size ' + size);
     UI.el('form-mode-label').textContent = '✏️ Edit Size ' + size + ' — ' + item.code;
     UI.el('cancel-edit-btn').style.display = 'block';
     updateProfitPreview();
@@ -7619,7 +8043,6 @@ function renderShoeSummary() {
   const saveBtn = UI.el('save-btn');
   const panel   = UI.el('shoe-size-panel');
   if (saveBtn && panel && panel.style.display !== 'none') {
-    saveBtn.textContent = '+ Save ' + sorted.length + ' shoe size' + (sorted.length>1?'s':'');
+    setSaveBtnLabel('Save ' + sorted.length + ' shoe size' + (sorted.length > 1 ? 's' : ''));
   }
 }
-function togglePerSizeMode() { setShoeMode(_shoeState.perSizeMode ? 'shared' : 'persize'); }

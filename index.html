@@ -196,7 +196,7 @@
 
   <!-- User menu (hidden until login) -->
   <span id="low-stock-badge" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;margin-right:6px;cursor:pointer;" onclick="showPage('list')"></span>
-  <div style="position:relative;flex-shrink:0;" id="user-menu-wrap" style="display:none;">
+  <div id="user-menu-wrap" style="position:relative;flex-shrink:0;display:none;">
 
     <!-- Pill button shows username; click opens dropdown -->
     <button class="user-pill" id="user-pill"
@@ -624,7 +624,7 @@
   <div class="stock-toolbar">
     <div>
       <div class="stock-title">Wishlist</div>
-      <div class="stock-sub" id="wishlist-sub">Prospective items to stock · You can also paste screenshot photos</div>
+      <div class="stock-sub" id="wishlist-sub">Prospective items to stock · Screenshot in another app, return here to auto-import</div>
     </div>
   </div>
 
@@ -649,7 +649,7 @@
         <span class="add-photo-ph-text">Tap to add photo</span>
         <span class="add-photo-ph-hint">Camera, gallery, or paste screenshot</span>
       </div>
-      <button type="button" id="wish-photo-remove" onclick="removeWishPhoto(event)" class="add-photo-remove" style="display:none;">✕ Remove</button>
+      <button type="button" id="wish-photo-remove" onclick="removeWishFormPhoto(event)" class="add-photo-remove" style="display:none;">✕ Remove</button>
     </div>
     <button onclick="saveWishlistItem()" class="stock-add-wish-btn">
       <i class="fa-solid fa-plus"></i> Add to wishlist
@@ -689,66 +689,70 @@
      saveItem() handles validation + IndexedDB write.
      editItem() pre-fills all fields and loads existing photo.
      ============================================================== -->
-<div class="page" id="page-add">
+<div class="page page-add" id="page-add">
 
   <input type="hidden" id="edit-id">
 
-  <!-- Header -->
-  <div class="add-form-header">
-    <span id="form-mode-label">➕ New Item</span>
-    <button id="cancel-edit-btn" class="add-cancel-btn" onclick="cancelEdit()" style="display:none;">✕ Cancel</button>
-  </div>
+  <header class="add-hero">
+    <div class="add-hero-text">
+      <h1 class="add-hero-title" id="form-mode-label">New item</h1>
+      <p class="add-hero-sub" id="add-form-sub">Category → details → stock → save</p>
+    </div>
+    <button type="button" id="cancel-edit-btn" class="add-cancel-btn" onclick="cancelEdit()" style="display:none;">Cancel</button>
+  </header>
 
-  <!-- ── Identity ──────────────────────────────────────────────── -->
-  <div class="add-section">
+  <div id="restock-mode-banner" class="add-restock-banner" style="display:none;" role="status"></div>
+
+  <div class="add-flow">
+
+  <!-- Step 1: Category -->
+  <section class="add-card" aria-labelledby="add-step-cat">
+    <h2 class="add-card-title" id="add-step-cat"><span class="add-step-badge">1</span> Category</h2>
+    <p class="add-card-hint">Pick the main category, then any sub-categories that appear.</p>
+    <input type="hidden" id="f-type" value="">
+    <div id="f-type-cascade" class="add-cascade"></div>
+    <div id="f-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
+  </section>
+
+  <!-- Step 2: Item details -->
+  <section class="add-card" aria-labelledby="add-step-item">
+    <h2 class="add-card-title" id="add-step-item"><span class="add-step-badge">2</span> Item details</h2>
 
     <div class="add-field">
-      <label class="add-label">Category <span class="add-required">*</span></label>
-      <select class="add-select" id="f-type" onchange="onTypeChange()">
-        <option value="">Select category…</option>
+      <label class="add-label" for="f-code">Item code <span class="add-required">*</span></label>
+      <input class="add-input add-mono" id="f-code" type="text"
+             placeholder="e.g. SH001"
+             autocomplete="off" spellcheck="false"
+             style="text-transform:uppercase;"
+             oninput="onCodeInput()">
+    </div>
+
+    <div class="add-field" id="code-match-field">
+      <label class="add-label" for="code-match-select">Existing code match</label>
+      <select class="add-select add-mono" id="code-match-select" disabled>
+        <option value="">No matches yet</option>
       </select>
     </div>
 
-    <div class="add-row-2">
-      <div class="add-field" style="position:relative;">
-        <label class="add-label">Code <span class="add-required">*</span></label>
-        <input class="add-input add-mono" id="f-code" type="text"
-               placeholder="SH001"
-               autocomplete="off" spellcheck="false"
-               style="text-transform:uppercase;"
-               oninput="onCodeInput()"
-               >
-      </div>
-      <div class="add-field" id="code-match-field">
-        <label class="add-label">Select Code</label>
-        <select class="add-select add-mono" id="code-match-select" disabled
-               placeholder="e.g. 42 · L"
-               autocomplete="off" spellcheck="false">
-          <option value="">Code match</option>
-        </select>
-      </div>
+    <div class="add-field">
+      <label class="add-label" for="f-name">Display name <span class="add-hint">optional</span></label>
+      <input class="add-input" id="f-name" type="text"
+             placeholder="e.g. School shoes black"
+             autocomplete="off" spellcheck="false">
     </div>
 
     <div class="add-field" id="f-size-field">
-      <label class="add-label">Size / Variant</label>
+      <label class="add-label" for="f-size">Size / variant</label>
       <input class="add-input" id="f-size" type="text"
-             placeholder="e.g. 42 Â· L"
+             placeholder="e.g. 42, Large, or N/A"
              autocomplete="off" spellcheck="false">
     </div>
+  </section>
 
-    <div class="add-field">
-      <label class="add-label">Name <span class="add-hint">(optional)</span></label>
-      <input class="add-input" id="f-name" type="text"
-             placeholder="e.g. School Shoes · Omo Powder"
-             autocomplete="off" spellcheck="false">
-    </div>
-
-  </div>
-
-  <!-- ── Shoe size panel ───────────────────────────────────────── -->
-  <div id="shoe-size-panel" style="display:none;">
-    <div class="add-section-title">Size Group</div>
-    <div class="add-section" style="padding-bottom:10px;">
+  <!-- Shoe sizes (footwear categories) -->
+  <div id="shoe-size-panel" class="add-card add-card-shoe" style="display:none;">
+    <h2 class="add-card-title"><span class="add-step-badge">3</span> Shoe sizes</h2>
+    <div class="add-section add-section-inset">
       <div class="sg-row">
         <button type="button" class="sg-btn" id="sg-btn-S" onclick="selectSizeGroup('S')">
           <span class="sg-ltr">S</span>
@@ -769,16 +773,16 @@
     </div>
 
     <div id="shoe-sizes-grid" style="display:none;">
-      <div class="add-section-title">Sizes</div>
-      <div class="add-section" style="padding-bottom:10px;">
+      <p class="add-card-hint" style="margin:10px 0 6px;">Tap sizes to stock</p>
+      <div class="add-section add-section-inset" style="padding-bottom:10px;">
         <div id="sz-grid"></div>
         <div id="shoe-selected-summary"></div>
       </div>
     </div>
 
     <div id="shoe-rows-wrap" style="display:none;">
-      <div class="add-section-title">Qty &amp; Pricing</div>
-      <div class="add-section" style="padding-bottom:10px;">
+      <p class="add-card-hint" style="margin:10px 0 6px;">Quantity &amp; pricing</p>
+      <div class="add-section add-section-inset" style="padding-bottom:10px;">
 
         <!-- ── Mode toggle tabs ─────────────────────────────── -->
         <div class="shoe-mode-tabs">
@@ -833,10 +837,10 @@
     </div>
   </div>
 
-  <!-- ── Stock & Pricing (standard items) ─────────────────────── -->
-  <div id="std-pricing-section">
-    <div class="add-section-title">Stock &amp; Pricing</div>
-    <div class="add-section">
+  <!-- Step 3: Stock & pricing (standard items) -->
+  <section id="std-pricing-section" class="add-card">
+    <h2 class="add-card-title"><span class="add-step-badge">3</span> Stock &amp; pricing</h2>
+    <div class="add-section add-section-inset">
 
       <!-- Qty · Buy · Sell in one row -->
       <div class="add-row-3">
@@ -880,26 +884,29 @@
       </div>
 
     </div>
-  </div>
+  </section>
 
-  <!-- ── Photo ────────────────────────────────────────────────── -->
-  <div class="add-section-title">Photo <span class="add-hint">optional</span></div>
-  <div class="add-section">
+  <!-- Step 4: Photo -->
+  <section class="add-card add-card-photo">
+    <h2 class="add-card-title"><span class="add-step-badge">4</span> Photo <span class="add-hint">optional</span></h2>
     <div class="add-photo-box" id="add-photo-preview" onclick="triggerAddPhotoUpload()">
       <img id="add-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
       <div id="add-photo-placeholder" class="add-photo-ph">
         <span class="add-photo-ph-icon">📷</span>
-        <span class="add-photo-ph-text">Tap to add photo</span>
-        <span class="add-photo-ph-hint">Camera, gallery, or paste screenshot</span>
+        <span class="add-photo-ph-text">Add a photo</span>
+        <span class="add-photo-ph-hint">Tap — camera, gallery, or screenshot</span>
       </div>
-      <button id="add-photo-remove" onclick="removeAddPhoto(event)" class="add-photo-remove" style="display:none;">✕ Remove</button>
+      <button type="button" id="add-photo-remove" onclick="removeAddPhoto(event)" class="add-photo-remove" style="display:none;">Remove</button>
     </div>
-  </div>
+  </section>
 
-  <!-- ── Save ──────────────────────────────────────────────────── -->
-  <button class="add-save-btn" id="save-btn" onclick="saveItem()">
-    <i class="fa-solid fa-check"></i> Add to Inventory
-  </button>
+  </div><!-- /add-flow -->
+
+  <footer class="add-footer">
+    <button type="button" class="add-save-btn" id="save-btn" onclick="saveItem()">
+      <i class="fa-solid fa-check"></i> Add to inventory
+    </button>
+  </footer>
 
 </div><!-- /page-add -->
 
@@ -1598,6 +1605,37 @@
 
 
 <!-- ==============================================================
+     SHEET: WISHLIST ITEM DETAIL
+     ============================================================== -->
+<div class="sheet-overlay" id="wishlist-detail-sheet">
+  <div class="sheet wish-detail-sheet">
+    <div class="sheet-handle"></div>
+    <button type="button" class="wish-detail-close" onclick="closeWishlistDetail()" aria-label="Close">✕</button>
+
+    <div id="wd-photo-wrap" class="wish-detail-photo-wrap">
+      <img id="wd-photo-img" class="wish-detail-photo" src="" alt="" style="display:none;">
+      <div id="wd-photo-empty" class="wish-detail-photo-empty">📷</div>
+    </div>
+
+    <div class="wish-detail-body">
+      <div id="wd-name" class="wish-detail-name"></div>
+      <div id="wd-code" class="wish-detail-code"></div>
+      <div id="wd-meta" class="wish-detail-meta"></div>
+      <div id="wd-note" class="wish-detail-note" style="display:none;"></div>
+    </div>
+
+    <div class="wish-detail-actions">
+      <button type="button" class="wish-detail-btn stock" onclick="wishlistDetailStock()">
+        <i class="fa-solid fa-boxes-stacked"></i> Stock it
+      </button>
+      <button type="button" class="wish-detail-btn delete" onclick="wishlistDetailDelete()">
+        <i class="fa-solid fa-trash"></i> Remove
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ==============================================================
      SHEET: ITEM DETAIL  (id="detail-sheet")
      Opens when a stock card is tapped.
      openSheet(id) in app.js populates all *id* elements.
@@ -1933,11 +1971,7 @@
   </div>
 </div><!-- /install-banner -->
 
-<!-- ── App JavaScript ──────────────────────────────────────────── -->
-<script src="app.js"></script>
-
-
-<!-- ==========================================================<!-- ==============================================================
+<!-- ==============================================================
      PAGE: DAY CASH FLOW  (id="page-day")
      ============================================================== -->
 <div class="page" id="page-day">
@@ -2246,5 +2280,6 @@
   </div>
 </div>
 
+<script src="app.js"></script>
 </body>
 </html>
