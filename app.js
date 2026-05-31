@@ -2286,15 +2286,64 @@ async function renderDashboard() {
     }
   }
 
-  // ── Alerts ────────────────────────────────────────────────
+  // ── Out of Stock & Low Stock lists ───────────────────────
   const outStk = allItems.filter(i => i.qty === 0);
   const lowStk = allItems.filter(i => i.qty > 0 && i.qty <= LOW_STOCK_LEVEL);
+
+  // Clear legacy alert strip
   const alertEl = document.getElementById('d-alerts');
-  if (alertEl) {
-    let html = '';
-    if (outStk.length) html += `<div style="background:var(--red-light);border:1px solid rgba(192,57,43,0.25);border-radius:var(--r);padding:10px 12px;margin-bottom:6px;font-size:12px;color:var(--red);font-weight:600;">⚠️ <strong>${outStk.length}</strong> out of stock — ${outStk.slice(0,4).map(i=>escapeHtml(i.code)).join(', ')}${outStk.length>4?' +more':''}</div>`;
-    if (lowStk.length) html += `<div style="background:var(--amber-light);border:1px solid #f5d9a0;border-radius:var(--r);padding:10px 12px;margin-bottom:6px;font-size:12px;color:var(--amber);font-weight:600;">📉 <strong>${lowStk.length}</strong> running low — ${lowStk.slice(0,4).map(i=>escapeHtml(i.code)).join(', ')}${lowStk.length>4?' +more':''}</div>`;
-    alertEl.innerHTML = html;
+  if (alertEl) alertEl.innerHTML = '';
+
+  // Out of Stock — full item rows with Restock button
+  const outWrap = document.getElementById('d-out-of-stock-wrap');
+  const outList = document.getElementById('d-out-of-stock-list');
+  if (outWrap && outList) {
+    if (outStk.length) {
+      outWrap.style.display = '';
+      outList.innerHTML = outStk.map(i => {
+        const t = getTypeObj(i.type || '');
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1.5px solid rgba(192,57,43,0.2);border-radius:var(--r);margin-bottom:6px;">
+          <span style="font-size:20px;flex-shrink:0;">${t.emoji}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(i.name || i.code)}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:1px;">${escapeHtml(i.code)} · sell ${fmt(i.sellPrice || i.sell || 0)}</div>
+          </div>
+          <button onclick="openSheetRestock(${i.id})"
+            style="flex-shrink:0;padding:7px 13px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+            + Restock
+          </button>
+        </div>`;
+      }).join('');
+    } else {
+      outWrap.style.display = 'none';
+      outList.innerHTML = '';
+    }
+  }
+
+  // Low Stock — same layout with amber Restock button
+  const lowWrap = document.getElementById('d-low-stock-wrap');
+  const lowList = document.getElementById('d-low-stock-list');
+  if (lowWrap && lowList) {
+    if (lowStk.length) {
+      lowWrap.style.display = '';
+      lowList.innerHTML = lowStk.map(i => {
+        const t = getTypeObj(i.type || '');
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1.5px solid #f5d9a0;border-radius:var(--r);margin-bottom:6px;">
+          <span style="font-size:20px;flex-shrink:0;">${t.emoji}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(i.name || i.code)}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:1px;">${escapeHtml(i.code)} · ${i.qty} left · sell ${fmt(i.sellPrice || i.sell || 0)}</div>
+          </div>
+          <button onclick="openSheetRestock(${i.id})"
+            style="flex-shrink:0;padding:7px 13px;background:#d97706;color:white;border:none;border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+            + Restock
+          </button>
+        </div>`;
+      }).join('');
+    } else {
+      lowWrap.style.display = 'none';
+      lowList.innerHTML = '';
+    }
   }
 
   // ── Insights ──────────────────────────────────────────────
@@ -4281,6 +4330,21 @@ function toggleRestock() {
   }
 }
 
+// Open item sheet and jump straight to restock panel (used from dashboard)
+async function openSheetRestock(id) {
+  showPage('list');
+  await new Promise(r => setTimeout(r, 80));
+  await openSheet(id);
+  // Small delay so the sheet finishes rendering, then open restock panel
+  await new Promise(r => setTimeout(r, 120));
+  const panel = document.getElementById('restock-panel');
+  if (panel) {
+    panel.style.display = 'block';
+    const qtyInput = document.getElementById('restock-qty');
+    if (qtyInput) { qtyInput.value = ''; qtyInput.focus(); }
+  }
+}
+
 async function confirmRestock() {
   const restockBtn = document.querySelector('#restock-panel button');
   if (restockBtn) { restockBtn.disabled = true; restockBtn.style.opacity = '0.5'; }
@@ -4920,133 +4984,81 @@ async function renderFinancePage() {
 
   const allEntries = await dbAll('finances');
 
-  // ── All entries except reconciliation markers ──────────────
   const poolTypes = ['revenue','injection','investment','stock_purchase','expense','withdrawal','other'];
   const poolEntries = allEntries.filter(e => poolTypes.includes(e.type));
 
-  // ── Correct accounting calculations (all time) ─────────────
-  //
-  // MONEY IN:
-  //   Revenue      = all sales revenue (auto-recorded per sale)
-  //   Injections   = manual cash injections + owner investments
-  //
-  // MONEY OUT:
-  //   Stock bought = stock_purchase entries (auto on every restock)
-  //   Expenses     = expense + other entries
-  //   Withdrawals  = withdrawal entries
-  //
-  // NET POSITION = Total In − Total Out
-  // GROSS PROFIT = sum of profit field on revenue entries (revenue − cost of goods)
+  // ── KPIs (all time) ──────────────────────────────────────
+  const invested  = poolEntries.filter(e=>e.type==='injection'||e.type==='investment'||e.type==='stock_purchase').reduce((s,e)=>s+(e.amount||0),0);
+  const salesPool = poolEntries.filter(e=>e.type==='revenue').reduce((s,e)=>s+(e.amount||0),0);
+  const stockCostReleased = poolEntries.filter(e=>e.type==='revenue').reduce((s,e)=>s+(e.costAmount||Math.max(0,(e.amount||0)-(e.profit||0))),0);
+  const expenses  = poolEntries.filter(e=>e.type==='expense'||e.type==='other').reduce((s,e)=>s+(e.amount||0),0);
+  const withdrawn = poolEntries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+(e.amount||0),0);
+  const businessPool = invested - stockCostReleased - expenses;
+  const net       = salesPool - withdrawn;
 
-  const totalRevenue   = poolEntries.filter(e=>e.type==='revenue').reduce((s,e)=>s+(e.amount||0),0);
-  const grossProfit    = poolEntries.filter(e=>e.type==='revenue').reduce((s,e)=>s+(e.profit||0),0);
-  const injections     = poolEntries.filter(e=>e.type==='injection'||e.type==='investment').reduce((s,e)=>s+(e.amount||0),0);
-  const stockPurchased = poolEntries.filter(e=>e.type==='stock_purchase').reduce((s,e)=>s+(e.amount||0),0);
-  const expenses       = poolEntries.filter(e=>e.type==='expense'||e.type==='other').reduce((s,e)=>s+(e.amount||0),0);
-  const withdrawn      = poolEntries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+(e.amount||0),0);
-
-  const totalIn        = totalRevenue + injections;
-  const totalOut       = stockPurchased + expenses + withdrawn;
-  const netPosition    = totalIn - totalOut;
-  const margin         = totalRevenue > 0 ? (grossProfit / totalRevenue * 100) : 0;
-
-  // ── Update KPI tiles ───────────────────────────────────────
   const setT = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=fmt(v); };
-  const setLbl = (id, text) => {
+  const setLabel = (id, text) => {
     const el = document.getElementById(id);
     const lbl = el && el.parentElement ? el.parentElement.querySelector('.fin-kpi-lbl') : null;
     if (lbl) lbl.textContent = text;
   };
-
-  // Row 1: Revenue | Profit | Net Position
-  setLbl('fin-revenue',  'Revenue');
-  setLbl('fin-profit',   'Gross Profit');
-  setLbl('fin-net',      'Net Position');
-  setT('fin-revenue',    totalRevenue);
-  setT('fin-profit',     grossProfit);
-
-  const netEl  = document.getElementById('fin-net');
-  const netKpi = document.getElementById('fin-net-kpi');
-  if (netEl) {
-    netEl.textContent = (netPosition>=0?'+':'-')+fmt(Math.abs(netPosition));
-    netEl.style.color = netPosition>=0 ? 'var(--green)' : 'var(--red)';
+  setLabel('fin-net', 'Sales Pool');
+  setLabel('fin-invested', 'Business Pool');
+  setLabel('fin-expenses', 'Business Spent');
+  setLabel('fin-withdrawn', 'Sales Out');
+  const finTypeEl = document.getElementById('fin-type');
+  if (finTypeEl) {
+    const optionLabels = {
+      injection: 'Cash to Business Pool',
+      investment: 'Owner Investment',
+      stock_purchase: 'Stock Added',
+      expense: 'Business Expense',
+      withdrawal: 'Sales Withdrawal',
+      other: 'Other Business Spend'
+    };
+    Object.entries(optionLabels).forEach(([value, label]) => {
+      const opt = finTypeEl.querySelector('option[value="' + value + '"]');
+      if (opt) opt.textContent = label;
+    });
   }
-  if (netKpi) netKpi.className = 'fin-kpi '+(netPosition>=0?'green':'red');
+  const filterInvestment = document.getElementById('fin-filter-investment');
+  const filterExpense = document.getElementById('fin-filter-expense');
+  if (filterInvestment) filterInvestment.textContent = 'Business';
+  if (filterExpense) filterExpense.textContent = 'Out';
+  setT('fin-revenue',  0);
+  setT('fin-profit',   0);
+  setT('fin-invested', businessPool);
+  setT('fin-expenses', expenses);
+  setT('fin-withdrawn',withdrawn);
 
-  // Row 2: Injected | Stock Bought | Expenses | Withdrawn
-  setLbl('fin-invested',  '💉 Injected');
-  setLbl('fin-expenses',  '💸 Expenses');
-  setLbl('fin-withdrawn', '🏧 Withdrawn');
-  setT('fin-invested',  injections);
-  setT('fin-expenses',  expenses);
-  setT('fin-withdrawn', withdrawn);
-
-  // Stock purchased tile (reuse fin-margin slot)
   const marginEl = document.getElementById('fin-margin');
   if (marginEl) {
-    marginEl.textContent = fmt(stockPurchased);
+    marginEl.textContent = '0%';
     marginEl.style.color = 'var(--text)';
   }
-  const marginLblEl = marginEl && marginEl.parentElement ? marginEl.parentElement.querySelector('.fin-kpi-lbl') : null;
-  if (marginLblEl) marginLblEl.textContent = '🛍️ Stock Bought';
+  const netEl  = document.getElementById('fin-net');
+  const netKpi = document.getElementById('fin-net-kpi');
+  if (netEl)  { netEl.textContent = (net>=0?'':'-')+fmt(Math.abs(net)); netEl.style.color = net>=0?'var(--green)':'var(--red)'; }
+  if (netKpi) { netKpi.className = 'fin-kpi '+(net>=0?'green':'red'); }
 
-  // ── Balance equation banner ────────────────────────────────
-  // Render or update a simple balance line below the KPIs
-  let balEl = document.getElementById('fin-balance-line');
-  if (!balEl) {
-    balEl = document.createElement('div');
-    balEl.id = 'fin-balance-line';
-    balEl.style.cssText = 'margin:0 12px 8px;padding:10px 14px;border-radius:var(--r-lg);border:1.5px solid;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;';
-    const summaryLine = document.getElementById('fin-summary-line');
-    if (summaryLine) summaryLine.parentElement.insertBefore(balEl, summaryLine);
-  }
-  const bColor = netPosition>=0 ? '#a8d8b5' : '#fca5a5';
-  const bBg    = netPosition>=0 ? 'var(--green-light)' : 'var(--red-light)';
-  const bText  = netPosition>=0 ? 'var(--green)' : 'var(--red)';
-  balEl.style.borderColor  = bColor;
-  balEl.style.background   = bBg;
-  balEl.innerHTML =
-    '<div style="font-size:11px;color:var(--muted);line-height:1.7;">' +
-      'In: <b style="color:var(--green);">+'+fmt(totalIn)+'</b>' +
-      ' &nbsp;|&nbsp; Out: <b style="color:var(--red);">−'+fmt(totalOut)+'</b>' +
-    '</div>' +
-    '<div style="font-size:14px;font-weight:900;font-family:var(--mono);color:'+bText+';white-space:nowrap;">' +
-      (netPosition>=0?'▲ ':'▼ ')+fmt(Math.abs(netPosition)) +
-    '</div>';
-
-  // ── Transaction list ───────────────────────────────────────
-  // Show manual entries only (not auto-revenue; those live in Sales)
-  // "In"  filter = injections + investments (money owner brought in)
-  // "Out" filter = stock_purchase + expenses + withdrawals + other (money spent)
-  const manualTypes = ['injection','investment','stock_purchase','expense','withdrawal','other'];
-  const listPool = poolEntries.filter(e => manualTypes.includes(e.type));
-
+  // ── Transaction list ─────────────────────────────────────
   let listEntries;
   if (_finFilter === 'all') {
-    listEntries = listPool;
+    listEntries = poolEntries;
   } else if (_finFilter === 'investment') {
-    // "In" — money coming into the business from the owner
-    listEntries = listPool.filter(e=>e.type==='injection'||e.type==='investment');
+    listEntries = poolEntries.filter(e=>e.type==='injection'||e.type==='investment'||e.type==='stock_purchase');
   } else if (_finFilter === 'expense') {
-    // "Out" — all money leaving the business
-    listEntries = listPool.filter(e=>e.type==='stock_purchase'||e.type==='expense'||e.type==='withdrawal'||e.type==='other');
+    listEntries = poolEntries.filter(e=>e.type==='expense'||e.type==='withdrawal'||e.type==='other');
   } else {
-    listEntries = listPool.filter(e=>e.type===_finFilter);
+    listEntries = poolEntries.filter(e=>e.type===_finFilter);
   }
   const sorted = [...listEntries].sort((a,b)=>new Date(b.date||b.createdAt)-new Date(a.date||a.createdAt));
 
   const summaryLine = document.getElementById('fin-summary-line');
   if (summaryLine) {
-    const inAmt  = listPool.filter(e=>e.type==='injection'||e.type==='investment').reduce((s,e)=>s+e.amount,0);
-    const outAmt = listPool.filter(e=>e.type==='stock_purchase'||e.type==='expense'||e.type==='withdrawal'||e.type==='other').reduce((s,e)=>s+e.amount,0);
-    summaryLine.textContent = listPool.length + ' entr'+(listPool.length===1?'y':'ies')+' · In: '+fmt(inAmt)+' · Out: '+fmt(outAmt);
+    const total = listEntries.reduce((s,e)=>s+e.amount,0);
+    summaryLine.textContent = sorted.length + ' entr'+(sorted.length===1?'y':'ies')+' · '+fmt(total);
   }
-
-  // Update filter button labels
-  const filterIn  = document.getElementById('fin-filter-investment');
-  const filterOut = document.getElementById('fin-filter-expense');
-  if (filterIn)  filterIn.textContent  = '💉 In';
-  if (filterOut) filterOut.textContent = '💸 Out';
 
   renderFinList(sorted);
 }
@@ -5097,54 +5109,41 @@ function renderFinList(entries) {
   const list = document.getElementById('fin-list');
   if (!list) return;
   if (!entries.length) {
-    list.innerHTML = '<div style="text-align:center;padding:28px 16px;color:var(--muted);font-size:13px;">No transactions yet.<br><span style="font-size:11px;">Use the form above to record a transaction.</span></div>';
+    list.innerHTML = '<div style="text-align:center;padding:28px 16px;color:var(--muted);font-size:13px;">No entries yet.<br><span style="font-size:11px;">Use the form above to record a transaction.</span></div>';
     return;
   }
-
-  // cfg: icon, colour, label, out (true = money leaves business)
   const cfgMap = {
-    injection:     { icon:'💉', color:'var(--green)',  label:'Cash Injection',  out:false },
-    investment:    { icon:'💵', color:'var(--green)',  label:'Owner Investment', out:false },
-    stock_purchase:{ icon:'🛍️', color:'#1d4ed8',       label:'Stock Purchase',  out:true  },
-    expense:       { icon:'💸', color:'var(--red)',    label:'Business Expense', out:true  },
-    withdrawal:    { icon:'🏧', color:'#d97706',       label:'Withdrawal',       out:true  },
-    other:         { icon:'📝', color:'var(--muted)',  label:'Other',            out:true  },
+    revenue:       { icon:'KES', color:'var(--accent2)', label:'Sale to Sales Pool', out:false },
+    injection:     { icon:'💉', color:'var(--green)', label:'Injection',      out:false },
+    investment:    { icon:'💵', color:'var(--green)', label:'Investment',     out:false },
+    stock_purchase:{ icon:'🛍️', color:'#1d4ed8',      label:'Stock Purchase', out:true  },
+    expense:       { icon:'💸', color:'var(--red)',   label:'Expense',        out:true  },
+    withdrawal:    { icon:'🏧', color:'#d97706',      label:'Withdrawal',     out:true  },
+    other:         { icon:'📝', color:'var(--muted)', label:'Other',          out:false },
   };
-
   const rows = entries.map((e, i) => {
-    const c  = cfgMap[e.type] || cfgMap.other;
+    let c  = cfgMap[e.type] || cfgMap.other;
+    if (e.type === 'stock_purchase') c = { ...c, label: 'Stock Investment', out: false };
+    if (e.type === 'expense') c = { ...c, label: 'Business Expense', out: true };
+    if (e.type === 'withdrawal') c = { ...c, label: 'Sales Withdrawal', out: true };
+    if (e.type === 'other') c = { ...c, out: true };
     const ds = e.date || (e.createdAt||'').split('T')[0];
-    const fd = ds ? new Date(ds+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
+    const fd = ds ? new Date(ds+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '—';
     const bg = i % 2 === 0 ? 'var(--surface)' : '#f7faf7';
-    const amtColor = c.out ? 'var(--red)' : 'var(--green)';
-    const sign     = c.out ? '−' : '+';
     const delBtn = (currentUser&&currentUser.role==='super')
-      ? '<button onclick="deleteFinanceEntry('+e.id+')" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;flex-shrink:0;" title="Delete">✕</button>'
+      ? '<button onclick="deleteFinanceEntry('+e.id+')" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;flex-shrink:0;">✕</button>'
       : '';
-    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:'+bg+';border-bottom:1px solid var(--border);">' +
+    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:'+bg+';border-bottom:1px solid var(--border);">' +
       '<span style="font-size:18px;flex-shrink:0;">'+c.icon+'</span>' +
       '<div style="flex:1;min-width:0;">' +
         '<div style="font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(e.description||c.label)+'</div>' +
         '<div style="font-size:10px;color:var(--muted);margin-top:1px;">'+c.label+' · '+fd+'</div>' +
       '</div>' +
-      '<div style="font-size:14px;font-weight:900;font-family:var(--mono);color:'+amtColor+';flex-shrink:0;">'+sign+fmt(e.amount)+'</div>' +
+      '<div style="font-size:14px;font-weight:900;font-family:var(--mono);color:'+c.color+';flex-shrink:0;">'+(c.out?'-':'+')+fmt(e.amount)+'</div>' +
       delBtn +
     '</div>';
   });
-
-  // Running balance footer
-  const totalIn  = entries.filter(e=>!((cfgMap[e.type]||cfgMap.other).out)).reduce((s,e)=>s+e.amount,0);
-  const totalOut = entries.filter(e=> (cfgMap[e.type]||cfgMap.other).out ).reduce((s,e)=>s+e.amount,0);
-  const net      = totalIn - totalOut;
-  const netColor = net>=0?'var(--green)':'var(--red)';
-  const footer = entries.length > 1
-    ? '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--surface2);border-top:2px solid var(--border);font-size:11px;font-weight:700;">' +
-        '<span style="color:var(--muted);">'+entries.length+' entries · In: <span style="color:var(--green);">+'+fmt(totalIn)+'</span>  Out: <span style="color:var(--red);">−'+fmt(totalOut)+'</span></span>' +
-        '<span style="font-family:var(--mono);color:'+netColor+';">'+(net>=0?'▲ +':'▼ ')+fmt(Math.abs(net))+'</span>' +
-      '</div>'
-    : '';
-
-  list.innerHTML = '<div style="border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;">' + rows.join('') + footer + '</div>';
+  list.innerHTML = '<div style="border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;">' + rows.join('') + '</div>';
 }
 
 async function saveFinanceEntry() {
@@ -5749,6 +5748,7 @@ window.closeUserMenu = closeUserMenu;
 window.confirmCloseDay = confirmCloseDay;
 window.confirmLogout = confirmLogout;
 window.confirmRestock = confirmRestock;
+window.openSheetRestock = openSheetRestock;
 window.confirmSale = confirmSale;
 window.dashSetPeriod = dashSetPeriod;
 window.deleteItem = deleteItem;
