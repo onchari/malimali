@@ -1908,7 +1908,7 @@
   </div>
 
   <!-- ── Sales KPIs (always visible) ─────────────────────── -->
-  <div class="day-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px;">
+  <div class="day-kpi-grid" id="day-sales-details" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px;">
     <div class="day-kpi day-kpi-green">
       <div id="day-sales-count" class="day-kpi-val">0</div>
       <div class="day-kpi-lbl">Sales</div>
@@ -1951,7 +1951,7 @@
             <div class="day-recon-field-label">Cash at Hand</div>
             <div class="day-recon-field-sub">Loose notes &amp; coins (float)</div>
           </div>
-          <input id="op-cash" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="op-cash" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">🏧</span>
@@ -1959,7 +1959,7 @@
             <div class="day-recon-field-label">Amount in Till</div>
             <div class="day-recon-field-sub">Cash inside the register</div>
           </div>
-          <input id="op-till" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="op-till" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
         </div>
         <div class="day-recon-row" style="border-bottom:none;">
           <span class="day-recon-emoji">📱</span>
@@ -1967,7 +1967,7 @@
             <div class="day-recon-field-label">M-Pesa Float</div>
             <div class="day-recon-field-sub">M-Pesa till balance</div>
           </div>
-          <input id="op-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="op-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
         </div>
         <button onclick="lockOpeningBalances()" class="day-recon-btn" style="background:var(--green);">
           💾 Save &amp; Lock Opening
@@ -2013,7 +2013,7 @@
             <div class="day-recon-field-label">Cash Injected</div>
             <div class="day-recon-field-sub">Extra money added today</div>
           </div>
-          <input id="cl-injected" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-injected" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">💵</span>
@@ -2021,7 +2021,7 @@
             <div class="day-recon-field-label">Cash at Hand</div>
             <div class="day-recon-field-sub">Loose notes &amp; coins now</div>
           </div>
-          <input id="cl-cash" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-cash" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">🏧</span>
@@ -2029,7 +2029,7 @@
             <div class="day-recon-field-label">Amount in Till</div>
             <div class="day-recon-field-sub">Cash in register now</div>
           </div>
-          <input id="cl-till" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-till" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">📱</span>
@@ -2037,7 +2037,7 @@
             <div class="day-recon-field-label">M-Pesa Float</div>
             <div class="day-recon-field-sub">M-Pesa balance now</div>
           </div>
-          <input id="cl-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">💸</span>
@@ -2045,7 +2045,7 @@
             <div class="day-recon-field-label">Expenses Paid</div>
             <div class="day-recon-field-sub">Cash paid out for costs</div>
           </div>
-          <input id="cl-expenses" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-expenses" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
         </div>
         <div class="day-recon-row" style="border-bottom:none;">
           <span class="day-recon-emoji">🏧</span>
@@ -2053,7 +2053,7 @@
             <div class="day-recon-field-label">Amount Withdrawn</div>
             <div class="day-recon-field-sub">Cash taken by owner</div>
           </div>
-          <input id="cl-withdrawn" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
+          <input id="cl-withdrawn" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
         </div>
         <button onclick="reconcileDay()" class="day-recon-btn">
           🔍 Reconcile &amp; Close Day

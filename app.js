@@ -2725,6 +2725,15 @@ async function renderDashboard() {
     // Potential profit still in stock
     if (potProfit > 0) insights.push({ icon:'💎', text:`Potential profit in stock: <strong>${fmt(potProfit)}</strong>`, color:'var(--green)' });
 
+    try {
+      const money = await _computeFinanceMovement();
+      insights.push({
+        icon:'KES',
+        text:`Business pool: <strong>${fmt(money.businessPool)}</strong> · stock sold cost ${fmt(money.salesCostOut)} · profit ${fmt(money.salesProfit)}`,
+        color: money.businessPool >= 0 ? 'var(--accent)' : 'var(--red)'
+      });
+    } catch(_) { /* finance insight is non-critical */ }
+
     // Stock turnover
     if (totalPiecesSold > 0 && totalQty > 0) {
       const ratio = (totalPiecesSold/(totalPiecesSold+totalQty)*100).toFixed(0);
@@ -5772,6 +5781,177 @@ function updateFinTypeColor() {
 
 
 // ── Shoe group expand/collapse ────────────────────────────────────
+async function _cleanupFinanceCoherence() {
+  if (window._financeCoherenceCleaned) return;
+  window._financeCoherenceCleaned = true;
+  const entries = await dbAll('finances');
+  let changedAny = false;
+  for (const e of entries) {
+    if (e.type === 'reconciliation') {
+      await dbDelete('finances', e.id);
+      changedAny = true;
+      continue;
+    }
+    let changed = false;
+    if (e.type === 'investment') { e.type = 'injection'; changed = true; }
+    if (e.type === 'other') { e.type = 'expense'; changed = true; }
+    if (changed) { await dbPut('finances', e); changedAny = true; }
+  }
+  if (changedAny) scheduleSync();
+}
+
+async function _computeFinanceMovement() {
+  await _cleanupFinanceCoherence();
+  const finances = await dbAll('finances');
+  const sales = await dbAll('sales');
+  const cleanFin = finances.filter(e => e.type !== 'reconciliation');
+  const cashToBusiness = cleanFin.filter(e => e.type === 'injection' || e.type === 'investment').reduce((s,e)=>s+(e.amount||0),0);
+  const stockAdded = cleanFin.filter(e => e.type === 'stock_purchase').reduce((s,e)=>s+(e.amount||0),0);
+  const businessSpend = cleanFin.filter(e => e.type === 'expense' || e.type === 'other').reduce((s,e)=>s+(e.amount||0),0);
+  const personalWithdraws = cleanFin.filter(e => e.type === 'withdrawal').reduce((s,e)=>s+(e.amount||0),0);
+  const salesRevenue = sales.reduce((s,e)=>s+(e.revenue||0),0);
+  const salesProfit = sales.reduce((s,e)=>s+(e.profit||0),0);
+  const salesCostOut = sales.reduce((s,e)=>{
+    const cost = Number.isFinite(e.buyPrice) && e.qty ? (e.buyPrice||0) * (e.qty||0) : ((e.revenue||0) - (e.profit||0));
+    return s + Math.max(0, cost || 0);
+  },0);
+  const businessPool = cashToBusiness + stockAdded - salesCostOut + salesProfit - businessSpend - personalWithdraws;
+  return { finances: cleanFin, sales, cashToBusiness, stockAdded, businessSpend, personalWithdraws, salesRevenue, salesProfit, salesCostOut, businessPool };
+}
+
+function _setFinanceRecordOptions() {
+  const sel = document.getElementById('fin-type');
+  if (!sel) return;
+  const cur = ['injection','expense','withdrawal'].includes(sel.value) ? sel.value : '';
+  sel.innerHTML =
+    '<option value="">Select...</option>' +
+    '<option value="injection">Cash to Business</option>' +
+    '<option value="expense">Business Expenses</option>' +
+    '<option value="withdrawal">Personal Withdraws</option>';
+  sel.value = cur;
+}
+
+renderFinancePage = async function() {
+  const dateEl = document.getElementById('fin-date');
+  if (dateEl && !dateEl.value) dateEl.value = todayDateStr();
+  _setFinanceRecordOptions();
+  const money = await _computeFinanceMovement();
+  const setT = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=fmt(v); };
+  const setLabel = (id, text) => {
+    const el = document.getElementById(id);
+    const lbl = el && el.parentElement ? el.parentElement.querySelector('.fin-kpi-lbl') : null;
+    if (lbl) lbl.textContent = text;
+  };
+  setLabel('fin-net', 'Business Pool');
+  setLabel('fin-invested', 'Sales Out');
+  setLabel('fin-expenses', 'Business Spend');
+  setLabel('fin-withdrawn', 'Personal Withdraws');
+  setT('fin-net', money.businessPool);
+  setT('fin-invested', money.salesCostOut);
+  setT('fin-expenses', money.businessSpend);
+  setT('fin-withdrawn', money.personalWithdraws);
+  setT('fin-revenue', money.salesRevenue);
+  setT('fin-profit', money.salesProfit);
+  const marginEl = document.getElementById('fin-margin');
+  if (marginEl) marginEl.textContent = money.salesRevenue > 0 ? (money.salesProfit / money.salesRevenue * 100).toFixed(1) + '%' : '0%';
+  const netEl = document.getElementById('fin-net');
+  const netKpi = document.getElementById('fin-net-kpi');
+  if (netEl) netEl.style.color = money.businessPool >= 0 ? 'var(--green)' : 'var(--red)';
+  if (netKpi) netKpi.className = 'fin-kpi ' + (money.businessPool >= 0 ? 'green' : 'red');
+  const filterInvestment = document.getElementById('fin-filter-investment');
+  const filterExpense = document.getElementById('fin-filter-expense');
+  if (filterInvestment) filterInvestment.textContent = 'Business';
+  if (filterExpense) filterExpense.textContent = 'Out';
+
+  const saleRows = money.sales.map(s => ({
+    id: 'sale_' + s.id,
+    type: 'sale_out',
+    amount: Math.max(0, (s.revenue||0) - (s.profit||0)),
+    profit: s.profit || 0,
+    revenue: s.revenue || 0,
+    description: 'Sale: ' + (s.itemName || s.itemCode || 'item') + ' x ' + (s.qty || 1),
+    date: s.businessDate || (s.date || '').split('T')[0],
+    createdAt: s.date,
+    isSaleRow: true
+  }));
+  const financeRows = money.finances.filter(e => ['injection','stock_purchase','expense','withdrawal'].includes(e.type));
+  let listEntries = [...financeRows, ...saleRows];
+  if (_finFilter === 'investment') listEntries = listEntries.filter(e => e.type === 'injection' || e.type === 'stock_purchase');
+  if (_finFilter === 'expense') listEntries = listEntries.filter(e => e.type === 'expense' || e.type === 'withdrawal' || e.type === 'sale_out');
+  listEntries.sort((a,b)=>new Date(b.date||b.createdAt||0)-new Date(a.date||a.createdAt||0));
+  const summaryLine = document.getElementById('fin-summary-line');
+  if (summaryLine) {
+    summaryLine.textContent = 'Pool ' + fmt(money.businessPool) + ' · Cash in ' + fmt(money.cashToBusiness) + ' · Stock added ' + fmt(money.stockAdded) + ' · Profit ' + fmt(money.salesProfit);
+  }
+  renderFinList(listEntries);
+};
+
+renderFinList = function(entries) {
+  const list = document.getElementById('fin-list');
+  if (!list) return;
+  if (!entries.length) {
+    list.innerHTML = '<div style="text-align:center;padding:28px 16px;color:var(--muted);font-size:13px;">No transactions yet.</div>';
+    return;
+  }
+  const cfgMap = {
+    sale_out:       { icon:'KES', color:'var(--accent2)', label:'Sales Out', out:true },
+    injection:      { icon:'KES', color:'var(--green)', label:'Cash to Business', out:false },
+    stock_purchase: { icon:'+', color:'#1d4ed8', label:'Stock Added', out:false },
+    expense:        { icon:'-', color:'var(--red)', label:'Business Expense', out:true },
+    withdrawal:     { icon:'-', color:'#d97706', label:'Personal Withdraw', out:true }
+  };
+  const groupLabel = e => e.type === 'sale_out' ? 'Sales' : (e.type === 'injection' || e.type === 'stock_purchase' ? 'Business In' : 'Business Out');
+  let lastGroup = '';
+  const rows = entries.map(e => {
+    const c = cfgMap[e.type] || cfgMap.expense;
+    const ds = e.date || (e.createdAt||'').split('T')[0];
+    const fd = ds ? new Date(ds+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '-';
+    const grp = groupLabel(e) + ' · ' + fd;
+    const header = grp !== lastGroup ? '<div style="background:var(--surface2);padding:7px 12px;font-size:10px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">' + grp + '</div>' : '';
+    lastGroup = grp;
+    const delBtn = (!e.isSaleRow && currentUser&&currentUser.role==='super')
+      ? '<button onclick="deleteFinanceEntry('+e.id+')" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;flex-shrink:0;">x</button>'
+      : '';
+    const sub = e.type === 'sale_out'
+      ? 'Cost: ' + fmt(e.amount || 0) + ' · Profit: ' + fmt(e.profit || 0)
+      : c.label;
+    return header + '<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface);border-bottom:1px solid var(--border);">' +
+      '<span style="font-size:13px;font-weight:900;min-width:24px;text-align:center;color:'+c.color+';">'+c.icon+'</span>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-size:12px;font-weight:800;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(e.description||c.label)+'</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:1px;">'+sub+'</div>' +
+      '</div>' +
+      '<div style="font-size:13px;font-weight:900;font-family:var(--mono);color:'+c.color+';flex-shrink:0;">'+(c.out?'-':'+')+fmt(e.amount||0)+'</div>' +
+      delBtn +
+    '</div>';
+  });
+  list.innerHTML = '<div style="border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;">' + rows.join('') + '</div>';
+};
+
+saveFinanceEntry = async function() {
+  const type   = document.getElementById('fin-type').value;
+  const amount = parseFloat(document.getElementById('fin-amount').value);
+  const desc   = (document.getElementById('fin-desc').value||'').trim();
+  const date   = document.getElementById('fin-date').value || todayDateStr();
+  const cat    = type === 'injection' ? 'owner_capital' : type === 'withdrawal' ? 'cash_drawer' : 'general';
+  const validTypes = ['injection','expense','withdrawal'];
+  if (!type || !validTypes.includes(type)) return Validate.fail('Select a transaction type', 'fin-type');
+  if (!amount || amount <= 0)  return Validate.fail('Enter a valid amount (must be > 0)', 'fin-amount');
+  if (amount > 99999999)       return Validate.fail('Amount too large - check the value', 'fin-amount');
+  if (!desc)                   return Validate.fail('Enter a description for this transaction', 'fin-desc');
+  if (date > todayDateStr() && !confirm('Date is in the future - are you sure?')) return;
+  const entry = { type, amount, description: desc, category: cat, date, createdAt: new Date().toISOString(), createdBy: currentUser ? currentUser.username : 'system' };
+  entry.id = await dbAdd('finances', entry);
+  document.getElementById('fin-type').value   = '';
+  document.getElementById('fin-amount').value = '';
+  document.getElementById('fin-desc').value   = '';
+  document.getElementById('fin-date').value   = todayDateStr();
+  renderFinancePage();
+  renderDashboard();
+  scheduleSync();
+  toast('Transaction recorded: ' + fmt(amount), 'ok');
+};
+
 let _expandedShoeGroups = new Set();
 window._activeSizeGroupFilter = 'all';
 
@@ -6232,6 +6412,167 @@ function dayStartOver() {
 window.dayStartOver = dayStartOver;
 
 // ── Auto-close at 11:59 PM ───────────────────────────────────────
+function _zeroDayInputs() {
+  ['op-cash','op-till','op-mpesa','cl-injected','cl-cash','cl-till','cl-mpesa','cl-expenses','cl-withdrawn']
+    .forEach(id => { const el = document.getElementById(id); if (el && el.value === '') el.value = '0'; });
+}
+
+function _moveSalesDetailsAfterOpening() {
+  const sales = document.getElementById('day-sales-details');
+  const openingLocked = document.getElementById('day-opening-locked');
+  const openingForm = document.getElementById('day-step-opening-form');
+  if (!sales) return;
+  if (openingLocked && openingLocked.style.display !== 'none') openingLocked.insertAdjacentElement('afterend', sales);
+  else if (openingForm && openingForm.style.display !== 'none') openingForm.insertAdjacentElement('afterend', sales);
+}
+
+renderDayState = function() {
+  const today = activeDay ? (activeDay.businessDate || activeDay.business_date) : todayDateStr();
+  const titleEl = document.getElementById('day-banner-title');
+  const subEl = document.getElementById('day-banner-sub');
+  if (titleEl) titleEl.textContent = fmtFullDate(today);
+  if (subEl) subEl.textContent = today;
+  _zeroDayInputs();
+  const data = _getDayRecon(today);
+  const step = data ? data.step : 'opening_form';
+  const salesDetails = document.getElementById('day-sales-details');
+  if (salesDetails) salesDetails.style.display = step === 'reconciled' ? 'none' : 'grid';
+  ['open','opening-form','close-btn','closing-form','reconciled'].forEach(s => {
+    const el = document.getElementById('day-step-' + s);
+    if (el) el.style.display = 'none';
+  });
+  const openLocked = document.getElementById('day-opening-locked');
+  if (openLocked) openLocked.style.display = 'none';
+  if (step === 'reconciled') {
+    if (openLocked) openLocked.style.display = '';
+    _renderOpeningSummary(data);
+    const el = document.getElementById('day-step-reconciled'); if (el) el.style.display = '';
+    _renderReconcileInsights(data, today);
+  } else if (step === 'closing_form') {
+    if (openLocked) openLocked.style.display = '';
+    _renderOpeningSummary(data);
+    const el = document.getElementById('day-step-closing-form'); if (el) el.style.display = '';
+  } else if (step === 'opening_locked' || (data && data.opening)) {
+    if (openLocked) openLocked.style.display = '';
+    _renderOpeningSummary(data);
+    const el = document.getElementById('day-step-close-btn'); if (el) el.style.display = '';
+  } else {
+    const el = document.getElementById('day-step-opening-form'); if (el) el.style.display = '';
+  }
+  _moveSalesDetailsAfterOpening();
+};
+window.renderDayState = renderDayState;
+
+lockOpeningBalances = async function() {
+  if (!activeDay || activeDay.status !== 'OPEN') await openDay();
+  const cash = parseFloat(document.getElementById('op-cash')?.value) || 0;
+  const till = parseFloat(document.getElementById('op-till')?.value) || 0;
+  const mpesa = parseFloat(document.getElementById('op-mpesa')?.value) || 0;
+  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
+  _saveDayRecon(today, { step:'opening_locked', date:today, lockedAt:new Date().toISOString(), opening:{ cash, till, mpesa, total:cash+till+mpesa } });
+  toast('Opening balances saved', 'ok');
+  renderDayState();
+};
+window.lockOpeningBalances = lockOpeningBalances;
+
+reconcileDay = async function() {
+  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
+  const data = _getDayRecon(today);
+  if (!data || !data.opening) { toast('Record opening balances first', 'err'); return; }
+  const injected = parseFloat(document.getElementById('cl-injected')?.value) || 0;
+  const cash = parseFloat(document.getElementById('cl-cash')?.value) || 0;
+  const till = parseFloat(document.getElementById('cl-till')?.value) || 0;
+  const mpesa = parseFloat(document.getElementById('cl-mpesa')?.value) || 0;
+  const expenses = parseFloat(document.getElementById('cl-expenses')?.value) || 0;
+  const withdrawn = parseFloat(document.getElementById('cl-withdrawn')?.value) || 0;
+  const allSales = await dbAll('sales');
+  const daySales = allSales.filter(s => (s.businessDate||s.business_date||(s.date||'').split('T')[0]) === today);
+  const sysTotalRev = daySales.reduce((a,s)=>a+(s.revenue||0),0);
+  const sysTotalProf = daySales.reduce((a,s)=>a+(s.profit||0),0);
+  const salesCount = daySales.length;
+  const margin = sysTotalRev > 0 ? (sysTotalProf/sysTotalRev*100) : 0;
+  const opTotal = (data.opening.cash||0) + (data.opening.till||0) + (data.opening.mpesa||0);
+  const correct = opTotal + sysTotalRev + injected - expenses - withdrawn;
+  const exact = cash + till + mpesa;
+  const variance = exact - correct;
+  const reconciled = {
+    step:'reconciled', date:today, lockedAt:data.lockedAt, opening:data.opening,
+    reconciledAt:new Date().toISOString(),
+    closing:{ injected, cash, till, mpesa, expenses, withdrawn },
+    system:{ sysTotalRev, sysTotalProf, salesCount, margin },
+    analysis:{ opTotal, correct, exact, variance, netMove: sysTotalRev + injected - expenses - withdrawn }
+  };
+  _saveDayRecon(today, reconciled);
+  await _doCloseDay();
+  await _cleanupFinanceCoherence();
+  scheduleSync();
+  toast('Day closed and reconciled', 'ok');
+  renderDayState();
+  renderDaySessionsList();
+  renderFinancePage();
+};
+window.reconcileDay = reconcileDay;
+
+_renderReconcileInsights = function(data) {
+  const el = document.getElementById('day-reconcile-insights');
+  if (!el || !data || !data.closing) return;
+  const cl = data.closing, sy = data.system, an = data.analysis;
+  const absV = Math.abs(an.variance || 0);
+  const ok = absV <= 5;
+  const warn = !ok && absV <= 300;
+  const color = ok ? 'var(--green)' : warn ? '#d97706' : 'var(--red)';
+  const insights = [];
+  if (ok) insights.push('Balanced. Correct money and exact money match.');
+  else if ((an.variance || 0) > 0) insights.push('Surplus: you have more than the expected day money. Check unrecorded cash to business or extra payment.');
+  else insights.push('Shortage: you have less than expected. Check unrecorded expense, personal withdraw, or missed sale.');
+  if ((sy.margin || 0) < 10 && (sy.sysTotalRev || 0) > 0) insights.push('Low profit margin today. Review selling prices and buying costs.');
+  if ((an.netMove || 0) < 0) insights.push('Money movement is negative: more left the business than came in today.');
+  el.innerHTML =
+    '<div class="day-section-label">Sales Details</div>' +
+    '<div class="day-card" style="padding:12px;margin-bottom:8px;"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;">' +
+      '<div><div class="day-kpi-val">'+(sy.salesCount||0)+'</div><div class="day-kpi-lbl">Sales</div></div>' +
+      '<div><div class="day-kpi-val day-kpi-sm">'+fmt(sy.sysTotalRev||0)+'</div><div class="day-kpi-lbl">Revenue</div></div>' +
+      '<div><div class="day-kpi-val day-kpi-sm">'+fmt(sy.sysTotalProf||0)+'</div><div class="day-kpi-lbl">Profit</div></div>' +
+    '</div></div>' +
+    '<div class="day-section-label">Today Summary</div>' +
+    '<div class="day-card" style="padding:12px;margin-bottom:8px;">' +
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>Opening</span><b>'+fmt(an.opTotal||0)+'</b></div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>Sales</span><b>'+fmt(sy.sysTotalRev||0)+'</b></div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>Cash to Business</span><b>'+fmt(cl.injected||0)+'</b></div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>Business Expenses</span><b>'+fmt(cl.expenses||0)+'</b></div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:12px;"><span>Personal Withdraws</span><b>'+fmt(cl.withdrawn||0)+'</b></div>' +
+    '</div>' +
+    '<div class="day-section-label">Day Money Check</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
+      '<div class="day-card" style="padding:12px;"><div class="day-kpi-lbl">Correct</div><div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--accent);">'+fmt(an.correct||0)+'</div></div>' +
+      '<div class="day-card" style="padding:12px;"><div class="day-kpi-lbl">Actually Have</div><div style="font-size:18px;font-weight:900;font-family:var(--mono);color:'+color+';">'+fmt(an.exact||0)+'</div></div>' +
+    '</div>' +
+    '<details class="day-card" style="padding:12px;margin-bottom:8px;" open><summary style="font-size:13px;font-weight:900;color:'+color+';cursor:pointer;">Variance: '+fmt(an.variance||0)+'</summary>' +
+      '<div style="margin-top:10px;font-size:12px;line-height:1.6;color:var(--text2);">' + insights.map(i=>'<div style="margin-bottom:6px;">'+i+'</div>').join('') + '</div>' +
+    '</details>';
+};
+
+dayStartOver = async function() {
+  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
+  if (!confirm("Delete today's opening and closing records and start over?")) return;
+  _clearDayRecon(today);
+  const fins = await dbAll('finances');
+  for (const e of fins) {
+    if (e.type === 'reconciliation' && (e.date || '').slice(0,10) === today) await dbDelete('finances', e.id);
+  }
+  if (activeDay) {
+    activeDay.status = 'OPEN';
+    activeDay.closed_at = null;
+    await dbPut('business_days', activeDay);
+    setDayMode(true);
+  }
+  ['op-cash','op-till','op-mpesa','cl-injected','cl-cash','cl-till','cl-mpesa','cl-expenses','cl-withdrawn'].forEach(id => { const el = document.getElementById(id); if (el) el.value = '0'; });
+  toast('Day records deleted', '');
+  renderDayState();
+  renderFinancePage();
+};
+window.dayStartOver = dayStartOver;
+
 function _checkAutoClose() {
   const now = new Date();
   if (now.getHours() === 23 && now.getMinutes() === 59) {
