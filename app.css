@@ -1513,6 +1513,18 @@ body {
   padding: 8px 0;
 }
 
+#payment-method-section,
+#sm-payment-btns,
+#off-payment {
+  display: none !important;
+}
+
+#confirm-sale-btn {
+  background: #1e7a3e !important;
+  color: #fff !important;
+  text-transform: uppercase;
+}
+
 .hist-day-card {
   background: var(--surface);
   border: 1px solid var(--border);

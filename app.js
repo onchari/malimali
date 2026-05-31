@@ -2637,20 +2637,27 @@ async function renderDashboard() {
   } else if (barWrap) { barWrap.style.display = 'none'; }
 
   // ── Today at a Glance (only show on Today period) ─────────
+  const todayDashSales = allSales.filter(s => (s.businessDate||(s.date||'').split('T')[0]) === today);
+  const todayDashRev   = todayDashSales.reduce((s,x)=>s+(x.revenue||0),0);
+  const todayDashProf  = todayDashSales.reduce((s,x)=>s+(x.profit||0),0);
+  const todayDashQty   = todayDashSales.reduce((s,x)=>s+(x.qty||0),0);
+  const todayDashRecon = typeof _getDayRecon === 'function' ? _getDayRecon(today) : null;
+  const todayDashVariance = todayDashRecon?.analysis ? todayDashRecon.analysis.variance : null;
   const todayWrap = document.getElementById('d-today-wrap');
   if (todayWrap) {
     if (_dashPeriod === 'today') {
-      const todaySales = allSales.filter(s => (s.businessDate||(s.date||'').split('T')[0]) === today);
-      const tRev  = todaySales.reduce((s,x)=>s+(x.revenue||0),0);
-      const tProf = todaySales.reduce((s,x)=>s+(x.profit||0),0);
-      const tQty  = todaySales.reduce((s,x)=>s+(x.qty||0),0);
       todayWrap.style.display = '';
       const grid = document.getElementById('d-today-grid');
       if (grid) grid.innerHTML = [
-        { label:'Revenue', val:fmt(tRev), color:'var(--green)' },
-        { label:'Profit',  val:fmt(tProf), color: tProf>=0?'var(--accent2)':'var(--red)' },
-        { label:'Pieces',  val:fmtN(tQty), color:'var(--accent)' },
-      ].map(k=>`<div class="stat-box" style="padding:10px 8px;"><div class="stat-val" style="font-size:15px;color:${k.color};">${k.val}</div><div class="stat-lbl">${k.label}</div></div>`).join('');
+        { label:'Sales',   val:fmtN(todayDashSales.length), color:'var(--accent)' },
+        { label:'Revenue', val:fmt(todayDashRev), color:'var(--green)' },
+        { label:'Profit',  val:fmt(todayDashProf), color: todayDashProf>=0?'var(--accent2)':'var(--red)' },
+        {
+          label: todayDashVariance === null ? 'Pieces' : 'Variance',
+          val: todayDashVariance === null ? fmtN(todayDashQty) : ((todayDashVariance>=0?'+':'') + fmt(todayDashVariance)),
+          color: todayDashVariance === null ? 'var(--accent)' : (Math.abs(todayDashVariance) < 1 ? 'var(--green)' : 'var(--red)')
+        },
+      ].map(k=>`<div class="stat-box" style="padding:10px 8px;"><div class="stat-lbl" style="margin-bottom:3px;">${k.label}</div><div class="stat-val" style="font-size:15px;color:${k.color};">${k.val}</div></div>`).join('');
     } else {
       todayWrap.style.display = 'none';
     }
@@ -2698,6 +2705,18 @@ async function renderDashboard() {
   } else {
     if (totalSalesCount > 0) {
       insights.push({ icon:'🛒', text:`${fmtN(totalSalesCount)} sale${totalSalesCount!==1?'s':''} · avg ${fmt(avgSale)} per sale`, color:'var(--accent2)' });
+    }
+    if (_dashPeriod === 'today') {
+      if (todayDashSales.length === 0) {
+        insights.push({ icon:'Day', text:'No sales recorded today yet. Keep the day open and record each sale as it happens.', color:'var(--muted)' });
+      } else {
+        const avgToday = todayDashRev / Math.max(todayDashSales.length, 1);
+        insights.push({ icon:'Day', text:`Today: <strong>${fmtN(todayDashSales.length)}</strong> sales, revenue <strong>${fmt(todayDashRev)}</strong>, profit <strong>${fmt(todayDashProf)}</strong>, avg sale ${fmt(avgToday)}.`, color: todayDashProf >= 0 ? 'var(--green)' : 'var(--red)' });
+      }
+      if (todayDashVariance !== null) {
+        const ok = Math.abs(todayDashVariance) < 1;
+        insights.push({ icon:'Check', text:`Day money check: ${ok ? 'balanced' : 'variance ' + ((todayDashVariance>=0?'+':'') + fmt(todayDashVariance))}.`, color: ok ? 'var(--green)' : 'var(--red)' });
+      }
     }
     if (margin < 0 && totalRevenue > 0) insights.push({ icon:'🚨', text:`Negative margin (${margin.toFixed(1)}%) — selling below cost!`, color:'var(--red)' });
     else if (margin < 10 && totalRevenue > 0) insights.push({ icon:'⚠️', text:`Low margin ${margin.toFixed(1)}% — consider reviewing prices`, color:'#d97706' });
@@ -3097,7 +3116,7 @@ async function confirmOffStockSale() {
   const qty = parseInt(document.getElementById('off-qty')?.value || '0');
   const buyPrice = parseFloat(document.getElementById('off-buy')?.value || '0') || 0;
   const sellPrice = parseFloat(document.getElementById('off-sell')?.value || '0') || 0;
-  const paymentMethod = document.getElementById('off-payment')?.value || 'cash';
+  const paymentMethod = 'cash';
   if (!name && !code) return Validate.fail('Enter item name or code', 'off-name');
   if (!type) return Validate.fail('Select a category', 'off-type');
   if (!Validate.restockQty(qty, 'off-qty')) return;
@@ -3163,7 +3182,7 @@ async function confirmOffStockSale() {
 
   ['off-name','off-code','off-size','off-qty','off-buy','off-sell'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.value = id === 'off-qty' ? '1' : '';
+    if (el) el.value = id === 'off-qty' ? '0' : '';
   });
   closeOffStockSale();
   await renderStockMonitor();
@@ -3196,11 +3215,11 @@ async function openSellModal(itemId) {
   if (_smProfit) _smProfit.textContent = (_itemSell - _itemBuy >= 0 ? '+' : '') + fmt(_itemSell - _itemBuy);
   const _tpel=document.getElementById('sm-total-profit'); if(_tpel) _tpel.textContent = (_itemSell - _itemBuy >= 0 ? '+' : '') + fmt(_itemSell - _itemBuy);
   document.getElementById('sm-cur').textContent = currency;
-  document.getElementById('sm-qty').value = 1;
+  document.getElementById('sm-qty').value = 0;
+  document.getElementById('sm-qty').min = 0;
   document.getElementById('sm-qty').max = item.qty;
   document.getElementById('sm-actual').value = '';
   updateSellModal();
-  selectPayment('cash'); // reset payment method
   document.getElementById('sell-modal').classList.add('open');
   } catch(e) { console.error("[openSellModal]", e); toast("Error: " + e.message, "err"); }
 }
@@ -3222,7 +3241,18 @@ async function updateSellModal() {
   const basePrice = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.sellPrice || item.sellPrice || item.sell || 0) : (item.sell || item.sellPrice || 0);
   const baseBuy   = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.buyPrice  || item.buyPrice  || item.buy  || 0) : (item.buy  || item.buyPrice  || 0);
   const maxStock  = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.qty || 0) : (item.qty || 0);
-  const qty = Math.max(1, parseInt(document.getElementById('sm-qty').value) || 1);
+  const qtyEl = document.getElementById('sm-qty');
+  let qty = parseInt(qtyEl?.value || '0');
+  if (!Number.isFinite(qty) || qty < 0) qty = 0;
+  if (qty > maxStock) {
+    qty = maxStock;
+    toast('Only ' + maxStock + ' in stock', 'err');
+  }
+  if (qtyEl) {
+    qtyEl.min = 0;
+    qtyEl.max = maxStock;
+    if (String(qtyEl.value) !== String(qty)) qtyEl.value = qty;
+  }
   const actualRaw = parseFloat(document.getElementById('sm-actual').value);
   const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : basePrice;
   const totalRev = qty * priceUsed;
@@ -3240,26 +3270,21 @@ async function updateSellModal() {
     smProfit.textContent = (profitPerItem >= 0 ? '+' : '') + fmt(profitPerItem);
     smProfit.style.color = profitPerItem >= 0 ? 'var(--green)' : 'var(--red)';
   }
-  // Warn confirm button if below-cost
   const confirmBtn = document.getElementById('confirm-sale-btn');
   if (confirmBtn) {
-    if (priceUsed < baseBuy && priceUsed > 0) {
-      confirmBtn.style.background = 'var(--red)';
-      confirmBtn.title = 'Warning: selling below cost price';
-    } else {
-      confirmBtn.style.background = '';
-      confirmBtn.title = '';
-    }
+    confirmBtn.textContent = 'CONFIRM SALE';
+    confirmBtn.style.background = '#1e7a3e';
+    confirmBtn.title = priceUsed < baseBuy && priceUsed > 0 ? 'Warning: selling below cost price' : '';
   }
   } catch(e) { console.error("[updateSellModal]", e); toast("Error: " + e.message, "err"); }
 }
 
 function adjSellQty(d) {
   const inp = document.getElementById('sm-qty');
-  let v = (parseInt(inp.value) || 1) + d;
+  let v = (parseInt(inp.value) || 0) + d;
   const max = parseInt(inp.max) || 9999;
   if (v > max) { toast('⚠️ Only ' + max + ' in stock', 'err'); v = max; }
-  inp.value = Math.max(1, v);
+  inp.value = Math.max(0, v);
   updateSellModal();
 }
 
@@ -3278,7 +3303,7 @@ async function confirmSale() {
   // ── Read form values ───────────────────────────────────────────
   const qtyEl     = document.getElementById('sm-qty');
   const actualEl  = document.getElementById('sm-actual');
-  const qty       = Math.max(1, parseInt(qtyEl?.value || '1') || 1);
+  const qty       = parseInt(qtyEl?.value || '0');
   const actualRaw = parseFloat(actualEl?.value || '');
 
   // ── Prices — use normalized sellPrice/buyPrice ─────────────────
@@ -3294,15 +3319,25 @@ async function confirmSale() {
   // ── Validate stock ─────────────────────────────────────────────
   const maxQty = _isShoeSale && _sellShoeSize ? _sellShoeSize.qty : item.qty;
   const itemLabel = item.name || item.code;
-  if (!Validate.stock(qty, maxQty, itemLabel)) return;
+  if (!Number.isFinite(qty) || qty <= 0) {
+    Validate.fail('Enter quantity to sell', 'sm-qty');
+    _overlay.hide();
+    return;
+  }
+  if (qty > maxQty) {
+    Validate.fail('Only ' + maxQty + ' in stock - cannot sell ' + qty, 'sm-qty');
+    _overlay.hide();
+    return;
+  }
+  if (!Validate.stock(qty, maxQty, itemLabel)) { _overlay.hide(); return; }
 
   // ── Validate sale price ────────────────────────────────────────
-  if (!Validate.salePrice(priceUsed, buyPrice, sellPrice)) return;
+  if (!Validate.salePrice(priceUsed, buyPrice, sellPrice)) { _overlay.hide(); return; }
 
   const revenue = qty * priceUsed;
   const profit  = qty * (priceUsed - buyPrice);
 
-  const paymentMethod = _selectedPayment || 'cash';
+  const paymentMethod = 'cash';
 
   const sale = {
     itemId:        item.id,
@@ -4785,7 +4820,7 @@ async function updateDayLiveStats() {
         time:  s.date || s.createdAt,
         type:  'sale',
         label: (s.itemName||s.itemCode||'Sale') + (s.itemSize ? ' ·'+s.itemSize : ''),
-        sub:   (s.paymentMethod||'cash').toUpperCase() + ' · ' + (s.qty||1) + ' pc' + ((s.qty||1)!==1?'s':''),
+        sub:   (s.qty||1) + ' pc' + ((s.qty||1)!==1?'s':''),
         amt:   s.revenue||0,
         color: 'var(--green)',
         sign:  '+',
@@ -6819,20 +6854,23 @@ async function renderHistoryPage() {
 function _histSaleRow(s, mode) {
   const profColor = (s.profit||0) >= 0 ? 'var(--green)' : 'var(--red)';
   const profSign  = (s.profit||0) >= 0 ? '+' : '';
+  const title = `${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize ? ' · ' + (mode === 'full' ? 'Size ' : 'Sz ') + escapeHtml(s.itemSize) : ''}`;
+  const unitPrice = fmt(s.actualPrice||s.sellPrice||0);
+  const revenue = fmt(s.revenue||0);
+  const profit = `${profSign}${fmt(s.profit||0)}`;
   if (mode === 'full') {
     return `
       <div class="hist-sale-row">
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            ${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize?' · Size '+escapeHtml(s.itemSize):''}
+            ${title}
           </div>
-          <div style="font-size:11px;color:var(--muted);">
-            ${s.qty} × ${fmt(s.actualPrice||s.sellPrice||0)} · ${s.paymentMethod||'cash'} · ${fmtTime(s.date)}
-          </div>
+          <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--accent2);margin-top:2px;">${revenue}</div>
+          <div style="font-size:11px;color:var(--muted);">${s.qty} x ${unitPrice} · ${fmtTime(s.date)}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
-          <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue||0)}</div>
-          <div style="font-size:11px;font-weight:700;font-family:var(--mono);color:${profColor};">${profSign}${fmt(s.profit||0)}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:800;">Profit</div>
+          <div style="font-size:12px;font-weight:800;font-family:var(--mono);color:${profColor};">${profit}</div>
         </div>
       </div>`;
   }
@@ -6841,13 +6879,14 @@ function _histSaleRow(s, mode) {
     <div class="hist-sale-row" style="border-top:1px solid var(--border);">
       <div style="flex:1;min-width:0;">
         <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-          ${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize?' · Sz '+escapeHtml(s.itemSize):''}
+          ${title}
         </div>
-        <div style="font-size:10px;color:var(--muted);">${s.qty} × ${fmt(s.actualPrice||s.sellPrice||0)} · ${s.paymentMethod||'cash'} · ${fmtTime(s.date)}</div>
+        <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent2);margin-top:1px;">${revenue}</div>
+        <div style="font-size:10px;color:var(--muted);">${s.qty} x ${unitPrice} · ${fmtTime(s.date)}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;">
-        <div style="font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue||0)}</div>
-        <div style="font-size:11px;font-weight:700;font-family:var(--mono);color:${profColor};">${profSign}${fmt(s.profit||0)}</div>
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:800;">Profit</div>
+        <div style="font-size:11px;font-weight:700;font-family:var(--mono);color:${profColor};">${profit}</div>
       </div>
     </div>`;
 }
@@ -7176,7 +7215,7 @@ async function openSellShoeModal(itemId, size) {
   if (el('sm-stock')) el('sm-stock').textContent = sizeRec.qty;
   if (el('sm-sell'))  el('sm-sell').textContent  = fmt(sizeRec.sellPrice || item.sellPrice || 0);
   if (el('sm-cur'))   el('sm-cur').textContent   = currency;
-  if (el('sm-qty'))   { el('sm-qty').value = 1; el('sm-qty').max = sizeRec.qty; }
+  if (el('sm-qty'))   { el('sm-qty').value = 0; el('sm-qty').min = 0; el('sm-qty').max = sizeRec.qty; }
   if (el('sm-actual')) el('sm-actual').value = '';
   const sellModal = document.getElementById('sell-modal');
   if (sellModal) sellModal.classList.add('open');

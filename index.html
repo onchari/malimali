@@ -456,7 +456,7 @@
   <!-- ── Today snapshot ───────────────────────────────────────── -->
   <div id="d-today-wrap" class="dash-extra" style="margin:0 12px 8px;display:none;">
     <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Today at a Glance</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;" id="d-today-grid"></div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;" id="d-today-grid"></div>
   </div>
 
   <!-- ── Stock health ─────────────────────────────────────────── -->
@@ -1419,7 +1419,7 @@
                        font-size:24px;font-weight:700;cursor:pointer;color:var(--text);flex-shrink:0;">
           −
         </button>
-        <input id="sm-qty" type="number" value="1" min="1"
+        <input id="sm-qty" type="number" value="0" min="0"
                style="flex:1;border:none;text-align:center;font-size:24px;font-weight:800;
                       font-family:var(--mono);color:var(--text);background:transparent;
                       outline:none;padding:10px;"
@@ -1460,15 +1460,6 @@
       </div>
     </div>
 
-    <!-- Payment method -->
-    <div style="margin-bottom:14px;">
-      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;">Payment Method</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;" id="sm-payment-btns">
-        <button onclick="selectPayment('cash')"   id="pay-cash"  class="pay-btn active">💵 Cash</button>
-        <button onclick="selectPayment('mpesa')"  id="pay-mpesa" class="pay-btn">📱 M-Pesa</button>
-      </div>
-    </div>
-
     <!-- Totals summary -->
     <div style="background:var(--accent-light);border:1.5px solid #a8d8b5;
                 border-radius:var(--r);padding:14px 16px;margin-bottom:16px;">
@@ -1498,7 +1489,7 @@
                    border-radius:var(--r);font-size:18px;font-weight:900;
                    cursor:pointer;font-family:var(--sans);letter-spacing:.5px;
                    box-shadow:0 4px 14px rgba(30,122,62,.4);margin-bottom:8px;">
-      ✅ Confirm Sale
+      CONFIRM SALE
     </button>
     <button onclick="closeSellModal()"
             style="width:100%;padding:12px;background:transparent;border:1.5px solid var(--border);
@@ -1533,15 +1524,12 @@
         <input class="add-input" id="off-size" type="text" placeholder="Size / variant optional">
       </div>
       <div class="stock-form-grid">
-        <input class="add-input add-mono" id="off-qty" type="number" min="1" value="1" inputmode="numeric" placeholder="Qty sold">
+        <input class="add-input add-mono" id="off-qty" type="number" min="0" value="0" inputmode="numeric" placeholder="Qty sold">
         <input class="add-input add-mono" id="off-buy" type="number" min="0" inputmode="decimal" placeholder="Buy price">
       </div>
       <div class="stock-form-grid">
         <input class="add-input add-mono" id="off-sell" type="number" min="0" inputmode="decimal" placeholder="Sale price">
-        <select class="add-select" id="off-payment">
-          <option value="cash">Cash</option>
-          <option value="mpesa">M-Pesa</option>
-        </select>
+        <input class="add-input add-mono" id="off-note" type="text" placeholder="Note optional">
       </div>
       <button onclick="confirmOffStockSale()" class="stock-add-wish-btn">
         <i class="fa-solid fa-cash-register"></i> Sell
