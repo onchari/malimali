@@ -21,15 +21,37 @@
   line-height: 1.4;
 }
 
-/* Restock view — condensed item summary + qty/pricing */
+/* Restock view — item summary + qty/pricing form in one panel */
 .restock-view {
   margin: 0 4px 12px;
-}
-.restock-summary-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   overflow: hidden;
+}
+.restock-summary-card {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+.restock-view #std-pricing-section {
+  display: block !important;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.restock-view #std-pricing-section .add-section-inset {
+  padding-top: 4px;
+}
+.restock-view #std-pricing-section .add-card-title {
+  padding: 12px 14px 0;
+  margin: 0;
+  font-size: 14px;
+}
+.restock-view #profit-preview {
+  margin: 0 14px 14px;
 }
 .restock-summary-table {
   width: 100%;
@@ -68,6 +90,9 @@
 #page-add.restock-mode .add-flow > .add-card:not(#std-pricing-section),
 #page-add.restock-mode .add-flow > #shoe-size-panel,
 #page-add.restock-mode .add-card-photo {
+  display: none !important;
+}
+#page-add.restock-mode .add-flow #std-pricing-section {
   display: none !important;
 }
 #page-add.restock-mode #std-pricing-section .add-step-badge {
@@ -1196,6 +1221,26 @@ body {
   cursor: pointer;
   font-family: var(--sans);
 }
+.clipboard-wait-import.pulse {
+  animation: clipboard-import-pulse 1.2s ease-in-out infinite;
+}
+@keyframes clipboard-import-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(30, 122, 62, 0.45); }
+  50% { box-shadow: 0 0 0 8px rgba(30, 122, 62, 0); }
+}
+.clipboard-wait-gallery {
+  width: 100%;
+  padding: 11px;
+  margin-bottom: 8px;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--sans);
+}
 .clipboard-wait-cancel {
   width: 100%;
   padding: 10px;
@@ -1207,6 +1252,21 @@ body {
   font-family: var(--sans);
 }
 .wish-photo-box { height: 140px; margin-bottom: 10px; }
+.wish-screenshot-btn {
+  width: 100%;
+  padding: 11px 12px;
+  margin-bottom: 10px;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--sans);
+  text-align: center;
+}
+.wish-screenshot-btn:active { background: var(--surface); }
 .wish-list-thumb {
   width: 48px;
   height: 48px;

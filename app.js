@@ -353,9 +353,21 @@ function getTypeRecord(name) {
   return types.find(t => t.name === name) || null;
 }
 
+function _normTypeId(id) {
+  if (id == null || id === '') return null;
+  const n = Number(id);
+  return Number.isFinite(n) ? n : id;
+}
+
 function getTypeById(id) {
-  if (id == null) return null;
-  return types.find(t => t.id === id) || null;
+  const nid = _normTypeId(id);
+  if (nid == null) return null;
+  return types.find(t => _normTypeId(t.id) === nid) || null;
+}
+
+function _typeParentMatches(typeParentId, parentId) {
+  if (parentId == null) return typeParentId == null;
+  return _normTypeId(typeParentId) === _normTypeId(parentId);
 }
 
 function getCategoryAncestors(rec) {
@@ -380,10 +392,11 @@ function isCategoryActive(rec) {
 
 function isDescendantOfType(typeRec, ancestorId) {
   if (!typeRec || ancestorId == null) return false;
+  const aid = _normTypeId(ancestorId);
   let cur = typeRec;
   const seen = new Set();
   while (cur && cur.parentId) {
-    if (cur.parentId === ancestorId) return true;
+    if (_normTypeId(cur.parentId) === aid) return true;
     if (seen.has(cur.parentId)) break;
     seen.add(cur.parentId);
     cur = getTypeById(cur.parentId);
@@ -394,7 +407,7 @@ function isDescendantOfType(typeRec, ancestorId) {
 function walkCategoryTree(visitor) {
   const roots = types.filter(t => t.parentId == null).sort(_sortTypes);
   function walkChildren(parentId, depth) {
-    types.filter(t => t.parentId === parentId).sort(_sortTypes).forEach(child => {
+    types.filter(t => _typeParentMatches(t.parentId, parentId)).sort(_sortTypes).forEach(child => {
       visitor(child, depth);
       walkChildren(child.id, depth + 1);
     });
@@ -408,7 +421,7 @@ function walkCategoryTree(visitor) {
 function collectCategoryDescendantIds(parentId) {
   const ids = [];
   function walk(pid) {
-    types.filter(t => t.parentId === pid).forEach(c => {
+    types.filter(t => _typeParentMatches(t.parentId, pid)).forEach(c => {
       ids.push(c.id);
       walk(c.id);
     });
@@ -430,6 +443,7 @@ function populateCategoryParentSelect(selectEl) {
 }
 
 function isFootwearType(typeName) {
+  if (!typeName || !String(typeName).trim()) return false;
   const rec = getTypeRecord(typeName);
   if (rec) {
     if (rec.isFootwear === true) return true;
@@ -1027,6 +1041,7 @@ function showInventoryTab(tab) {
   if (_activeInventoryTab === 'add') {
     renderTypeSelect();
     updateProfitPreview();
+    onTypeChange();
   }
 }
 
@@ -1152,7 +1167,12 @@ async function normalizeTypeRecords() {
   for (const t of types) {
     let changed = false;
     if (t.active == null) { t.active = true; changed = true; }
-    if (t.parentId === undefined) { t.parentId = null; changed = true; }
+    if (t.parentId === undefined || t.parentId === '') {
+      if (t.parentId !== null) { t.parentId = null; changed = true; }
+    } else {
+      const pid = _normTypeId(t.parentId);
+      if (pid !== t.parentId) { t.parentId = pid; changed = true; }
+    }
     if (t.isFootwear == null) { t.isFootwear = _legacyFootwearName(t.name); changed = true; }
     if (t.sortOrder == null) { t.sortOrder = t.id || 0; changed = true; }
     if (changed) await dbPut('types', t);
@@ -1183,7 +1203,7 @@ function _categoryHasActiveChildren(typeId) {
 
 function _activeChildTypes(parentId) {
   return types
-    .filter(t => t.parentId === parentId && isCategoryActive(t))
+    .filter(t => _typeParentMatches(t.parentId, parentId) && isCategoryActive(t))
     .sort(_sortTypes);
 }
 
@@ -1202,7 +1222,9 @@ function _typePathFromId(typeId) {
 function _getCascadePathFromWrap(wrap) {
   if (!wrap) return [];
   try {
-    return JSON.parse(wrap.dataset.pathIds || '[]').map(n => parseInt(n, 10)).filter(Boolean);
+    return JSON.parse(wrap.dataset.pathIds || '[]')
+      .map(n => _normTypeId(n))
+      .filter(id => id != null);
   } catch (_) {
     return [];
   }
@@ -1225,7 +1247,7 @@ function _resolveCascadePathIds(config, selectedValue, preservePath) {
   const wrap = config.wrap;
   if (selectedValue) {
     if (config.valueMode === 'id') {
-      const path = _typePathFromId(parseInt(selectedValue, 10));
+      const path = _typePathFromId(_normTypeId(selectedValue));
       const ids = path.map(x => x.id);
       _setCascadePathOnWrap(wrap, ids);
       return ids;
@@ -1266,7 +1288,6 @@ function _catPickBtnHtml(placeholder, selected) {
 }
 
 function _appendCascadePickButton(wrap, config, depth, parentId, currentId, currentRec) {
-  const children = _activeChildTypes(parentId);
   const ph0 = config.placeholder || 'Choose category…';
   const phN = config.placeholderSub || 'Choose sub-category…';
   const placeholder = depth === 0 ? ph0 : phN;
@@ -1280,6 +1301,11 @@ function _appendCascadePickButton(wrap, config, depth, parentId, currentId, curr
     : _catPickBtnHtml(placeholder, null);
 
   btn.addEventListener('click', () => {
+    const children = _activeChildTypes(parentId);
+    if (!children.length) {
+      toast('No sub-categories here', 'err');
+      return;
+    }
     let subtitle = depth === 0 ? 'Pick the main category' : 'Pick the next level';
     if (parentId) {
       const parentRec = getTypeById(parentId);
@@ -1299,7 +1325,7 @@ function _appendCascadePickButton(wrap, config, depth, parentId, currentId, curr
       allowClear: true,
       onSelect: (id) => {
         const newPath = _getCascadePathFromWrap(wrap).slice(0, depth);
-        if (id) newPath.push(parseInt(id, 10));
+        if (id) newPath.push(_normTypeId(id));
         _setCascadePathOnWrap(wrap, newPath);
         const deepest = newPath.length ? getTypeById(newPath[newPath.length - 1]) : null;
         if (deepest && (!config.requireLeaf || !_categoryHasActiveChildren(deepest.id))) {
@@ -1307,9 +1333,12 @@ function _appendCascadePickButton(wrap, config, depth, parentId, currentId, curr
         } else if (config.requireLeaf) {
           if (config.valueEl) config.valueEl.value = '';
         }
-        const rerenderValue = config.requireLeaf && deepest && !_categoryHasActiveChildren(deepest.id)
-          ? deepest.name
-          : (config.valueMode === 'name' ? (config.valueEl?.value || '') : '');
+        let rerenderValue = '';
+        if (config.requireLeaf && deepest && !_categoryHasActiveChildren(deepest.id)) {
+          rerenderValue = config.valueMode === 'id' ? String(deepest.id) : deepest.name;
+        } else if (config.valueEl && config.valueEl.value) {
+          rerenderValue = config.valueEl.value;
+        }
         config.rerender(rerenderValue, { preservePath: true });
       }
     });
@@ -1452,7 +1481,10 @@ function renderAddTypeCascade(selectedTypeName, opts) {
     onChange: () => { if (!(opts && opts.skipTypeChange)) onTypeChange(); }
   });
   const selectedName = selectedTypeName != null ? selectedTypeName : (hidden.value || '');
-  renderCategoryCascade(config, selectedName, opts);
+  const cascadeOpts = Object.assign({}, opts || {}, {
+    skipChange: !!(opts && opts.skipTypeChange)
+  });
+  renderCategoryCascade(config, selectedName, cascadeOpts);
 }
 
 function closeCategoryPicker() {
@@ -1565,7 +1597,26 @@ function setRestockBanner(show, message) {
 }
 
 const _RESTOCK_PRICING_TITLE = '<span class="add-step-badge">3</span> Stock &amp; pricing';
-const _RESTOCK_QTY_TITLE = 'Quantity &amp; prices';
+const _RESTOCK_QTY_TITLE = 'Add to stock';
+
+function _mountRestockPricingSection() {
+  const view = document.getElementById('restock-view');
+  const stdPricing = document.getElementById('std-pricing-section');
+  if (!view || !stdPricing) return;
+  if (!view.contains(stdPricing)) view.appendChild(stdPricing);
+  stdPricing.style.display = 'block';
+  const shoePanel = document.getElementById('shoe-size-panel');
+  if (shoePanel) shoePanel.style.display = 'none';
+}
+
+function _unmountRestockPricingSection() {
+  const flow = document.querySelector('#page-add .add-flow');
+  const stdPricing = document.getElementById('std-pricing-section');
+  if (!flow || !stdPricing || flow.contains(stdPricing)) return;
+  const photoSection = flow.querySelector('.add-card-photo');
+  if (photoSection) flow.insertBefore(stdPricing, photoSection);
+  else flow.appendChild(stdPricing);
+}
 
 function showRestockView(meta) {
   const page = document.getElementById('page-add');
@@ -1580,6 +1631,7 @@ function showRestockView(meta) {
     const shoePanel = document.getElementById('shoe-size-panel');
     if (shoePanel) shoePanel.style.display = 'none';
   }
+  _mountRestockPricingSection();
 
   const setCell = (id, val) => {
     const el = document.getElementById(id);
@@ -1638,9 +1690,12 @@ function hideRestockView() {
   if (page) page.classList.remove('restock-mode');
   const view = document.getElementById('restock-view');
   if (view) view.hidden = true;
+  _unmountRestockPricingSection();
   const flow = document.querySelector('#page-add .add-flow');
   if (flow) {
     flow.querySelectorAll('.add-card').forEach(card => { card.style.display = ''; });
+    const shoePanel = document.getElementById('shoe-size-panel');
+    if (shoePanel) shoePanel.style.display = 'none';
   }
   const footer = document.getElementById('add-footer');
   const cancelBtn = document.getElementById('restock-cancel-btn');
@@ -1650,6 +1705,7 @@ function hideRestockView() {
   if (pricingTitle) pricingTitle.innerHTML = _RESTOCK_PRICING_TITLE;
   const qtyEl = UI.el('f-qty');
   if (qtyEl) qtyEl.placeholder = 'Qty *';
+  if (typeof onTypeChange === 'function') onTypeChange();
 }
 
 function resetShoeUiPanels() {
@@ -1872,7 +1928,7 @@ async function addSubCategory() {
       active: true,
       parentId,
       isFootwear: inheritFootwear,
-      sortOrder: types.filter(t => t.parentId === parentId).length + 1
+      sortOrder: types.filter(t => _typeParentMatches(t.parentId, parentId)).length + 1
     });
     document.getElementById('new-sub-name').value = '';
     await loadTypes();
@@ -2151,12 +2207,48 @@ function _closeImagePickerSheet() {
 }
 
 let _clipboardPastePending = null;
+let _wishlistScreenshotWatchOn = false;
+
+async function _imageBlobToStorage(blob, preset) {
+  if (!blob || !blob.size) return null;
+  const type = blob.type || 'image/png';
+  const rough = await compressImageFile(new File([blob], 'screenshot.jpg', { type }), 960, 0.82);
+  return compressImageForStorage(rough, preset);
+}
+
+async function _readImageFromClipboardItems(items, preset) {
+  for (const item of items) {
+    const types = (item.types && item.types.length)
+      ? [...item.types]
+      : ['image/png', 'image/jpeg', 'image/webp'];
+    for (const type of types) {
+      if (!type.startsWith('image/')) continue;
+      try {
+        const blob = await item.getType(type);
+        const dataUrl = await _imageBlobToStorage(blob, preset);
+        if (dataUrl) return dataUrl;
+      } catch (_) { /* try next type */ }
+    }
+  }
+  return null;
+}
+
+function _isWishlistVisible() {
+  const inv = document.getElementById('page-inventory');
+  if (inv && inv.classList.contains('active') && _activeInventoryTab === 'wishlist') return true;
+  const wp = document.getElementById('page-wishlist');
+  return !!(wp && wp.classList.contains('active'));
+}
 
 function cancelClipboardScreenshotWait() {
   if (!_clipboardPastePending) return;
   document.removeEventListener('visibilitychange', _clipboardPastePending.onVis);
   window.removeEventListener('focus', _clipboardPastePending.onFocus);
   window.removeEventListener('pageshow', _clipboardPastePending.onPageShow);
+  document.removeEventListener('paste', _clipboardPastePending.onPaste, true);
+  if (_clipboardPastePending.retryTimers) {
+    _clipboardPastePending.retryTimers.forEach(id => clearTimeout(id));
+  }
   if (_clipboardPastePending.timeoutId) clearTimeout(_clipboardPastePending.timeoutId);
   const el = document.getElementById('clipboard-wait-overlay');
   if (el) el.remove();
@@ -2164,9 +2256,26 @@ function cancelClipboardScreenshotWait() {
 }
 window.cancelClipboardScreenshotWait = cancelClipboardScreenshotWait;
 
+function _updateClipboardWaitOverlay(state) {
+  const el = document.getElementById('clipboard-wait-overlay');
+  if (!el) return;
+  const importBtn = el.querySelector('#clipboard-wait-import-btn');
+  const text = el.querySelector('.clipboard-wait-text');
+  if (state === 'ready') {
+    if (importBtn) importBtn.classList.add('pulse');
+    if (text) text.textContent = 'You\'re back — tap Import now to attach the screenshot.';
+  } else if (state === 'waiting') {
+    if (importBtn) importBtn.classList.remove('pulse');
+    if (text) text.innerHTML = 'Open another app, take your screenshot, tap <strong>Done</strong> or <strong>Complete</strong>, then switch back here.';
+  }
+}
+
 function _showClipboardWaitOverlay() {
   let el = document.getElementById('clipboard-wait-overlay');
-  if (el) return el;
+  if (el) {
+    _updateClipboardWaitOverlay('waiting');
+    return el;
+  }
   el = document.createElement('div');
   el.id = 'clipboard-wait-overlay';
   el.className = 'clipboard-wait-overlay';
@@ -2174,8 +2283,9 @@ function _showClipboardWaitOverlay() {
     '<div class="clipboard-wait-card">' +
       '<div class="clipboard-wait-icon">📋</div>' +
       '<div class="clipboard-wait-title">Waiting for screenshot</div>' +
-      '<p class="clipboard-wait-text">Open another app, take your screenshot, tap <strong>Done</strong> or <strong>Complete</strong>, then switch back here. The photo will import automatically.</p>' +
+      '<p class="clipboard-wait-text">Open another app, take your screenshot, tap <strong>Done</strong> or <strong>Complete</strong>, then switch back here.</p>' +
       '<button type="button" class="clipboard-wait-import" id="clipboard-wait-import-btn">Import now</button>' +
+      '<button type="button" class="clipboard-wait-gallery" id="clipboard-wait-gallery-btn">🖼️ Pick from gallery instead</button>' +
       '<button type="button" class="clipboard-wait-cancel" id="clipboard-wait-cancel-btn">Cancel</button>' +
     '</div>';
   el.querySelector('#clipboard-wait-cancel-btn').addEventListener('click', () => {
@@ -2187,6 +2297,29 @@ function _showClipboardWaitOverlay() {
       _clipboardPastePending.tryImport(true);
     }
   });
+  el.querySelector('#clipboard-wait-gallery-btn').addEventListener('click', () => {
+    const pending = _clipboardPastePending;
+    if (!pending) return;
+    const preset = pending.opts.photoPreset || 'item';
+    const onPick = pending.opts.onPick;
+    cancelClipboardScreenshotWait();
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async e => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        const rough = await compressImageFile(file, 960, 0.82);
+        const dataUrl = await compressImageForStorage(rough, preset);
+        if (onPick) await onPick(dataUrl);
+        toast('Photo attached', 'ok');
+      } catch (_) {
+        toast('Could not load image', 'err');
+      }
+    };
+    input.click();
+  });
   document.body.appendChild(el);
   return el;
 }
@@ -2194,30 +2327,40 @@ function _showClipboardWaitOverlay() {
 async function pasteImageFromClipboard(options) {
   const silent = options && options.silent;
   const preset = (options && options.photoPreset) || 'item';
-  if (!navigator.clipboard || !navigator.clipboard.read) {
-    if (!silent) toast('Clipboard paste not supported — use Gallery and pick your screenshot', 'err');
-    return null;
-  }
-  try {
-    const items = await navigator.clipboard.read();
-    for (const item of items) {
-      for (const type of item.types) {
-        if (type.startsWith('image/')) {
-          const blob = await item.getType(type);
-          const rough = await compressImageFile(new File([blob], 'screenshot.jpg', { type }), 960, 0.82);
-          return await compressImageForStorage(rough, preset);
+
+  if (navigator.clipboard && navigator.clipboard.read) {
+    try {
+      const items = await navigator.clipboard.read();
+      const dataUrl = await _readImageFromClipboardItems(items, preset);
+      if (dataUrl) return dataUrl;
+    } catch (e) {
+      console.warn('[clipboard]', e);
+      if (!silent) {
+        if (e.name === 'NotAllowedError') {
+          toast('Tap Import now to allow clipboard access', 'err');
+        } else {
+          toast('Could not read clipboard — tap Import now or use Gallery', 'err');
         }
       }
+      return null;
     }
-    if (!silent) toast('No image in clipboard yet', 'err');
-    return null;
-  } catch (e) {
-    console.warn('[clipboard]', e);
-    if (!silent) toast('Could not read clipboard — tap Import now when you return, or use Gallery', 'err');
-    return null;
+  } else if (!silent) {
+    toast('Clipboard not supported — use Gallery and pick your screenshot', 'err');
   }
+
+  if (!silent) toast('No image in clipboard yet', 'err');
+  return null;
 }
 window.pasteImageFromClipboard = pasteImageFromClipboard;
+
+async function _completeScreenshotImport(dataUrl) {
+  if (!dataUrl || !_clipboardPastePending) return false;
+  const onPick = _clipboardPastePending.opts.onPick;
+  cancelClipboardScreenshotWait();
+  if (onPick) await onPick(dataUrl);
+  toast('Screenshot imported', 'ok');
+  return true;
+}
 
 function startClipboardScreenshotImport(opts) {
   cancelClipboardScreenshotWait();
@@ -2226,32 +2369,66 @@ function startClipboardScreenshotImport(opts) {
     onPick: opts.onPick
   };
 
+  _showClipboardWaitOverlay();
+
   let importing = false;
   async function tryImport(fromUserTap) {
-    if (!_clipboardPastePending || importing) return;
+    if (!_clipboardPastePending || importing) return false;
     importing = true;
     try {
       const dataUrl = await pasteImageFromClipboard({
         silent: !fromUserTap,
         photoPreset: pickOpts.photoPreset
       });
-      if (dataUrl && _clipboardPastePending) {
-        const onPick = _clipboardPastePending.opts.onPick;
-        cancelClipboardScreenshotWait();
-        if (onPick) onPick(dataUrl);
-        toast('Screenshot imported', 'ok');
-        return;
+      if (dataUrl) {
+        await _completeScreenshotImport(dataUrl);
+        return true;
       }
-      if (fromUserTap) toast('No screenshot in clipboard yet — finish in the other app first', 'err');
+      if (fromUserTap) {
+        toast('No screenshot in clipboard — try Gallery or take the screenshot again', 'err');
+      }
+      return false;
     } finally {
       importing = false;
     }
   }
 
+  async function tryImportFromPasteEvent(e) {
+    if (!_clipboardPastePending || importing) return;
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items || !items.length) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item.type || item.type.indexOf('image') === -1) continue;
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (!file) continue;
+      importing = true;
+      try {
+        const dataUrl = await _imageBlobToStorage(file, pickOpts.photoPreset);
+        if (dataUrl) await _completeScreenshotImport(dataUrl);
+      } finally {
+        importing = false;
+      }
+      return;
+    }
+  }
+
+  const retryDelays = [200, 600, 1200, 2200];
+  const retryTimers = [];
+
   const onReturn = () => {
     if (document.visibilityState && document.visibilityState !== 'visible') return;
-    setTimeout(() => { if (_clipboardPastePending) tryImport(false); }, 350);
+    _updateClipboardWaitOverlay('ready');
+    retryTimers.forEach(id => clearTimeout(id));
+    retryDelays.forEach(ms => {
+      retryTimers.push(setTimeout(() => {
+        if (_clipboardPastePending) tryImport(false);
+      }, ms));
+    });
   };
+
+  const onPaste = e => { tryImportFromPasteEvent(e); };
 
   _clipboardPastePending = {
     opts: pickOpts,
@@ -2259,6 +2436,8 @@ function startClipboardScreenshotImport(opts) {
     onVis: onReturn,
     onFocus: onReturn,
     onPageShow: onReturn,
+    onPaste,
+    retryTimers,
     timeoutId: setTimeout(() => {
       if (_clipboardPastePending) {
         cancelClipboardScreenshotWait();
@@ -2270,14 +2449,45 @@ function startClipboardScreenshotImport(opts) {
   document.addEventListener('visibilitychange', onReturn);
   window.addEventListener('focus', onReturn);
   window.addEventListener('pageshow', onReturn);
+  document.addEventListener('paste', onPaste, true);
 
-  tryImport(false).then(() => {
-    if (!_clipboardPastePending) return;
-    _showClipboardWaitOverlay();
+  tryImport(false).then(imported => {
+    if (imported || !_clipboardPastePending) return;
     toast('Take screenshot in another app, then return here', 'ok');
   });
 }
 window.startClipboardScreenshotImport = startClipboardScreenshotImport;
+
+function startWishlistScreenshotImport() {
+  startClipboardScreenshotImport({
+    photoPreset: 'wish',
+    onPick: async dataUrl => {
+      _wishFormPhotoData = dataUrl;
+      updateWishPhotoPreview();
+    }
+  });
+}
+window.startWishlistScreenshotImport = startWishlistScreenshotImport;
+
+function initWishlistScreenshotWatch() {
+  if (_wishlistScreenshotWatchOn) return;
+  _wishlistScreenshotWatchOn = true;
+  const delays = [300, 900, 1800];
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!_isWishlistVisible() || _clipboardPastePending || _wishFormPhotoData) return;
+    delays.forEach(ms => {
+      setTimeout(async () => {
+        if (!_isWishlistVisible() || _clipboardPastePending || _wishFormPhotoData) return;
+        const dataUrl = await pasteImageFromClipboard({ silent: true, photoPreset: 'wish' });
+        if (!dataUrl) return;
+        _wishFormPhotoData = dataUrl;
+        updateWishPhotoPreview();
+        toast('Screenshot imported to wishlist', 'ok');
+      }, ms);
+    });
+  });
+}
 
 function showImagePickerSheet(opts) {
   _closeImagePickerSheet();
@@ -2300,11 +2510,12 @@ function showImagePickerSheet(opts) {
     btn.addEventListener('click', async () => {
       const src = btn.getAttribute('data-src');
       if (src === 'cancel') { _closeImagePickerSheet(); return; }
-      _closeImagePickerSheet();
       if (src === 'clipboard') {
         startClipboardScreenshotImport(opts);
+        _closeImagePickerSheet();
         return;
       }
+      _closeImagePickerSheet();
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
@@ -2348,7 +2559,7 @@ function triggerAddPhotoUpload() {
     title: 'Item photo',
     photoPreset: 'item',
     onPick: async dataUrl => {
-      _addFormPhotoData = await compressImageForStorage(dataUrl, 'item');
+      _addFormPhotoData = dataUrl;
       const photoImg = document.getElementById('add-photo-img');
       const placeholder = document.getElementById('add-photo-placeholder');
       const removeBtn = document.getElementById('add-photo-remove');
@@ -2383,7 +2594,7 @@ function triggerWishPhotoUpload() {
     title: 'Wishlist photo',
     photoPreset: 'wish',
     onPick: async dataUrl => {
-      _wishFormPhotoData = await compressImageForStorage(dataUrl, 'wish');
+      _wishFormPhotoData = dataUrl;
       updateWishPhotoPreview();
       toast('Photo attached', 'ok');
     }
@@ -2773,12 +2984,6 @@ function clearForm() {
 
   _shoeState.reset();
   resetShoeUiPanels();
-  const shoePanel  = UI.el('shoe-size-panel');
-  const stdPricing = UI.el('std-pricing-section');
-  const sizeField  = document.getElementById('f-size-field');
-  if (shoePanel)  shoePanel.style.display  = 'none';
-  if (stdPricing) stdPricing.style.display = 'block';
-  if (sizeField)  sizeField.style.display  = 'block';
   ['shoe-shared-qty','shoe-shared-buy','shoe-shared-sell'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
@@ -2786,6 +2991,7 @@ function clearForm() {
   setRestockBanner(false);
   hideRestockView();
   _wishStockingFromId = null;
+  onTypeChange();
 
   clearCodeMatchSelect();
   hideCodeDropdown();
@@ -3915,6 +4121,7 @@ async function editItem() {
   UI.el('form-mode-label').textContent = '✏️ Edit · ' + (item.name || item.code);
   UI.el('cancel-edit-btn').style.display = 'block';
   _editOriginItemId = item.id;
+  onTypeChange();
   updateProfitPreview();
   const existingPhoto = getItemPhoto(item.id);
   if (existingPhoto) applyAddFormPhotoPreview(existingPhoto);
@@ -7086,6 +7293,7 @@ function initCleanNumericInputs() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initCleanNumericInputs();
+  initWishlistScreenshotWatch();
   const ps = document.getElementById('profile-sheet');
   if (ps) ps.addEventListener('click', e => { if (e.target === ps) closeProfileSheet(); });
 });
@@ -8240,13 +8448,20 @@ window.startWishlistRestock = startWishlistRestock;
 
 function onTypeChange() {
   const typeEl     = UI.el('f-type');
-  const type       = typeEl ? typeEl.value : '';
+  const type       = typeEl ? String(typeEl.value || '').trim() : '';
   const shoePanel  = UI.el('shoe-size-panel');
   const stdPricing = UI.el('std-pricing-section');
   const sizeField  = document.getElementById('f-size-field');
   if (!shoePanel || !stdPricing) return;
 
-  const isShoe = isFootwearType(type);
+  const inRestock = document.getElementById('page-add')?.classList.contains('restock-mode');
+  if (inRestock) {
+    shoePanel.style.display = 'none';
+    stdPricing.style.display = 'block';
+    return;
+  }
+
+  const isShoe = !!type && isFootwearType(type);
   shoePanel.style.display  = isShoe ? 'block' : 'none';
   stdPricing.style.display = isShoe ? 'none'  : 'block';
   if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
@@ -8669,7 +8884,6 @@ async function openShoeSizeRestock(itemId, size) {
     UI.el('f-qty').value   = '';
     UI.el('f-buy').value   = sizeRec.buyPrice  || '';
     UI.el('f-sell').value  = sizeRec.sellPrice || '';
-    onTypeChange();
     setAddTypeLocked(true);
     showRestockView({
       code: item.code,

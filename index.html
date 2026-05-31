@@ -14,6 +14,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Mandela General Stores">
   <meta name="description" content="Mandela General Stores — Inventory Management System">
+  <meta http-equiv="Permissions-Policy" content="clipboard-read=(self), clipboard-write=(self)">
   <title>Mandela General Stores</title>
 
   <!-- PWA manifest & touch icon -->
@@ -662,10 +663,13 @@
       <div id="wish-photo-placeholder" class="add-photo-ph">
         <span class="add-photo-ph-icon">📷</span>
         <span class="add-photo-ph-text">Tap to add photo</span>
-        <span class="add-photo-ph-hint">Camera, gallery, or paste screenshot</span>
+        <span class="add-photo-ph-hint">Camera, gallery, or screenshot</span>
       </div>
       <button type="button" id="wish-photo-remove" onclick="removeWishFormPhoto(event)" class="add-photo-remove" style="display:none;">✕ Remove</button>
     </div>
+    <button type="button" class="wish-screenshot-btn" onclick="startWishlistScreenshotImport()">
+      📋 Screenshot from another app
+    </button>
     <button onclick="saveWishlistItem()" class="stock-add-wish-btn">
       <i class="fa-solid fa-plus"></i> Add to wishlist
     </button>

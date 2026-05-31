@@ -4,7 +4,7 @@
 //   Firebase SDK → Cache-first (static SDK, rarely changes)
 //   Firestore API → Network-only (never cache live data)
 
-const CACHE_NAME = 'mandela-v20260531-restock-ui';   // bump this on every deploy
+const CACHE_NAME = 'mandela-v20260531-shoe-panel-default';   // bump this on every deploy
 const FIREBASE_CACHE = 'firebase-sdk-v1';
 
 const APP_FILES = [
