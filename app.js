@@ -2943,7 +2943,7 @@ let _isShoeSale       = false;
 let _sellShoeItem     = null;
 let _sellShoeSize     = null;    // full sizeRec object
 
-async function searchSell() {
+async function _legacySearchSell() {
   try {
   const q = (document.getElementById('sell-search').value || '').trim().toLowerCase();
   const results = document.getElementById('sell-results');
