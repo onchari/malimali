@@ -313,6 +313,9 @@
   <button class="nav-btn" onclick="showPage('list')" id="tab-list">
     <span class="icon"><i class="fa-solid fa-boxes-stacked"></i></span>Stock
   </button>
+  <button class="nav-btn" onclick="showPage('wishlist')" id="tab-wishlist">
+    <span class="icon"><i class="fa-solid fa-clipboard-list"></i></span>Wishlist
+  </button>
   <button class="nav-btn" onclick="showPage('add')" id="tab-add">
     <span class="icon"><i class="fa-solid fa-plus"></i></span>Add
   </button>
@@ -534,7 +537,7 @@
   <div class="stock-toolbar">
     <div>
       <div class="stock-title">Stock</div>
-      <div class="stock-sub" id="stock-monitor-sub">Monitor items to buy</div>
+      <div class="stock-sub" id="stock-monitor-sub">Out-of-stock monitor</div>
     </div>
     <button class="stock-monitor-btn" onclick="openStockMonitor()" title="Stock monitor">
       <i class="fa-solid fa-display"></i>
@@ -565,42 +568,57 @@
 
 </div><!-- /page-list -->
 
-<!-- Stock monitor sheet: out of stock + prospective items -->
+<!-- Stock monitor sheet: out of stock items -->
 <div class="sheet-overlay" id="stock-monitor-sheet">
   <div class="sheet" style="max-height:92vh;overflow:auto;">
     <div class="sheet-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
       <div>
-        <div class="sheet-title">Stock Monitor</div>
-        <div class="sheet-code">Out of stock and prospective items</div>
+        <div class="sheet-title">Out of Stock</div>
+        <div class="sheet-code">Items that need restocking</div>
       </div>
       <button onclick="closeStockMonitor()" class="stock-icon-btn" title="Close">
         <i class="fa-solid fa-xmark"></i>
       </button>
     </div>
 
-    <div class="stock-monitor-form">
-      <div class="stock-form-title">Add prospective item</div>
-      <div class="stock-form-grid">
-        <input class="add-input" id="wish-name" type="text" placeholder="Item name">
-        <input class="add-input add-mono" id="wish-code" type="text" placeholder="Code optional">
-      </div>
-      <div class="stock-form-grid">
-        <select class="add-select" id="wish-type"></select>
-        <input class="add-input add-mono" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="Qty">
-      </div>
-      <div class="stock-form-grid">
-        <input class="add-input" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Est. buy price">
-        <input class="add-input" id="wish-note" type="text" maxlength="160" placeholder="Note optional">
-      </div>
-      <button onclick="saveWishlistItem()" class="stock-add-wish-btn">
-        <i class="fa-solid fa-plus"></i> Add to monitor
-      </button>
-    </div>
-
     <div id="stock-monitor-counts" class="stock-monitor-counts"></div>
     <div id="stock-monitor-list"></div>
   </div>
+</div>
+
+<!-- ============================================================== 
+     PAGE: WISHLIST  (id="page-wishlist")
+     Prospective items the business may stock later.
+     ============================================================== -->
+<div class="page" id="page-wishlist" style="padding:12px 12px 0;">
+  <div class="stock-toolbar">
+    <div>
+      <div class="stock-title">Wishlist</div>
+      <div class="stock-sub" id="wishlist-sub">Prospective items to stock</div>
+    </div>
+  </div>
+
+  <div class="stock-monitor-form">
+    <div class="stock-form-title">Add prospective item</div>
+    <div class="stock-form-grid">
+      <input class="add-input" id="wish-name" type="text" placeholder="Item name">
+      <input class="add-input add-mono" id="wish-code" type="text" placeholder="Code optional">
+    </div>
+    <div class="stock-form-grid">
+      <select class="add-select" id="wish-type"></select>
+      <input class="add-input add-mono" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="Qty">
+    </div>
+    <div class="stock-form-grid">
+      <input class="add-input" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Est. buy price">
+      <input class="add-input" id="wish-note" type="text" maxlength="160" placeholder="Note optional">
+    </div>
+    <button onclick="saveWishlistItem()" class="stock-add-wish-btn">
+      <i class="fa-solid fa-plus"></i> Add to wishlist
+    </button>
+  </div>
+
+  <div id="wishlist-list" style="padding-bottom:80px;"></div>
 </div>
 
 

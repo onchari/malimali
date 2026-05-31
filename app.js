@@ -712,6 +712,7 @@ function showPage(id) {
   if (tabEl) tabEl.classList.add('active');
   if (id === 'dash') renderDashboard();
   if (id === 'list') renderList();
+  if (id === 'wishlist') renderWishlistPage();
   if (id === 'day') { updateDayLiveStats(); renderDaySessionsList(); renderDayState(); }
   if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
   if (id === 'history') { renderHistoryPage(); }
@@ -1689,6 +1690,10 @@ async function getStockMonitorRows() {
   });
 }
 
+function filterStockRows(rows, kind) {
+  return kind ? rows.filter(r => r.kind === kind) : rows;
+}
+
 async function renderStockMonitorSummary() {
   const btn = document.querySelector('.stock-monitor-btn');
   const sub = document.getElementById('stock-monitor-sub');
@@ -1696,8 +1701,10 @@ async function renderStockMonitorSummary() {
   const rows = await getStockMonitorRows();
   const outCount = rows.filter(r => r.kind === 'out').length;
   const wishCount = rows.filter(r => r.kind === 'prospective').length;
-  if (btn) btn.classList.toggle('active', rows.length > 0);
-  if (sub) sub.textContent = outCount + ' out · ' + wishCount + ' prospective';
+  if (btn) btn.classList.toggle('active', outCount > 0);
+  if (sub) sub.textContent = outCount + ' out of stock';
+  const wishSub = document.getElementById('wishlist-sub');
+  if (wishSub) wishSub.textContent = wishCount + ' prospective items';
 }
 
 function renderWishlistTypeOptions() {
@@ -1710,7 +1717,6 @@ function renderWishlistTypeOptions() {
 }
 
 async function openStockMonitor() {
-  renderWishlistTypeOptions();
   await renderStockMonitor();
   const sheet = document.getElementById('stock-monitor-sheet');
   if (sheet) sheet.classList.add('open');
@@ -1725,16 +1731,13 @@ async function renderStockMonitor() {
   const list = document.getElementById('stock-monitor-list');
   const counts = document.getElementById('stock-monitor-counts');
   if (!list) return;
-  const rows = await getStockMonitorRows();
-  const outCount = rows.filter(r => r.kind === 'out').length;
-  const wishCount = rows.filter(r => r.kind === 'prospective').length;
+  const rows = filterStockRows(await getStockMonitorRows(), 'out');
+  const outCount = rows.length;
   if (counts) {
-    counts.innerHTML =
-      '<div class="stock-monitor-pill red">' + outCount + ' Out of stock</div>' +
-      '<div class="stock-monitor-pill yellow">' + wishCount + ' Prospective</div>';
+    counts.innerHTML = '<div class="stock-monitor-pill red">' + outCount + ' Out of stock</div>';
   }
   if (!rows.length) {
-    list.innerHTML = '<div class="empty" style="padding:28px 12px;"><div class="e-icon">OK</div><p>No out-of-stock or prospective items yet.</p></div>';
+    list.innerHTML = '<div class="empty" style="padding:28px 12px;"><div class="e-icon">OK</div><p>No out-of-stock items.</p></div>';
     return;
   }
   list.innerHTML = rows.map(row => {
@@ -1769,6 +1772,38 @@ async function renderStockMonitor() {
   }).join('');
 }
 
+async function renderWishlistPage() {
+  renderWishlistTypeOptions();
+  await renderStockMonitorSummary();
+  const list = document.getElementById('wishlist-list');
+  if (!list) return;
+  const rows = filterStockRows(await getStockMonitorRows(), 'prospective');
+  if (!rows.length) {
+    list.innerHTML = '<div class="empty" style="padding:36px 12px;"><div class="e-icon">+</div><p>No prospective items yet.</p></div>';
+    return;
+  }
+  list.innerHTML = rows.map(row => {
+    return '<div class="stock-monitor-row prospective">' +
+      '<div class="stock-monitor-body">' +
+        '<div class="stock-monitor-name">' + escapeHtml(row.name) + '</div>' +
+        '<div class="stock-monitor-meta">' +
+          escapeHtml(row.code || 'No code') + (row.type ? ' · ' + escapeHtml(row.type) : '') +
+          (row.qty ? ' · target ' + row.qty : '') +
+          (row.buyPrice ? ' · ' + fmt(row.buyPrice) : '') +
+        '</div>' +
+        '<div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;">' +
+          '<span class="tag tag-amber">Prospective</span>' +
+          (row.note ? '<span class="tag tag-gray">' + escapeHtml(row.note) + '</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="stock-monitor-actions">' +
+        '<button class="stock-monitor-action restock" onclick="startWishlistRestock(' + row.wishId + ')" title="Restock"><i class="fa-solid fa-boxes-stacked"></i></button>' +
+        '<button class="stock-monitor-action delete" onclick="deleteWishlistItem(' + row.wishId + ')" title="Remove"><i class="fa-solid fa-trash"></i></button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
 async function saveWishlistItem() {
   const name = (document.getElementById('wish-name')?.value || '').trim();
   const code = (document.getElementById('wish-code')?.value || '').trim().toUpperCase();
@@ -1794,14 +1829,15 @@ async function saveWishlistItem() {
     if (el) el.value = '';
   });
   scheduleSync();
-  await renderStockMonitor();
+  await renderWishlistPage();
   await renderStockMonitorSummary();
-  toast('Added to stock monitor', 'ok');
+  toast('Added to wishlist', 'ok');
 }
 
 async function deleteWishlistItem(id) {
   await dbDelete('wishlist', id);
   scheduleSync();
+  await renderWishlistPage();
   await renderStockMonitor();
   await renderStockMonitorSummary();
 }
@@ -4852,7 +4888,7 @@ function showUserProfile() {
   if (!currentUser) return;
   const roleColors = { super: '#92400e', user: '#1d4ed8', clerk: 'var(--green)' };
   const roleLabels = { super: '🟡 Super User — Full Access', user: '🔵 User — Standard Access', clerk: '🟢 Clerk — Limited Access' };
-  const tabLabels = { dash: 'Dashboard', list: 'Stock', add: 'Add Item', sell: 'Sell', day: 'Day', settings: 'Settings' };
+  const tabLabels = { dash: 'Dashboard', list: 'Stock', wishlist: 'Wishlist', add: 'Add Item', sell: 'Sell', day: 'Day', finance: 'Finance', settings: 'Settings' };
   document.getElementById('profile-name').textContent = currentUser.name;
   document.getElementById('profile-username').textContent = currentUser.username;
   const roleEl = document.getElementById('profile-role');
@@ -4884,7 +4920,7 @@ const USERS = [
     role: 'super',
     roleLabel: 'Super User',
     // Super: access to everything
-    tabs: ['dash','list','add','history','finance','day','settings']
+    tabs: ['dash','list','wishlist','add','history','finance','day','settings']
   },
   {
     username: 'vanice',
@@ -4894,7 +4930,7 @@ const USERS = [
     role: 'user',
     roleLabel: 'User',
     // User: everything except Settings
-    tabs: ['dash','list','add','history','finance','day']
+    tabs: ['dash','list','wishlist','add','history','finance','day']
   },
   {
     username: 'trevor',
@@ -4904,7 +4940,7 @@ const USERS = [
     role: 'clerk',
     roleLabel: 'Clerk',
     // Clerk: view stock + add stock
-    tabs: ['list','add']
+    tabs: ['list','wishlist','add']
   }
 ];
 
@@ -4925,7 +4961,7 @@ let currentUser = null;
 
 function applyRoleRestrictions(user) {
   // Show/hide nav tabs based on role
-  const allTabs = ['dash','list','add','history','finance','day','settings'];
+  const allTabs = ['dash','list','wishlist','add','history','finance','day','settings'];
   allTabs.forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) {
@@ -4952,7 +4988,7 @@ function logout() {
   localStorage.removeItem(KEY_SESSION);
   localStorage.removeItem('mg_last_page');
   // Reset nav tabs visibility
-  ['dash','list','add','sell','day','types','settings'].forEach(tab => {
+  ['dash','list','wishlist','add','sell','history','finance','day','types','settings'].forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) btn.style.display = '';
   });
