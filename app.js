@@ -3,7 +3,7 @@
 // ===================================================================
 let db;
 const DB_NAME = 'InventoryApp';
-const DB_VER  = 9;
+const DB_VER  = 10;
 
 // ── APP CONSTANTS ─────────────────────────────────────────────────────
 const KEY_SESSION     = 'mg_session';
@@ -89,6 +89,15 @@ function initDB() {
     // ── types ──────────────────────────────────────────────────────
     if (!d.objectStoreNames.contains('types')) {
       d.createObjectStore('types', { keyPath: 'id', autoIncrement: true });
+    }
+
+    // Prospective items the business wants to stock later.
+    if (!d.objectStoreNames.contains('wishlist')) {
+      const wl = d.createObjectStore('wishlist', { keyPath: 'id', autoIncrement: true });
+      wl.createIndex('idx_status',     'status',    { unique: false });
+      wl.createIndex('idx_type',       'type',      { unique: false });
+      wl.createIndex('idx_created_at', 'createdAt', { unique: false });
+      wl.createIndex('idx_fbid',       'fbId',      { unique: false });
     }
 
     // NOTE: day_sessions store (legacy) intentionally NOT created in v9.
@@ -203,6 +212,7 @@ const STORES = Object.freeze({
   FINANCES: 'finances',
   BDAYS:    'business_days',
   TYPES:    'types',
+  WISHLIST: 'wishlist',
   SESSIONS: 'day_sessions',
 });
 
@@ -1209,6 +1219,7 @@ async function saveItem() {
       const newId=await dbAdd('items',item);item.id=newId;
       if(_addFormPhotoData)setItemPhoto(newId,_addFormPhotoData);
       await recordStockInvestment(item, qty * buy, qty, 'New stock');
+      await markWishlistStockedForItem(item);
       fbSyncItem(item);
       clearForm();clearAddFormPhoto();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
@@ -1470,6 +1481,7 @@ async function renderList() {
       <div class="e-icon">${allItems.length ? '🔍' : '📦'}</div>
       <p>${allItems.length ? 'No items match your search.' : 'No items yet.\nTap ➕ Add Item to get started.'}</p>
     </div>`;
+    renderStockMonitorSummary();
     return;
   }
 
@@ -1618,6 +1630,234 @@ async function renderList() {
 
   list.style.border = '';
   list.innerHTML = cards.join('');
+  renderStockMonitorSummary();
+}
+
+async function getStockMonitorRows() {
+  const items = await dbAll('items');
+  await enrichShoeItems(items);
+  const sizes = await dbAll('shoe_sizes');
+  const wishlist = db.objectStoreNames.contains('wishlist') ? await dbAll('wishlist') : [];
+  const rows = [];
+
+  items.forEach(item => {
+    if (item.isShoe) {
+      sizes
+        .filter(sz => sz.itemCode === item.code && (sz.qty || 0) <= 0)
+        .forEach(sz => rows.push({
+          kind: 'out',
+          itemId: item.id,
+          size: sz.size,
+          name: item.name || item.code,
+          code: item.code,
+          type: item.type || '',
+          qty: 0,
+          buyPrice: sz.buyPrice || item.buyPrice || item.buy || 0,
+          label: 'Out of stock - size ' + sz.size
+        }));
+    } else if ((item.qty || 0) <= 0) {
+      rows.push({
+        kind: 'out',
+        itemId: item.id,
+        name: item.name || item.code,
+        code: item.code,
+        type: item.type || '',
+        qty: 0,
+        buyPrice: item.buyPrice || item.buy || 0,
+        label: 'Out of stock'
+      });
+    }
+  });
+
+  wishlist
+    .filter(w => (w.status || 'prospective') !== 'stocked')
+    .forEach(w => rows.push({
+      kind: 'prospective',
+      wishId: w.id,
+      name: w.name || w.code || 'Prospective item',
+      code: w.code || '',
+      type: w.type || '',
+      qty: w.qty || 0,
+      buyPrice: w.estimatedCost || 0,
+      note: w.note || '',
+      label: 'Prospective'
+    }));
+
+  return rows.sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'out' ? -1 : 1;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+}
+
+async function renderStockMonitorSummary() {
+  const btn = document.querySelector('.stock-monitor-btn');
+  const sub = document.getElementById('stock-monitor-sub');
+  if (!btn && !sub) return;
+  const rows = await getStockMonitorRows();
+  const outCount = rows.filter(r => r.kind === 'out').length;
+  const wishCount = rows.filter(r => r.kind === 'prospective').length;
+  if (btn) btn.classList.toggle('active', rows.length > 0);
+  if (sub) sub.textContent = outCount + ' out · ' + wishCount + ' prospective';
+}
+
+function renderWishlistTypeOptions() {
+  const sel = document.getElementById('wish-type');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Category</option>' +
+    types.map(t => '<option value="' + escapeHtml(t.name) + '">' + escapeHtml(t.name) + '</option>').join('');
+  if (current) sel.value = current;
+}
+
+async function openStockMonitor() {
+  renderWishlistTypeOptions();
+  await renderStockMonitor();
+  const sheet = document.getElementById('stock-monitor-sheet');
+  if (sheet) sheet.classList.add('open');
+}
+
+function closeStockMonitor() {
+  const sheet = document.getElementById('stock-monitor-sheet');
+  if (sheet) sheet.classList.remove('open');
+}
+
+async function renderStockMonitor() {
+  const list = document.getElementById('stock-monitor-list');
+  const counts = document.getElementById('stock-monitor-counts');
+  if (!list) return;
+  const rows = await getStockMonitorRows();
+  const outCount = rows.filter(r => r.kind === 'out').length;
+  const wishCount = rows.filter(r => r.kind === 'prospective').length;
+  if (counts) {
+    counts.innerHTML =
+      '<div class="stock-monitor-pill red">' + outCount + ' Out of stock</div>' +
+      '<div class="stock-monitor-pill yellow">' + wishCount + ' Prospective</div>';
+  }
+  if (!rows.length) {
+    list.innerHTML = '<div class="empty" style="padding:28px 12px;"><div class="e-icon">OK</div><p>No out-of-stock or prospective items yet.</p></div>';
+    return;
+  }
+  list.innerHTML = rows.map(row => {
+    const cls = row.kind === 'out' ? 'out' : 'prospective';
+    const status = row.kind === 'out'
+      ? '<span class="tag tag-red">Out of stock</span>'
+      : '<span class="tag tag-amber">Prospective</span>';
+    const restockAction = row.kind === 'out'
+      ? 'restockFromMonitor(' + row.itemId + (row.size ? ',' + row.size : '') + ')'
+      : 'startWishlistRestock(' + row.wishId + ')';
+    const deleteBtn = row.kind === 'prospective'
+      ? '<button class="stock-monitor-action delete" onclick="deleteWishlistItem(' + row.wishId + ')" title="Remove"><i class="fa-solid fa-trash"></i></button>'
+      : '';
+    return '<div class="stock-monitor-row ' + cls + '">' +
+      '<div class="stock-monitor-body">' +
+        '<div class="stock-monitor-name">' + escapeHtml(row.name) + '</div>' +
+        '<div class="stock-monitor-meta">' +
+          escapeHtml(row.code || 'No code') + (row.type ? ' · ' + escapeHtml(row.type) : '') +
+          (row.qty ? ' · target ' + row.qty : '') +
+          (row.buyPrice ? ' · ' + fmt(row.buyPrice) : '') +
+        '</div>' +
+        '<div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;">' + status +
+          (row.size ? '<span class="tag tag-gray">Size ' + escapeHtml(row.size) + '</span>' : '') +
+          (row.note ? '<span class="tag tag-gray">' + escapeHtml(row.note) + '</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="stock-monitor-actions">' +
+        '<button class="stock-monitor-action restock" onclick="' + restockAction + '" title="Restock"><i class="fa-solid fa-boxes-stacked"></i></button>' +
+        deleteBtn +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function saveWishlistItem() {
+  const name = (document.getElementById('wish-name')?.value || '').trim();
+  const code = (document.getElementById('wish-code')?.value || '').trim().toUpperCase();
+  const type = document.getElementById('wish-type')?.value || '';
+  const qty = parseInt(document.getElementById('wish-qty')?.value || '0');
+  const estimatedCost = parseFloat(document.getElementById('wish-cost')?.value || '0') || 0;
+  const note = (document.getElementById('wish-note')?.value || '').trim();
+  if (!name && !code) return Validate.fail('Enter item name or code', 'wish-name');
+  const entry = {
+    name,
+    code,
+    type,
+    qty: qty > 0 ? qty : 1,
+    estimatedCost,
+    note,
+    status: 'prospective',
+    createdAt: new Date().toISOString(),
+    createdBy: currentUser ? currentUser.username : 'system'
+  };
+  entry.id = await dbAdd('wishlist', entry);
+  ['wish-name','wish-code','wish-qty','wish-cost','wish-note'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  scheduleSync();
+  await renderStockMonitor();
+  await renderStockMonitorSummary();
+  toast('Added to stock monitor', 'ok');
+}
+
+async function deleteWishlistItem(id) {
+  await dbDelete('wishlist', id);
+  scheduleSync();
+  await renderStockMonitor();
+  await renderStockMonitorSummary();
+}
+
+async function markWishlistStockedForItem(item) {
+  if (!item || !db.objectStoreNames.contains('wishlist')) return;
+  const wishlist = await dbAll('wishlist');
+  const itemCode = (item.code || '').trim().toLowerCase();
+  const itemName = (item.name || '').trim().toLowerCase();
+  for (const wish of wishlist) {
+    if ((wish.status || 'prospective') === 'stocked') continue;
+    const wishCode = (wish.code || '').trim().toLowerCase();
+    const wishName = (wish.name || '').trim().toLowerCase();
+    const matchesCode = itemCode && wishCode && itemCode === wishCode;
+    const matchesName = itemName && wishName && itemName === wishName;
+    if (!matchesCode && !matchesName) continue;
+    wish.status = 'stocked';
+    wish.stockedAt = new Date().toISOString();
+    wish.stockedItemId = item.id || null;
+    await dbPut('wishlist', wish);
+  }
+}
+
+async function restockFromMonitor(itemId, size) {
+  closeStockMonitor();
+  if (size != null) {
+    await openShoeSizeRestock(itemId, size);
+    return;
+  }
+  await openSheet(itemId);
+  setTimeout(() => {
+    const panel = document.getElementById('restock-panel');
+    if (panel && panel.style.display === 'none') toggleRestock();
+    const qty = document.getElementById('restock-qty');
+    if (qty) qty.focus();
+  }, 120);
+}
+
+async function startWishlistRestock(wishId) {
+  const wish = await dbGet('wishlist', wishId);
+  if (!wish) return;
+  closeStockMonitor();
+  clearForm();
+  showPage('add');
+  setTimeout(() => {
+    const typeEl = UI.el('f-type');
+    if (typeEl && wish.type) {
+      typeEl.value = wish.type;
+      onTypeChange();
+    }
+    if (UI.el('f-code')) UI.el('f-code').value = wish.code || '';
+    if (UI.el('f-name')) UI.el('f-name').value = wish.name || '';
+    if (UI.el('f-qty')) UI.el('f-qty').value = wish.qty || 1;
+    if (UI.el('f-buy')) UI.el('f-buy').value = wish.estimatedCost || '';
+    updateProfitPreview();
+  }, 80);
 }
 
 // Open a dedicated size detail sheet from the stock list
@@ -2938,7 +3178,7 @@ async function resetAndRebuildDB() {
     // 1. Clear all IndexedDB data stores
     await DB.clearAll([
       STORES.ITEMS, STORES.SALES, STORES.SIZES,
-      STORES.FINANCES, STORES.BDAYS, STORES.TYPES,
+      STORES.FINANCES, STORES.BDAYS, STORES.TYPES, STORES.WISHLIST,
     ]);
     console.log('[DB] All stores cleared');
 
@@ -2946,7 +3186,7 @@ async function resetAndRebuildDB() {
     if (fbReady && fbDb) {
       try {
         const { collection, getDocs, writeBatch, doc } = await waitForFbImports();
-        for (const col of [STORES.ITEMS, STORES.SALES, STORES.SIZES, STORES.FINANCES, STORES.BDAYS]) {
+        for (const col of [STORES.ITEMS, STORES.SALES, STORES.SIZES, STORES.FINANCES, STORES.BDAYS, STORES.WISHLIST]) {
           const snap = await getDocs(collection(fbDb, col));
           if (snap.empty) continue;
           let batch = writeBatch(fbDb); let n = 0;
@@ -3009,7 +3249,7 @@ async function resetAllData() {
 
     // ── 1. Clear IndexedDB using store.clear() ────────────────────
     // This is atomic and reliable — clears entire store in one op
-    const stores = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances'];
+    const stores = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances', 'wishlist'];
     await new Promise((resolve, reject) => {
       const tx = db.transaction(
         stores.filter(s => db.objectStoreNames.contains(s)),
@@ -3029,7 +3269,7 @@ async function resetAllData() {
     if (fbReady && fbDb) {
       try {
         const { collection, getDocs, deleteDoc, doc, writeBatch } = await waitForFbImports();
-        for (const col of ['items', 'sales', 'business_days', 'shoe_sizes']) {
+        for (const col of ['items', 'sales', 'business_days', 'shoe_sizes', 'wishlist']) {
           const snap = await getDocs(collection(fbDb, col));
           if (!snap.empty) {
             // Use batched deletes (max 500 per batch)
@@ -3489,6 +3729,18 @@ async function forcePushToFirebase(silent = false) {
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
 
+    // Push wishlist
+    const wishlist = db.objectStoreNames.contains('wishlist') ? await dbAll('wishlist') : [];
+    for (const w of wishlist) {
+      if (!w.fbId) {
+        w.fbId = 'wish_' + (w.createdAt || '').replace(/[:.TZ]/g, '-') + '_' + (w.id || Math.random().toString(36).slice(2, 6));
+        await dbPut('wishlist', w);
+      }
+      batch.set(doc(fbDb, 'wishlist', w.fbId), sanitiseForFirestore({...w}));
+      count++;
+      if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
+    }
+
     if (count > 0) await batch.commit();
     setFbStatus('on');
     if (!silent) toast('⬆️ Synced ' + items.length + ' items · ' + sales.length + ' sales · ' + shoeSizes.length + ' sizes', 'ok');
@@ -3584,6 +3836,21 @@ async function pullFromFirebase(silent = false) {
         const ex = finByFbId[d.id];
         if (ex) { data.id = ex.id; await dbPut('finances', data); }
         else    { try { await dbAdd('finances', data); } catch(_) { /* intentionally ignored */ } }
+      }
+    } catch(_) { /* intentionally ignored */ }
+
+    // Pull wishlist
+    try {
+      if (db.objectStoreNames.contains('wishlist')) {
+        const wishSnap = await getDocs(collection(fbDb, 'wishlist'));
+        const localWish = await dbAll('wishlist');
+        const wishByFbId = Object.fromEntries(localWish.filter(w=>w.fbId).map(w=>[w.fbId,w]));
+        for (const d of wishSnap.docs) {
+          const data = { ...d.data(), fbId: d.id }; delete data.id;
+          const ex = wishByFbId[d.id];
+          if (ex) { data.id = ex.id; await dbPut('wishlist', data); }
+          else    { try { await dbAdd('wishlist', data); } catch(_) { /* intentionally ignored */ } }
+        }
       }
     } catch(_) { /* intentionally ignored */ }
 
@@ -5695,6 +5962,7 @@ window.filterFinance = filterFinance;
 window.forcePushToFirebase = forcePushToFirebase;
 window.installAppUpdate = installAppUpdate;
 window.onCodeInput = onCodeInput;
+window.openStockMonitor = openStockMonitor;
 window.openSellFromSheet = openSellFromSheet;
 window.pickEmoji = pickEmoji;
 window.pullFromFirebase = pullFromFirebase;
@@ -5708,6 +5976,7 @@ window.saveCurrency = saveCurrency;
 window.saveFinanceEntry = saveFinanceEntry;
 window.saveFirebaseConfig = saveFirebaseConfig;
 window.saveItem = saveItem;
+window.saveWishlistItem = saveWishlistItem;
 window.searchSell = searchSell;
 window.selectPayment = selectPayment;
 window.showPage = showPage;
@@ -5721,6 +5990,10 @@ window.triggerSheetPhotoUpload = triggerSheetPhotoUpload;
 window.updateFinTypeColor = updateFinTypeColor;
 window.updateProfitPreview = updateProfitPreview;
 window.updateSellModal = updateSellModal;
+window.closeStockMonitor = closeStockMonitor;
+window.deleteWishlistItem = deleteWishlistItem;
+window.restockFromMonitor = restockFromMonitor;
+window.startWishlistRestock = startWishlistRestock;
 
 function onTypeChange() {
   const typeEl     = UI.el('f-type');
@@ -6082,6 +6355,7 @@ async function saveShoeItems(baseCode, baseName, type) {
   product.qty = allSz.reduce((t, s) => t + s.qty, 0);
   await dbPut('items', product);
   await recordStockInvestment(product, stockCost, stockQty, 'Shoe stock');
+  await markWishlistStockedForItem(product);
   fbSyncItem(product);
 
   if (fbReady && fbDb) {

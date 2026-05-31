@@ -586,6 +586,142 @@ body {
 .empty .e-icon { font-size: 48px; margin-bottom: 12px; }
 .empty p { font-size: 14px; }
 
+/* STOCK MONITOR */
+.stock-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.stock-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--text);
+}
+.stock-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.stock-monitor-btn,
+.stock-icon-btn {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 17px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.stock-monitor-btn.active {
+  border-color: var(--red);
+  color: var(--red);
+  background: var(--red-light);
+}
+.stock-monitor-form {
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.stock-form-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text2);
+  margin-bottom: 8px;
+}
+.stock-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.stock-add-wish-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--r);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+.stock-monitor-counts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.stock-monitor-pill {
+  border-radius: var(--r);
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+.stock-monitor-pill.red { background: var(--red-light); color: var(--red); border: 1px solid #fca5a5; }
+.stock-monitor-pill.yellow { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.stock-monitor-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  margin-bottom: 8px;
+}
+.stock-monitor-row.out { border-left: 4px solid var(--red); }
+.stock-monitor-row.prospective { border-left: 4px solid #d97706; }
+.stock-monitor-body { flex: 1; min-width: 0; }
+.stock-monitor-name {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stock-monitor-meta {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--mono);
+  margin-top: 2px;
+}
+.stock-monitor-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.stock-monitor-action {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--r);
+  cursor: pointer;
+}
+.stock-monitor-action.restock { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
+.stock-monitor-action.delete { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+@media (max-width: 420px) {
+  .stock-form-grid { grid-template-columns: 1fr; }
+}
+
 /* SUCCESS SPLASH */
 .splash {
   position: fixed; inset: 0; z-index: 500;
