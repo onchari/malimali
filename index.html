@@ -945,12 +945,9 @@
         <label class="add-label">Type <span class="add-required">*</span></label>
         <select class="add-select" id="fin-type" onchange="updateFinTypeColor()">
           <option value="">Select…</option>
-          <option value="injection">💉 Cash Injection</option>
-          <option value="investment">💵 Investment</option>
-          <option value="stock_purchase">🛍️ Stock Purchase</option>
-          <option value="expense">💸 Expense</option>
-          <option value="withdrawal">🏧 Withdrawal</option>
-          <option value="other">📝 Other</option>
+          <option value="injection">💉 Cash to Business</option>
+          <option value="expense">💸 Business Expense</option>
+          <option value="withdrawal">🏧 Personal Withdraw</option>
         </select>
       </div>
       <div>
@@ -1088,38 +1085,68 @@
     </button>
   </div>
 
-  <!-- ── Item Types ─────────────────────────────────────────── -->
-  <div class="sec-label">🏷️ Item Types</div>
-  <div class="card">
-    <!-- Emoji picker grid -->
-    <div class="emoji-pick" id="emoji-pick" style="margin-bottom:12px;">
+  <!-- ── Categories & shoe setup ─────────────────────────────── -->
+  <div class="sec-label">🏷️ Categories</div>
+  <div style="font-size:12px;color:var(--muted);margin:0 14px 8px;line-height:1.45;">
+    Activate categories for dropdowns. Toggle 👟 for size-grid mode (like shoes).
+    Add sub-categories under a parent (e.g. Footwear → School Shoes).
+  </div>
+
+  <div class="card" style="margin-bottom:8px;">
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">New parent category</div>
+    <div class="emoji-pick" id="emoji-pick" style="margin-bottom:10px;">
       <div class="ep sel" data-e="📦" onclick="pickEmoji(this)">📦</div>
-      <div class="ep" data-e="👟"  onclick="pickEmoji(this)">👟</div>
-      <div class="ep" data-e="👕"  onclick="pickEmoji(this)">👕</div>
-      <div class="ep" data-e="🪣"  onclick="pickEmoji(this)">🪣</div>
-      <div class="ep" data-e="📱"  onclick="pickEmoji(this)">📱</div>
-      <div class="ep" data-e="🍱"  onclick="pickEmoji(this)">🍱</div>
-      <div class="ep" data-e="💄"  onclick="pickEmoji(this)">💄</div>
-      <div class="ep" data-e="🧴"  onclick="pickEmoji(this)">🧴</div>
-      <div class="ep" data-e="🧦"  onclick="pickEmoji(this)">🧦</div>
-      <div class="ep" data-e="👜"  onclick="pickEmoji(this)">👜</div>
-      <div class="ep" data-e="⌚"  onclick="pickEmoji(this)">⌚</div>
-      <div class="ep" data-e="🏠"  onclick="pickEmoji(this)">🏠</div>
-      <div class="ep" data-e="🔧"  onclick="pickEmoji(this)">🔧</div>
-      <div class="ep" data-e="📚"  onclick="pickEmoji(this)">📚</div>
-      <div class="ep" data-e="🎮"  onclick="pickEmoji(this)">🎮</div>
-      <div class="ep" data-e="🧺"  onclick="pickEmoji(this)">🧺</div>
+      <div class="ep" data-e="👟" onclick="pickEmoji(this)">👟</div>
+      <div class="ep" data-e="👕" onclick="pickEmoji(this)">👕</div>
+      <div class="ep" data-e="🪣" onclick="pickEmoji(this)">🪣</div>
+      <div class="ep" data-e="📱" onclick="pickEmoji(this)">📱</div>
+      <div class="ep" data-e="🍱" onclick="pickEmoji(this)">🍱</div>
+      <div class="ep" data-e="💄" onclick="pickEmoji(this)">💄</div>
+      <div class="ep" data-e="⛽" onclick="pickEmoji(this)">⛽</div>
+      <div class="ep" data-e="🧴" onclick="pickEmoji(this)">🧴</div>
+      <div class="ep" data-e="🧦" onclick="pickEmoji(this)">🧦</div>
+      <div class="ep" data-e="👜" onclick="pickEmoji(this)">👜</div>
+      <div class="ep" data-e="⌚" onclick="pickEmoji(this)">⌚</div>
+      <div class="ep" data-e="🏠" onclick="pickEmoji(this)">🏠</div>
+      <div class="ep" data-e="🔧" onclick="pickEmoji(this)">🔧</div>
     </div>
-    <!-- Add new type row -->
-    <div class="type-add-row">
-      <input class="type-input" id="new-type-name" placeholder="Type name e.g. Shoes">
-      <button class="type-add-btn" onclick="addType()">Add Type</button>
+    <div class="type-add-row" style="margin-top:0;">
+      <input class="type-input" id="new-type-name" placeholder="Category name e.g. Footwear">
+      <button class="type-add-btn" onclick="addType()">Add</button>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--text2);cursor:pointer;">
+      <input type="checkbox" id="new-type-footwear" style="width:16px;height:16px;">
+      Use size-grid mode (multi-size stock like shoes)
+    </label>
+  </div>
+
+  <div class="card" style="margin-bottom:8px;">
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">New sub-category</div>
+    <select class="form-select form-select-bold" id="new-sub-parent" style="margin-bottom:8px;">
+      <option value="">— Parent category —</option>
+    </select>
+    <div class="type-add-row" style="margin-top:0;">
+      <input class="type-input" id="new-sub-name" placeholder="Sub-category e.g. School Shoes">
+      <button class="type-add-btn" onclick="addSubCategory()">Add sub</button>
     </div>
   </div>
 
-  <!-- Existing types list — populated by renderTypes() -->
   <div class="card" style="margin-bottom:4px;">
-    <div id="types-list"></div>
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">All categories</div>
+    <div id="categories-list"></div>
+  </div>
+
+  <div class="sec-label" style="margin-top:14px;">👟 Size groups (for size-grid categories)</div>
+  <div class="card" style="margin-bottom:4px;">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;">
+      S / M / L button ranges on the Add Item shoe panel. Change labels and size numbers here.
+    </div>
+    <div id="shoe-groups-settings"></div>
+    <button onclick="saveShoeGroupSettings()"
+            style="width:100%;margin-top:10px;padding:12px;background:var(--accent);color:white;border:none;
+                   border-radius:var(--r);font-size:13px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+      Save size groups
+    </button>
   </div>
 
   <!-- ── Currency ───────────────────────────────────────────── -->

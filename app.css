@@ -844,6 +844,28 @@ body {
 .ep { width: 36px; height: 36px; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: pointer; }
 .ep.sel { border-color: var(--accent); background: var(--accent-light); }
 
+/* Category settings */
+.cat-row { border-bottom: 1px solid var(--border); }
+.cat-row:last-child { border-bottom: none; }
+.cat-sub { padding-left: 20px; background: var(--surface2); }
+.cat-row-main { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+.cat-emoji { font-size: 20px; flex-shrink: 0; }
+.cat-info { flex: 1; min-width: 0; }
+.cat-name { font-size: 13px; font-weight: 800; color: var(--text); }
+.cat-subcount { font-size: 10px; font-weight: 600; color: var(--muted); }
+.cat-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.cat-toggles { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.cat-toggle {
+  min-width: 36px; padding: 5px 8px; border-radius: 999px; border: 1.5px solid var(--border);
+  background: var(--surface2); color: var(--muted); font-size: 10px; font-weight: 800; cursor: pointer;
+}
+.cat-toggle.on { background: var(--green-light); border-color: #a8d8b5; color: var(--green); }
+.cat-toggle.foot.on { background: #eef4ff; border-color: #93c5fd; color: #1d4ed8; }
+.sg-setting-row { margin-bottom: 10px; }
+.sg-setting-label { font-size: 11px; font-weight: 800; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .3px; }
+.sg-setting-fields { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sg-num { width: 56px !important; flex: 0 0 56px !important; text-align: center; }
+
 /* EXPORT */
 .export-btn {
   width: 100%; padding: 14px; margin-bottom: 10px;

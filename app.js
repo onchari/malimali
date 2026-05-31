@@ -120,6 +120,7 @@ function initDB() {
       if (!sessionRestored) return;
 
       await loadActiveDay();
+      try { await _cleanupFinanceCoherence(true); } catch(_) { /* intentionally ignored */ }
       renderDashboard();
       renderList();
       renderSummary();
@@ -328,11 +329,71 @@ class UI {
 
 
 // ── Core shoe helpers — defined early so all functions can use them ─
-function isFootwearType(typeName) {
+function _legacyFootwearName(typeName) {
   if (!typeName) return false;
   const n = typeName.toLowerCase();
   return n.includes('shoe') || n.includes('footwear') || n.includes('boot') ||
          n.includes('sandal') || n.includes('slipper') || n.includes('sneaker');
+}
+
+function getTypeRecord(name) {
+  if (!name) return null;
+  return types.find(t => t.name === name) || null;
+}
+
+function isCategoryActive(rec) {
+  if (!rec) return false;
+  if (rec.active === false) return false;
+  if (rec.parentId) {
+    const parent = types.find(t => t.id === rec.parentId);
+    if (parent && parent.active === false) return false;
+  }
+  return true;
+}
+
+function isFootwearType(typeName) {
+  const rec = getTypeRecord(typeName);
+  if (rec) {
+    if (rec.isFootwear === true) return true;
+    if (rec.isFootwear === false) {
+      if (rec.parentId) {
+        const parent = types.find(t => t.id === rec.parentId);
+        if (parent) return isFootwearType(parent.name);
+      }
+      return false;
+    }
+    if (rec.parentId) {
+      const parent = types.find(t => t.id === rec.parentId);
+      if (parent) return isFootwearType(parent.name);
+    }
+  }
+  return _legacyFootwearName(typeName);
+}
+
+function _sortTypes(a, b) {
+  return (a.sortOrder || 0) - (b.sortOrder || 0) || String(a.name || '').localeCompare(String(b.name || ''));
+}
+
+function getOrderedTypesForDropdown() {
+  const active = types.filter(isCategoryActive);
+  const parents = active.filter(t => !t.parentId).sort(_sortTypes);
+  const opts = [];
+  for (const p of parents) {
+    opts.push({ rec: p, depth: 0 });
+    active.filter(s => s.parentId === p.id).sort(_sortTypes).forEach(s => opts.push({ rec: s, depth: 1 }));
+  }
+  active.filter(t => t.parentId && !parents.some(p => p.id === t.parentId)).sort(_sortTypes)
+    .forEach(s => opts.push({ rec: s, depth: 1 }));
+  return opts;
+}
+
+function itemMatchesTypeFilter(item, filterName) {
+  if (filterName === 'all') return true;
+  if ((item.type || '') === filterName) return true;
+  const itemRec = getTypeRecord(item.type);
+  const filterRec = getTypeRecord(filterName);
+  if (itemRec && filterRec && itemRec.parentId === filterRec.id) return true;
+  return false;
 }
 
 async function getShoeSizes(itemCode) {
@@ -404,7 +465,137 @@ const Validate = {
     // sale price may be lower after bargaining, even below cost if approved.
     return true;
   },
+
+  /** Required non-empty text */
+  text(value, fieldId, label) {
+    if (!value || !String(value).trim()) return this.fail((label || 'This field') + ' is required', fieldId);
+    return true;
+  },
+
+  /** Required money > 0 */
+  moneyRequired(value, fieldId, label) {
+    if (value === null || value === '') return this.fail('Enter ' + (label || 'amount').toLowerCase(), fieldId);
+    if (!Number.isFinite(value)) return this.fail('Enter a valid number', fieldId);
+    if (value < 0) return this.fail((label || 'Amount') + ' cannot be negative', fieldId);
+    if (value <= 0) return this.fail((label || 'Amount') + ' must be greater than zero', fieldId);
+    if (value > 99999999) return this.fail((label || 'Amount') + ' is too large', fieldId);
+    return true;
+  },
+
+  /** Optional money — empty allowed, must be >= 0 if entered */
+  moneyOptional(value, fieldId, label) {
+    if (value === null) return true;
+    if (!Number.isFinite(value)) return this.fail('Enter a valid number', fieldId);
+    if (value < 0) return this.fail((label || 'Amount') + ' cannot be negative', fieldId);
+    if (value > 99999999) return this.fail((label || 'Amount') + ' is too large', fieldId);
+    return true;
+  },
+
+  /** Opening day — at least one pocket entered; empty ≠ zero */
+  dayOpening(cash, till, mpesa) {
+    const vals = [cash, till, mpesa];
+    const ids = ['op-cash', 'op-till', 'op-mpesa'];
+    if (vals.every(v => v === null)) {
+      return this.fail('Enter opening balances — type 0 if a pocket is empty', 'op-cash');
+    }
+    for (let i = 0; i < vals.length; i++) {
+      if (vals[i] === null) continue;
+      if (!Number.isFinite(vals[i])) return this.fail('Enter valid numbers only', ids[i]);
+      if (vals[i] < 0) return this.fail('Opening balance cannot be negative', ids[i]);
+    }
+    return true;
+  },
+
+  /** Closing physical count — cash/till/mpesa required (not all blank) */
+  dayClosingPhysical(cash, till, mpesa) {
+    const vals = [cash, till, mpesa];
+    const ids = ['cl-cash', 'cl-till', 'cl-mpesa'];
+    if (vals.every(v => v === null)) {
+      return this.fail('Enter closing cash, till, or M-Pesa — type 0 if empty', 'cl-cash');
+    }
+    for (let i = 0; i < vals.length; i++) {
+      if (vals[i] === null) continue;
+      if (!Number.isFinite(vals[i])) return this.fail('Enter valid numbers only', ids[i]);
+      if (vals[i] < 0) return this.fail('Closing amount cannot be negative', ids[i]);
+    }
+    return true;
+  },
+
+  /** Finance entry date */
+  financeDate(dateStr, fieldId) {
+    if (!dateStr) return this.fail('Select a date', fieldId);
+    const today = todayDateStr();
+    if (dateStr > today) return 'future';
+    const min = '2020-01-01';
+    if (dateStr < min) return this.fail('Date is too far in the past', fieldId);
+    return true;
+  },
+
+  /** Integer qty optional (empty → null) */
+  intOptional(value, fieldId, label) {
+    if (value === null) return true;
+    if (!Number.isFinite(value)) return this.fail('Enter a valid whole number', fieldId);
+    if (value < 0) return this.fail((label || 'Quantity') + ' cannot be negative', fieldId);
+    return true;
+  },
 };
+
+/** Unified input parsing — empty field is null, not zero */
+const Input = {
+  el(id) { return document.getElementById(id); },
+  raw(id) {
+    const el = typeof id === 'string' ? document.getElementById(id) : id;
+    return el ? String(el.value ?? '').trim() : '';
+  },
+  money(id) {
+    const raw = this.raw(id);
+    if (raw === '') return null;
+    const n = parseFloat(raw);
+    return Number.isFinite(n) ? n : NaN;
+  },
+  moneyOrZero(id) {
+    const v = this.money(id);
+    if (v === null) return 0;
+    return Number.isFinite(v) ? v : NaN;
+  },
+  int(id) {
+    const raw = this.raw(id);
+    if (raw === '') return null;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : NaN;
+  },
+  text(id) {
+    return this.raw(id);
+  },
+  /** Coalesce null pockets to 0 for storage */
+  moneyZero(...values) {
+    return values.map(v => (v === null || v === '' ? 0 : (Number.isFinite(v) ? v : 0)));
+  }
+};
+
+async function _financeTotalsForDay(today) {
+  const fins = await dbAll('finances');
+  const day = (today || '').slice(0, 10);
+  const sumType = type => fins
+    .filter(e => e.type === type && (e.date || (e.createdAt || '').split('T')[0]).slice(0, 10) === day)
+    .reduce((s, e) => s + (e.amount || 0), 0);
+  return { injection: sumType('injection'), expense: sumType('expense'), withdrawal: sumType('withdrawal') };
+}
+
+function _warnFinanceClosingMismatch(finTotals, closing, tolerance) {
+  const tol = tolerance ?? 1;
+  const lines = [];
+  if (Math.abs((finTotals.expense || 0) - closing.expenses) > tol && ((finTotals.expense || 0) > 0 || closing.expenses > 0)) {
+    lines.push('Business expenses: closing ' + fmt(closing.expenses) + ' vs Finance tab ' + fmt(finTotals.expense || 0));
+  }
+  if (Math.abs((finTotals.withdrawal || 0) - closing.withdrawn) > tol && ((finTotals.withdrawal || 0) > 0 || closing.withdrawn > 0)) {
+    lines.push('Personal withdraws: closing ' + fmt(closing.withdrawn) + ' vs Finance tab ' + fmt(finTotals.withdrawal || 0));
+  }
+  if (Math.abs((finTotals.injection || 0) - closing.injected) > tol && ((finTotals.injection || 0) > 0 || closing.injected > 0)) {
+    lines.push('Cash to business: closing ' + fmt(closing.injected) + ' vs Finance tab ' + fmt(finTotals.injection || 0));
+  }
+  return lines;
+}
 
 // ── Standard 3: ShoeState class — encapsulates all shoe form state ──
 class ShoeState {
@@ -814,6 +1005,7 @@ function showPage(id) {
   if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
   if (id === 'history') { renderHistoryPage(); }
   if (id === 'finance')  { renderFinancePage(); }
+  if (id === 'settings') { renderCategorySettings(); }
 }
 
 // Guard: wrap showPage to enforce tab access by role
@@ -832,72 +1024,200 @@ showPage = function(id) {
 
 // ===== TYPES =====
 const DEFAULT_TYPES = [
-  { name: 'Footwear', emoji: '👟', color: '#1e3a5f' },
-  { name: 'Clothes', emoji: '👕', color: '#2d1b4e' },
-  { name: 'Plastics', emoji: '🪣', color: '#1a3a2a' },
-  { name: 'Gas', emoji: '⛽', color: '#1e7a3e' },
-  { name: 'Electronics', emoji: '📱', color: '#1e2a3a' },
-  { name: 'Food', emoji: '🍱', color: '#3a2a1a' },
-  { name: 'Cosmetics', emoji: '💄', color: '#3a1a2a' },
-  { name: 'General', emoji: '📦', color: '#1e293b' },
+  { name: 'Footwear', emoji: '👟', color: '#1e3a5f', active: true, parentId: null, isFootwear: true, sortOrder: 1 },
+  { name: 'Clothes', emoji: '👕', color: '#2d1b4e', active: true, parentId: null, isFootwear: false, sortOrder: 2 },
+  { name: 'Plastics', emoji: '🪣', color: '#1a3a2a', active: true, parentId: null, isFootwear: false, sortOrder: 3 },
+  { name: 'Gas', emoji: '⛽', color: '#1e7a3e', active: true, parentId: null, isFootwear: false, sortOrder: 4 },
+  { name: 'Electronics', emoji: '📱', color: '#1e2a3a', active: true, parentId: null, isFootwear: false, sortOrder: 5 },
+  { name: 'Food', emoji: '🍱', color: '#3a2a1a', active: true, parentId: null, isFootwear: false, sortOrder: 6 },
+  { name: 'Cosmetics', emoji: '💄', color: '#3a1a2a', active: true, parentId: null, isFootwear: false, sortOrder: 7 },
+  { name: 'General', emoji: '📦', color: '#1e293b', active: true, parentId: null, isFootwear: false, sortOrder: 8 },
 ];
+
+async function normalizeTypeRecords() {
+  types = await dbAll('types');
+  for (const t of types) {
+    let changed = false;
+    if (t.active == null) { t.active = true; changed = true; }
+    if (t.parentId === undefined) { t.parentId = null; changed = true; }
+    if (t.isFootwear == null) { t.isFootwear = _legacyFootwearName(t.name); changed = true; }
+    if (t.sortOrder == null) { t.sortOrder = t.id || 0; changed = true; }
+    if (changed) await dbPut('types', t);
+  }
+  types = await dbAll('types');
+}
 
 async function loadTypes() {
   try {
   types = await dbAll('types');
   if (types.length === 0) {
-    for (const t of DEFAULT_TYPES) await dbAdd('types', t);
+    for (const t of DEFAULT_TYPES) await dbAdd('types', { ...t });
     types = await dbAll('types');
   }
+  await normalizeTypeRecords();
   if (!types.some(t => isFootwearType(t.name))) {
-    await dbAdd('types', DEFAULT_TYPES[0]);
+    await dbAdd('types', { ...DEFAULT_TYPES[0] });
     types = await dbAll('types');
+    await normalizeTypeRecords();
   }
-  if (!types.some(t => (t.name || '').toLowerCase() === 'gas')) {
-    const gasType = DEFAULT_TYPES.find(t => t.name === 'Gas');
-    if (gasType) {
-      await dbAdd('types', gasType);
-      types = await dbAll('types');
-    }
-  }
-  renderTypeSelect();
-  renderTypeChips();
+  renderAllTypeDropdowns();
   } catch(e) { console.error("[loadTypes]", e); toast("Error: " + e.message, "err"); }
 }
 
+function renderTypeSelectOptions(selectEl, placeholder) {
+  if (!selectEl) return;
+  const cur = selectEl.value;
+  const items = getOrderedTypesForDropdown();
+  const ph = placeholder || '— Select category —';
+  selectEl.innerHTML = '<option value="">' + ph + '</option>' +
+    items.map(({ rec: t, depth }) => {
+      const prefix = depth ? '\u2003\u21b3 ' : '';
+      const sel = t.name === cur ? ' selected' : '';
+      return '<option value="' + escapeHtml(t.name) + '"' + sel + '>' +
+        (t.emoji || '📦') + ' ' + prefix + escapeHtml(t.name) + '</option>';
+    }).join('');
+}
+
+function renderAllTypeDropdowns() {
+  renderTypeSelectOptions(UI.el('f-type'));
+  renderTypeSelectOptions(document.getElementById('wish-type'), 'Category');
+  renderTypeSelectOptions(document.getElementById('off-type'), 'Category');
+  renderTypeChips();
+}
+
 function renderTypeSelect() {
-  const sel = UI.el('f-type');
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">— Select type —</option>' +
-    types.map(t => `<option value="${t.name}" ${t.name === cur ? 'selected' : ''}>${t.emoji} ${t.name}</option>`).join('');
+  renderTypeSelectOptions(UI.el('f-type'));
 }
 
 function renderTypeChips() {
   const chips = document.getElementById('type-chips');
-  chips.innerHTML = `<span class="chip ${activeTypeFilter === 'all' ? 'active' : ''}" onclick="setTypeFilter('all', this)">All</span>` +
-    types.map(t => `<span class="chip ${activeTypeFilter === t.name ? 'active' : ''}" onclick="setTypeFilter('${t.name}', this)">${t.emoji} ${t.name}</span>`).join('');
+  if (!chips) return;
+  const topActive = types.filter(t => !t.parentId && isCategoryActive(t)).sort(_sortTypes);
+  chips.innerHTML = '<span class="chip ' + (activeTypeFilter === 'all' ? 'active' : '') + '" onclick="setTypeFilter(\'all\', this)">All</span>' +
+    topActive.map(t =>
+      '<span class="chip ' + (activeTypeFilter === t.name ? 'active' : '') + '" onclick="setTypeFilter(\'' + escapeHtml(t.name).replace(/'/g, "\\'") + '\', this)">' +
+      (t.emoji || '📦') + ' ' + escapeHtml(t.name) + '</span>'
+    ).join('');
 }
 
 function setTypeFilter(name, el) {
   activeTypeFilter = name;
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
+  document.querySelectorAll('#type-chips .chip').forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
   renderList();
 }
 
-async function renderTypes() {
+async function renderCategorySettings() {
   try {
-  types = await dbAll('types');
-  renderTypeSelect();
-  const list = document.getElementById('types-list');
-  if (!types.length) { list.innerHTML = '<div style="color:var(--muted);font-size:13px;">No types yet</div>'; return; }
-  list.innerHTML = types.map(t => `
-    <div class="type-row">
-      <div class="type-name"><span>${t.emoji}</span>${t.name}</div>
-      <button class="type-del" onclick="deleteType(${t.id})">✕</button>
-    </div>`).join('');
-  } catch(e) { console.error("[renderTypes]", e); toast("Error: " + e.message, "err"); }
+    types = await dbAll('types');
+    await normalizeTypeRecords();
+    renderAllTypeDropdowns();
+    renderShoeGroupSettings();
+    const list = document.getElementById('categories-list');
+    if (!list) return;
+    if (!types.length) {
+      list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px;">No categories yet</div>';
+      return;
+    }
+    const parents = types.filter(t => !t.parentId).sort(_sortTypes);
+    const parentSelect = document.getElementById('new-sub-parent');
+    if (parentSelect) {
+      parentSelect.innerHTML = '<option value="">— Parent category —</option>' +
+        parents.map(p => '<option value="' + p.id + '">' + escapeHtml(p.emoji + ' ' + p.name) + '</option>').join('');
+    }
+    const rowHtml = (t, isSub) => {
+      const active = t.active !== false;
+      const footwear = t.isFootwear === true;
+      const subs = types.filter(s => s.parentId === t.id).sort(_sortTypes);
+      const subCount = subs.length;
+      return '<div class="cat-row' + (isSub ? ' cat-sub' : '') + '" data-id="' + t.id + '">' +
+        '<div class="cat-row-main">' +
+          '<span class="cat-emoji">' + (t.emoji || '📦') + '</span>' +
+          '<div class="cat-info">' +
+            '<div class="cat-name">' + escapeHtml(t.name) + (isSub ? '' : (subCount ? ' <span class="cat-subcount">' + subCount + ' sub</span>' : '')) + '</div>' +
+            '<div class="cat-meta">' + (active ? 'Active in dropdowns' : 'Hidden from dropdowns') +
+              (footwear ? ' · Size-grid mode' : '') + '</div>' +
+          '</div>' +
+          '<div class="cat-toggles">' +
+            '<button type="button" class="cat-toggle' + (active ? ' on' : '') + '" onclick="toggleCategoryActive(' + t.id + ')" title="Show in dropdowns">' +
+              (active ? 'ON' : 'OFF') + '</button>' +
+            '<button type="button" class="cat-toggle foot' + (footwear ? ' on' : '') + '" onclick="toggleCategoryFootwear(' + t.id + ')" title="Use shoe size grid">' +
+              '👟</button>' +
+            '<button type="button" class="type-del" onclick="deleteType(' + t.id + ')">✕</button>' +
+          '</div>' +
+        '</div>' +
+        (subs.length ? subs.map(s => rowHtml(s, true)).join('') : '') +
+      '</div>';
+    };
+    list.innerHTML = parents.map(p => rowHtml(p, false)).join('');
+  } catch (e) {
+    console.error('[renderCategorySettings]', e);
+    toast('Error loading categories: ' + e.message, 'err');
+  }
 }
+
+window.renderCategorySettings = renderCategorySettings;
+window.renderTypes = renderCategorySettings;
+
+function renderShoeGroupSettings() {
+  const wrap = document.getElementById('shoe-groups-settings');
+  if (!wrap) return;
+  const groups = getShoeGroups();
+  const labels = { S: 'Children (S)', M: 'Teens (M)', L: 'Adults (L)' };
+  wrap.innerHTML = ['S', 'M', 'L'].map(g => {
+    const cfg = groups[g] || SHOE_GROUP_DEFAULTS[g];
+    const lbl = (cfg && cfg.label) || labels[g];
+    return '<div class="sg-setting-row">' +
+      '<div class="sg-setting-label">' + escapeHtml(lbl) + ' <span style="color:var(--muted);font-weight:600;">(' + g + ')</span></div>' +
+      '<div class="sg-setting-fields">' +
+        '<input id="sg-label-' + g + '" type="text" class="type-input" placeholder="Display name" value="' + escapeHtml(lbl) + '" style="flex:1;min-width:0;">' +
+        '<input id="sg-min-' + g + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Min" value="' + (cfg?.min ?? '') + '">' +
+        '<span style="color:var(--muted);">–</span>' +
+        '<input id="sg-max-' + g + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Max" value="' + (cfg?.max ?? '') + '">' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function saveShoeGroupSettings() {
+  const groups = {};
+  for (const g of ['S', 'M', 'L']) {
+    const min = parseInt(document.getElementById('sg-min-' + g)?.value, 10);
+    const max = parseInt(document.getElementById('sg-max-' + g)?.value, 10);
+    const label = (document.getElementById('sg-label-' + g)?.value || '').trim();
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min > max || min < 1 || max > 60) {
+      toast('Invalid size range for group ' + g + ' (use sizes 1–60)', 'err');
+      return;
+    }
+    groups[g] = { min, max };
+    if (label) groups[g].label = label;
+  }
+  localStorage.setItem(KEY_SHOE_GROUPS, JSON.stringify(groups));
+  renderShoeGroupButtons();
+  toast('Shoe size groups saved', 'ok');
+}
+window.saveShoeGroupSettings = saveShoeGroupSettings;
+
+async function toggleCategoryActive(id) {
+  const t = types.find(x => x.id === id);
+  if (!t) return;
+  t.active = t.active === false;
+  await dbPut('types', t);
+  await loadTypes();
+  renderCategorySettings();
+}
+
+async function toggleCategoryFootwear(id) {
+  const t = types.find(x => x.id === id);
+  if (!t) return;
+  t.isFootwear = !t.isFootwear;
+  await dbPut('types', t);
+  await loadTypes();
+  renderCategorySettings();
+  toast(t.isFootwear ? 'Size-grid mode ON for ' + t.name : 'Size-grid mode OFF for ' + t.name, 'ok');
+}
+window.toggleCategoryActive = toggleCategoryActive;
+window.toggleCategoryFootwear = toggleCategoryFootwear;
 
 function pickEmoji(el) {
   document.querySelectorAll('.ep').forEach(e => e.classList.remove('sel'));
@@ -908,27 +1228,64 @@ function pickEmoji(el) {
 async function addType() {
   try {
   const name = document.getElementById('new-type-name').value.trim();
-  if (!name) { toast('Enter a type name', 'err'); return; }
-  if (types.find(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Type already exists', 'err'); return; }
-  await dbAdd('types', { name, emoji: selectedEmoji, color: '#1e293b' });
+  if (!name) { toast('Enter a category name', 'err'); return; }
+  if (types.find(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Category already exists', 'err'); return; }
+  const isFootwear = document.getElementById('new-type-footwear')?.checked || false;
+  await dbAdd('types', {
+    name, emoji: selectedEmoji, color: '#1e293b',
+    active: true, parentId: null, isFootwear, sortOrder: types.length + 1
+  });
   document.getElementById('new-type-name').value = '';
+  const ft = document.getElementById('new-type-footwear');
+  if (ft) ft.checked = false;
   await loadTypes();
-  renderTypes();
-  toast('✅ Type added!', 'ok');
+  renderCategorySettings();
+  toast('Category added', 'ok');
   } catch(e) { console.error("[addType]", e); toast("Error: " + e.message, "err"); }
 }
+
+async function addSubCategory() {
+  try {
+    const parentId = parseInt(document.getElementById('new-sub-parent')?.value, 10);
+    const name = (document.getElementById('new-sub-name')?.value || '').trim();
+    if (!parentId) { toast('Select a parent category', 'err'); return; }
+    if (!name) { toast('Enter sub-category name', 'err'); return; }
+    if (types.find(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Name already exists', 'err'); return; }
+    const parent = types.find(t => t.id === parentId);
+    await dbAdd('types', {
+      name,
+      emoji: parent?.emoji || selectedEmoji,
+      color: parent?.color || '#1e293b',
+      active: true,
+      parentId,
+      isFootwear: parent?.isFootwear || false,
+      sortOrder: types.filter(t => t.parentId === parentId).length + 1
+    });
+    document.getElementById('new-sub-name').value = '';
+    await loadTypes();
+    renderCategorySettings();
+    toast('Sub-category added', 'ok');
+  } catch (e) {
+    console.error('[addSubCategory]', e);
+    toast('Error: ' + e.message, 'err');
+  }
+}
+window.addSubCategory = addSubCategory;
 
 async function deleteType(id) {
   try {
   const allItems = await dbAll('items');
   const typeObj = types.find(t => t.id === id);
+  const subs = types.filter(t => t.parentId === id);
   const inUse = allItems.filter(i => i.type === (typeObj ? typeObj.name : '')).length;
-  let msg = 'Delete type "' + (typeObj ? typeObj.name : 'this type') + '"?';
-  if (inUse > 0) msg += '\n\n⚠️ ' + inUse + ' item(s) use this type. They will keep showing but the type filter will not work.';
+  let msg = 'Delete "' + (typeObj ? typeObj.name : 'this category') + '"?';
+  if (subs.length) msg += '\n\nAlso deletes ' + subs.length + ' sub-categor' + (subs.length === 1 ? 'y' : 'ies') + '.';
+  if (inUse > 0) msg += '\n\n' + inUse + ' item(s) still use this name — they will keep the label.';
   if (!confirm(msg)) return;
+  for (const s of subs) await dbDelete('types', s.id);
   await dbDelete('types', id);
   await loadTypes();
-  renderTypes();
+  renderCategorySettings();
   } catch(e) { console.error("[deleteType]", e); toast("Error: " + e.message, "err"); }
 }
 
@@ -1578,7 +1935,7 @@ async function renderList() {
       (item.code || '').toLowerCase().includes(q) ||
       (item.variant || item.size || '').toLowerCase().includes(q) ||
       (item.type || '').toLowerCase().includes(q);
-    const matchType = activeTypeFilter === 'all' || item.type === activeTypeFilter;
+    const matchType = itemMatchesTypeFilter(item, activeTypeFilter);
     return matchSearch && matchType;
   }).sort((a, b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
 
@@ -1820,12 +2177,11 @@ async function renderStockMonitorSummary() {
 }
 
 function renderWishlistTypeOptions() {
-  const sel = document.getElementById('wish-type');
-  if (!sel) return;
-  const current = sel.value;
-  sel.innerHTML = '<option value="">Category</option>' +
-    types.map(t => '<option value="' + escapeHtml(t.name) + '">' + escapeHtml(t.name) + '</option>').join('');
-  if (current) sel.value = current;
+  renderTypeSelectOptions(document.getElementById('wish-type'), 'Category');
+}
+
+function renderOffstockTypeOptions() {
+  renderTypeSelectOptions(document.getElementById('off-type'), 'Category');
 }
 
 async function openStockMonitor() {
@@ -1923,18 +2279,22 @@ async function renderWishlistPage() {
 }
 
 async function saveWishlistItem() {
-  const name = (document.getElementById('wish-name')?.value || '').trim();
-  const code = (document.getElementById('wish-code')?.value || '').trim().toUpperCase();
+  const name = Input.text('wish-name');
+  const code = Input.text('wish-code').toUpperCase();
   const type = document.getElementById('wish-type')?.value || '';
-  const qty = parseInt(document.getElementById('wish-qty')?.value || '0');
-  const estimatedCost = parseFloat(document.getElementById('wish-cost')?.value || '0') || 0;
-  const note = (document.getElementById('wish-note')?.value || '').trim();
+  const qtyRaw = Input.int('wish-qty');
+  const costRaw = Input.money('wish-cost');
+  const note = Input.text('wish-note');
   if (!name && !code) return Validate.fail('Enter item name or code', 'wish-name');
+  if (!Validate.intOptional(qtyRaw, 'wish-qty', 'Quantity')) return;
+  if (!Validate.moneyOptional(costRaw, 'wish-cost', 'Estimated cost')) return;
+  const qty = (qtyRaw === null || qtyRaw <= 0) ? 1 : qtyRaw;
+  const estimatedCost = costRaw === null ? 0 : costRaw;
   const entry = {
     name,
     code,
     type,
-    qty: qty > 0 ? qty : 1,
+    qty,
     estimatedCost,
     note,
     status: 'prospective',
@@ -3087,15 +3447,6 @@ function selectPayment(method) {
   if (btn) btn.classList.add('active');
 }
 
-function renderOffstockTypeOptions() {
-  const sel = document.getElementById('off-type');
-  if (!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">Category</option>' +
-    types.map(t => '<option value="' + escapeHtml(t.name) + '">' + escapeHtml(t.name) + '</option>').join('');
-  if (cur) sel.value = cur;
-}
-
 function openOffStockSale() {
   renderOffstockTypeOptions();
   const sheet = document.getElementById('offstock-sale-sheet');
@@ -3109,21 +3460,24 @@ function closeOffStockSale() {
 }
 
 async function confirmOffStockSale() {
-  const name = (document.getElementById('off-name')?.value || '').trim();
-  const code = sanitiseCode(document.getElementById('off-code')?.value || '');
+  const name = Input.text('off-name');
+  const code = sanitiseCode(Input.text('off-code'));
   const type = document.getElementById('off-type')?.value || '';
-  const size = (document.getElementById('off-size')?.value || '').trim();
-  const qty = parseInt(document.getElementById('off-qty')?.value || '0');
-  const buyPrice = parseFloat(document.getElementById('off-buy')?.value || '0') || 0;
-  const sellPrice = parseFloat(document.getElementById('off-sell')?.value || '0') || 0;
+  const size = Input.text('off-size');
+  const qty = Input.int('off-qty');
+  const buyPrice = Input.money('off-buy');
+  const sellPrice = Input.money('off-sell');
   const paymentMethod = 'cash';
   if (!name && !code) return Validate.fail('Enter item name or code', 'off-name');
   if (!type) return Validate.fail('Select a category', 'off-type');
   if (!Validate.restockQty(qty, 'off-qty')) return;
-  if (!Validate.salePrice(sellPrice, buyPrice, sellPrice)) return;
+  if (!Validate.moneyOptional(buyPrice, 'off-buy', 'Buy price')) return;
+  if (!Validate.moneyRequired(sellPrice, 'off-sell', 'Sale price')) return;
+  const buy = buyPrice === null ? 0 : buyPrice;
+  if (buy > 0 && sellPrice < buy && !confirm('Sale price is below buy price. Record anyway?')) return;
 
   const revenue = qty * sellPrice;
-  const profit = qty * (sellPrice - buyPrice);
+  const profit = qty * (sellPrice - buy);
   const sale = {
     itemId: null,
     itemCode: code,
@@ -3131,7 +3485,7 @@ async function confirmOffStockSale() {
     itemType: type,
     itemSize: size,
     qty,
-    buyPrice,
+    buyPrice: buy,
     sellPrice,
     actualPrice: sellPrice,
     revenue,
@@ -3160,29 +3514,9 @@ async function confirmOffStockSale() {
   };
   monitorRow.id = await dbAdd('wishlist', monitorRow);
 
-  try {
-    const finEntry = {
-      type: 'revenue',
-      amount: revenue,
-      costAmount: buyPrice * qty,
-      profit,
-      description: 'Sale not accounted: ' + (name || code) + ' x ' + qty,
-      category: 'sales',
-      paymentMethod,
-      saleId: sale.id,
-      itemCode: code,
-      date: todayDateStr(),
-      createdAt: new Date().toISOString(),
-      createdBy: currentUser ? currentUser.username : 'system',
-    };
-    finEntry.id = await dbAdd('finances', finEntry);
-  } catch(e) {
-    console.warn('[FINANCE] Off-stock auto-record failed:', e.message);
-  }
-
   ['off-name','off-code','off-size','off-qty','off-buy','off-sell'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.value = id === 'off-qty' ? '0' : '';
+    if (el) el.value = '';
   });
   closeOffStockSale();
   await renderStockMonitor();
@@ -3383,39 +3717,7 @@ async function confirmSale() {
   fbSyncItem(item);
   fbSyncSale(sale);
 
-  // ── AUTO-RECORD TO FINANCES ────────────────────────────────────
-  // Every sale automatically creates a finance revenue entry
-  try {
-    const finEntry = {
-      type:        'revenue',
-      amount:      revenue,
-      costAmount:  buyPrice * qty,
-      profit:      profit,
-      description: 'Sale: ' + (item.name || item.code) +
-                   (_isShoeSale && _sellShoeSize ? ' (Size ' + _sellShoeSize.size + ')' : '') +
-                   ' × ' + qty,
-      category:    'sales',
-      paymentMethod,
-      saleId:      newSaleId,
-      itemCode:    item.code,
-      date:        todayDateStr(),
-      createdAt:   new Date().toISOString(),
-      createdBy:   currentUser ? currentUser.username : 'system',
-    };
-    finEntry.id = await dbAdd('finances', finEntry);
-    // Sync to Firebase
-    if (fbReady && fbDb) {
-      try {
-        const { doc, setDoc } = await waitForFbImports();
-        const fbFinId = 'fin_sale_' + newSaleId;
-        finEntry.fbId = fbFinId;
-        await setDoc(doc(fbDb, 'finances', fbFinId), sanitiseForFirestore({...finEntry}));
-        await dbPut('finances', finEntry);
-      } catch(e) { console.warn('[SYNC] finance entry:', e.message); }
-    }
-  } catch(e) {
-    console.warn('[FINANCE] Auto-record failed:', e.message);
-  }
+  // Sales are the source of truth for revenue — no duplicate finance row.
 
   // ── Close all overlays ─────────────────────────────────────────
   closeSellModal();       // sell modal
@@ -4749,6 +5051,15 @@ function startBannerClock() {
 // ── AUTO SCHEDULER ───────────────────────────────────────────────────
 // Checks every 30s for time-triggered actions
 // ── VOID SALE ─────────────────────────────────────────────────────
+async function _deleteLocalRevenueForSale(saleId) {
+  const localFin = await dbAll('finances');
+  for (const f of localFin) {
+    if (f.type === 'revenue' && (f.saleId === saleId)) {
+      await dbDelete('finances', f.id);
+    }
+  }
+}
+
 async function voidSale(saleId) {
   try {
   const _voidSale = await dbGet('sales', saleId);
@@ -4796,12 +5107,7 @@ async function voidSale(saleId) {
     description: 'Sale: ' + (sale.itemName || sale.itemCode || 'item')
   };
   await fbDeleteFinanceEntry(finPayload);
-  const localFin = await dbAll('finances');
-  for (const f of localFin) {
-    if (f.type === 'revenue' && (f.saleId === saleId || f.saleId === sale.id)) {
-      await dbDelete('finances', f.id);
-    }
-  }
+  await _deleteLocalRevenueForSale(saleId);
   await dbDelete('sales', saleId);
 
   // Refresh
@@ -4809,6 +5115,7 @@ async function voidSale(saleId) {
   await enrichShoeItems(allItems);
   renderList(); renderDashboard(); updateHeader();
   if (activeDay) updateDayLiveStats();
+  try { renderFinancePage(); } catch(_) { /* intentionally ignored */ }
   scheduleSync();
   toast('↩️ Sale voided · stock restored', 'ok');
   } catch(e) { console.error("[voidSale]", e); toast("Error: " + e.message, "err"); }
@@ -5121,10 +5428,12 @@ async function deleteSale(saleId) {
       date: sale.businessDate || (sale.date || '').split('T')[0],
       description: 'Sale: ' + (sale.itemName || sale.itemCode || 'item')
     });
+    await _deleteLocalRevenueForSale(saleId);
   }
   await dbDelete('sales', saleId);
   renderSellPage();
   renderDashboard();
+  renderFinancePage();
   toast('Sale record deleted', '');
   } catch(e) { console.error("[deleteSale]", e); toast("Error: " + e.message, "err"); }
 }
@@ -5398,6 +5707,26 @@ function initCleanNumericInputs() {
     if (!el || el.tagName !== 'INPUT' || el.type !== 'number') return;
     const v = (el.value || '').trim();
     if (v === '0' || v === '0.0' || v === '0.00') el.value = '';
+    el.dataset.touched = '1';
+  });
+  document.addEventListener('focusout', e => {
+    const el = e.target;
+    if (!el || el.tagName !== 'INPUT' || el.type !== 'number') return;
+    const v = (el.value || '').trim();
+    if (v === '') {
+      el.style.borderColor = '';
+      return;
+    }
+    const n = parseFloat(v);
+    if (!Number.isFinite(n)) {
+      el.style.borderColor = 'var(--red)';
+      toast('Enter a valid number', 'err');
+    } else if (n < 0) {
+      el.style.borderColor = 'var(--red)';
+      toast('Amount cannot be negative', 'err');
+    } else {
+      el.style.borderColor = '';
+    }
   });
 }
 
@@ -5684,251 +6013,6 @@ function installAppUpdate() { applyAppUpdate(); }
 
 let _finFilter = 'all';
 
-// ── Finance period state ────────────────────────────────────
-let _finPeriod = 'today';  // today | week | month | all
-
-function finSetPeriod(period) {
-  _finPeriod = period;
-  document.querySelectorAll('[id^="fin-period-"]').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById('fin-period-' + period);
-  if (btn) btn.classList.add('active');
-  renderFinancePage();
-}
-
-function _finDateRange() {
-  const now   = new Date();
-  const today = todayDateStr();
-  if (_finPeriod === 'today') return { from: today, to: today };
-  if (_finPeriod === 'week') {
-    const d = new Date(now);
-    d.setDate(d.getDate() - 6);
-    return { from: d.toISOString().split('T')[0], to: today };
-  }
-  if (_finPeriod === 'month') {
-    const d = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { from: d.toISOString().split('T')[0], to: today };
-  }
-  return { from: null, to: null }; // all
-}
-
-function _finInRange(date, range) {
-  if (!range.from) return true;
-  return date >= range.from && date <= range.to;
-}
-
-async function renderFinancePage() {
-  const dateEl = document.getElementById('fin-date');
-  if (dateEl && !dateEl.value) dateEl.value = todayDateStr();
-
-  const allEntries = await dbAll('finances');
-
-  const poolTypes = ['revenue','injection','investment','stock_purchase','expense','withdrawal','other'];
-  const poolEntries = allEntries.filter(e => poolTypes.includes(e.type));
-
-  // ── KPIs (all time) ──────────────────────────────────────
-  const invested  = poolEntries.filter(e=>e.type==='injection'||e.type==='investment'||e.type==='stock_purchase').reduce((s,e)=>s+(e.amount||0),0);
-  const salesPool = poolEntries.filter(e=>e.type==='revenue').reduce((s,e)=>s+(e.amount||0),0);
-  const stockCostReleased = poolEntries.filter(e=>e.type==='revenue').reduce((s,e)=>s+(e.costAmount||Math.max(0,(e.amount||0)-(e.profit||0))),0);
-  const expenses  = poolEntries.filter(e=>e.type==='expense'||e.type==='other').reduce((s,e)=>s+(e.amount||0),0);
-  const withdrawn = poolEntries.filter(e=>e.type==='withdrawal').reduce((s,e)=>s+(e.amount||0),0);
-  const businessPool = invested - stockCostReleased - expenses;
-  const net       = salesPool - withdrawn;
-
-  const setT = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=fmt(v); };
-  const setLabel = (id, text) => {
-    const el = document.getElementById(id);
-    const lbl = el && el.parentElement ? el.parentElement.querySelector('.fin-kpi-lbl') : null;
-    if (lbl) lbl.textContent = text;
-  };
-  setLabel('fin-net', 'Sales Pool');
-  setLabel('fin-invested', 'Business Pool');
-  setLabel('fin-expenses', 'Business Spent');
-  setLabel('fin-withdrawn', 'Sales Out');
-  const finTypeEl = document.getElementById('fin-type');
-  if (finTypeEl) {
-    const optionLabels = {
-      injection: 'Cash to Business Pool',
-      investment: 'Owner Investment',
-      stock_purchase: 'Stock Added',
-      expense: 'Business Expense',
-      withdrawal: 'Sales Withdrawal',
-      other: 'Other Business Spend'
-    };
-    Object.entries(optionLabels).forEach(([value, label]) => {
-      const opt = finTypeEl.querySelector('option[value="' + value + '"]');
-      if (opt) opt.textContent = label;
-    });
-  }
-  const filterInvestment = document.getElementById('fin-filter-investment');
-  const filterExpense = document.getElementById('fin-filter-expense');
-  if (filterInvestment) filterInvestment.textContent = 'Business';
-  if (filterExpense) filterExpense.textContent = 'Out';
-  setT('fin-revenue',  0);
-  setT('fin-profit',   0);
-  setT('fin-invested', businessPool);
-  setT('fin-expenses', expenses);
-  setT('fin-withdrawn',withdrawn);
-
-  const marginEl = document.getElementById('fin-margin');
-  if (marginEl) {
-    marginEl.textContent = '0%';
-    marginEl.style.color = 'var(--text)';
-  }
-  const netEl  = document.getElementById('fin-net');
-  const netKpi = document.getElementById('fin-net-kpi');
-  if (netEl)  { netEl.textContent = (net>=0?'':'-')+fmt(Math.abs(net)); netEl.style.color = net>=0?'var(--green)':'var(--red)'; }
-  if (netKpi) { netKpi.className = 'fin-kpi '+(net>=0?'green':'red'); }
-
-  // ── Transaction list ─────────────────────────────────────
-  let listEntries;
-  if (_finFilter === 'all') {
-    listEntries = poolEntries;
-  } else if (_finFilter === 'investment') {
-    listEntries = poolEntries.filter(e=>e.type==='injection'||e.type==='investment'||e.type==='stock_purchase');
-  } else if (_finFilter === 'expense') {
-    listEntries = poolEntries.filter(e=>e.type==='expense'||e.type==='withdrawal'||e.type==='other');
-  } else {
-    listEntries = poolEntries.filter(e=>e.type===_finFilter);
-  }
-  const sorted = [...listEntries].sort((a,b)=>new Date(b.date||b.createdAt)-new Date(a.date||a.createdAt));
-
-  const summaryLine = document.getElementById('fin-summary-line');
-  if (summaryLine) {
-    const total = listEntries.reduce((s,e)=>s+e.amount,0);
-    summaryLine.textContent = sorted.length + ' entr'+(sorted.length===1?'y':'ies')+' · '+fmt(total);
-  }
-
-  renderFinList(sorted);
-}
-
-
-function _renderFinChart(allEntries, allSales) {
-  const chartWrap = document.getElementById('fin-chart-wrap');
-  const chart     = document.getElementById('fin-chart');
-  const labels    = document.getElementById('fin-chart-labels');
-  if (!chart || !chartWrap) return;
-
-  // Build last 7 days
-  const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i);
-    days.push(d.toISOString().split('T')[0]);
-  }
-
-  const dayData = days.map(date => {
-    const revE = allEntries.filter(e=>e.type==='revenue'&&e.category==='sales'&&(e.date||'').split('T')[0]===date);
-    const rev  = revE.length ? revE.reduce((s,e)=>s+e.amount,0) : allSales.filter(s=>(s.businessDate||(s.date||'').split('T')[0])===date).reduce((s,s2)=>s+(s2.revenue||0),0);
-    const exp  = allEntries.filter(e=>e.type==='expense'&&(e.date||'').split('T')[0]===date).reduce((s,e)=>s+e.amount,0);
-    return { date, rev, exp, net: rev - exp };
-  });
-
-  const hasData = dayData.some(d => d.rev > 0 || d.exp > 0);
-  chartWrap.style.display = hasData ? '' : 'none';
-  if (!hasData) return;
-
-  const maxVal = Math.max(...dayData.map(d => Math.max(d.rev, d.exp)), 1);
-  const barW   = 'calc(' + (100/7) + '% - 3px)';
-
-  chart.innerHTML = dayData.map(d => {
-    const revH = Math.round((d.rev / maxVal) * 56);
-    const expH = Math.round((d.exp / maxVal) * 56);
-    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:60px;justify-content:flex-end;">' +
-      (d.rev > 0 ? '<div title="Revenue: ' + fmt(d.rev) + '" style="width:100%;background:var(--accent);border-radius:3px 3px 0 0;height:' + revH + 'px;"></div>' : '<div style="height:' + revH + 'px;"></div>') +
-    '</div>';
-  }).join('');
-
-  labels.innerHTML = dayData.map(d => {
-    const label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-GB',{weekday:'short'}).slice(0,2);
-    return '<div style="flex:1;text-align:center;font-size:9px;color:var(--muted);font-weight:600;">' + label + '</div>';
-  }).join('');
-}
-
-function renderFinList(entries) {
-  const list = document.getElementById('fin-list');
-  if (!list) return;
-  if (!entries.length) {
-    list.innerHTML = '<div style="text-align:center;padding:28px 16px;color:var(--muted);font-size:13px;">No entries yet.<br><span style="font-size:11px;">Use the form above to record a transaction.</span></div>';
-    return;
-  }
-  const cfgMap = {
-    revenue:       { icon:'KES', color:'var(--accent2)', label:'Sale to Sales Pool', out:false },
-    injection:     { icon:'💉', color:'var(--green)', label:'Injection',      out:false },
-    investment:    { icon:'💵', color:'var(--green)', label:'Investment',     out:false },
-    stock_purchase:{ icon:'🛍️', color:'#1d4ed8',      label:'Stock Purchase', out:true  },
-    expense:       { icon:'💸', color:'var(--red)',   label:'Expense',        out:true  },
-    withdrawal:    { icon:'🏧', color:'#d97706',      label:'Withdrawal',     out:true  },
-    other:         { icon:'📝', color:'var(--muted)', label:'Other',          out:false },
-  };
-  const rows = entries.map((e, i) => {
-    let c  = cfgMap[e.type] || cfgMap.other;
-    if (e.type === 'stock_purchase') c = { ...c, label: 'Stock Investment', out: false };
-    if (e.type === 'expense') c = { ...c, label: 'Business Expense', out: true };
-    if (e.type === 'withdrawal') c = { ...c, label: 'Sales Withdrawal', out: true };
-    if (e.type === 'other') c = { ...c, out: true };
-    const ds = e.date || (e.createdAt||'').split('T')[0];
-    const fd = ds ? new Date(ds+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '—';
-    const bg = i % 2 === 0 ? 'var(--surface)' : '#f7faf7';
-    const delBtn = (currentUser&&currentUser.role==='super')
-      ? '<button onclick="deleteFinanceEntry('+e.id+')" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;flex-shrink:0;">✕</button>'
-      : '';
-    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:'+bg+';border-bottom:1px solid var(--border);">' +
-      '<span style="font-size:18px;flex-shrink:0;">'+c.icon+'</span>' +
-      '<div style="flex:1;min-width:0;">' +
-        '<div style="font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(e.description||c.label)+'</div>' +
-        '<div style="font-size:10px;color:var(--muted);margin-top:1px;">'+c.label+' · '+fd+'</div>' +
-      '</div>' +
-      '<div style="font-size:14px;font-weight:900;font-family:var(--mono);color:'+c.color+';flex-shrink:0;">'+(c.out?'-':'+')+fmt(e.amount)+'</div>' +
-      delBtn +
-    '</div>';
-  });
-  list.innerHTML = '<div style="border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;">' + rows.join('') + '</div>';
-}
-
-async function saveFinanceEntry() {
-  const type   = document.getElementById('fin-type').value;
-  const amount = parseFloat(document.getElementById('fin-amount').value);
-  const desc   = (document.getElementById('fin-desc').value||'').trim();
-  const date   = document.getElementById('fin-date').value || todayDateStr();
-  const cat    = (document.getElementById('fin-category')?.value) || 'general';
-
-  const validTypes = ['injection','investment','stock_purchase','expense','withdrawal','other'];
-  if (!type || !validTypes.includes(type)) return Validate.fail('Select a transaction type', 'fin-type');
-  if (!amount || amount <= 0)  return Validate.fail('Enter a valid amount (must be > 0)', 'fin-amount');
-  if (amount > 99999999)       return Validate.fail('Amount too large — check the value', 'fin-amount');
-  if (!desc)                   return Validate.fail('Enter a description for this transaction', 'fin-desc');
-  if (desc.length > 200)       return Validate.fail('Description too long (max 200 characters)', 'fin-desc');
-  if (!date)                   return Validate.fail('Select a date', 'fin-date');
-  // Warn if future date
-  if (date > todayDateStr() && !confirm('Date is in the future — are you sure?')) return;
-
-  const entry = { type, amount, description: desc, category: cat, date,
-    createdAt: new Date().toISOString(), createdBy: currentUser ? currentUser.username : 'system' };
-  entry.id = await dbAdd('finances', entry);
-
-  // Sync to Firebase
-  if (fbReady && fbDb) {
-    try {
-      const { doc, setDoc } = await waitForFbImports();
-      const fbId = 'fin_manual_' + Date.now();
-      entry.fbId = fbId;
-      await setDoc(doc(fbDb, 'finances', fbId), sanitiseForFirestore({...entry}));
-      await dbPut('finances', entry);
-    } catch(e) { console.warn('[SYNC] finance entry:', e.message); }
-  }
-
-  // Clear form after save
-  document.getElementById('fin-type').value   = '';
-  document.getElementById('fin-amount').value = '';
-  document.getElementById('fin-desc').value   = '';
-  document.getElementById('fin-date').value   = todayDateStr();
-  const ftEl = document.getElementById('fin-type');
-  if (ftEl) ftEl.style.background = '';
-
-  renderFinancePage();
-  scheduleSync();
-  toast('✅ ' + (type==='investment'?'Investment':'Expense') + ' recorded: ' + fmt(amount), 'ok');
-}
-
 async function deleteFinanceEntry(id) {
   if (!confirm('Delete this transaction? This cannot be undone.')) return;
   const entry = await dbGet('finances', id);
@@ -5938,6 +6022,7 @@ async function deleteFinanceEntry(id) {
   }
   await dbDelete('finances', id);
   renderFinancePage();
+  renderDashboard();
   toast('Transaction deleted', '');
 }
 
@@ -5955,17 +6040,17 @@ function updateFinTypeColor() {
   const sel = document.getElementById('fin-type');
   if (!sel) return;
   const colors = {
-    injection:'#dcfce7', investment:'#dcfce7',
-    stock_purchase:'#dbeafe', expense:'#fee2e2',
-    withdrawal:'#fef3c7', other:'var(--surface2)'
+    injection: '#dcfce7',
+    expense: '#fee2e2',
+    withdrawal: '#fef3c7'
   };
   sel.style.background = colors[sel.value] || '';
   const catEl = document.getElementById('fin-category');
   if (catEl) {
     const autoCat = {
-      injection:'owner_capital', investment:'owner_capital',
-      stock_purchase:'stock', expense:'general',
-      withdrawal:'cash_drawer', other:'general'
+      injection: 'owner_capital',
+      expense: 'general',
+      withdrawal: 'cash_drawer'
     };
     catEl.value = autoCat[sel.value] || 'general';
   }
@@ -5979,7 +6064,7 @@ async function _cleanupFinanceCoherence(force) {
   const entries = await dbAll('finances');
   let changedAny = false;
   for (const e of entries) {
-    if (e.type === 'reconciliation') {
+    if (e.type === 'reconciliation' || e.type === 'revenue') {
       await dbDelete('finances', e.id);
       changedAny = true;
       continue;
@@ -6155,18 +6240,28 @@ renderFinList = function(entries) {
 
 saveFinanceEntry = async function() {
   const type   = document.getElementById('fin-type').value;
-  const amount = parseFloat(document.getElementById('fin-amount').value);
-  const desc   = (document.getElementById('fin-desc').value||'').trim();
+  const amount = Input.money('fin-amount');
+  const desc   = Input.text('fin-desc');
   const date   = document.getElementById('fin-date').value || todayDateStr();
   const cat    = type === 'injection' ? 'owner_capital' : type === 'withdrawal' ? 'cash_drawer' : 'general';
   const validTypes = ['injection','expense','withdrawal'];
   if (!type || !validTypes.includes(type)) return Validate.fail('Select a transaction type', 'fin-type');
-  if (!amount || amount <= 0)  return Validate.fail('Enter a valid amount (must be > 0)', 'fin-amount');
-  if (amount > 99999999)       return Validate.fail('Amount too large - check the value', 'fin-amount');
-  if (!desc)                   return Validate.fail('Enter a description for this transaction', 'fin-desc');
-  if (date > todayDateStr() && !confirm('Date is in the future - are you sure?')) return;
+  if (!Validate.moneyRequired(amount, 'fin-amount', 'Amount')) return;
+  if (!Validate.text(desc, 'fin-desc', 'Description')) return;
+  if (desc.length > 200) return Validate.fail('Description too long (max 200 characters)', 'fin-desc');
+  const dateCheck = Validate.financeDate(date, 'fin-date');
+  if (dateCheck === false) return;
+  if (dateCheck === 'future' && !confirm('Date is in the future — are you sure?')) return;
   const entry = { type, amount, description: desc, category: cat, date, createdAt: new Date().toISOString(), createdBy: currentUser ? currentUser.username : 'system' };
   entry.id = await dbAdd('finances', entry);
+  if (fbReady && fbDb) {
+    try {
+      const { doc, setDoc } = await waitForFbImports();
+      entry.fbId = 'fin_manual_' + Date.now();
+      await setDoc(doc(fbDb, 'finances', entry.fbId), sanitiseForFirestore({...entry}));
+      await dbPut('finances', entry);
+    } catch(e) { console.warn('[SYNC] finance entry:', e.message); }
+  }
   document.getElementById('fin-type').value   = '';
   document.getElementById('fin-amount').value = '';
   document.getElementById('fin-desc').value   = '';
@@ -6231,65 +6326,6 @@ function _clearDayRecon(date) {
   try { localStorage.removeItem(DAY_RECON_KEY(date)); } catch(e) {}
 }
 
-// ── Show correct step ────────────────────────────────────────────
-function renderDayState() {
-  const today = activeDay
-    ? (activeDay.businessDate || activeDay.business_date)
-    : todayDateStr();
-
-  // Update header
-  const titleEl = document.getElementById('day-banner-title');
-  const subEl   = document.getElementById('day-banner-sub');
-  const iconEl  = document.getElementById('day-banner-icon');
-  if (titleEl) titleEl.textContent = fmtFullDate(today);
-  if (subEl)   subEl.textContent   = today;
-  if (iconEl)  iconEl.textContent  = '📅';
-
-  const data  = _getDayRecon(today);
-  const step  = data ? data.step : 'open';
-  const isOpen = activeDay && (activeDay.status === 'OPEN');
-
-  // All step divs
-  const steps = ['open','opening-form','close-btn','closing-form','reconciled'];
-  steps.forEach(s => {
-    const el = document.getElementById('day-step-' + s);
-    if (el) el.style.display = 'none';
-  });
-  const openLocked = document.getElementById('day-opening-locked');
-  if (openLocked) openLocked.style.display = 'none';
-
-  // Determine which step to show
-  if (step === 'reconciled') {
-    if (openLocked) openLocked.style.display = '';
-    _renderOpeningSummary(data);
-    const el = document.getElementById('day-step-reconciled');
-    if (el) el.style.display = '';
-    _renderReconcileInsights(data, today);
-
-  } else if (step === 'closing_form') {
-    if (openLocked) openLocked.style.display = '';
-    _renderOpeningSummary(data);
-    const el = document.getElementById('day-step-closing-form');
-    if (el) el.style.display = '';
-
-  } else if (step === 'opening_locked' || (data && data.opening)) {
-    if (openLocked) openLocked.style.display = '';
-    _renderOpeningSummary(data);
-    const el = document.getElementById('day-step-close-btn');
-    if (el) el.style.display = '';
-
-  } else if (step === 'opening_form' || isOpen) {
-    const el = document.getElementById('day-step-opening-form');
-    if (el) el.style.display = '';
-
-  } else {
-    // Default: show Open Day button
-    const el = document.getElementById('day-step-open');
-    if (el) el.style.display = '';
-  }
-}
-window.renderDayState = renderDayState;
-
 // ── openDay: existing logic + advance to opening form ────────────
 // Wrap the existing openDay to also advance the state
 const _origOpenDay = openDay;
@@ -6303,25 +6339,6 @@ openDay = async function() {
   renderDayState();
 };
 window.openDay = openDay;
-
-// ── lockOpeningBalances ──────────────────────────────────────────
-function lockOpeningBalances() {
-  const cash  = parseFloat(document.getElementById('op-cash')?.value)  || 0;
-  const till  = parseFloat(document.getElementById('op-till')?.value)  || 0;
-  const mpesa = parseFloat(document.getElementById('op-mpesa')?.value) || 0;
-  if (cash === 0 && till === 0 && mpesa === 0) {
-    toast('⚠️ Enter at least one opening balance', 'err'); return;
-  }
-  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
-  _saveDayRecon(today, {
-    step: 'opening_locked', date: today,
-    lockedAt: new Date().toISOString(),
-    opening: { cash, till, mpesa, total: cash + till + mpesa }
-  });
-  toast('🌅 Opening balances locked', 'ok');
-  renderDayState();
-}
-window.lockOpeningBalances = lockOpeningBalances;
 
 // ── initCloseDay: show closing form ─────────────────────────────
 function initCloseDay() {
@@ -6340,98 +6357,6 @@ function cancelCloseDay() {
   renderDayState();
 }
 window.cancelCloseDay = cancelCloseDay;
-
-// ── reconcileDay: save closing, compute insights, lock ───────────
-async function reconcileDay() {
-  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
-  const data  = _getDayRecon(today);
-  if (!data || !data.opening) { toast('⚠️ Record opening balances first', 'err'); return; }
-
-  const injected  = parseFloat(document.getElementById('cl-injected')?.value)  || 0;
-  const cash      = parseFloat(document.getElementById('cl-cash')?.value)       || 0;
-  const till      = parseFloat(document.getElementById('cl-till')?.value)       || 0;
-  const mpesa     = parseFloat(document.getElementById('cl-mpesa')?.value)      || 0;
-  const expenses  = parseFloat(document.getElementById('cl-expenses')?.value)   || 0;
-  const withdrawn = parseFloat(document.getElementById('cl-withdrawn')?.value)  || 0;
-
-  if (cash === 0 && till === 0 && mpesa === 0) {
-    toast('⚠️ Enter at least Cash at Hand, Till, or M-Pesa', 'err'); return;
-  }
-
-  // ── System figures (this day only) ──────────────────────
-  const allSales = await dbAll('sales');
-  const allFins  = await dbAll('finances');
-  const daySales = allSales.filter(s =>
-    (s.businessDate||s.business_date||(s.date||'').split('T')[0]) === today);
-  const dayFins  = allFins.filter(e =>
-    (e.date||(e.createdAt||'').split('T')[0]) === today && e.type !== 'reconciliation');
-
-  const sysCashRev   = daySales.filter(s=>!s.paymentMethod||s.paymentMethod==='cash').reduce((a,s)=>a+(s.revenue||0),0);
-  const sysMpesaRev  = daySales.filter(s=>s.paymentMethod==='mpesa').reduce((a,s)=>a+(s.revenue||0),0);
-  const sysTotalRev  = daySales.reduce((a,s)=>a+(s.revenue||0),0);
-  const sysTotalProf = daySales.reduce((a,s)=>a+(s.profit||0),0);
-  const salesCount   = daySales.length;
-  const margin       = sysTotalRev > 0 ? (sysTotalProf/sysTotalRev*100) : 0;
-
-  // ── THE TWO FORMULAS ────────────────────────────────────
-  //
-  // CORRECT DAY MONEY
-  // = what you SHOULD have in hand right now
-  // = Opening + Sales + Injected − Expenses − Withdrawn
-  //
-  const opTotal    = (data.opening.cash||0) + (data.opening.till||0) + (data.opening.mpesa||0);
-  const correctDay = opTotal + sysTotalRev + injected - expenses - withdrawn;
-
-  // ACTUAL DAY MONEY
-  // = what you physically hold right now
-  // = Cash at Hand + Amount in Till + M-Pesa Float
-  const actualDay  = cash + till + mpesa;
-
-  // VARIANCE = Actual − Correct
-  // Zero = perfect balance
-  // Positive = surplus (more cash than expected)
-  // Negative = shortage (less cash than expected)
-  const variance   = actualDay - correctDay;
-
-  // ── Per-pocket expected closing (for detail view) ────────
-  // What should be in each pocket right now:
-  const expCash  = (data.opening.cash||0) + (data.opening.till||0) + sysCashRev  + injected - expenses - withdrawn;
-  const expMpesa = (data.opening.mpesa||0) + sysMpesaRev;
-  const physCash  = cash + till;
-  const physMpesa = mpesa;
-  const cashVar   = physCash  - expCash;
-  const mpesaVar  = physMpesa - expMpesa;
-  const netMove   = sysTotalRev + injected - expenses - withdrawn;
-
-  // ── Save state ───────────────────────────────────────────
-  const reconciled = {
-    step: 'reconciled', date: today,
-    lockedAt: data.lockedAt, opening: data.opening,
-    reconciledAt: new Date().toISOString(),
-    closing:  { injected, cash, till, mpesa, expenses, withdrawn },
-    system:   { sysCashRev, sysMpesaRev, sysTotalRev, sysTotalProf, salesCount, margin },
-    analysis: {
-      opTotal, correctDay, actualDay, variance,
-      expCash, expMpesa, physCash, physMpesa, cashVar, mpesaVar, netMove
-    }
-  };
-  _saveDayRecon(today, reconciled);
-
-  await _doCloseDay();
-
-  await dbAdd('finances', {
-    type:'reconciliation', amount:actualDay,
-    description:'Day reconcile · '+today, category:'reconciliation', date:today,
-    createdAt:new Date().toISOString(), createdBy:currentUser?currentUser.username:'system',
-    details: reconciled
-  });
-  scheduleSync();
-
-  toast('✅ Day closed & reconciled', 'ok');
-  renderDayState();
-  renderDaySessionsList();
-}
-window.reconcileDay = reconcileDay;
 
 // ── Internal: close the business day record ──────────────────────
 async function _doCloseDay() {
@@ -6479,9 +6404,20 @@ function _renderReconcileInsights(data, today) {
   const o  = data.opening;
   const cl = data.closing;
   const sy = data.system;
-  const an = data.analysis;
+  const an = data.analysis || {};
+  if (an.correctDay == null && an.correct != null) an.correctDay = an.correct;
+  if (an.actualDay == null && an.exact != null) an.actualDay = an.exact;
+  if (an.variance == null && an.correctDay != null) an.variance = (an.actualDay || 0) - (an.correctDay || 0);
+  an.expCash = an.expCash ?? 0;
+  an.expMpesa = an.expMpesa ?? 0;
+  an.physCash = an.physCash ?? ((cl.cash || 0) + (cl.till || 0));
+  an.physMpesa = an.physMpesa ?? (cl.mpesa || 0);
+  an.cashVar = an.cashVar ?? (an.physCash - an.expCash);
+  an.mpesaVar = an.mpesaVar ?? (an.physMpesa - an.expMpesa);
+  an.netMove = an.netMove ?? 0;
+  an.opTotal = an.opTotal ?? 0;
 
-  const absV = Math.abs(an.variance);
+  const absV = Math.abs(an.variance || 0);
   const isOk = absV <= 5;
   const isWn = !isOk && absV <= 300;
   const vc   = isOk ? 'var(--green)' : isWn ? '#d97706' : 'var(--red)';
@@ -6588,24 +6524,6 @@ function _renderReconcileInsights(data, today) {
         '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:'+vc+';border-top:1px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';padding-top:8px;">'+fmt(an.actualDay)+'</div>' +
       '</div>' +
     '</div>' +
-      '<div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;">' +
-        '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Correct Day Money</div>' +
-        '<div style="font-size:10px;color:var(--muted);line-height:1.8;margin-bottom:8px;">' +
-          'Opening: '+fmt(an.opTotal)+'<br>' +
-          '+ Sales: '+fmt(sy.sysTotalRev)+(cl.injected>0?'<br>+ Injected: '+fmt(cl.injected):'')+(cl.expenses>0?'<br>+ Expenses: '+fmt(cl.expenses):'')+(cl.withdrawn>0?'<br>+ Withdrawn: '+fmt(cl.withdrawn):'') +
-        '</div>' +
-        '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--text);border-top:1px solid var(--border);padding-top:8px;">'+fmt(an.correctDay)+'</div>' +
-      '</div>' +
-      '<div style="background:'+(isOk?'var(--green-light)':isWn?'#fef3c7':'var(--red-light)')+';border:1.5px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';border-radius:var(--r-lg);padding:12px 14px;">' +
-        '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Actual Day Money</div>' +
-        '<div style="font-size:10px;color:var(--muted);line-height:1.8;margin-bottom:8px;">' +
-          'Cash: '+fmt(cl.cash)+'<br>Till: '+fmt(cl.till)+'<br>M-Pesa: '+fmt(cl.mpesa) +
-          (cl.expenses>0?'<br>+ Expenses: '+fmt(cl.expenses):'') +
-          (cl.withdrawn>0?'<br>+ Withdrawn: '+fmt(cl.withdrawn):'') +
-        '</div>' +
-        '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:'+vc+';border-top:1px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';padding-top:8px;">'+fmt(an.actualDay)+'</div>' +
-      '</div>' +
-    '</div>' +
     '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:'+(isOk?'var(--green-light)':isWn?'#fef3c7':'var(--red-light)')+';border:1.5px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';border-radius:var(--r-lg);margin-bottom:8px;">' +
       '<span style="font-size:13px;font-weight:800;color:'+vc+';">Variance</span>' +
       '<span style="font-size:20px;font-weight:900;font-family:var(--mono);color:'+vc+';">'+vi+' '+vl+'</span>' +
@@ -6639,37 +6557,69 @@ function _moveSalesDetailsAfterOpening() {
   else if (openingForm && openingForm.style.display !== 'none') openingForm.insertAdjacentElement('afterend', sales);
 }
 
+async function _prefillClosingFromFinances(today) {
+  try {
+    const fins = await dbAll('finances');
+    const day = (today || '').slice(0, 10);
+    const sumType = type => fins
+      .filter(e => e.type === type && (e.date || (e.createdAt || '').split('T')[0]).slice(0, 10) === day)
+      .reduce((s, e) => s + (e.amount || 0), 0);
+    const setIfEmpty = (id, val) => {
+      const el = document.getElementById(id);
+      if (el && el.value === '' && val > 0) el.value = String(val);
+    };
+    setIfEmpty('cl-injected', sumType('injection'));
+    setIfEmpty('cl-expenses', sumType('expense'));
+    setIfEmpty('cl-withdrawn', sumType('withdrawal'));
+  } catch (_) { /* intentionally ignored */ }
+}
+
 renderDayState = function() {
   const today = activeDay ? (activeDay.businessDate || activeDay.business_date) : todayDateStr();
   const titleEl = document.getElementById('day-banner-title');
   const subEl = document.getElementById('day-banner-sub');
+  const iconEl = document.getElementById('day-banner-icon');
   if (titleEl) titleEl.textContent = fmtFullDate(today);
   if (subEl) subEl.textContent = today;
+  if (iconEl) iconEl.textContent = '📅';
+
   const data = _getDayRecon(today);
-  const step = data ? data.step : 'opening_form';
+  const isOpen = activeDay && activeDay.status === 'OPEN';
+  const step = data ? data.step : (isOpen ? 'opening_form' : 'open');
+
   const salesDetails = document.getElementById('day-sales-details');
   if (salesDetails) salesDetails.style.display = step === 'reconciled' ? 'none' : 'grid';
+
   ['open','opening-form','close-btn','closing-form','reconciled'].forEach(s => {
     const el = document.getElementById('day-step-' + s);
     if (el) el.style.display = 'none';
   });
   const openLocked = document.getElementById('day-opening-locked');
   if (openLocked) openLocked.style.display = 'none';
+
   if (step === 'reconciled') {
     if (openLocked) openLocked.style.display = '';
     _renderOpeningSummary(data);
-    const el = document.getElementById('day-step-reconciled'); if (el) el.style.display = '';
+    const el = document.getElementById('day-step-reconciled');
+    if (el) el.style.display = '';
     _renderReconcileInsights(data, today);
   } else if (step === 'closing_form') {
     if (openLocked) openLocked.style.display = '';
     _renderOpeningSummary(data);
-    const el = document.getElementById('day-step-closing-form'); if (el) el.style.display = '';
+    const el = document.getElementById('day-step-closing-form');
+    if (el) el.style.display = '';
+    _prefillClosingFromFinances(today);
   } else if (step === 'opening_locked' || (data && data.opening)) {
     if (openLocked) openLocked.style.display = '';
     _renderOpeningSummary(data);
-    const el = document.getElementById('day-step-close-btn'); if (el) el.style.display = '';
+    const el = document.getElementById('day-step-close-btn');
+    if (el) el.style.display = '';
+  } else if (step === 'opening_form' || isOpen) {
+    const el = document.getElementById('day-step-opening-form');
+    if (el) el.style.display = '';
   } else {
-    const el = document.getElementById('day-step-opening-form'); if (el) el.style.display = '';
+    const el = document.getElementById('day-step-open');
+    if (el) el.style.display = '';
   }
   _moveSalesDetailsAfterOpening();
 };
@@ -6677,9 +6627,11 @@ window.renderDayState = renderDayState;
 
 lockOpeningBalances = async function() {
   if (!activeDay || activeDay.status !== 'OPEN') await openDay();
-  const cash = parseFloat(document.getElementById('op-cash')?.value) || 0;
-  const till = parseFloat(document.getElementById('op-till')?.value) || 0;
-  const mpesa = parseFloat(document.getElementById('op-mpesa')?.value) || 0;
+  const cashRaw = Input.money('op-cash');
+  const tillRaw = Input.money('op-till');
+  const mpesaRaw = Input.money('op-mpesa');
+  if (!Validate.dayOpening(cashRaw, tillRaw, mpesaRaw)) return;
+  const [cash, till, mpesa] = Input.moneyZero(cashRaw, tillRaw, mpesaRaw);
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
   _saveDayRecon(today, { step:'opening_locked', date:today, lockedAt:new Date().toISOString(), opening:{ cash, till, mpesa, total:cash+till+mpesa } });
   toast('Opening balances saved', 'ok');
@@ -6691,32 +6643,81 @@ reconcileDay = async function() {
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
   const data = _getDayRecon(today);
   if (!data || !data.opening) { toast('Record opening balances first', 'err'); return; }
-  const injected = parseFloat(document.getElementById('cl-injected')?.value) || 0;
-  const cash = parseFloat(document.getElementById('cl-cash')?.value) || 0;
-  const till = parseFloat(document.getElementById('cl-till')?.value) || 0;
-  const mpesa = parseFloat(document.getElementById('cl-mpesa')?.value) || 0;
-  const expenses = parseFloat(document.getElementById('cl-expenses')?.value) || 0;
-  const withdrawn = parseFloat(document.getElementById('cl-withdrawn')?.value) || 0;
+
+  const injectedRaw  = Input.money('cl-injected');
+  const cashRaw      = Input.money('cl-cash');
+  const tillRaw      = Input.money('cl-till');
+  const mpesaRaw     = Input.money('cl-mpesa');
+  const expensesRaw  = Input.money('cl-expenses');
+  const withdrawnRaw = Input.money('cl-withdrawn');
+
+  if (!Validate.dayClosingPhysical(cashRaw, tillRaw, mpesaRaw)) return;
+  if (!Validate.moneyOptional(injectedRaw, 'cl-injected', 'Cash to business')) return;
+  if (!Validate.moneyOptional(expensesRaw, 'cl-expenses', 'Expenses')) return;
+  if (!Validate.moneyOptional(withdrawnRaw, 'cl-withdrawn', 'Withdrawn')) return;
+
+  const [injected, cash, till, mpesa, expenses, withdrawn] = Input.moneyZero(
+    injectedRaw, cashRaw, tillRaw, mpesaRaw, expensesRaw, withdrawnRaw
+  );
+
+  let useInjected = injected;
+  let useExpenses = expenses;
+  let useWithdrawn = withdrawn;
+
+  const finTotals = await _financeTotalsForDay(today);
+  const mismatchLines = _warnFinanceClosingMismatch(finTotals, { injected, expenses, withdrawn });
+  if (mismatchLines.length) {
+    const useFin = confirm(
+      'Closing figures differ from Finance tab records:\n\n' +
+      mismatchLines.join('\n') +
+      '\n\nUse Finance tab totals instead?'
+    );
+    if (useFin) {
+      useInjected = finTotals.injection || 0;
+      useExpenses = finTotals.expense || 0;
+      useWithdrawn = finTotals.withdrawal || 0;
+      const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v > 0 ? String(v) : ''; };
+      setVal('cl-injected', useInjected);
+      setVal('cl-expenses', useExpenses);
+      setVal('cl-withdrawn', useWithdrawn);
+    } else if (!confirm('Continue with the figures you entered?')) return;
+  }
+
   const allSales = await dbAll('sales');
-  const daySales = allSales.filter(s => (s.businessDate||s.business_date||(s.date||'').split('T')[0]) === today);
-  const sysTotalRev = daySales.reduce((a,s)=>a+(s.revenue||0),0);
-  const sysTotalProf = daySales.reduce((a,s)=>a+(s.profit||0),0);
-  const salesCount = daySales.length;
-  const margin = sysTotalRev > 0 ? (sysTotalProf/sysTotalRev*100) : 0;
-  const opTotal = (data.opening.cash||0) + (data.opening.till||0) + (data.opening.mpesa||0);
-  const correct = opTotal + sysTotalRev + injected - expenses - withdrawn;
-  const exact = cash + till + mpesa;
-  const variance = exact - correct;
-  const reconciled = {
-    step:'reconciled', date:today, lockedAt:data.lockedAt, opening:data.opening,
-    reconciledAt:new Date().toISOString(),
-    closing:{ injected, cash, till, mpesa, expenses, withdrawn },
-    system:{ sysTotalRev, sysTotalProf, salesCount, margin },
-    analysis:{ opTotal, correct, exact, variance, netMove: sysTotalRev + injected - expenses - withdrawn }
-  };
-  _saveDayRecon(today, reconciled);
+  const daySales = allSales.filter(s =>
+    (s.businessDate||s.business_date||(s.date||'').split('T')[0]) === today);
+
+  const sysCashRev   = daySales.filter(s => !s.paymentMethod || s.paymentMethod === 'cash').reduce((a,s) => a + (s.revenue||0), 0);
+  const sysMpesaRev  = daySales.filter(s => s.paymentMethod === 'mpesa').reduce((a,s) => a + (s.revenue||0), 0);
+  const sysTotalRev  = daySales.reduce((a,s) => a + (s.revenue||0), 0);
+  const sysTotalProf = daySales.reduce((a,s) => a + (s.profit||0), 0);
+  const salesCount   = daySales.length;
+  const margin       = sysTotalRev > 0 ? (sysTotalProf / sysTotalRev * 100) : 0;
+
+  const opTotal    = (data.opening.cash||0) + (data.opening.till||0) + (data.opening.mpesa||0);
+  const correctDay = opTotal + sysTotalRev + useInjected - useExpenses - useWithdrawn;
+  const actualDay  = cash + till + mpesa;
+  const variance   = actualDay - correctDay;
+
+  const expCash   = (data.opening.cash||0) + (data.opening.till||0) + sysCashRev + useInjected - useExpenses - useWithdrawn;
+  const expMpesa  = (data.opening.mpesa||0) + sysMpesaRev;
+  const physCash  = cash + till;
+  const physMpesa = mpesa;
+  const cashVar   = physCash - expCash;
+  const mpesaVar  = physMpesa - expMpesa;
+  const netMove   = sysTotalRev + useInjected - useExpenses - useWithdrawn;
+
+  _saveDayRecon(today, {
+    step: 'reconciled', date: today,
+    lockedAt: data.lockedAt, opening: data.opening,
+    reconciledAt: new Date().toISOString(),
+    closing: { injected: useInjected, cash, till, mpesa, expenses: useExpenses, withdrawn: useWithdrawn },
+    system: { sysCashRev, sysMpesaRev, sysTotalRev, sysTotalProf, salesCount, margin },
+    analysis: { opTotal, correctDay, actualDay, variance, expCash, expMpesa, physCash, physMpesa, cashVar, mpesaVar, netMove }
+  });
+
   await _doCloseDay();
-  await _cleanupFinanceCoherence();
+  await _cleanupFinanceCoherence(true);
   scheduleSync();
   toast('Day closed and reconciled', 'ok');
   renderDayState();
@@ -6724,45 +6725,6 @@ reconcileDay = async function() {
   renderFinancePage();
 };
 window.reconcileDay = reconcileDay;
-
-_renderReconcileInsights = function(data) {
-  const el = document.getElementById('day-reconcile-insights');
-  if (!el || !data || !data.closing) return;
-  const cl = data.closing, sy = data.system, an = data.analysis;
-  const absV = Math.abs(an.variance || 0);
-  const ok = absV <= 5;
-  const warn = !ok && absV <= 300;
-  const color = ok ? 'var(--green)' : warn ? '#d97706' : 'var(--red)';
-  const insights = [];
-  if (ok) insights.push('Balanced. Correct money and exact money match.');
-  else if ((an.variance || 0) > 0) insights.push('Surplus: you have more than the expected day money. Check unrecorded cash to business or extra payment.');
-  else insights.push('Shortage: you have less than expected. Check unrecorded expense, personal withdraw, or missed sale.');
-  if ((sy.margin || 0) < 10 && (sy.sysTotalRev || 0) > 0) insights.push('Low profit margin today. Review selling prices and buying costs.');
-  if ((an.netMove || 0) < 0) insights.push('Money movement is negative: more left the business than came in today.');
-  el.innerHTML =
-    '<div class="day-section-label">Sales Details</div>' +
-    '<div class="day-card" style="padding:12px;margin-bottom:8px;"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;">' +
-      '<div><div class="day-kpi-val">'+(sy.salesCount||0)+'</div><div class="day-kpi-lbl">Sales</div></div>' +
-      '<div><div class="day-kpi-val day-kpi-sm">'+fmt(sy.sysTotalRev||0)+'</div><div class="day-kpi-lbl">Revenue</div></div>' +
-      '<div><div class="day-kpi-val day-kpi-sm">'+fmt(sy.sysTotalProf||0)+'</div><div class="day-kpi-lbl">Profit</div></div>' +
-    '</div></div>' +
-    '<div class="day-section-label">Today Summary</div>' +
-    '<div class="day-card" style="padding:12px;margin-bottom:8px;">' +
-      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>Opening</span><b>'+fmt(an.opTotal||0)+'</b></div>' +
-      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>Sales</span><b>'+fmt(sy.sysTotalRev||0)+'</b></div>' +
-      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>Cash to Business</span><b>'+fmt(cl.injected||0)+'</b></div>' +
-      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>Business Expenses</span><b>'+fmt(cl.expenses||0)+'</b></div>' +
-      '<div style="display:flex;justify-content:space-between;font-size:12px;"><span>Personal Withdraws</span><b>'+fmt(cl.withdrawn||0)+'</b></div>' +
-    '</div>' +
-    '<div class="day-section-label">Day Money Check</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
-      '<div class="day-card" style="padding:12px;"><div class="day-kpi-lbl">Correct</div><div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--accent);">'+fmt(an.correct||0)+'</div></div>' +
-      '<div class="day-card" style="padding:12px;"><div class="day-kpi-lbl">Actually Have</div><div style="font-size:18px;font-weight:900;font-family:var(--mono);color:'+color+';">'+fmt(an.exact||0)+'</div></div>' +
-    '</div>' +
-    '<details class="day-card" style="padding:12px;margin-bottom:8px;" open><summary style="font-size:13px;font-weight:900;color:'+color+';cursor:pointer;">Variance: '+fmt(an.variance||0)+'</summary>' +
-      '<div style="margin-top:10px;font-size:12px;line-height:1.6;color:var(--text2);">' + insights.map(i=>'<div style="margin-bottom:6px;">'+i+'</div>').join('') + '</div>' +
-    '</details>';
-};
 
 dayStartOver = async function() {
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
@@ -6851,6 +6813,7 @@ window.confirmRestock = confirmRestock;
 window.confirmSale = confirmSale;
 window.dashSetPeriod = dashSetPeriod;
 window.deleteItem = deleteItem;
+window.deleteType = deleteType;
 window.disconnectFirebase = disconnectFirebase;
 window.dismissAppUpdate = dismissAppUpdate;
 window.dismissInstall = dismissInstall;
@@ -7442,7 +7405,10 @@ function renderShoeGroupButtons() {
     const rng = document.getElementById('sg-range-' + g);
     const hasSelected = _getGroupSizes(g).some(s => _shoeState.sizes.has(s));
     if (btn) btn.classList.toggle('sg-active', hasSelected || _shoeState.shownGroups.has(g));
-    if (rng && groups[g]) rng.textContent = groups[g].min + '–' + groups[g].max;
+    if (rng && groups[g]) {
+      const lbl = groups[g].label ? groups[g].label + ' · ' : '';
+      rng.textContent = lbl + groups[g].min + '–' + groups[g].max;
+    }
   });
 }
 function renderShoeRows() {
