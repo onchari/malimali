@@ -2286,64 +2286,15 @@ async function renderDashboard() {
     }
   }
 
-  // ── Out of Stock & Low Stock lists ───────────────────────
+  // ── Alerts ────────────────────────────────────────────────
   const outStk = allItems.filter(i => i.qty === 0);
   const lowStk = allItems.filter(i => i.qty > 0 && i.qty <= LOW_STOCK_LEVEL);
-
-  // Clear legacy alert strip
   const alertEl = document.getElementById('d-alerts');
-  if (alertEl) alertEl.innerHTML = '';
-
-  // Out of Stock — full item rows with Restock button
-  const outWrap = document.getElementById('d-out-of-stock-wrap');
-  const outList = document.getElementById('d-out-of-stock-list');
-  if (outWrap && outList) {
-    if (outStk.length) {
-      outWrap.style.display = '';
-      outList.innerHTML = outStk.map(i => {
-        const t = getTypeObj(i.type || '');
-        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1.5px solid rgba(192,57,43,0.2);border-radius:var(--r);margin-bottom:6px;">
-          <span style="font-size:20px;flex-shrink:0;">${t.emoji}</span>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(i.name || i.code)}</div>
-            <div style="font-size:10px;color:var(--muted);margin-top:1px;">${escapeHtml(i.code)} · sell ${fmt(i.sellPrice || i.sell || 0)}</div>
-          </div>
-          <button onclick="openSheetRestock(${i.id})"
-            style="flex-shrink:0;padding:7px 13px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);">
-            + Restock
-          </button>
-        </div>`;
-      }).join('');
-    } else {
-      outWrap.style.display = 'none';
-      outList.innerHTML = '';
-    }
-  }
-
-  // Low Stock — same layout with amber Restock button
-  const lowWrap = document.getElementById('d-low-stock-wrap');
-  const lowList = document.getElementById('d-low-stock-list');
-  if (lowWrap && lowList) {
-    if (lowStk.length) {
-      lowWrap.style.display = '';
-      lowList.innerHTML = lowStk.map(i => {
-        const t = getTypeObj(i.type || '');
-        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1.5px solid #f5d9a0;border-radius:var(--r);margin-bottom:6px;">
-          <span style="font-size:20px;flex-shrink:0;">${t.emoji}</span>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(i.name || i.code)}</div>
-            <div style="font-size:10px;color:var(--muted);margin-top:1px;">${escapeHtml(i.code)} · ${i.qty} left · sell ${fmt(i.sellPrice || i.sell || 0)}</div>
-          </div>
-          <button onclick="openSheetRestock(${i.id})"
-            style="flex-shrink:0;padding:7px 13px;background:#d97706;color:white;border:none;border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);">
-            + Restock
-          </button>
-        </div>`;
-      }).join('');
-    } else {
-      lowWrap.style.display = 'none';
-      lowList.innerHTML = '';
-    }
+  if (alertEl) {
+    let html = '';
+    if (outStk.length) html += `<div style="background:var(--red-light);border:1px solid rgba(192,57,43,0.25);border-radius:var(--r);padding:10px 12px;margin-bottom:6px;font-size:12px;color:var(--red);font-weight:600;">⚠️ <strong>${outStk.length}</strong> out of stock — ${outStk.slice(0,4).map(i=>escapeHtml(i.code)).join(', ')}${outStk.length>4?' +more':''}</div>`;
+    if (lowStk.length) html += `<div style="background:var(--amber-light);border:1px solid #f5d9a0;border-radius:var(--r);padding:10px 12px;margin-bottom:6px;font-size:12px;color:var(--amber);font-weight:600;">📉 <strong>${lowStk.length}</strong> running low — ${lowStk.slice(0,4).map(i=>escapeHtml(i.code)).join(', ')}${lowStk.length>4?' +more':''}</div>`;
+    alertEl.innerHTML = html;
   }
 
   // ── Insights ──────────────────────────────────────────────
@@ -4330,21 +4281,6 @@ function toggleRestock() {
   }
 }
 
-// Open item sheet and jump straight to restock panel (used from dashboard)
-async function openSheetRestock(id) {
-  showPage('list');
-  await new Promise(r => setTimeout(r, 80));
-  await openSheet(id);
-  // Small delay so the sheet finishes rendering, then open restock panel
-  await new Promise(r => setTimeout(r, 120));
-  const panel = document.getElementById('restock-panel');
-  if (panel) {
-    panel.style.display = 'block';
-    const qtyInput = document.getElementById('restock-qty');
-    if (qtyInput) { qtyInput.value = ''; qtyInput.focus(); }
-  }
-}
-
 async function confirmRestock() {
   const restockBtn = document.querySelector('#restock-panel button');
   if (restockBtn) { restockBtn.disabled = true; restockBtn.style.opacity = '0.5'; }
@@ -5748,7 +5684,6 @@ window.closeUserMenu = closeUserMenu;
 window.confirmCloseDay = confirmCloseDay;
 window.confirmLogout = confirmLogout;
 window.confirmRestock = confirmRestock;
-window.openSheetRestock = openSheetRestock;
 window.confirmSale = confirmSale;
 window.dashSetPeriod = dashSetPeriod;
 window.deleteItem = deleteItem;
@@ -5819,108 +5754,149 @@ async function renderHistoryPage() {
   const today     = todayDateStr();
   const todayFull = new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
 
-  // Set today header
   UI.setText('hist-today-date', todayFull);
 
-  // All data
-  const allSales    = await dbAll('sales');
-  const allFinances = await dbAll('finances');
+  const allSales = await dbAll('sales');
 
-  // Today's sales
+  // ── Today ──────────────────────────────────────────────────
   const todaySales = allSales.filter(s => (s.businessDate || s.date?.slice(0,10)) === today);
-  const todayRev   = todaySales.reduce((s,x) => s + x.revenue, 0);
-  const todayProf  = todaySales.reduce((s,x) => s + x.profit, 0);
+  const todayRev   = todaySales.reduce((s,x) => s + (x.revenue||0), 0);
+  const todayProf  = todaySales.reduce((s,x) => s + (x.profit||0),  0);
 
   UI.setText('hist-today-revenue', fmt(todayRev));
   UI.setText('hist-today-profit',  fmt(todayProf));
   UI.setText('hist-today-sales',   todaySales.length);
 
-  // Today sales list
+  // Today — profit tile colour
+  const profEl = document.getElementById('hist-today-profit');
+  if (profEl) profEl.style.color = todayProf >= 0 ? 'var(--green)' : 'var(--red)';
+
   const todayList = UI.el('hist-today-list');
   if (todayList) {
     if (!todaySales.length) {
       todayList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales today yet.</div>';
     } else {
-      const sorted = [...todaySales].sort((a,b) => new Date(b.date) - new Date(a.date));
-      todayList.innerHTML = sorted.map(s => `
-        <div class="hist-sale-row">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-              ${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize?' · Size '+escapeHtml(s.itemSize):''}
-            </div>
-            <div style="font-size:11px;color:var(--muted);">
-              ${s.qty} × ${fmt(s.actualPrice||s.sellPrice||0)} · ${s.paymentMethod||'cash'} · ${fmtTime(s.date)}
-            </div>
-          </div>
-          <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
-            <div style="font-size:11px;color:var(--green);font-family:var(--mono);">+${fmt(s.profit)}</div>
-          </div>
-        </div>`).join('');
+      todayList.innerHTML = [...todaySales]
+        .sort((a,b) => new Date(b.date) - new Date(a.date))
+        .map(s => _histSaleRow(s, 'full')).join('');
     }
   }
 
-  // Past records grouped by date
+  // ── Past records ───────────────────────────────────────────
   const filterEl = UI.el('hist-period-filter');
-  const days     = filterEl ? parseInt(filterEl.value) || 999 : 30;
-  const cutoff   = new Date();
-  if (!isNaN(days)) cutoff.setDate(cutoff.getDate() - days);
+  const filterVal = filterEl ? filterEl.value : '30';
+  const days      = filterVal === 'all' ? null : (parseInt(filterVal) || 30);
+  const cutoff    = days ? new Date(Date.now() - days * 86400000) : null;
 
-  // Group sales by date (excluding today)
   const byDate = {};
   allSales.forEach(s => {
     const d = s.businessDate || s.date?.slice(0,10) || today;
-    if (d === today) return; // today shown separately
-    if (!isNaN(days) && new Date(d) < cutoff) return;
-    if (!byDate[d]) byDate[d] = { sales: [], revenue: 0, profit: 0 };
+    if (d === today) return;
+    if (cutoff && new Date(d + 'T12:00:00') < cutoff) return;
+    if (!byDate[d]) byDate[d] = { sales:[], revenue:0, profit:0, cost:0 };
     byDate[d].sales.push(s);
-    byDate[d].revenue += s.revenue;
-    byDate[d].profit  += s.profit;
+    byDate[d].revenue += (s.revenue || 0);
+    byDate[d].profit  += (s.profit  || 0);
+    byDate[d].cost    += ((s.revenue||0) - (s.profit||0));
   });
 
   const datesSorted = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
   const recList = UI.el('hist-records-list');
-  if (recList) {
-    if (!datesSorted.length) {
-      recList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:16px 0;text-align:center;">No historical records in this period.</div>';
-    } else {
-      recList.innerHTML = datesSorted.map(date => {
-        const day   = byDate[date];
-        const label = new Date(date + 'T12:00:00').toLocaleDateString('en-GB',
-                      { weekday:'short', day:'numeric', month:'short', year:'numeric' });
-        const rows  = [...day.sales]
-          .sort((a,b) => new Date(b.date) - new Date(a.date))
-          .slice(0, 5)
-          .map(s => `
-            <div class="hist-sale-row" style="border-top:1px solid var(--border);">
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                  ${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize?' · Sz'+escapeHtml(s.itemSize):''}
-                </div>
-                <div style="font-size:10px;color:var(--muted);">${s.qty} × ${fmt(s.actualPrice||s.sellPrice||0)} · ${fmtTime(s.date)}</div>
-              </div>
-              <div style="text-align:right;flex-shrink:0;font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue)}</div>
-            </div>`).join('');
-        const more  = day.sales.length > 5
-          ? `<div style="font-size:11px;color:var(--muted);padding:6px 0;text-align:center;">+${day.sales.length-5} more sales</div>` : '';
+  if (!recList) return;
 
-        return `
-          <div class="hist-day-card">
-            <div class="hist-day-header">
-              <div>
-                <div style="font-size:14px;font-weight:800;">${label}</div>
-                <div style="font-size:11px;color:var(--muted);">${day.sales.length} sale${day.sales.length!==1?'s':''}</div>
-              </div>
-              <div style="text-align:right;">
-                <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(day.revenue)}</div>
-                <div style="font-size:11px;color:var(--green);font-family:var(--mono);">+${fmt(day.profit)}</div>
-              </div>
-            </div>
-            ${rows}${more}
-          </div>`;
-      }).join('');
-    }
+  if (!datesSorted.length) {
+    recList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px 0;text-align:center;">No records in this period.</div>';
+    return;
   }
+
+  // Totals summary for the selected period
+  const periodRev  = datesSorted.reduce((s,d) => s + byDate[d].revenue, 0);
+  const periodProf = datesSorted.reduce((s,d) => s + byDate[d].profit,  0);
+  const periodSales= datesSorted.reduce((s,d) => s + byDate[d].sales.length, 0);
+  const pMargin    = periodRev > 0 ? (periodProf / periodRev * 100).toFixed(1) : '0.0';
+
+  const summaryHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 8px;text-align:center;">
+        <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--accent2);">${fmt(periodRev)}</div>
+        <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Revenue</div>
+      </div>
+      <div style="background:var(--green-light);border:1px solid var(--green);border-radius:var(--r);padding:10px 8px;text-align:center;">
+        <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--green);">${fmt(periodProf)}</div>
+        <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Profit</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 8px;text-align:center;">
+        <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--text);">${pMargin}%</div>
+        <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Margin</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 8px;text-align:center;">
+        <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--text);">${periodSales}</div>
+        <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Sales</div>
+      </div>
+    </div>`;
+
+  recList.innerHTML = summaryHtml + datesSorted.map(date => {
+    const day   = byDate[date];
+    const label = new Date(date + 'T12:00:00').toLocaleDateString('en-GB',
+                  { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+    const margin = day.revenue > 0 ? (day.profit / day.revenue * 100).toFixed(0) : '0';
+    const profColor = day.profit >= 0 ? 'var(--green)' : 'var(--red)';
+    const rows  = [...day.sales]
+      .sort((a,b) => new Date(b.date) - new Date(a.date))
+      .map(s => _histSaleRow(s, 'compact')).join('');
+
+    return `
+      <div class="hist-day-card">
+        <div class="hist-day-header">
+          <div>
+            <div style="font-size:14px;font-weight:800;">${label}</div>
+            <div style="font-size:11px;color:var(--muted);">${day.sales.length} sale${day.sales.length!==1?'s':''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(day.revenue)}</div>
+            <div style="font-size:11px;font-weight:700;font-family:var(--mono);color:${profColor};">profit ${fmt(day.profit)} <span style="color:var(--muted);font-weight:600;">(${margin}%)</span></div>
+          </div>
+        </div>
+        ${rows}
+      </div>`;
+  }).join('');
+}
+
+// ── Shared sale row renderer ────────────────────────────────
+function _histSaleRow(s, mode) {
+  const profColor = (s.profit||0) >= 0 ? 'var(--green)' : 'var(--red)';
+  const profSign  = (s.profit||0) >= 0 ? '+' : '';
+  if (mode === 'full') {
+    return `
+      <div class="hist-sale-row">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize?' · Size '+escapeHtml(s.itemSize):''}
+          </div>
+          <div style="font-size:11px;color:var(--muted);">
+            ${s.qty} × ${fmt(s.actualPrice||s.sellPrice||0)} · ${s.paymentMethod||'cash'} · ${fmtTime(s.date)}
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue||0)}</div>
+          <div style="font-size:11px;font-weight:700;font-family:var(--mono);color:${profColor};">${profSign}${fmt(s.profit||0)}</div>
+        </div>
+      </div>`;
+  }
+  // compact — used in past records
+  return `
+    <div class="hist-sale-row" style="border-top:1px solid var(--border);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          ${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize?' · Sz '+escapeHtml(s.itemSize):''}
+        </div>
+        <div style="font-size:10px;color:var(--muted);">${s.qty} × ${fmt(s.actualPrice||s.sellPrice||0)} · ${s.paymentMethod||'cash'} · ${fmtTime(s.date)}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(s.revenue||0)}</div>
+        <div style="font-size:11px;font-weight:700;font-family:var(--mono);color:${profColor};">${profSign}${fmt(s.profit||0)}</div>
+      </div>
+    </div>`;
 }
 window.renderHistoryPage = renderHistoryPage;
 
