@@ -126,7 +126,8 @@ function initDB() {
       renderSellPage();
       updateLowStockBadge();
 
-      const lastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
+      const rawLastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
+      const lastPage = (rawLastPage === 'day' || rawLastPage === 'finance') ? 'operations' : rawLastPage;
       const allowedPage = currentUser && currentUser.tabs.includes(lastPage)
         ? lastPage : currentUser.tabs[0];
       _origShowPage(allowedPage);
@@ -703,7 +704,49 @@ function toast(msg, type = '') {
 function getTypeObj(name) { return types.find(t => t.name === name) || { name, emoji: '📦', color: '#334155' }; }
 
 // ===== PAGES =====
+let _operationsMounted = false;
+let _activeOperationsTab = 'day';
+
+function mountOperationsPage() {
+  if (_operationsMounted) return;
+  const daySlot = document.getElementById('ops-day-slot');
+  const finSlot = document.getElementById('ops-finance-slot');
+  const dayPage = document.getElementById('page-day');
+  const finPage = document.getElementById('page-finance');
+  if (!daySlot || !finSlot || !dayPage || !finPage) return;
+
+  dayPage.classList.remove('page', 'active');
+  finPage.classList.remove('page', 'active');
+  dayPage.classList.add('op-module');
+  finPage.classList.add('op-module');
+  daySlot.appendChild(dayPage);
+  finSlot.appendChild(finPage);
+  _operationsMounted = true;
+}
+
+function showOperationsTab(tab) {
+  _activeOperationsTab = tab === 'finance' ? 'finance' : 'day';
+  mountOperationsPage();
+  ['day', 'finance'].forEach(name => {
+    const btn = document.getElementById('ops-tab-' + name);
+    const slot = document.getElementById('ops-' + name + '-slot');
+    if (btn) btn.classList.toggle('active', name === _activeOperationsTab);
+    if (slot) slot.classList.toggle('active', name === _activeOperationsTab);
+  });
+  if (_activeOperationsTab === 'day') {
+    updateDayLiveStats();
+    renderDaySessionsList();
+    renderDayState();
+  } else {
+    renderFinancePage();
+  }
+}
+
 function showPage(id) {
+  if (id === 'day' || id === 'finance') {
+    _activeOperationsTab = id;
+    id = 'operations';
+  }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   const pageEl = document.getElementById('page-' + id);
@@ -713,6 +756,7 @@ function showPage(id) {
   if (id === 'dash') renderDashboard();
   if (id === 'list') renderList();
   if (id === 'wishlist') renderWishlistPage();
+  if (id === 'operations') showOperationsTab(_activeOperationsTab);
   if (id === 'day') { updateDayLiveStats(); renderDaySessionsList(); renderDayState(); }
   if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
   if (id === 'history') { renderHistoryPage(); }
@@ -3111,7 +3155,9 @@ async function confirmSale() {
   try { if (activeDay) updateDayLiveStats(); } catch(_) { /* intentionally ignored */ }
   // Refresh finance page if it's currently visible
   try {
-    if (document.getElementById('page-finance')?.classList.contains('active')) {
+    const financeVisible = document.getElementById('page-finance')?.classList.contains('active') ||
+      (document.getElementById('page-operations')?.classList.contains('active') && _activeOperationsTab === 'finance');
+    if (financeVisible) {
       renderFinancePage();
     }
   } catch(_) { /* intentionally ignored */ }
@@ -4888,7 +4934,7 @@ function showUserProfile() {
   if (!currentUser) return;
   const roleColors = { super: '#92400e', user: '#1d4ed8', clerk: 'var(--green)' };
   const roleLabels = { super: '🟡 Super User — Full Access', user: '🔵 User — Standard Access', clerk: '🟢 Clerk — Limited Access' };
-  const tabLabels = { dash: 'Dashboard', list: 'Stock', wishlist: 'Wishlist', add: 'Add Item', sell: 'Sell', day: 'Day', finance: 'Finance', settings: 'Settings' };
+  const tabLabels = { dash: 'Dashboard', list: 'Stock', wishlist: 'Wishlist', add: 'Add Item', sell: 'Sell', operations: 'Operations', settings: 'Settings' };
   document.getElementById('profile-name').textContent = currentUser.name;
   document.getElementById('profile-username').textContent = currentUser.username;
   const roleEl = document.getElementById('profile-role');
@@ -4920,7 +4966,7 @@ const USERS = [
     role: 'super',
     roleLabel: 'Super User',
     // Super: access to everything
-    tabs: ['dash','list','wishlist','add','history','finance','day','settings']
+    tabs: ['dash','list','wishlist','add','history','operations','settings']
   },
   {
     username: 'vanice',
@@ -4930,7 +4976,7 @@ const USERS = [
     role: 'user',
     roleLabel: 'User',
     // User: everything except Settings
-    tabs: ['dash','list','wishlist','add','history','finance','day']
+    tabs: ['dash','list','wishlist','add','history','operations']
   },
   {
     username: 'trevor',
@@ -4961,7 +5007,7 @@ let currentUser = null;
 
 function applyRoleRestrictions(user) {
   // Show/hide nav tabs based on role
-  const allTabs = ['dash','list','wishlist','add','history','finance','day','settings'];
+  const allTabs = ['dash','list','wishlist','add','history','operations','finance','day','settings'];
   allTabs.forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) {
@@ -4988,7 +5034,7 @@ function logout() {
   localStorage.removeItem(KEY_SESSION);
   localStorage.removeItem('mg_last_page');
   // Reset nav tabs visibility
-  ['dash','list','wishlist','add','sell','history','finance','day','types','settings'].forEach(tab => {
+  ['dash','list','wishlist','add','sell','history','operations','finance','day','types','settings'].forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) btn.style.display = '';
   });
@@ -5038,7 +5084,8 @@ function attemptLogin() {
   }
 
   // Go to day page if day not open, otherwise last visited page
-  const lastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
+  const rawLastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
+  const lastPage = (rawLastPage === 'day' || rawLastPage === 'finance') ? 'operations' : rawLastPage;
   const allowedPage = user.tabs.includes(lastPage) ? lastPage : user.tabs[0];
 
   // Check day status
@@ -6016,6 +6063,7 @@ window.saveWishlistItem = saveWishlistItem;
 window.searchSell = searchSell;
 window.selectPayment = selectPayment;
 window.showPage = showPage;
+window.showOperationsTab = showOperationsTab;
 window.showUserProfile = showUserProfile;
 window.toggleNotifPanel = toggleNotifPanel;
 window.toggleRestock = toggleRestock;

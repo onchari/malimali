@@ -319,14 +319,11 @@
   <button class="nav-btn" onclick="showPage('add')" id="tab-add">
     <span class="icon"><i class="fa-solid fa-plus"></i></span>Add
   </button>
-  <button class="nav-btn" onclick="showPage('day')" id="tab-day">
-    <span class="icon"><i class="fa-solid fa-calendar-day"></i></span>Day
-  </button>
   <button class="nav-btn" onclick="showPage('history')" id="tab-history">
     <span class="icon"><i class="fa-solid fa-clock-rotate-left"></i></span>History
   </button>
-  <button class="nav-btn" onclick="showPage('finance')" id="tab-finance">
-    <span class="icon"><i class="fa-solid fa-wallet"></i></span>Finance
+  <button class="nav-btn" onclick="showPage('operations')" id="tab-operations">
+    <span class="icon"><i class="fa-solid fa-briefcase"></i></span>Operations
   </button>
   <button class="nav-btn" onclick="showPage('settings')" id="tab-settings">
     <span class="icon"><i class="fa-solid fa-gear"></i></span>Settings
@@ -619,6 +616,29 @@
   </div>
 
   <div id="wishlist-list" style="padding-bottom:80px;"></div>
+</div>
+
+<!-- ============================================================== 
+     PAGE: OPERATIONS  (id="page-operations")
+     Contains Day and Finance as inner tabs.
+     ============================================================== -->
+<div class="page" id="page-operations" style="padding:12px 12px 0;">
+  <div class="ops-header">
+    <div>
+      <div class="stock-title">Operations</div>
+      <div class="stock-sub">Day control and business money flow</div>
+    </div>
+  </div>
+  <div class="ops-tabs">
+    <button class="ops-tab active" id="ops-tab-day" onclick="showOperationsTab('day')">
+      <i class="fa-solid fa-calendar-day"></i> Day
+    </button>
+    <button class="ops-tab" id="ops-tab-finance" onclick="showOperationsTab('finance')">
+      <i class="fa-solid fa-wallet"></i> Finance
+    </button>
+  </div>
+  <div id="ops-day-slot" class="ops-slot active"></div>
+  <div id="ops-finance-slot" class="ops-slot"></div>
 </div>
 
 

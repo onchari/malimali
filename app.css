@@ -722,6 +722,48 @@ body {
   .stock-form-grid { grid-template-columns: 1fr; }
 }
 
+/* OPERATIONS */
+.ops-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.ops-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.ops-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+.ops-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.ops-slot { display: none; }
+.ops-slot.active { display: block; }
+.op-module {
+  display: block !important;
+  padding: 0 !important;
+  animation: none !important;
+}
+
 /* SUCCESS SPLASH */
 .splash {
   position: fixed; inset: 0; z-index: 500;
