@@ -341,14 +341,80 @@ function getTypeRecord(name) {
   return types.find(t => t.name === name) || null;
 }
 
-function isCategoryActive(rec) {
-  if (!rec) return false;
-  if (rec.active === false) return false;
-  if (rec.parentId) {
-    const parent = types.find(t => t.id === rec.parentId);
-    if (parent && parent.active === false) return false;
+function getTypeById(id) {
+  if (id == null) return null;
+  return types.find(t => t.id === id) || null;
+}
+
+function getCategoryAncestors(rec) {
+  const chain = [];
+  let cur = rec;
+  const seen = new Set();
+  while (cur && cur.parentId) {
+    if (seen.has(cur.parentId)) break;
+    seen.add(cur.parentId);
+    const parent = getTypeById(cur.parentId);
+    if (!parent) break;
+    chain.push(parent);
+    cur = parent;
   }
-  return true;
+  return chain;
+}
+
+function isCategoryActive(rec) {
+  if (!rec || rec.active === false) return false;
+  return getCategoryAncestors(rec).every(a => a.active !== false);
+}
+
+function isDescendantOfType(typeRec, ancestorId) {
+  if (!typeRec || ancestorId == null) return false;
+  let cur = typeRec;
+  const seen = new Set();
+  while (cur && cur.parentId) {
+    if (cur.parentId === ancestorId) return true;
+    if (seen.has(cur.parentId)) break;
+    seen.add(cur.parentId);
+    cur = getTypeById(cur.parentId);
+  }
+  return false;
+}
+
+function walkCategoryTree(visitor) {
+  const roots = types.filter(t => t.parentId == null).sort(_sortTypes);
+  function walkChildren(parentId, depth) {
+    types.filter(t => t.parentId === parentId).sort(_sortTypes).forEach(child => {
+      visitor(child, depth);
+      walkChildren(child.id, depth + 1);
+    });
+  }
+  roots.forEach(r => {
+    visitor(r, 0);
+    walkChildren(r.id, 1);
+  });
+}
+
+function collectCategoryDescendantIds(parentId) {
+  const ids = [];
+  function walk(pid) {
+    types.filter(t => t.parentId === pid).forEach(c => {
+      ids.push(c.id);
+      walk(c.id);
+    });
+  }
+  walk(parentId);
+  return ids;
+}
+
+function populateCategoryParentSelect(selectEl) {
+  if (!selectEl) return;
+  const cur = selectEl.value;
+  let html = '<option value="">— Parent category —</option>';
+  walkCategoryTree((rec, depth) => {
+    const indent = depth ? '\u2003'.repeat(depth) + '\u21b3 ' : '';
+    html += '<option value="' + rec.id + '">' + indent + escapeHtml((rec.emoji || '📦') + ' ' + rec.name) + '</option>';
+  });
+  selectEl.innerHTML = html;
+  if (cur) selectEl.value = cur;
 }
 
 function isFootwearType(typeName) {
@@ -356,15 +422,13 @@ function isFootwearType(typeName) {
   if (rec) {
     if (rec.isFootwear === true) return true;
     if (rec.isFootwear === false) {
-      if (rec.parentId) {
-        const parent = types.find(t => t.id === rec.parentId);
-        if (parent) return isFootwearType(parent.name);
+      for (const anc of getCategoryAncestors(rec)) {
+        if (anc.isFootwear === true) return true;
       }
       return false;
     }
-    if (rec.parentId) {
-      const parent = types.find(t => t.id === rec.parentId);
-      if (parent) return isFootwearType(parent.name);
+    for (const anc of getCategoryAncestors(rec)) {
+      if (anc.isFootwear === true) return true;
     }
   }
   return _legacyFootwearName(typeName);
@@ -375,15 +439,10 @@ function _sortTypes(a, b) {
 }
 
 function getOrderedTypesForDropdown() {
-  const active = types.filter(isCategoryActive);
-  const parents = active.filter(t => !t.parentId).sort(_sortTypes);
   const opts = [];
-  for (const p of parents) {
-    opts.push({ rec: p, depth: 0 });
-    active.filter(s => s.parentId === p.id).sort(_sortTypes).forEach(s => opts.push({ rec: s, depth: 1 }));
-  }
-  active.filter(t => t.parentId && !parents.some(p => p.id === t.parentId)).sort(_sortTypes)
-    .forEach(s => opts.push({ rec: s, depth: 1 }));
+  walkCategoryTree((rec, depth) => {
+    if (isCategoryActive(rec)) opts.push({ rec, depth });
+  });
   return opts;
 }
 
@@ -392,7 +451,7 @@ function itemMatchesTypeFilter(item, filterName) {
   if ((item.type || '') === filterName) return true;
   const itemRec = getTypeRecord(item.type);
   const filterRec = getTypeRecord(filterName);
-  if (itemRec && filterRec && itemRec.parentId === filterRec.id) return true;
+  if (itemRec && filterRec && isDescendantOfType(itemRec, filterRec.id)) return true;
   return false;
 }
 
@@ -1092,7 +1151,7 @@ function renderTypeSelect() {
 function renderTypeChips() {
   const chips = document.getElementById('type-chips');
   if (!chips) return;
-  const topActive = types.filter(t => !t.parentId && isCategoryActive(t)).sort(_sortTypes);
+  const topActive = types.filter(t => t.parentId == null && isCategoryActive(t)).sort(_sortTypes);
   chips.innerHTML = '<span class="chip ' + (activeTypeFilter === 'all' ? 'active' : '') + '" onclick="setTypeFilter(\'all\', this)">All</span>' +
     topActive.map(t =>
       '<span class="chip ' + (activeTypeFilter === t.name ? 'active' : '') + '" onclick="setTypeFilter(\'' + escapeHtml(t.name).replace(/'/g, "\\'") + '\', this)">' +
@@ -1119,22 +1178,23 @@ async function renderCategorySettings() {
       list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px;">No categories yet</div>';
       return;
     }
-    const parents = types.filter(t => !t.parentId).sort(_sortTypes);
-    const parentSelect = document.getElementById('new-sub-parent');
-    if (parentSelect) {
-      parentSelect.innerHTML = '<option value="">— Parent category —</option>' +
-        parents.map(p => '<option value="' + p.id + '">' + escapeHtml(p.emoji + ' ' + p.name) + '</option>').join('');
-    }
-    const rowHtml = (t, isSub) => {
+    populateCategoryParentSelect(document.getElementById('new-sub-parent'));
+
+    const countDescendants = (id) => collectCategoryDescendantIds(id).length;
+
+    const rowHtml = (t, depth) => {
       const active = t.active !== false;
-      const footwear = t.isFootwear === true;
-      const subs = types.filter(s => s.parentId === t.id).sort(_sortTypes);
-      const subCount = subs.length;
-      return '<div class="cat-row' + (isSub ? ' cat-sub' : '') + '" data-id="' + t.id + '">' +
+      const footwear = isFootwearType(t.name);
+      const subCount = countDescendants(t.id);
+      const pad = 12 + Math.min(depth, 12) * 14;
+      return '<div class="cat-row' + (depth ? ' cat-sub' : '') + '" data-id="' + t.id + '" style="padding-left:' + pad + 'px;">' +
         '<div class="cat-row-main">' +
           '<span class="cat-emoji">' + (t.emoji || '📦') + '</span>' +
           '<div class="cat-info">' +
-            '<div class="cat-name">' + escapeHtml(t.name) + (isSub ? '' : (subCount ? ' <span class="cat-subcount">' + subCount + ' sub</span>' : '')) + '</div>' +
+            '<div class="cat-name">' + escapeHtml(t.name) +
+              (depth ? ' <span class="cat-subcount">L' + (depth + 1) + '</span>' : '') +
+              (subCount ? ' <span class="cat-subcount">' + subCount + ' nested</span>' : '') +
+            '</div>' +
             '<div class="cat-meta">' + (active ? 'Active in dropdowns' : 'Hidden from dropdowns') +
               (footwear ? ' · Size-grid mode' : '') + '</div>' +
           '</div>' +
@@ -1146,10 +1206,12 @@ async function renderCategorySettings() {
             '<button type="button" class="type-del" onclick="deleteType(' + t.id + ')">✕</button>' +
           '</div>' +
         '</div>' +
-        (subs.length ? subs.map(s => rowHtml(s, true)).join('') : '') +
       '</div>';
     };
-    list.innerHTML = parents.map(p => rowHtml(p, false)).join('');
+
+    let html = '';
+    walkCategoryTree((rec, depth) => { html += rowHtml(rec, depth); });
+    list.innerHTML = html;
   } catch (e) {
     console.error('[renderCategorySettings]', e);
     toast('Error loading categories: ' + e.message, 'err');
@@ -1251,14 +1313,15 @@ async function addSubCategory() {
     if (!parentId) { toast('Select a parent category', 'err'); return; }
     if (!name) { toast('Enter sub-category name', 'err'); return; }
     if (types.find(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Name already exists', 'err'); return; }
-    const parent = types.find(t => t.id === parentId);
+    const parent = getTypeById(parentId);
+    const inheritFootwear = parent ? isFootwearType(parent.name) : false;
     await dbAdd('types', {
       name,
       emoji: parent?.emoji || selectedEmoji,
       color: parent?.color || '#1e293b',
       active: true,
       parentId,
-      isFootwear: parent?.isFootwear || false,
+      isFootwear: inheritFootwear,
       sortOrder: types.filter(t => t.parentId === parentId).length + 1
     });
     document.getElementById('new-sub-name').value = '';
@@ -1275,14 +1338,16 @@ window.addSubCategory = addSubCategory;
 async function deleteType(id) {
   try {
   const allItems = await dbAll('items');
-  const typeObj = types.find(t => t.id === id);
-  const subs = types.filter(t => t.parentId === id);
-  const inUse = allItems.filter(i => i.type === (typeObj ? typeObj.name : '')).length;
+  const typeObj = getTypeById(id);
+  const descIds = collectCategoryDescendantIds(id);
+  const descRecords = descIds.map(did => getTypeById(did)).filter(Boolean);
+  const namesToCheck = [typeObj?.name, ...descRecords.map(t => t.name)].filter(Boolean);
+  const inUse = allItems.filter(i => namesToCheck.includes(i.type)).length;
   let msg = 'Delete "' + (typeObj ? typeObj.name : 'this category') + '"?';
-  if (subs.length) msg += '\n\nAlso deletes ' + subs.length + ' sub-categor' + (subs.length === 1 ? 'y' : 'ies') + '.';
-  if (inUse > 0) msg += '\n\n' + inUse + ' item(s) still use this name — they will keep the label.';
+  if (descIds.length) msg += '\n\nAlso deletes ' + descIds.length + ' nested sub-categor' + (descIds.length === 1 ? 'y' : 'ies') + '.';
+  if (inUse > 0) msg += '\n\n' + inUse + ' item(s) still use these names — they will keep the label.';
   if (!confirm(msg)) return;
-  for (const s of subs) await dbDelete('types', s.id);
+  for (const did of descIds) await dbDelete('types', did);
   await dbDelete('types', id);
   await loadTypes();
   renderCategorySettings();
@@ -1339,7 +1404,6 @@ function setItemPhoto(itemId, dataUrl) {
   try {
     localStorage.setItem('item_photo_' + itemId, dataUrl);
   } catch(e) {
-    // localStorage full — remove and retry
     toast('⚠️ Storage full, photo not saved', 'err');
   }
 }
@@ -1347,87 +1411,197 @@ function removeItemPhoto(itemId) {
   localStorage.removeItem('item_photo_' + itemId);
 }
 
+function getWishPhoto(wishId) {
+  return localStorage.getItem('wish_photo_' + wishId) || null;
+}
+function setWishPhoto(wishId, dataUrl) {
+  try {
+    localStorage.setItem('wish_photo_' + wishId, dataUrl);
+  } catch (e) {
+    toast('⚠️ Storage full, photo not saved', 'err');
+  }
+}
+function removeWishPhoto(wishId) {
+  localStorage.removeItem('wish_photo_' + wishId);
+}
+
+function compressImageDataUrl(dataUrl, maxW, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, maxW / img.width);
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => reject(new Error('Invalid image'));
+    img.src = dataUrl;
+  });
+}
+
+function compressImageFile(file, maxW, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = ev => compressImageDataUrl(ev.target.result, maxW, quality).then(resolve).catch(reject);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function _closeImagePickerSheet() {
+  const el = document.getElementById('image-picker-sheet');
+  if (el) el.remove();
+}
+
+function showImagePickerSheet(opts) {
+  _closeImagePickerSheet();
+  const title = opts.title || 'Add photo';
+  const sheet = document.createElement('div');
+  sheet.id = 'image-picker-sheet';
+  sheet.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center;';
+  sheet.onclick = e => { if (e.target === sheet) _closeImagePickerSheet(); };
+  const btnStyle = 'width:100%;padding:14px;border-radius:var(--r);font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans);margin-bottom:8px;border:none;';
+  sheet.innerHTML =
+    '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:20px 18px 32px;" onclick="event.stopPropagation()">' +
+      '<div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px;text-align:center;">' + escapeHtml(title) + '</div>' +
+      '<div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:14px;line-height:1.4;">Take a photo, pick from gallery, or paste a screenshot after taking it in another app.</div>' +
+      '<button type="button" data-src="camera" style="' + btnStyle + 'background:var(--accent);color:white;">📸 Take photo</button>' +
+      '<button type="button" data-src="gallery" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">🖼️ Choose from gallery</button>' +
+      '<button type="button" data-src="clipboard" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">📋 Import screenshot (clipboard)</button>' +
+      '<button type="button" data-src="cancel" style="width:100%;padding:12px;background:transparent;color:var(--muted);border:none;font-size:14px;cursor:pointer;font-family:var(--sans);">Cancel</button>' +
+    '</div>';
+  sheet.querySelectorAll('button[data-src]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const src = btn.getAttribute('data-src');
+      if (src === 'cancel') { _closeImagePickerSheet(); return; }
+      _closeImagePickerSheet();
+      if (src === 'clipboard') {
+        const dataUrl = await pasteImageFromClipboard();
+        if (dataUrl && opts.onPick) opts.onPick(dataUrl);
+        return;
+      }
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      if (src === 'camera') input.capture = 'environment';
+      input.onchange = async e => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        try {
+          const dataUrl = await compressImageFile(file, opts.maxW || 800, opts.quality || 0.75);
+          if (opts.onPick) opts.onPick(dataUrl);
+        } catch (err) {
+          toast('Could not load image', 'err');
+        }
+      };
+      input.click();
+    });
+  });
+  document.body.appendChild(sheet);
+}
+window.showImagePickerSheet = showImagePickerSheet;
+
+async function pasteImageFromClipboard() {
+  if (!navigator.clipboard || !navigator.clipboard.read) {
+    toast('Clipboard paste not supported here — use Gallery and select your screenshot', 'err');
+    return null;
+  }
+  try {
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      for (const type of item.types) {
+        if (type.startsWith('image/')) {
+          const blob = await item.getType(type);
+          return await compressImageFile(new File([blob], 'screenshot.jpg', { type }), 800, 0.75);
+        }
+      }
+    }
+    toast('No image in clipboard — take a screenshot, then tap Import screenshot', 'err');
+    return null;
+  } catch (e) {
+    console.warn('[clipboard]', e);
+    toast('Could not read clipboard — allow access or use Gallery', 'err');
+    return null;
+  }
+}
+window.pasteImageFromClipboard = pasteImageFromClipboard;
+
 function triggerPhotoUpload(itemId, event) {
   event.stopPropagation();
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.capture = 'environment'; // opens camera on mobile
-  input.onchange = e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    // Compress to max 400px wide
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxW = 600;
-        const scale = Math.min(1, maxW / img.width);
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const compressed = canvas.toDataURL('image/jpeg', 0.72);
-        setItemPhoto(itemId, compressed);
-        renderList();
-        toast('📸 Photo saved!', 'ok');
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-  input.click();
+  showImagePickerSheet({
+    title: 'Item photo',
+    maxW: 600,
+    quality: 0.72,
+    onPick: dataUrl => {
+      setItemPhoto(itemId, dataUrl);
+      renderList();
+      toast('Photo saved', 'ok');
+    }
+  });
 }
 
 // ===== ADD FORM PHOTO =====
 let _addFormPhotoData = null;
 
 function triggerAddPhotoUpload() {
-  const menu = document.createElement('div');
-  menu.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center;';
-  menu.innerHTML = '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:20px 18px 32px;">'
-    + '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px;text-align:center;">Add Item Photo</div>'
-    + '<button onclick="this.closest(\'[style*=fixed]\').remove();_doAddPhoto(\'camera\')" style="width:100%;padding:16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:700;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">📸 Take Photo</button>'
-    + '<button onclick="this.closest(\'[style*=fixed]\').remove();_doAddPhoto(\'gallery\')" style="width:100%;padding:16px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--r);font-size:16px;font-weight:700;cursor:pointer;font-family:var(--sans);margin-bottom:10px;">🖼️ Choose from Gallery</button>'
-    + '<button onclick="this.closest(\'[style*=fixed]\').remove()" style="width:100%;padding:13px;background:transparent;color:var(--muted);border:none;font-size:15px;cursor:pointer;font-family:var(--sans);">Cancel</button>'
-    + '</div>';
-  document.body.appendChild(menu);
+  showImagePickerSheet({
+    title: 'Item photo',
+    onPick: dataUrl => {
+      _addFormPhotoData = dataUrl;
+      const photoImg = document.getElementById('add-photo-img');
+      const placeholder = document.getElementById('add-photo-placeholder');
+      const removeBtn = document.getElementById('add-photo-remove');
+      if (photoImg) { photoImg.src = _addFormPhotoData; photoImg.style.display = 'block'; }
+      if (placeholder) placeholder.style.display = 'none';
+      if (removeBtn) removeBtn.style.display = 'block';
+      toast('Photo ready', 'ok');
+    }
+  });
 }
 
-function _doAddPhoto(source) {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  if (source === 'camera') input.capture = 'environment';
-  input.onchange = e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxW = 800;
-        const scale = Math.min(1, maxW / img.width);
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        _addFormPhotoData = canvas.toDataURL('image/jpeg', 0.75);
-        const photoImg = document.getElementById('add-photo-img');
-        const placeholder = document.getElementById('add-photo-placeholder');
-        const removeBtn = document.getElementById('add-photo-remove');
-        if (photoImg) { photoImg.src = _addFormPhotoData; photoImg.style.display = 'block'; }
-        if (placeholder) placeholder.style.display = 'none';
-        if (removeBtn) removeBtn.style.display = 'block';
-        toast('📸 Photo ready!', 'ok');
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-  input.click();
+// ===== WISHLIST PHOTO =====
+let _wishFormPhotoData = null;
+
+function updateWishPhotoPreview() {
+  const photoImg = document.getElementById('wish-photo-img');
+  const placeholder = document.getElementById('wish-photo-placeholder');
+  const removeBtn = document.getElementById('wish-photo-remove');
+  if (_wishFormPhotoData) {
+    if (photoImg) { photoImg.src = _wishFormPhotoData; photoImg.style.display = 'block'; }
+    if (placeholder) placeholder.style.display = 'none';
+    if (removeBtn) removeBtn.style.display = 'block';
+  } else {
+    if (photoImg) { photoImg.src = ''; photoImg.style.display = 'none'; }
+    if (placeholder) placeholder.style.display = 'flex';
+    if (removeBtn) removeBtn.style.display = 'none';
+  }
 }
+
+function triggerWishPhotoUpload() {
+  showImagePickerSheet({
+    title: 'Wishlist photo',
+    onPick: dataUrl => {
+      _wishFormPhotoData = dataUrl;
+      updateWishPhotoPreview();
+      toast('Photo attached', 'ok');
+    }
+  });
+}
+window.triggerWishPhotoUpload = triggerWishPhotoUpload;
+
+function removeWishPhoto(event) {
+  if (event) event.stopPropagation();
+  _wishFormPhotoData = null;
+  updateWishPhotoPreview();
+}
+
+function clearWishPhotoForm() {
+  _wishFormPhotoData = null;
+  updateWishPhotoPreview();
+}
+window.removeWishPhoto = removeWishPhoto;
 
 function removeAddPhoto(event) {
   event.stopPropagation();
@@ -2257,7 +2431,12 @@ async function renderWishlistPage() {
     return;
   }
   list.innerHTML = rows.map(row => {
+    const photo = getWishPhoto(row.wishId);
+    const thumb = photo
+      ? '<img src="' + photo + '" alt="" class="wish-list-thumb">'
+      : '<div class="wish-list-thumb wish-list-thumb-empty">📷</div>';
     return '<div class="stock-monitor-row prospective" onclick="startWishlistRestock(' + row.wishId + ')" role="button" tabindex="0">' +
+      thumb +
       '<div class="stock-monitor-body">' +
         '<div class="stock-monitor-name">' + escapeHtml(row.name) + '</div>' +
         '<div class="stock-monitor-meta">' +
@@ -2302,10 +2481,12 @@ async function saveWishlistItem() {
     createdBy: currentUser ? currentUser.username : 'system'
   };
   entry.id = await dbAdd('wishlist', entry);
+  if (_wishFormPhotoData) setWishPhoto(entry.id, _wishFormPhotoData);
   ['wish-name','wish-code','wish-qty','wish-cost','wish-note'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  clearWishPhotoForm();
   scheduleSync();
   await renderWishlistPage();
   await renderStockMonitorSummary();
@@ -2313,6 +2494,7 @@ async function saveWishlistItem() {
 }
 
 async function deleteWishlistItem(id) {
+  removeWishPhoto(id);
   await dbDelete('wishlist', id);
   scheduleSync();
   await renderWishlistPage();

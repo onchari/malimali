@@ -689,6 +689,23 @@ body {
 .stock-monitor-row.out { border-left: 4px solid var(--red); }
 .stock-monitor-row.prospective { border-left: 4px solid #d97706; }
 .stock-monitor-row.unaccounted { border-left: 4px solid #1d4ed8; background: #eff6ff; cursor: pointer; }
+.wish-photo-box { height: 140px; margin-bottom: 10px; }
+.wish-list-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+.wish-list-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface2);
+  font-size: 18px;
+  color: var(--muted);
+}
 .stock-monitor-body { flex: 1; min-width: 0; }
 .stock-monitor-name {
   font-size: 13px;

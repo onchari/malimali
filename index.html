@@ -624,7 +624,7 @@
   <div class="stock-toolbar">
     <div>
       <div class="stock-title">Wishlist</div>
-      <div class="stock-sub" id="wishlist-sub">Prospective items to stock</div>
+      <div class="stock-sub" id="wishlist-sub">Prospective items to stock · You can also paste screenshot photos</div>
     </div>
   </div>
 
@@ -641,6 +641,15 @@
     <div class="stock-form-grid">
       <input class="add-input" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Est. buy price">
       <input class="add-input" id="wish-note" type="text" maxlength="160" placeholder="Note optional">
+    </div>
+    <div class="add-photo-box wish-photo-box" onclick="triggerWishPhotoUpload()">
+      <img id="wish-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
+      <div id="wish-photo-placeholder" class="add-photo-ph">
+        <span class="add-photo-ph-icon">📷</span>
+        <span class="add-photo-ph-text">Tap to add photo</span>
+        <span class="add-photo-ph-hint">Camera, gallery, or paste screenshot</span>
+      </div>
+      <button type="button" id="wish-photo-remove" onclick="removeWishPhoto(event)" class="add-photo-remove" style="display:none;">✕ Remove</button>
     </div>
     <button onclick="saveWishlistItem()" class="stock-add-wish-btn">
       <i class="fa-solid fa-plus"></i> Add to wishlist
@@ -881,7 +890,7 @@
       <div id="add-photo-placeholder" class="add-photo-ph">
         <span class="add-photo-ph-icon">📷</span>
         <span class="add-photo-ph-text">Tap to add photo</span>
-        <span class="add-photo-ph-hint">Camera or Gallery</span>
+        <span class="add-photo-ph-hint">Camera, gallery, or paste screenshot</span>
       </div>
       <button id="add-photo-remove" onclick="removeAddPhoto(event)" class="add-photo-remove" style="display:none;">✕ Remove</button>
     </div>
@@ -1089,7 +1098,8 @@
   <div class="sec-label">🏷️ Categories</div>
   <div style="font-size:12px;color:var(--muted);margin:0 14px 8px;line-height:1.45;">
     Activate categories for dropdowns. Toggle 👟 for size-grid mode (like shoes).
-    Add sub-categories under a parent (e.g. Footwear → School Shoes).
+    Nest sub-categories without limit (e.g. Footwear → School Shoes → Boys → Size 10).
+    Any category can be a parent when adding a sub-category.
   </div>
 
   <div class="card" style="margin-bottom:8px;">
@@ -1121,7 +1131,7 @@
   </div>
 
   <div class="card" style="margin-bottom:8px;">
-    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">New sub-category</div>
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">New sub-category (any depth)</div>
     <select class="form-select form-select-bold" id="new-sub-parent" style="margin-bottom:8px;">
       <option value="">— Parent category —</option>
     </select>
