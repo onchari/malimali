@@ -645,8 +645,12 @@
       <input class="add-input" id="wish-name" type="text" placeholder="Item name">
       <input class="add-input add-mono" id="wish-code" type="text" placeholder="Code optional">
     </div>
+    <div class="cat-cascade-field">
+      <div id="wish-type-cascade" class="add-cascade"></div>
+      <select class="cat-pick-hidden-select" id="wish-type" aria-label="Category"></select>
+      <div id="wish-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
+    </div>
     <div class="stock-form-grid">
-      <select class="add-select" id="wish-type" aria-label="Category"></select>
       <input class="add-input add-mono" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="Qty">
     </div>
     <div class="stock-form-grid">
@@ -712,7 +716,21 @@
     <button type="button" id="cancel-edit-btn" class="add-cancel-btn" onclick="cancelEdit()" style="display:none;">Cancel</button>
   </header>
 
-  <div id="restock-mode-banner" class="add-restock-banner" style="display:none;" role="status"></div>
+  <div id="restock-view" class="restock-view" hidden>
+    <div class="restock-summary-card">
+      <table class="restock-summary-table" aria-label="Item being restocked">
+        <tbody>
+          <tr><th scope="row">Code</th><td id="rs-code">—</td></tr>
+          <tr><th scope="row">Name</th><td id="rs-name">—</td></tr>
+          <tr><th scope="row">Category</th><td id="rs-category">—</td></tr>
+          <tr id="rs-size-row"><th scope="row">Size</th><td id="rs-size">—</td></tr>
+          <tr><th scope="row">In stock</th><td id="rs-stock">—</td></tr>
+          <tr><th scope="row">Buy</th><td id="rs-buy">—</td></tr>
+          <tr><th scope="row">Sell</th><td id="rs-sell">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
   <div class="add-flow">
 
@@ -914,10 +932,11 @@
 
   </div><!-- /add-flow -->
 
-  <footer class="add-footer">
+  <footer class="add-footer" id="add-footer">
     <button type="button" class="add-save-btn" id="save-btn" onclick="saveItem()">
       <i class="fa-solid fa-check"></i> Add to inventory
     </button>
+    <button type="button" class="add-footer-cancel" id="restock-cancel-btn" onclick="cancelEdit()" hidden>Cancel</button>
   </footer>
 
 </div><!-- /page-add -->
@@ -1149,9 +1168,11 @@
 
   <div class="card" style="margin-bottom:8px;">
     <div style="font-size:12px;font-weight:700;margin-bottom:8px;">New sub-category (any depth)</div>
-    <select class="form-select form-select-bold" id="new-sub-parent" style="margin-bottom:8px;" aria-label="Parent category">
-      <option value="">Parent category…</option>
-    </select>
+    <div class="cat-cascade-field">
+      <div id="new-sub-parent-cascade" class="add-cascade"></div>
+      <select class="cat-pick-hidden-select form-select form-select-bold" id="new-sub-parent" style="margin-bottom:8px;" aria-label="Parent category"></select>
+      <div id="new-sub-parent-breadcrumb" class="add-type-breadcrumb" hidden></div>
+    </div>
     <div class="type-add-row" style="margin-top:0;">
       <input class="type-input" id="new-sub-name" placeholder="Sub-category e.g. School Shoes">
       <button class="type-add-btn" onclick="addSubCategory()">Add sub</button>
@@ -1557,16 +1578,20 @@
         <input class="add-input" id="off-name" type="text" placeholder="Item name">
         <input class="add-input add-mono" id="off-code" type="text" placeholder="Code optional">
       </div>
+      <div class="cat-cascade-field">
+        <div id="off-type-cascade" class="add-cascade"></div>
+        <select class="cat-pick-hidden-select" id="off-type" aria-label="Category"></select>
+        <div id="off-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
+      </div>
       <div class="stock-form-grid">
-        <select class="add-select" id="off-type" aria-label="Category"></select>
         <input class="add-input" id="off-size" type="text" placeholder="Size / variant optional">
-      </div>
-      <div class="stock-form-grid">
         <input class="add-input add-mono" id="off-qty" type="number" min="0" inputmode="numeric" placeholder="Qty sold">
-        <input class="add-input add-mono" id="off-buy" type="number" min="0" inputmode="decimal" placeholder="Buy price">
       </div>
       <div class="stock-form-grid">
+        <input class="add-input add-mono" id="off-buy" type="number" min="0" inputmode="decimal" placeholder="Buy price">
         <input class="add-input add-mono" id="off-sell" type="number" min="0" inputmode="decimal" placeholder="Sale price">
+      </div>
+      <div class="stock-form-grid">
         <input class="add-input add-mono" id="off-note" type="text" placeholder="Note optional">
       </div>
       <button onclick="confirmOffStockSale()" class="stock-add-wish-btn">
@@ -1686,12 +1711,12 @@
       </div>
 
       <!-- Inline restock panel -->
-      <div id="restock-panel" style="display:none;margin:0 12px 10px;background:var(--accent-light);border:1.5px solid #a8d8b5;border-radius:var(--r);padding:12px;">
-        <div style="display:flex;gap:8px;align-items:center;">
-          <input id="restock-qty" type="number" min="1" placeholder="Qty to add to stock" inputmode="numeric"
-                 aria-label="Restock quantity"
-                 style="flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:15px;font-weight:700;font-family:var(--mono);background:var(--bg);outline:none;">
-          <button onclick="confirmRestock()" style="padding:10px 16px;background:var(--accent);color:white;border:none;border-radius:var(--r);font-size:13px;font-weight:800;cursor:pointer;font-family:var(--sans);">Add ✓</button>
+      <div id="restock-panel" class="detail-restock-panel" style="display:none;">
+        <input id="restock-qty" type="number" min="1" placeholder="Qty to add" inputmode="numeric"
+               aria-label="Restock quantity" class="detail-restock-qty">
+        <div class="detail-restock-actions">
+          <button type="button" id="detail-restock-btn" class="detail-restock-confirm" onclick="confirmRestock()">RESTOCK</button>
+          <button type="button" class="detail-restock-cancel" onclick="toggleRestock()">Cancel</button>
         </div>
       </div>
 

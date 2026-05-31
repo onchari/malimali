@@ -492,6 +492,16 @@ const Validate = {
   _shake(id) {
     const el = document.getElementById(id);
     if (!el) return;
+    if (el.classList.contains('cat-pick-hidden-select')) {
+      const btn = document.getElementById(id + '-parent') ||
+        document.querySelector('#' + id + '-cascade .cat-pick-btn:not(.has-value), #' + id + '-cascade .cat-pick-btn');
+      if (btn) {
+        btn.style.outline = '2px solid var(--red)';
+        btn.focus();
+        setTimeout(() => { btn.style.outline = ''; }, 2000);
+        return;
+      }
+    }
     el.style.borderColor = 'var(--red)';
     el.focus();
     setTimeout(() => { el.style.borderColor = ''; }, 2000);
@@ -1167,23 +1177,83 @@ async function loadTypes() {
   } catch(e) { console.error("[loadTypes]", e); toast("Error: " + e.message, "err"); }
 }
 
-function renderTypeSelectOptions(selectEl, placeholder) {
-  if (!selectEl) return;
-  const cur = selectEl.value;
-  const items = getOrderedTypesForDropdown();
-  const ph = placeholder || 'Category…';
-  selectEl.innerHTML = '<option value="">' + ph + '</option>' +
-    items.map(({ rec: t, depth }) => {
-      const prefix = depth ? '\u2003\u21b3 ' : '';
-      const sel = t.name === cur ? ' selected' : '';
-      return '<option value="' + escapeHtml(t.name) + '"' + sel + '>' +
-        (t.emoji || '📦') + ' ' + prefix + escapeHtml(t.name) + '</option>';
-    }).join('');
-  _syncCategoryPickButton(selectEl, ph);
-}
-
 function _categoryHasActiveChildren(typeId) {
   return _activeChildTypes(typeId).length > 0;
+}
+
+function _activeChildTypes(parentId) {
+  return types
+    .filter(t => t.parentId === parentId && isCategoryActive(t))
+    .sort(_sortTypes);
+}
+
+function _typePathToRoot(typeName) {
+  const rec = getTypeRecord(typeName);
+  if (!rec) return [];
+  return [...getCategoryAncestors(rec).reverse(), rec];
+}
+
+function _typePathFromId(typeId) {
+  const rec = getTypeById(typeId);
+  if (!rec) return [];
+  return [...getCategoryAncestors(rec).reverse(), rec];
+}
+
+function _getCascadePathFromWrap(wrap) {
+  if (!wrap) return [];
+  try {
+    return JSON.parse(wrap.dataset.pathIds || '[]').map(n => parseInt(n, 10)).filter(Boolean);
+  } catch (_) {
+    return [];
+  }
+}
+
+function _setCascadePathOnWrap(wrap, ids) {
+  if (wrap) wrap.dataset.pathIds = JSON.stringify(ids || []);
+}
+
+function _syncCascadeValueEl(config, rec) {
+  const el = config.valueEl;
+  if (!el || !rec) {
+    if (el) el.value = '';
+    return;
+  }
+  el.value = config.valueMode === 'id' ? String(rec.id) : rec.name;
+}
+
+function _resolveCascadePathIds(config, selectedValue, preservePath) {
+  const wrap = config.wrap;
+  if (selectedValue) {
+    if (config.valueMode === 'id') {
+      const path = _typePathFromId(parseInt(selectedValue, 10));
+      const ids = path.map(x => x.id);
+      _setCascadePathOnWrap(wrap, ids);
+      return ids;
+    }
+    const path = _typePathToRoot(selectedValue);
+    const ids = path.map(x => x.id);
+    _setCascadePathOnWrap(wrap, ids);
+    return ids;
+  }
+  if (preservePath) return _getCascadePathFromWrap(wrap);
+  _setCascadePathOnWrap(wrap, []);
+  return [];
+}
+
+function _updateCascadeBreadcrumb(config, pathIds, committed) {
+  const breadcrumb = config.breadcrumbEl;
+  if (!breadcrumb) return;
+  const pathRecs = pathIds.map(id => getTypeById(id)).filter(Boolean);
+  if (committed && pathRecs.length) {
+    breadcrumb.hidden = false;
+    breadcrumb.textContent = pathRecs.map(t => (t.emoji || '📦') + ' ' + t.name).join(' › ');
+  } else if (pathRecs.length) {
+    breadcrumb.hidden = false;
+    breadcrumb.textContent = pathRecs.map(t => (t.emoji || '📦') + ' ' + t.name).join(' › ') + ' › …';
+  } else {
+    breadcrumb.hidden = true;
+    breadcrumb.textContent = '';
+  }
 }
 
 function _catPickBtnHtml(placeholder, selected) {
@@ -1193,6 +1263,196 @@ function _catPickBtnHtml(placeholder, selected) {
   }
   return '<span class="cat-pick-ph">' + escapeHtml(placeholder) + '</span>' +
     '<span class="cat-pick-chevron" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>';
+}
+
+function _appendCascadePickButton(wrap, config, depth, parentId, currentId, currentRec) {
+  const children = _activeChildTypes(parentId);
+  const ph0 = config.placeholder || 'Choose category…';
+  const phN = config.placeholderSub || 'Choose sub-category…';
+  const placeholder = depth === 0 ? ph0 : phN;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'cat-pick-btn' + (currentRec ? ' has-value' : '');
+  btn.id = config.idPrefix + (depth === 0 ? '-parent' : ('-sub-' + depth));
+  btn.setAttribute('data-depth', String(depth));
+  btn.innerHTML = currentRec
+    ? _catPickBtnHtml('', { name: currentRec.name, emoji: currentRec.emoji })
+    : _catPickBtnHtml(placeholder, null);
+
+  btn.addEventListener('click', () => {
+    let subtitle = depth === 0 ? 'Pick the main category' : 'Pick the next level';
+    if (parentId) {
+      const parentRec = getTypeById(parentId);
+      if (parentRec) subtitle = 'Under: ' + (parentRec.emoji || '📦') + ' ' + parentRec.name;
+    }
+    openCategoryPicker({
+      title: depth === 0 ? 'Choose category' : 'Choose sub-category',
+      subtitle,
+      items: children.map(t => ({
+        id: String(t.id),
+        name: t.name,
+        emoji: t.emoji || '📦',
+        hint: _categoryHasActiveChildren(t.id) ? 'Has more sub-categories' : 'Use this category',
+        hasChildren: _categoryHasActiveChildren(t.id)
+      })),
+      currentId: currentId ? String(currentId) : '',
+      allowClear: true,
+      onSelect: (id) => {
+        const newPath = _getCascadePathFromWrap(wrap).slice(0, depth);
+        if (id) newPath.push(parseInt(id, 10));
+        _setCascadePathOnWrap(wrap, newPath);
+        const deepest = newPath.length ? getTypeById(newPath[newPath.length - 1]) : null;
+        if (deepest && (!config.requireLeaf || !_categoryHasActiveChildren(deepest.id))) {
+          _syncCascadeValueEl(config, deepest);
+        } else if (config.requireLeaf) {
+          if (config.valueEl) config.valueEl.value = '';
+        }
+        const rerenderValue = config.requireLeaf && deepest && !_categoryHasActiveChildren(deepest.id)
+          ? deepest.name
+          : (config.valueMode === 'name' ? (config.valueEl?.value || '') : '');
+        config.rerender(rerenderValue, { preservePath: true });
+      }
+    });
+  });
+
+  const step = document.createElement('div');
+  step.className = 'add-cascade-step';
+  if (depth > 0) {
+    const lbl = document.createElement('span');
+    lbl.className = 'add-cascade-step-lbl';
+    lbl.textContent = depth === 1 ? 'Sub-category' : 'Sub-category ' + depth;
+    step.appendChild(lbl);
+  }
+  step.appendChild(btn);
+  wrap.appendChild(step);
+}
+
+function renderCategoryCascade(config, selectedValue, opts) {
+  const wrap = config.wrap;
+  if (!wrap) return;
+  const preservePath = !!(opts && opts.preservePath);
+  const pathIds = _resolveCascadePathIds(config, selectedValue, preservePath);
+
+  wrap.innerHTML = '';
+  let parentId = null;
+  let depth = 0;
+
+  while (depth < pathIds.length) {
+    const rec = getTypeById(pathIds[depth]);
+    if (!rec) break;
+    _appendCascadePickButton(wrap, config, depth, parentId, rec.id, rec);
+    parentId = rec.id;
+    depth += 1;
+  }
+
+  if (_activeChildTypes(parentId).length) {
+    _appendCascadePickButton(wrap, config, depth, parentId, null, null);
+  }
+
+  const deepestId = pathIds.length ? pathIds[pathIds.length - 1] : null;
+  const deepestRec = deepestId ? getTypeById(deepestId) : null;
+  const isComplete = deepestRec && (!config.requireLeaf || !_categoryHasActiveChildren(deepestId));
+
+  if (isComplete) {
+    _syncCascadeValueEl(config, deepestRec);
+  } else if (config.requireLeaf && config.valueEl) {
+    config.valueEl.value = '';
+  }
+
+  _updateCascadeBreadcrumb(config, pathIds, !!(isComplete && config.valueEl && config.valueEl.value));
+  wrap.classList.toggle('is-locked', !!config.locked);
+
+  if (!(opts && opts.skipChange) && config.onChange) config.onChange();
+}
+
+function _makeCascadeConfig(base) {
+  const idPrefix = base.idPrefix || 'cat';
+  const wrap = base.wrap || document.getElementById(idPrefix + '-cascade');
+  return {
+    wrap,
+    valueEl: base.valueEl,
+    valueMode: base.valueMode || 'name',
+    requireLeaf: base.requireLeaf !== false,
+    breadcrumbEl: base.breadcrumbEl || document.getElementById(idPrefix + '-breadcrumb'),
+    idPrefix,
+    placeholder: base.placeholder || 'Choose category…',
+    placeholderSub: base.placeholderSub || 'Choose sub-category…',
+    locked: !!base.locked,
+    onChange: base.onChange || null,
+    rerender(selectedValue, opts) {
+      renderCategoryCascade(this, selectedValue, opts);
+    }
+  };
+}
+
+function mountCategoryCascadeField(opts) {
+  if (!opts || !opts.valueEl) return;
+  const idPrefix = opts.idPrefix || opts.valueEl.id;
+  let wrap = opts.wrap || document.getElementById(idPrefix + '-cascade');
+  if (!wrap && opts.valueEl.parentNode) {
+    wrap = document.createElement('div');
+    wrap.id = idPrefix + '-cascade';
+    wrap.className = 'add-cascade';
+    opts.valueEl.classList.add('cat-pick-hidden-select');
+    opts.valueEl.parentNode.insertBefore(wrap, opts.valueEl);
+  }
+  opts.valueEl.classList.add('cat-pick-hidden-select');
+  const config = _makeCascadeConfig({ ...opts, wrap, idPrefix });
+  renderCategoryCascade(config, opts.valueEl.value || '', { skipChange: true });
+  return config;
+}
+
+function mountWishTypeCascade() {
+  mountCategoryCascadeField({
+    wrap: document.getElementById('wish-type-cascade'),
+    valueEl: document.getElementById('wish-type'),
+    breadcrumbEl: document.getElementById('wish-type-breadcrumb'),
+    idPrefix: 'wish-type',
+    valueMode: 'name',
+    requireLeaf: true,
+    placeholder: 'Category…'
+  });
+}
+
+function mountOffTypeCascade() {
+  mountCategoryCascadeField({
+    wrap: document.getElementById('off-type-cascade'),
+    valueEl: document.getElementById('off-type'),
+    breadcrumbEl: document.getElementById('off-type-breadcrumb'),
+    idPrefix: 'off-type',
+    valueMode: 'name',
+    requireLeaf: true,
+    placeholder: 'Category…'
+  });
+}
+
+function mountNewSubParentCascade() {
+  mountCategoryCascadeField({
+    wrap: document.getElementById('new-sub-parent-cascade'),
+    valueEl: document.getElementById('new-sub-parent'),
+    breadcrumbEl: document.getElementById('new-sub-parent-breadcrumb'),
+    idPrefix: 'new-sub-parent',
+    valueMode: 'id',
+    requireLeaf: false,
+    placeholder: 'Parent category…'
+  });
+}
+
+function renderAddTypeCascade(selectedTypeName, opts) {
+  const hidden = UI.el('f-type');
+  if (!hidden) return;
+  const config = _makeCascadeConfig({
+    wrap: document.getElementById('f-type-cascade'),
+    valueEl: hidden,
+    valueMode: 'name',
+    requireLeaf: true,
+    breadcrumbEl: document.getElementById('f-type-breadcrumb'),
+    idPrefix: 'f-type',
+    locked: hidden.disabled,
+    onChange: () => { if (!(opts && opts.skipTypeChange)) onTypeChange(); }
+  });
+  const selectedName = selectedTypeName != null ? selectedTypeName : (hidden.value || '');
+  renderCategoryCascade(config, selectedName, opts);
 }
 
 function closeCategoryPicker() {
@@ -1286,212 +1546,110 @@ function openCategoryPicker(opts) {
 }
 window.openCategoryPicker = openCategoryPicker;
 
-function _ensureCategoryPickButton(selectEl) {
-  if (!selectEl || selectEl.dataset.catPickMounted === '1') return document.getElementById(selectEl.id + '-pick');
-  selectEl.classList.add('cat-pick-hidden-select');
-  selectEl.dataset.catPickMounted = '1';
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'cat-pick-btn';
-  btn.id = selectEl.id + '-pick';
-  selectEl.parentNode.insertBefore(btn, selectEl);
-  return btn;
-}
-
-function _syncCategoryPickButton(selectEl, placeholder) {
-  if (!selectEl) return;
-  const btn = _ensureCategoryPickButton(selectEl);
-  if (!btn) return;
-  const val = selectEl.value;
-  if (val) {
-    const t = getTypeObj(val);
-    btn.innerHTML = _catPickBtnHtml('', { name: val, emoji: t && t.emoji });
-    btn.classList.add('has-value');
-  } else {
-    btn.innerHTML = _catPickBtnHtml(placeholder || 'Category…', null);
-    btn.classList.remove('has-value');
-  }
-}
-
-function mountFlatCategoryPick(selectEl, placeholder) {
-  if (!selectEl) return;
-  renderTypeSelectOptions(selectEl, placeholder);
-  const btn = _ensureCategoryPickButton(selectEl);
-  if (!btn || btn.dataset.bound === '1') return;
-  btn.dataset.bound = '1';
-  btn.addEventListener('click', () => {
-    const items = getOrderedTypesForDropdown().map(({ rec: t, depth }) => ({
-      id: t.name,
-      name: t.name,
-      emoji: t.emoji || '📦',
-      depth,
-      hint: depth ? 'Sub-category' : 'Main category',
-      hasChildren: _categoryHasActiveChildren(t.id)
-    }));
-    openCategoryPicker({
-      title: placeholder || 'Choose category',
-      subtitle: items.length + ' categories available',
-      items,
-      currentId: selectEl.value,
-      allowClear: true,
-      onSelect: (id) => {
-        selectEl.value = id || '';
-        selectEl.dispatchEvent(new Event('change', { bubbles: true }));
-        _syncCategoryPickButton(selectEl, placeholder);
-      }
-    });
-  });
-}
-
-function mountParentCategoryPick(selectEl, placeholder) {
-  if (!selectEl) return;
-  populateCategoryParentSelect(selectEl);
-  const btn = _ensureCategoryPickButton(selectEl);
-  _syncParentCategoryPickButton(selectEl, placeholder);
-  if (!btn || btn.dataset.bound === '1') return;
-  btn.dataset.bound = '1';
-  btn.addEventListener('click', () => {
-    const items = [];
-    walkCategoryTree((rec, depth) => {
-      items.push({
-        id: String(rec.id),
-        name: rec.name,
-        emoji: rec.emoji || '📦',
-        depth,
-        hint: depth ? 'Parent for sub-category' : 'Top-level category',
-        hasChildren: _categoryHasActiveChildren(rec.id)
-      });
-    });
-    openCategoryPicker({
-      title: placeholder || 'Parent category',
-      subtitle: 'Pick where the new sub-category belongs',
-      items,
-      currentId: selectEl.value,
-      allowClear: true,
-      onSelect: (id) => {
-        selectEl.value = id || '';
-        _syncParentCategoryPickButton(selectEl, placeholder);
-      }
-    });
-  });
-}
-
-function _syncParentCategoryPickButton(selectEl, placeholder) {
-  if (!selectEl) return;
-  const btn = _ensureCategoryPickButton(selectEl);
-  if (!btn) return;
-  const val = selectEl.value;
-  if (val) {
-    const rec = getTypeById(parseInt(val, 10));
-    btn.innerHTML = _catPickBtnHtml('', rec ? { name: rec.name, emoji: rec.emoji } : { name: 'Category #' + val, emoji: '📦' });
-    btn.classList.add('has-value');
-  } else {
-    btn.innerHTML = _catPickBtnHtml(placeholder || 'Parent category…', null);
-    btn.classList.remove('has-value');
-  }
-}
-
-function _getCascadePathIds() {
-  const wrap = document.getElementById('f-type-cascade');
-  if (!wrap) return [];
-  try {
-    return JSON.parse(wrap.dataset.pathIds || '[]').map(n => parseInt(n, 10)).filter(Boolean);
-  } catch (_) {
-    return [];
-  }
-}
-
-function _setCascadePathIds(ids) {
-  const wrap = document.getElementById('f-type-cascade');
-  if (wrap) wrap.dataset.pathIds = JSON.stringify(ids || []);
-}
-
-function _appendCascadePickButton(wrap, depth, parentId, currentId, currentRec) {
-  const children = _activeChildTypes(parentId);
-  const placeholder = depth === 0 ? 'Choose category…' : 'Choose sub-category…';
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'cat-pick-btn' + (currentRec ? ' has-value' : '');
-  btn.id = depth === 0 ? 'f-type-parent' : ('f-type-sub-' + depth);
-  btn.setAttribute('data-depth', String(depth));
-  btn.innerHTML = currentRec
-    ? _catPickBtnHtml('', { name: currentRec.name, emoji: currentRec.emoji })
-    : _catPickBtnHtml(placeholder, null);
-
-  btn.addEventListener('click', () => {
-    let subtitle = depth === 0 ? 'Pick the main product category' : 'Pick the next level';
-    if (parentId) {
-      const parentRec = getTypeById(parentId);
-      if (parentRec) subtitle = 'Under: ' + (parentRec.emoji || '📦') + ' ' + parentRec.name;
-    }
-    openCategoryPicker({
-      title: depth === 0 ? 'Choose category' : 'Choose sub-category',
-      subtitle,
-      items: children.map(t => ({
-        id: String(t.id),
-        name: t.name,
-        emoji: t.emoji || '📦',
-        hint: _categoryHasActiveChildren(t.id) ? 'Has more sub-categories' : 'Use this category',
-        hasChildren: _categoryHasActiveChildren(t.id)
-      })),
-      currentId: currentId ? String(currentId) : '',
-      allowClear: true,
-      onSelect: (id) => {
-        const newPath = _getCascadePathIds().slice(0, depth);
-        if (id) newPath.push(parseInt(id, 10));
-        _setCascadePathIds(newPath);
-        const leaf = newPath.length ? getTypeById(newPath[newPath.length - 1]) : null;
-        const leafName = leaf && !_categoryHasActiveChildren(leaf.id) ? leaf.name : '';
-        renderAddTypeCascade(leafName, { preservePath: true });
-      }
-    });
-  });
-
-  const step = document.createElement('div');
-  step.className = 'add-cascade-step';
-  if (depth > 0) {
-    const lbl = document.createElement('span');
-    lbl.className = 'add-cascade-step-lbl';
-    lbl.textContent = depth === 1 ? 'Sub-category' : 'Sub-category ' + depth;
-    step.appendChild(lbl);
-  }
-  step.appendChild(btn);
-  wrap.appendChild(step);
-}
-
-function _activeChildTypes(parentId) {
-  return types
-    .filter(t => t.parentId === parentId && isCategoryActive(t))
-    .sort(_sortTypes);
-}
-
-function _typePathToRoot(typeName) {
-  const rec = getTypeRecord(typeName);
-  if (!rec) return [];
-  return [...getCategoryAncestors(rec).reverse(), rec];
-}
-
 function setAddFormSubtitle(text) {
   const el = document.getElementById('add-form-sub');
   if (el) el.textContent = text || 'Category → details → stock → save';
 }
 
-function setSaveBtnLabel(label) {
+function setSaveBtnLabel(label, icon) {
   const sb = UI.el('save-btn');
   if (!sb) return;
-  sb.innerHTML = '<i class="fa-solid fa-check"></i> ' + escapeHtml(label);
+  const ic = icon || 'fa-check';
+  sb.innerHTML = '<i class="fa-solid ' + ic + '"></i> ' + escapeHtml(label);
 }
 
 function setRestockBanner(show, message) {
   const banner = document.getElementById('restock-mode-banner');
   if (!banner) return;
-  if (show) {
-    banner.textContent = message || '📦 Restock mode — enter quantity to add';
-    banner.style.display = 'block';
-  } else {
-    banner.style.display = 'none';
-    banner.textContent = '';
+  banner.style.display = 'none';
+}
+
+const _RESTOCK_PRICING_TITLE = '<span class="add-step-badge">3</span> Stock &amp; pricing';
+const _RESTOCK_QTY_TITLE = 'Quantity &amp; prices';
+
+function showRestockView(meta) {
+  const page = document.getElementById('page-add');
+  const view = document.getElementById('restock-view');
+  const flow = document.querySelector('#page-add .add-flow');
+  if (page) page.classList.add('restock-mode');
+  if (view) view.hidden = false;
+  if (flow) {
+    flow.querySelectorAll('.add-card').forEach(card => {
+      if (card.id !== 'std-pricing-section') card.style.display = 'none';
+    });
+    const shoePanel = document.getElementById('shoe-size-panel');
+    if (shoePanel) shoePanel.style.display = 'none';
   }
+
+  const setCell = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = (val != null && val !== '') ? val : '—';
+  };
+  setCell('rs-code', meta.code);
+  setCell('rs-name', meta.name);
+  const typeObj = meta.type ? getTypeObj(meta.type) : null;
+  setCell('rs-category', typeObj ? ((typeObj.emoji || '📦') + ' ' + meta.type) : meta.type);
+  const sizeRow = document.getElementById('rs-size-row');
+  if (sizeRow) sizeRow.hidden = meta.size == null;
+  setCell('rs-size', meta.size != null ? String(meta.size) : '');
+  const stockEl = document.getElementById('rs-stock');
+  if (stockEl) {
+    const stock = meta.stock != null ? meta.stock : null;
+    stockEl.textContent = stock != null ? (stock + (meta.stockUnit || '')) : '—';
+    stockEl.classList.toggle('rs-stock-out', stock === 0);
+    stockEl.classList.toggle('rs-stock-ok', stock != null && stock > 0);
+  }
+  setCell('rs-buy', meta.buy != null ? fmt(meta.buy) : '—');
+  setCell('rs-sell', meta.sell != null ? fmt(meta.sell) : '—');
+
+  setRestockBanner(false);
+  const ml = UI.el('form-mode-label');
+  if (ml) ml.textContent = meta.size != null ? 'Restock · Size ' + meta.size : 'Restock';
+  setAddFormSubtitle(meta.code ? meta.code + (meta.name ? ' · ' + meta.name : '') : 'Add quantity to stock');
+
+  const sizeLabel = meta.size != null ? String(meta.size) : '';
+  setSaveBtnLabel(sizeLabel ? 'RESTOCK (' + sizeLabel + ')' : 'RESTOCK', 'fa-boxes-stacked');
+  const footer = document.getElementById('add-footer');
+  const cancelBtn = document.getElementById('restock-cancel-btn');
+  if (footer) footer.classList.add('has-cancel');
+  if (cancelBtn) cancelBtn.hidden = false;
+  const headerCancel = UI.el('cancel-edit-btn');
+  if (headerCancel) headerCancel.style.display = 'none';
+
+  const pricingTitle = document.querySelector('#std-pricing-section .add-card-title');
+  if (pricingTitle) pricingTitle.innerHTML = _RESTOCK_QTY_TITLE;
+
+  const qtyEl = UI.el('f-qty');
+  if (qtyEl) {
+    qtyEl.placeholder = 'Qty to add *';
+    qtyEl.disabled = false;
+    qtyEl.style.opacity = '1';
+    qtyEl.style.cursor = '';
+  }
+  ['f-buy', 'f-sell'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.disabled = false; el.style.opacity = '1'; el.style.cursor = ''; }
+  });
+  setTimeout(() => qtyEl?.focus(), 120);
+}
+
+function hideRestockView() {
+  const page = document.getElementById('page-add');
+  if (page) page.classList.remove('restock-mode');
+  const view = document.getElementById('restock-view');
+  if (view) view.hidden = true;
+  const flow = document.querySelector('#page-add .add-flow');
+  if (flow) {
+    flow.querySelectorAll('.add-card').forEach(card => { card.style.display = ''; });
+  }
+  const footer = document.getElementById('add-footer');
+  const cancelBtn = document.getElementById('restock-cancel-btn');
+  if (footer) footer.classList.remove('has-cancel');
+  if (cancelBtn) cancelBtn.hidden = true;
+  const pricingTitle = document.querySelector('#std-pricing-section .add-card-title');
+  if (pricingTitle) pricingTitle.innerHTML = _RESTOCK_PRICING_TITLE;
+  const qtyEl = UI.el('f-qty');
+  if (qtyEl) qtyEl.placeholder = 'Qty *';
 }
 
 function resetShoeUiPanels() {
@@ -1515,73 +1673,6 @@ function resetShoeUiPanels() {
   if (sum) sum.innerHTML = '';
 }
 
-function renderAddTypeCascade(selectedTypeName, opts) {
-  const wrap = document.getElementById('f-type-cascade');
-  const hidden = UI.el('f-type');
-  const breadcrumb = document.getElementById('f-type-breadcrumb');
-  if (!wrap || !hidden) return;
-  const triggerTypeChange = !(opts && opts.skipTypeChange);
-  const selectedName = selectedTypeName != null ? selectedTypeName : (hidden.value || '');
-
-  let pathIds = [];
-  if (selectedName) {
-    pathIds = _typePathToRoot(selectedName).map(x => x.id);
-    _setCascadePathIds(pathIds);
-  } else if (opts && opts.preservePath) {
-    pathIds = _getCascadePathIds();
-  } else {
-    _setCascadePathIds([]);
-    pathIds = [];
-  }
-
-  wrap.innerHTML = '';
-  let parentId = null;
-  let depth = 0;
-
-  while (depth < pathIds.length) {
-    const rec = getTypeById(pathIds[depth]);
-    if (!rec) break;
-    _appendCascadePickButton(wrap, depth, parentId, rec.id, rec);
-    parentId = rec.id;
-    depth += 1;
-  }
-
-  const nextChildren = _activeChildTypes(parentId);
-  if (nextChildren.length) {
-    _appendCascadePickButton(wrap, depth, parentId, null, null);
-  }
-
-  const leafId = pathIds.length ? pathIds[pathIds.length - 1] : null;
-  const leafRec = leafId ? getTypeById(leafId) : null;
-  if (leafRec && !_categoryHasActiveChildren(leafId)) {
-    hidden.value = leafRec.name;
-  } else {
-    hidden.value = '';
-  }
-
-  const selectedPath = leafRec && hidden.value ? _typePathToRoot(hidden.value) : pathIds.map(id => getTypeById(id)).filter(Boolean);
-
-  if (breadcrumb) {
-    if (selectedPath.length && hidden.value) {
-      breadcrumb.hidden = false;
-      breadcrumb.textContent = selectedPath.map(t => (t.emoji || '📦') + ' ' + t.name).join(' › ');
-    } else if (pathIds.length) {
-      breadcrumb.hidden = false;
-      breadcrumb.textContent = pathIds.map(id => {
-        const t = getTypeById(id);
-        return t ? (t.emoji || '📦') + ' ' + t.name : '';
-      }).filter(Boolean).join(' › ') + ' › …';
-    } else {
-      breadcrumb.hidden = true;
-      breadcrumb.textContent = '';
-    }
-  }
-
-  wrap.classList.toggle('is-locked', !!hidden.disabled);
-
-  if (triggerTypeChange) onTypeChange();
-}
-
 function setAddFormType(typeName, opts) {
   const hidden = UI.el('f-type');
   if (!hidden) return;
@@ -1598,8 +1689,9 @@ function setAddTypeLocked(locked) {
 
 function renderAllTypeDropdowns() {
   renderAddTypeCascade(UI.el('f-type')?.value || '', { skipTypeChange: true });
-  mountFlatCategoryPick(document.getElementById('wish-type'), 'Category…');
-  mountFlatCategoryPick(document.getElementById('off-type'), 'Category…');
+  mountWishTypeCascade();
+  mountOffTypeCascade();
+  mountNewSubParentCascade();
   renderTypeChips();
 }
 
@@ -1637,8 +1729,7 @@ async function renderCategorySettings() {
       list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px;">No categories yet</div>';
       return;
     }
-    populateCategoryParentSelect(document.getElementById('new-sub-parent'));
-    mountParentCategoryPick(document.getElementById('new-sub-parent'), 'Parent category…');
+    mountNewSubParentCascade();
 
     const countDescendants = (id) => collectCategoryDescendantIds(id).length;
 
@@ -1769,7 +1860,7 @@ async function addSubCategory() {
   try {
     const parentId = parseInt(document.getElementById('new-sub-parent')?.value, 10);
     const name = (document.getElementById('new-sub-name')?.value || '').trim();
-    if (!parentId) { toast('Select a parent category', 'err'); return; }
+    if (!parentId) return Validate.fail('Select a parent category', 'new-sub-parent');
     if (!name) { toast('Enter sub-category name', 'err'); return; }
     if (types.find(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Name already exists', 'err'); return; }
     const parent = getTypeById(parentId);
@@ -2693,6 +2784,7 @@ function clearForm() {
   });
 
   setRestockBanner(false);
+  hideRestockView();
   _wishStockingFromId = null;
 
   clearCodeMatchSelect();
@@ -3108,11 +3200,11 @@ async function renderStockMonitorSummary() {
 }
 
 function renderWishlistTypeOptions() {
-  mountFlatCategoryPick(document.getElementById('wish-type'), 'Category…');
+  mountWishTypeCascade();
 }
 
 function renderOffstockTypeOptions() {
-  mountFlatCategoryPick(document.getElementById('off-type'), 'Category…');
+  mountOffTypeCascade();
 }
 
 async function openStockMonitor() {
@@ -3483,12 +3575,14 @@ function openBulkShoeRestockSheet(itemId, sizes) {
   const inner = document.getElementById('bulk-shoe-restock-inner');
   inner.innerHTML =
     '<div class="sheet-handle"></div>' +
-    '<div class="sheet-title">Restock Sizes</div>' +
+    '<div class="sheet-title">Restock sizes</div>' +
     '<div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent);margin-bottom:12px;">' + sizes.join(', ') + '</div>' +
     '<input id="bulk-shoe-restock-qty" type="number" min="1" inputmode="numeric" placeholder="Qty to add to each size" ' +
       'style="width:100%;padding:13px 14px;border:1.5px solid var(--border);border-radius:var(--r);font-size:16px;font-weight:800;font-family:var(--mono);background:var(--bg);outline:none;margin-bottom:12px;">' +
-    '<button onclick="confirmBulkShoeRestock()" style="width:100%;padding:15px;background:var(--green);color:white;border:none;border-radius:var(--r);font-size:15px;font-weight:900;cursor:pointer;font-family:var(--sans);">Add Stock</button>' +
-    '<button onclick="closeBulkShoeRestock()" style="width:100%;padding:13px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;font-family:var(--sans);margin-top:8px;">Cancel</button>';
+    '<div class="detail-restock-actions">' +
+      '<button onclick="confirmBulkShoeRestock()" class="detail-restock-confirm">RESTOCK</button>' +
+      '<button onclick="closeBulkShoeRestock()" class="detail-restock-cancel">Cancel</button>' +
+    '</div>';
 
   sheet.classList.add('open');
   setTimeout(() => document.getElementById('bulk-shoe-restock-qty')?.focus(), 80);
@@ -3680,6 +3774,10 @@ async function openSheet(id) {
   set('sh-profit-made', fmt(profitMade));
 
   document.getElementById('detail-sheet').classList.add('open');
+
+  const restockPanel = document.getElementById('restock-panel');
+  if (restockPanel) restockPanel.style.display = 'none';
+  updateDetailRestockBtnLabel();
 
   // Show/hide action buttons based on day state
   const dayOpen = isDayOpen();
@@ -4578,6 +4676,9 @@ async function confirmOffStockSale() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  const offType = document.getElementById('off-type');
+  if (offType) offType.value = '';
+  renderOffstockTypeOptions();
   closeOffStockSale();
   await renderStockMonitor();
   await refreshSalesViews();
@@ -6605,12 +6706,22 @@ function toggleRestock() {
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   if (panel.style.display === 'block') {
     document.getElementById('restock-qty').value = '';
+    updateDetailRestockBtnLabel();
     document.getElementById('restock-qty').focus();
   }
 }
 
+function updateDetailRestockBtnLabel() {
+  const btn = document.getElementById('detail-restock-btn');
+  if (!btn) return;
+  const sizeEl = document.getElementById('sh-size');
+  const sizeText = sizeEl ? (sizeEl.textContent || '').trim() : '';
+  const hasSize = sizeText && sizeText !== '—';
+  btn.textContent = hasSize ? 'RESTOCK (' + sizeText + ')' : 'RESTOCK';
+}
+
 async function confirmRestock() {
-  const restockBtn = document.querySelector('#restock-panel button');
+  const restockBtn = document.getElementById('detail-restock-btn');
   if (restockBtn) { restockBtn.disabled = true; restockBtn.style.opacity = '0.5'; }
   try {
     const qty = parseInt(document.getElementById('restock-qty').value);
@@ -8546,6 +8657,8 @@ async function openShoeSizeRestock(itemId, size) {
   const sizes  = await getShoeSizes(item.code);
   const sizeRec = sizes.find(s => s.size === size);
   if (!sizeRec) { toast('Size record not found', 'err'); return; }
+  closeShoeSizeActions();
+  closeSheet();
   showPage('add');
   setTimeout(() => {
     setAddFormType(item.type || '', { skipTypeChange: true });
@@ -8557,27 +8670,18 @@ async function openShoeSizeRestock(itemId, size) {
     UI.el('f-buy').value   = sizeRec.buyPrice  || '';
     UI.el('f-sell').value  = sizeRec.sellPrice || '';
     onTypeChange();
-    const shoePanel = UI.el('shoe-size-panel');
-    const stdPricing = UI.el('std-pricing-section');
-    const sizeField = document.getElementById('f-size-field');
-    if (shoePanel) shoePanel.style.display = 'none';
-    if (stdPricing) stdPricing.style.display = 'block';
-    if (sizeField) sizeField.style.display = 'block';
-    ['f-code','f-name','f-size'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) { el.disabled = true; el.style.opacity = '0.45'; el.style.cursor = 'not-allowed'; }
-    });
     setAddTypeLocked(true);
-    const qtyEl = UI.el('f-qty');
-    if (qtyEl) { qtyEl.disabled = false; qtyEl.style.opacity = '1'; qtyEl.style.cursor = ''; qtyEl.focus(); }
-    ['f-buy','f-sell'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) { el.disabled = false; el.style.opacity = '1'; el.style.cursor = ''; }
+    showRestockView({
+      code: item.code,
+      name: item.name,
+      type: item.type,
+      size,
+      stock: sizeRec.qty || 0,
+      stockUnit: ' pairs',
+      buy: sizeRec.buyPrice || item.buyPrice || 0,
+      sell: sizeRec.sellPrice || item.sellPrice || 0
     });
-    setSaveBtnLabel('Add stock — size ' + size);
-    setRestockBanner(true, '📦 Restock size ' + size + ' · current stock: ' + (sizeRec.qty || 0));
-    UI.el('form-mode-label').textContent = '📦 Restock Size ' + size + ' · Current: ' + (sizeRec.qty||0);
-    UI.el('cancel-edit-btn').style.display = 'block';
+    updateProfitPreview();
   }, 100);
 }
 window.openShoeSizeRestock = openShoeSizeRestock;

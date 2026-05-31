@@ -21,6 +21,165 @@
   line-height: 1.4;
 }
 
+/* Restock view — condensed item summary + qty/pricing */
+.restock-view {
+  margin: 0 4px 12px;
+}
+.restock-summary-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.restock-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.restock-summary-table th,
+.restock-summary-table td {
+  padding: 10px 14px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+.restock-summary-table tr:last-child th,
+.restock-summary-table tr:last-child td {
+  border-bottom: none;
+}
+.restock-summary-table th {
+  width: 34%;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface2);
+  white-space: nowrap;
+}
+.restock-summary-table td {
+  font-weight: 700;
+  color: var(--text);
+  word-break: break-word;
+}
+.restock-summary-table td.rs-stock-out {
+  color: var(--red);
+}
+.restock-summary-table td.rs-stock-ok {
+  color: var(--green);
+}
+#page-add.restock-mode .add-flow > .add-card:not(#std-pricing-section),
+#page-add.restock-mode .add-flow > #shoe-size-panel,
+#page-add.restock-mode .add-card-photo {
+  display: none !important;
+}
+#page-add.restock-mode #std-pricing-section .add-step-badge {
+  display: none;
+}
+#page-add.restock-mode #std-pricing-section .add-card-title {
+  font-size: 14px;
+}
+
+.add-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+  pointer-events: none;
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  max-width: 520px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  width: 100%;
+}
+.add-footer .add-save-btn {
+  pointer-events: auto;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  max-width: none;
+  box-shadow: 0 4px 20px rgba(30, 122, 62, 0.35);
+}
+.add-footer.has-cancel .add-save-btn {
+  flex: 2;
+}
+.add-footer .add-footer-cancel {
+  pointer-events: auto;
+  flex: 1;
+  min-width: 0;
+  padding: 16px 12px;
+  background: var(--surface);
+  color: var(--text2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-lg);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+.add-footer .add-footer-cancel:active {
+  background: var(--surface2);
+}
+.add-footer .add-footer-cancel[hidden] {
+  display: none;
+}
+
+/* Detail sheet inline restock */
+.detail-restock-panel {
+  margin: 0 12px 10px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+}
+.detail-restock-qty {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  font-size: 16px;
+  font-weight: 800;
+  font-family: var(--mono);
+  background: var(--bg);
+  outline: none;
+  margin-bottom: 10px;
+}
+.detail-restock-qty:focus {
+  border-color: var(--accent);
+}
+.detail-restock-actions {
+  display: flex;
+  gap: 8px;
+}
+.detail-restock-confirm {
+  flex: 2;
+  padding: 12px 14px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--r);
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  font-family: var(--sans);
+  letter-spacing: 0.03em;
+}
+.detail-restock-cancel {
+  flex: 1;
+  padding: 12px 10px;
+  background: var(--surface2);
+  color: var(--text2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+
 .add-hero {
   display: flex;
   align-items: flex-start;
@@ -117,22 +276,6 @@
   font-weight: 600;
   color: var(--text2);
   line-height: 1.4;
-}
-.add-footer {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 90;
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(to top, var(--bg) 70%, transparent);
-  pointer-events: none;
-}
-.add-footer .add-save-btn {
-  pointer-events: auto;
-  margin: 0 auto;
-  max-width: 520px;
-  box-shadow: 0 4px 20px rgba(30, 122, 62, 0.35);
 }
 
 .add-form-header {
