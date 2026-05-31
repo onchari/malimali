@@ -1303,7 +1303,7 @@ function _appendCascadePickButton(wrap, config, depth, parentId, currentId, curr
   btn.addEventListener('click', () => {
     const children = _activeChildTypes(parentId);
     if (!children.length) {
-      toast('No sub-categories here', 'err');
+      toast(depth === 0 ? 'No categories available' : 'No sub-categories here', 'err');
       return;
     }
     let subtitle = depth === 0 ? 'Pick the main category' : 'Pick the next level';
@@ -2959,6 +2959,7 @@ async function saveItem() {
 function clearForm() {
   UI.el('edit-id').value   = '';
   _editingItemId = null;  // clear JS-side edit tracker
+  _lastAddFormType = '';
   setAddFormType('', { skipTypeChange: true });
   UI.el('f-code').value    = '';
   UI.el('f-name').value    = '';
@@ -3001,6 +3002,7 @@ function clearForm() {
 let _codeDropdownActive = false;
 let _editOriginItemId   = null;
 let _editingItemId      = null;  // tracks current edit ID reliably (backup to hidden input)
+let _lastAddFormType    = '';    // last f-type value — avoid wiping shoe sizes on tab switch
 let _selectedShoeSize   = null;
 let _selectedShoeSizes  = new Set();
 let _bulkShoeRestock    = null;
@@ -8462,17 +8464,21 @@ function onTypeChange() {
   }
 
   const isShoe = !!type && isFootwearType(type);
+  const typeChanged = type !== _lastAddFormType;
+  _lastAddFormType = type;
+
   shoePanel.style.display  = isShoe ? 'block' : 'none';
   stdPricing.style.display = isShoe ? 'none'  : 'block';
   if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
 
   if (isShoe) {
-    _shoeState.group = null;
-    _shoeState.sizes = new Set();
-    _shoeState.shownGroups = new Set();
-    resetShoeUiPanels();
+    if (typeChanged) {
+      _shoeState.reset();
+      resetShoeUiPanels();
+    }
     renderShoeGroupButtons();
-  } else {
+  } else if (typeChanged) {
+    _shoeState.reset();
     resetShoeUiPanels();
   }
 }
