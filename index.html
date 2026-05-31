@@ -394,12 +394,25 @@
 <div class="page active" id="page-dash">
 
   <!-- ── Period selector ──────────────────────────────────────── -->
-  <div style="display:flex;gap:6px;padding:10px 12px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch;">
+  <div class="dash-period-bar">
     <button onclick="dashSetPeriod('today')"  id="dash-period-today"  class="fin-filter-btn active">Today</button>
     <button onclick="dashSetPeriod('week')"   id="dash-period-week"   class="fin-filter-btn">This Week</button>
     <button onclick="dashSetPeriod('month')"  id="dash-period-month"  class="fin-filter-btn">This Month</button>
     <button onclick="dashSetPeriod('all')"    id="dash-period-all"    class="fin-filter-btn">All Time</button>
   </div>
+
+  <!-- ── App overview & summary ───────────────────────────────── -->
+  <section class="dash-summary" id="d-summary-wrap">
+    <div class="dash-summary-head">
+      <div>
+        <div class="dash-summary-title">Overview</div>
+        <div id="d-summary-sub" class="dash-summary-sub">Business snapshot</div>
+      </div>
+      <span id="d-summary-period" class="dash-summary-period"></span>
+    </div>
+    <p id="d-summary-headline" class="dash-summary-headline"></p>
+    <div id="d-summary-cards" class="dash-summary-cards"></div>
+  </section>
 
   <!-- ── Row 1: Revenue · Profit · Margin ────────────────────── -->
   <div class="stats-row" style="grid-template-columns:1fr 1fr 1fr;gap:6px;">
@@ -457,8 +470,8 @@
   </div>
 
   <!-- ── Stock health ─────────────────────────────────────────── -->
+  <div class="dash-section-label">📦 Stock Health</div>
   <div class="dash-extra" style="margin:0 12px 8px;">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">📦 Stock Health</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
       <div class="stat-box" style="padding:10px 8px;">
         <div class="stat-val" id="d-stock-val" style="font-size:14px;color:var(--text2);">0</div>
@@ -489,23 +502,24 @@
   </div>
 
   <!-- ── Insights ─────────────────────────────────────────────── -->
+  <div class="dash-section-label">💡 Insights</div>
   <div id="d-insights" class="dash-extra" style="margin:0 12px 8px;"></div>
 
   <!-- ── Top sellers ──────────────────────────────────────────── -->
+  <div class="dash-section-label">🏆 Top Sellers</div>
   <div class="dash-extra" style="margin:0 12px 8px;">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">🏆 Top Sellers (period)</div>
     <div id="d-top-sellers"></div>
   </div>
 
   <!-- ── Top items by stock value ─────────────────────────────── -->
+  <div class="dash-section-label">📦 Highest Stock Value</div>
   <div class="dash-extra" style="margin:0 12px 8px;">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">📦 Highest Stock Value</div>
     <div id="d-top-items"></div>
   </div>
 
   <!-- ── By type breakdown ────────────────────────────────────── -->
+  <div class="dash-section-label">📂 By Category</div>
   <div class="dash-extra" style="margin:0 12px 80px;">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">📂 By Category</div>
     <div id="d-by-type"></div>
   </div>
 
@@ -705,7 +719,7 @@
   <!-- Step 1: Category -->
   <section class="add-card" aria-labelledby="add-step-cat">
     <h2 class="add-card-title" id="add-step-cat"><span class="add-step-badge">1</span> Category</h2>
-    <p class="add-card-hint">Pick the main category, then any sub-categories that appear.</p>
+    <p class="add-card-hint">Tap to choose category, then sub-categories if shown.</p>
     <input type="hidden" id="f-type" value="">
     <div id="f-type-cascade" class="add-cascade"></div>
     <div id="f-type-breadcrumb" class="add-type-breadcrumb" hidden></div>

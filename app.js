@@ -1179,6 +1179,284 @@ function renderTypeSelectOptions(selectEl, placeholder) {
       return '<option value="' + escapeHtml(t.name) + '"' + sel + '>' +
         (t.emoji || '📦') + ' ' + prefix + escapeHtml(t.name) + '</option>';
     }).join('');
+  _syncCategoryPickButton(selectEl, ph);
+}
+
+function _categoryHasActiveChildren(typeId) {
+  return _activeChildTypes(typeId).length > 0;
+}
+
+function _catPickBtnHtml(placeholder, selected) {
+  if (selected && selected.name) {
+    return '<span class="cat-pick-val">' + (selected.emoji || '📦') + ' ' + escapeHtml(selected.name) + '</span>' +
+      '<span class="cat-pick-chevron" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>';
+  }
+  return '<span class="cat-pick-ph">' + escapeHtml(placeholder) + '</span>' +
+    '<span class="cat-pick-chevron" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>';
+}
+
+function closeCategoryPicker() {
+  const el = document.getElementById('category-picker-sheet');
+  if (el) el.remove();
+}
+window.closeCategoryPicker = closeCategoryPicker;
+
+function openCategoryPicker(opts) {
+  closeCategoryPicker();
+  const items = (opts && opts.items) || [];
+  const sheet = document.createElement('div');
+  sheet.id = 'category-picker-sheet';
+  sheet.className = 'cat-picker-overlay';
+  sheet.setAttribute('role', 'dialog');
+  sheet.setAttribute('aria-modal', 'true');
+
+  const renderList = (filter) => {
+    const q = (filter || '').trim().toLowerCase();
+    const filtered = q
+      ? items.filter(it => (it.name || '').toLowerCase().includes(q))
+      : items;
+    if (!filtered.length) {
+      return '<div class="cat-picker-empty">No categories match your search.</div>';
+    }
+    return filtered.map(it => {
+      const depth = it.depth || 0;
+      const pad = depth ? ' style="padding-left:' + (12 + depth * 14) + 'px;"' : '';
+      const sel = String(opts.currentId || '') === String(it.id) ? ' selected' : '';
+      return '<button type="button" class="cat-picker-item' + sel + '" data-id="' + escapeHtml(String(it.id)) + '"' + pad + '>' +
+        '<span class="cat-picker-emoji">' + (it.emoji || '📦') + '</span>' +
+        '<span class="cat-picker-body">' +
+          '<span class="cat-picker-name">' + escapeHtml(it.name || '') + '</span>' +
+          (it.hint ? '<span class="cat-picker-hint">' + escapeHtml(it.hint) + '</span>' : '') +
+        '</span>' +
+        (it.hasChildren ? '<span class="cat-picker-tag">Sub</span>' : '') +
+      '</button>';
+    }).join('');
+  };
+
+  sheet.innerHTML =
+    '<div class="cat-picker-panel">' +
+      '<div class="cat-picker-handle"></div>' +
+      '<div class="cat-picker-header">' +
+        '<div class="cat-picker-title">' + escapeHtml(opts.title || 'Choose category') + '</div>' +
+        (opts.subtitle ? '<div class="cat-picker-sub">' + escapeHtml(opts.subtitle) + '</div>' : '') +
+      '</div>' +
+      '<div class="cat-picker-search-wrap">' +
+        '<i class="fa-solid fa-magnifying-glass cat-picker-search-icon"></i>' +
+        '<input type="search" class="cat-picker-search" placeholder="Search categories…" autocomplete="off" spellcheck="false">' +
+      '</div>' +
+      '<div class="cat-picker-list">' + renderList('') + '</div>' +
+      (opts.allowClear ? '<button type="button" class="cat-picker-clear">Clear selection</button>' : '') +
+      '<button type="button" class="cat-picker-cancel">Cancel</button>' +
+    '</div>';
+
+  sheet.addEventListener('click', e => {
+    if (e.target === sheet) closeCategoryPicker();
+  });
+  sheet.querySelector('.cat-picker-panel').addEventListener('click', e => e.stopPropagation());
+
+  const listEl = sheet.querySelector('.cat-picker-list');
+  const searchEl = sheet.querySelector('.cat-picker-search');
+
+  listEl.addEventListener('click', e => {
+    const btn = e.target.closest('.cat-picker-item');
+    if (!btn) return;
+    const id = btn.getAttribute('data-id');
+    closeCategoryPicker();
+    if (opts.onSelect) opts.onSelect(id || '');
+  });
+
+  searchEl.addEventListener('input', () => {
+    listEl.innerHTML = renderList(searchEl.value);
+  });
+
+  const clearBtn = sheet.querySelector('.cat-picker-clear');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      closeCategoryPicker();
+      if (opts.onSelect) opts.onSelect('');
+    });
+  }
+  sheet.querySelector('.cat-picker-cancel').addEventListener('click', closeCategoryPicker);
+
+  document.body.appendChild(sheet);
+  requestAnimationFrame(() => {
+    sheet.classList.add('open');
+    searchEl.focus();
+  });
+}
+window.openCategoryPicker = openCategoryPicker;
+
+function _ensureCategoryPickButton(selectEl) {
+  if (!selectEl || selectEl.dataset.catPickMounted === '1') return document.getElementById(selectEl.id + '-pick');
+  selectEl.classList.add('cat-pick-hidden-select');
+  selectEl.dataset.catPickMounted = '1';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'cat-pick-btn';
+  btn.id = selectEl.id + '-pick';
+  selectEl.parentNode.insertBefore(btn, selectEl);
+  return btn;
+}
+
+function _syncCategoryPickButton(selectEl, placeholder) {
+  if (!selectEl) return;
+  const btn = _ensureCategoryPickButton(selectEl);
+  if (!btn) return;
+  const val = selectEl.value;
+  if (val) {
+    const t = getTypeObj(val);
+    btn.innerHTML = _catPickBtnHtml('', { name: val, emoji: t && t.emoji });
+    btn.classList.add('has-value');
+  } else {
+    btn.innerHTML = _catPickBtnHtml(placeholder || 'Category…', null);
+    btn.classList.remove('has-value');
+  }
+}
+
+function mountFlatCategoryPick(selectEl, placeholder) {
+  if (!selectEl) return;
+  renderTypeSelectOptions(selectEl, placeholder);
+  const btn = _ensureCategoryPickButton(selectEl);
+  if (!btn || btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', () => {
+    const items = getOrderedTypesForDropdown().map(({ rec: t, depth }) => ({
+      id: t.name,
+      name: t.name,
+      emoji: t.emoji || '📦',
+      depth,
+      hint: depth ? 'Sub-category' : 'Main category',
+      hasChildren: _categoryHasActiveChildren(t.id)
+    }));
+    openCategoryPicker({
+      title: placeholder || 'Choose category',
+      subtitle: items.length + ' categories available',
+      items,
+      currentId: selectEl.value,
+      allowClear: true,
+      onSelect: (id) => {
+        selectEl.value = id || '';
+        selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+        _syncCategoryPickButton(selectEl, placeholder);
+      }
+    });
+  });
+}
+
+function mountParentCategoryPick(selectEl, placeholder) {
+  if (!selectEl) return;
+  populateCategoryParentSelect(selectEl);
+  const btn = _ensureCategoryPickButton(selectEl);
+  _syncParentCategoryPickButton(selectEl, placeholder);
+  if (!btn || btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', () => {
+    const items = [];
+    walkCategoryTree((rec, depth) => {
+      items.push({
+        id: String(rec.id),
+        name: rec.name,
+        emoji: rec.emoji || '📦',
+        depth,
+        hint: depth ? 'Parent for sub-category' : 'Top-level category',
+        hasChildren: _categoryHasActiveChildren(rec.id)
+      });
+    });
+    openCategoryPicker({
+      title: placeholder || 'Parent category',
+      subtitle: 'Pick where the new sub-category belongs',
+      items,
+      currentId: selectEl.value,
+      allowClear: true,
+      onSelect: (id) => {
+        selectEl.value = id || '';
+        _syncParentCategoryPickButton(selectEl, placeholder);
+      }
+    });
+  });
+}
+
+function _syncParentCategoryPickButton(selectEl, placeholder) {
+  if (!selectEl) return;
+  const btn = _ensureCategoryPickButton(selectEl);
+  if (!btn) return;
+  const val = selectEl.value;
+  if (val) {
+    const rec = getTypeById(parseInt(val, 10));
+    btn.innerHTML = _catPickBtnHtml('', rec ? { name: rec.name, emoji: rec.emoji } : { name: 'Category #' + val, emoji: '📦' });
+    btn.classList.add('has-value');
+  } else {
+    btn.innerHTML = _catPickBtnHtml(placeholder || 'Parent category…', null);
+    btn.classList.remove('has-value');
+  }
+}
+
+function _getCascadePathIds() {
+  const wrap = document.getElementById('f-type-cascade');
+  if (!wrap) return [];
+  try {
+    return JSON.parse(wrap.dataset.pathIds || '[]').map(n => parseInt(n, 10)).filter(Boolean);
+  } catch (_) {
+    return [];
+  }
+}
+
+function _setCascadePathIds(ids) {
+  const wrap = document.getElementById('f-type-cascade');
+  if (wrap) wrap.dataset.pathIds = JSON.stringify(ids || []);
+}
+
+function _appendCascadePickButton(wrap, depth, parentId, currentId, currentRec) {
+  const children = _activeChildTypes(parentId);
+  const placeholder = depth === 0 ? 'Choose category…' : 'Choose sub-category…';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'cat-pick-btn' + (currentRec ? ' has-value' : '');
+  btn.id = depth === 0 ? 'f-type-parent' : ('f-type-sub-' + depth);
+  btn.setAttribute('data-depth', String(depth));
+  btn.innerHTML = currentRec
+    ? _catPickBtnHtml('', { name: currentRec.name, emoji: currentRec.emoji })
+    : _catPickBtnHtml(placeholder, null);
+
+  btn.addEventListener('click', () => {
+    let subtitle = depth === 0 ? 'Pick the main product category' : 'Pick the next level';
+    if (parentId) {
+      const parentRec = getTypeById(parentId);
+      if (parentRec) subtitle = 'Under: ' + (parentRec.emoji || '📦') + ' ' + parentRec.name;
+    }
+    openCategoryPicker({
+      title: depth === 0 ? 'Choose category' : 'Choose sub-category',
+      subtitle,
+      items: children.map(t => ({
+        id: String(t.id),
+        name: t.name,
+        emoji: t.emoji || '📦',
+        hint: _categoryHasActiveChildren(t.id) ? 'Has more sub-categories' : 'Use this category',
+        hasChildren: _categoryHasActiveChildren(t.id)
+      })),
+      currentId: currentId ? String(currentId) : '',
+      allowClear: true,
+      onSelect: (id) => {
+        const newPath = _getCascadePathIds().slice(0, depth);
+        if (id) newPath.push(parseInt(id, 10));
+        _setCascadePathIds(newPath);
+        const leaf = newPath.length ? getTypeById(newPath[newPath.length - 1]) : null;
+        const leafName = leaf && !_categoryHasActiveChildren(leaf.id) ? leaf.name : '';
+        renderAddTypeCascade(leafName, { preservePath: true });
+      }
+    });
+  });
+
+  const step = document.createElement('div');
+  step.className = 'add-cascade-step';
+  if (depth > 0) {
+    const lbl = document.createElement('span');
+    lbl.className = 'add-cascade-step-lbl';
+    lbl.textContent = depth === 1 ? 'Sub-category' : 'Sub-category ' + depth;
+    step.appendChild(lbl);
+  }
+  step.appendChild(btn);
+  wrap.appendChild(step);
 }
 
 function _activeChildTypes(parentId) {
@@ -1244,72 +1522,62 @@ function renderAddTypeCascade(selectedTypeName, opts) {
   if (!wrap || !hidden) return;
   const triggerTypeChange = !(opts && opts.skipTypeChange);
   const selectedName = selectedTypeName != null ? selectedTypeName : (hidden.value || '');
-  const selectedPath = _typePathToRoot(selectedName);
-  const selectedIds = selectedPath.map(x => x.id);
-  let lastSelectedName = '';
-  let parentId = null;
+
+  let pathIds = [];
+  if (selectedName) {
+    pathIds = _typePathToRoot(selectedName).map(x => x.id);
+    _setCascadePathIds(pathIds);
+  } else if (opts && opts.preservePath) {
+    pathIds = _getCascadePathIds();
+  } else {
+    _setCascadePathIds([]);
+    pathIds = [];
+  }
 
   wrap.innerHTML = '';
+  let parentId = null;
   let depth = 0;
-  while (true) {
-    const children = _activeChildTypes(parentId);
-    if (!children.length) break;
-    const currentId = selectedIds[depth] || '';
 
-    const step = document.createElement('div');
-    step.className = 'add-cascade-step';
-    const select = document.createElement('select');
-    select.className = 'add-select';
-    select.id = depth === 0 ? 'f-type-parent' : ('f-type-sub-' + depth);
-    select.setAttribute('data-depth', String(depth));
-    select.innerHTML =
-      '<option value="">' + (depth === 0 ? 'Choose category…' : 'Choose sub-category…') + '</option>' +
-      children.map(t => (
-        '<option value="' + t.id + '"' + (String(t.id) === String(currentId) ? ' selected' : '') + '>' +
-        (t.emoji || '📦') + ' ' + escapeHtml(t.name) + '</option>'
-      )).join('');
-    select.onchange = () => {
-      let chosen = '';
-      wrap.querySelectorAll('select').forEach(s => {
-        const id = parseInt(s.value, 10);
-        if (!id) return;
-        const rec = getTypeById(id);
-        if (rec) chosen = rec.name;
-      });
-      renderAddTypeCascade(chosen);
-    };
-    step.appendChild(select);
-    wrap.appendChild(step);
-
-    if (!currentId) break;
-    const rec = getTypeById(parseInt(currentId, 10));
+  while (depth < pathIds.length) {
+    const rec = getTypeById(pathIds[depth]);
     if (!rec) break;
+    _appendCascadePickButton(wrap, depth, parentId, rec.id, rec);
     parentId = rec.id;
-    lastSelectedName = rec.name;
     depth += 1;
   }
 
-  const nextOptions = _activeChildTypes(parentId);
-  if (lastSelectedName && !nextOptions.length) {
-    hidden.value = lastSelectedName;
-  } else if (nextOptions.length) {
-    hidden.value = '';
+  const nextChildren = _activeChildTypes(parentId);
+  if (nextChildren.length) {
+    _appendCascadePickButton(wrap, depth, parentId, null, null);
+  }
+
+  const leafId = pathIds.length ? pathIds[pathIds.length - 1] : null;
+  const leafRec = leafId ? getTypeById(leafId) : null;
+  if (leafRec && !_categoryHasActiveChildren(leafId)) {
+    hidden.value = leafRec.name;
   } else {
     hidden.value = '';
   }
+
+  const selectedPath = leafRec && hidden.value ? _typePathToRoot(hidden.value) : pathIds.map(id => getTypeById(id)).filter(Boolean);
 
   if (breadcrumb) {
     if (selectedPath.length && hidden.value) {
       breadcrumb.hidden = false;
       breadcrumb.textContent = selectedPath.map(t => (t.emoji || '📦') + ' ' + t.name).join(' › ');
+    } else if (pathIds.length) {
+      breadcrumb.hidden = false;
+      breadcrumb.textContent = pathIds.map(id => {
+        const t = getTypeById(id);
+        return t ? (t.emoji || '📦') + ' ' + t.name : '';
+      }).filter(Boolean).join(' › ') + ' › …';
     } else {
       breadcrumb.hidden = true;
       breadcrumb.textContent = '';
     }
   }
 
-  const locked = hidden.disabled;
-  wrap.classList.toggle('is-locked', locked);
+  wrap.classList.toggle('is-locked', !!hidden.disabled);
 
   if (triggerTypeChange) onTypeChange();
 }
@@ -1330,8 +1598,8 @@ function setAddTypeLocked(locked) {
 
 function renderAllTypeDropdowns() {
   renderAddTypeCascade(UI.el('f-type')?.value || '', { skipTypeChange: true });
-  renderTypeSelectOptions(document.getElementById('wish-type'), 'Category');
-  renderTypeSelectOptions(document.getElementById('off-type'), 'Category');
+  mountFlatCategoryPick(document.getElementById('wish-type'), 'Category…');
+  mountFlatCategoryPick(document.getElementById('off-type'), 'Category…');
   renderTypeChips();
 }
 
@@ -1370,6 +1638,7 @@ async function renderCategorySettings() {
       return;
     }
     populateCategoryParentSelect(document.getElementById('new-sub-parent'));
+    mountParentCategoryPick(document.getElementById('new-sub-parent'), 'Parent category…');
 
     const countDescendants = (id) => collectCategoryDescendantIds(id).length;
 
@@ -2276,7 +2545,7 @@ async function saveItem() {
     const name=(UI.el('f-name')?.value||'').trim().replace(/[ \t]+/g,' ')||(type+' '+code);
     if (!type) {
       toast('Select a category (and sub-category if shown)', 'err');
-      const firstCat = document.getElementById('f-type-parent') || document.querySelector('#f-type-cascade select');
+      const firstCat = document.getElementById('f-type-parent') || document.querySelector('#f-type-cascade .cat-pick-btn');
       if (firstCat) firstCat.focus();
       return;
     }
@@ -2839,11 +3108,11 @@ async function renderStockMonitorSummary() {
 }
 
 function renderWishlistTypeOptions() {
-  renderTypeSelectOptions(document.getElementById('wish-type'), 'Category');
+  mountFlatCategoryPick(document.getElementById('wish-type'), 'Category…');
 }
 
 function renderOffstockTypeOptions() {
-  renderTypeSelectOptions(document.getElementById('off-type'), 'Category');
+  mountFlatCategoryPick(document.getElementById('off-type'), 'Category…');
 }
 
 async function openStockMonitor() {
@@ -3574,27 +3843,148 @@ function _dashDateRange() {
   return { from: null, to: null };
 }
 
+function _dashPeriodLabel() {
+  return { today: 'Today', week: 'This Week', month: 'This Month', all: 'All Time' }[_dashPeriod] || 'Period';
+}
+
+function _dashPrevDateRange() {
+  const today = todayDateStr();
+  if (_dashPeriod === 'today') {
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    const y = d.toISOString().split('T')[0];
+    return { from: y, to: y };
+  }
+  if (_dashPeriod === 'week') {
+    const end = new Date(); end.setDate(end.getDate() - 7);
+    const start = new Date(end); start.setDate(start.getDate() - 6);
+    return { from: start.toISOString().split('T')[0], to: end.toISOString().split('T')[0] };
+  }
+  if (_dashPeriod === 'month') {
+    const d = new Date(); d.setDate(0);
+    const lastDay = d.getDate();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2, '0')}` };
+  }
+  return { from: null, to: null };
+}
+
+function _filterSalesByRange(allSales, range) {
+  if (!range || !range.from) return allSales;
+  return allSales.filter(s => {
+    const d = s.businessDate || (s.date || '').split('T')[0];
+    return d >= range.from && d <= range.to;
+  });
+}
+
+function _dashSumCard(icon, val, lbl, note, tone) {
+  const toneStyle = tone ? ` style="color:${tone};"` : '';
+  return '<div class="dash-sum-card">' +
+    '<div class="dash-sum-card-icon">' + icon + '</div>' +
+    '<div class="dash-sum-card-val"' + toneStyle + '>' + val + '</div>' +
+    '<div class="dash-sum-card-lbl">' + lbl + '</div>' +
+    (note ? '<div class="dash-sum-card-note">' + note + '</div>' : '') +
+  '</div>';
+}
+
+async function _renderDashSummary(ctx) {
+  const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const wrap = document.getElementById('d-summary-wrap');
+  if (!wrap) return;
+
+  const {
+    allItems, allSales, sales, totalItems, totalQty, stockRetail, stockCost,
+    totalRevenue, totalProfitEarned, totalSalesCount, totalPiecesSold,
+    outStk, lowStk, margin, today, todayDashSales, todayDashRev, todayDashProf
+  } = ctx;
+
+  const periodLbl = _dashPeriodLabel();
+  setEl('d-summary-period', periodLbl);
+  setEl('d-summary-sub', new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' }));
+
+  let wishCount = 0;
+  try {
+    if (db.objectStoreNames.contains('wishlist')) {
+      wishCount = (await dbAll('wishlist')).filter(w => w.status !== 'stocked').length;
+    }
+  } catch (_) { /* intentionally ignored */ }
+
+  let money = null;
+  try { money = await _computeFinanceMovement(); } catch (_) { /* intentionally ignored */ }
+
+  const dayStatus = activeDay ? (activeDay.status || 'OPEN') : 'NONE';
+  const dayOpen = dayStatus === 'OPEN';
+  const dayLabel = !activeDay ? 'No day opened' : dayOpen ? 'Day open' : 'Day ' + dayStatus.toLowerCase();
+
+  const prevRange = _dashPrevDateRange();
+  const prevSales = _filterSalesByRange(allSales, prevRange);
+  const prevRev = prevSales.reduce((s, x) => s + (x.revenue || 0), 0);
+  let trendNote = '';
+  if (_dashPeriod !== 'all' && prevRev > 0) {
+    const chg = ((totalRevenue - prevRev) / prevRev * 100);
+    trendNote = chg >= 0 ? '↑ ' + chg.toFixed(0) + '% vs prior period' : '↓ ' + Math.abs(chg).toFixed(0) + '% vs prior period';
+  } else if (_dashPeriod !== 'all' && totalRevenue > 0 && prevRev === 0) {
+    trendNote = 'Up from prior period';
+  }
+
+  const alertCount = outStk.length + lowStk.length;
+  const headlineParts = [];
+  if (totalItems === 0) headlineParts.push('Add your first items to start tracking stock and sales.');
+  else {
+    if (dayOpen && _dashPeriod === 'today') headlineParts.push('Day is open — record sales as they happen.');
+    else if (dayLabel) headlineParts.push(dayLabel + '.');
+    if (totalSalesCount > 0) headlineParts.push(periodLbl + ': ' + fmtN(totalSalesCount) + ' sales, ' + fmt(totalRevenue) + ' revenue.');
+    if (alertCount > 0) headlineParts.push(alertCount + ' stock alert' + (alertCount !== 1 ? 's' : '') + ' need attention.');
+    else if (totalItems > 0) headlineParts.push('Stock levels look healthy.');
+  }
+  setEl('d-summary-headline', headlineParts.join(' '));
+
+  const cards = [];
+  cards.push(_dashSumCard('📦', fmtN(totalItems) + ' SKUs', 'Inventory', fmtN(totalQty) + ' pcs · retail ' + fmt(stockRetail)));
+  cards.push(_dashSumCard('💰', fmt(totalRevenue), periodLbl + ' revenue', trendNote || (fmt(totalProfitEarned) + ' profit · ' + margin.toFixed(1) + '% margin'), totalProfitEarned >= 0 ? 'var(--green)' : 'var(--red)'));
+  cards.push(_dashSumCard('🛒', fmtN(totalSalesCount), 'Sales · ' + fmtN(totalPiecesSold) + ' pcs', totalSalesCount ? 'Avg ' + fmt(totalRevenue / totalSalesCount) + ' per sale' : 'No sales in period'));
+  cards.push(_dashSumCard(
+    dayOpen ? '🟢' : (activeDay ? '🔒' : '⏸️'),
+    dayOpen ? 'Open' : (activeDay ? activeDay.status : '—'),
+    'Business day',
+    _dashPeriod === 'today' && todayDashSales.length
+      ? fmtN(todayDashSales.length) + ' sales · ' + fmt(todayDashProf) + ' profit today'
+      : (money ? 'Pool ' + fmt(money.businessPool) : dayLabel)
+  ));
+  if (wishCount > 0 || alertCount > 0) {
+    cards.push(_dashSumCard(
+      alertCount ? '⚠️' : '📋',
+      alertCount ? fmtN(alertCount) + ' alerts' : fmtN(wishCount),
+      alertCount ? 'Needs attention' : 'Wishlist',
+      alertCount
+        ? (outStk.length ? outStk.length + ' out · ' : '') + (lowStk.length ? lowStk.length + ' low' : '')
+        : wishCount + ' item' + (wishCount !== 1 ? 's' : '') + ' to stock',
+      alertCount ? 'var(--amber)' : 'var(--accent)'
+    ));
+  }
+  if (money && (money.businessPool || money.salesProfit)) {
+    cards.push(_dashSumCard('💼', fmt(money.businessPool), 'Business pool', 'Profit ' + fmt(money.salesProfit) + ' · cost out ' + fmt(money.salesCostOut), money.businessPool >= 0 ? 'var(--accent2)' : 'var(--red)'));
+  }
+
+  const cardsEl = document.getElementById('d-summary-cards');
+  if (cardsEl) cardsEl.innerHTML = cards.slice(0, 6).join('');
+}
+
 async function renderDashboard() {
+  const setEl = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
   const allItems = await dbAll('items');
   const allSales = await dbAll('sales');
   const range    = _dashDateRange();
   const today    = todayDateStr();
 
-  // Filter sales by period
-  const sales = allSales.filter(s => {
-    const d = s.businessDate || (s.date||'').split('T')[0];
-    if (!range.from) return true;
-    return d >= range.from && d <= range.to;
-  });
+  const sales = _filterSalesByRange(allSales, range);
 
-  // ── Stock metrics (always all-time) ──────────────────────
   const totalItems  = allItems.length;
   const totalQty    = allItems.reduce((s,i) => s+(i.qty||0), 0);
   const stockCost   = allItems.reduce((s,i) => s+((i.buyPrice||i.buy||0)*(i.qty||0)), 0);
   const stockRetail = allItems.reduce((s,i) => s+((i.sellPrice||i.sell||0)*(i.qty||0)), 0);
   const potProfit   = stockRetail - stockCost;
 
-  // ── Period sales metrics ──────────────────────────────────
   const totalRevenue      = sales.reduce((s,x) => s+(x.revenue||0), 0);
   const totalProfitEarned = sales.reduce((s,x) => s+(x.profit||0), 0);
   const totalPiecesSold   = sales.reduce((s,x) => s+(x.qty||0), 0);
@@ -3602,8 +3992,18 @@ async function renderDashboard() {
   const margin = totalRevenue > 0 ? (totalProfitEarned/totalRevenue*100) : 0;
   const avgSale = totalSalesCount > 0 ? totalRevenue/totalSalesCount : 0;
 
-  // ── KPI tiles ─────────────────────────────────────────────
-  const setEl = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+  const outStk = allItems.filter(i => i.qty === 0);
+  const lowStk = allItems.filter(i => i.qty > 0 && i.qty <= LOW_STOCK_LEVEL);
+  const todayDashSales = allSales.filter(s => (s.businessDate||(s.date||'').split('T')[0]) === today);
+  const todayDashRev   = todayDashSales.reduce((s,x)=>s+(x.revenue||0),0);
+  const todayDashProf  = todayDashSales.reduce((s,x)=>s+(x.profit||0),0);
+
+  await _renderDashSummary({
+    allItems, allSales, sales, totalItems, totalQty, stockRetail, stockCost,
+    totalRevenue, totalProfitEarned, totalSalesCount, totalPiecesSold,
+    outStk, lowStk, margin, today, todayDashSales, todayDashRev, todayDashProf
+  });
+
   setEl('d-revenue',      fmt(totalRevenue));
   setEl('d-profit-earned',fmt(totalProfitEarned));
   setEl('d-margin',       margin.toFixed(1)+'%');
@@ -3636,9 +4036,6 @@ async function renderDashboard() {
   } else if (barWrap) { barWrap.style.display = 'none'; }
 
   // ── Today at a Glance (only show on Today period) ─────────
-  const todayDashSales = allSales.filter(s => (s.businessDate||(s.date||'').split('T')[0]) === today);
-  const todayDashRev   = todayDashSales.reduce((s,x)=>s+(x.revenue||0),0);
-  const todayDashProf  = todayDashSales.reduce((s,x)=>s+(x.profit||0),0);
   const todayDashQty   = todayDashSales.reduce((s,x)=>s+(x.qty||0),0);
   const todayDashRecon = typeof _getDayRecon === 'function' ? _getDayRecon(today) : null;
   const todayDashVariance = todayDashRecon?.analysis ? todayDashRecon.analysis.variance : null;
@@ -3687,8 +4084,6 @@ async function renderDashboard() {
   }
 
   // ── Alerts ────────────────────────────────────────────────
-  const outStk = allItems.filter(i => i.qty === 0);
-  const lowStk = allItems.filter(i => i.qty > 0 && i.qty <= LOW_STOCK_LEVEL);
   const alertEl = document.getElementById('d-alerts');
   if (alertEl) {
     let html = '';
@@ -3707,14 +4102,14 @@ async function renderDashboard() {
     }
     if (_dashPeriod === 'today') {
       if (todayDashSales.length === 0) {
-        insights.push({ icon:'Day', text:'No sales recorded today yet. Keep the day open and record each sale as it happens.', color:'var(--muted)' });
+        insights.push({ icon:'📅', text:'No sales recorded today yet. Keep the day open and record each sale as it happens.', color:'var(--muted)' });
       } else {
         const avgToday = todayDashRev / Math.max(todayDashSales.length, 1);
-        insights.push({ icon:'Day', text:`Today: <strong>${fmtN(todayDashSales.length)}</strong> sales, revenue <strong>${fmt(todayDashRev)}</strong>, profit <strong>${fmt(todayDashProf)}</strong>, avg sale ${fmt(avgToday)}.`, color: todayDashProf >= 0 ? 'var(--green)' : 'var(--red)' });
+        insights.push({ icon:'📅', text:`Today: <strong>${fmtN(todayDashSales.length)}</strong> sales, revenue <strong>${fmt(todayDashRev)}</strong>, profit <strong>${fmt(todayDashProf)}</strong>, avg sale ${fmt(avgToday)}.`, color: todayDashProf >= 0 ? 'var(--green)' : 'var(--red)' });
       }
       if (todayDashVariance !== null) {
         const ok = Math.abs(todayDashVariance) < 1;
-        insights.push({ icon:'Check', text:`Day money check: ${ok ? 'balanced' : 'variance ' + ((todayDashVariance>=0?'+':'') + fmt(todayDashVariance))}.`, color: ok ? 'var(--green)' : 'var(--red)' });
+        insights.push({ icon:'✅', text:`Day money check: ${ok ? 'balanced' : 'variance ' + ((todayDashVariance>=0?'+':'') + fmt(todayDashVariance))}.`, color: ok ? 'var(--green)' : 'var(--red)' });
       }
     }
     if (margin < 0 && totalRevenue > 0) insights.push({ icon:'🚨', text:`Negative margin (${margin.toFixed(1)}%) — selling below cost!`, color:'var(--red)' });
@@ -3746,11 +4141,27 @@ async function renderDashboard() {
     try {
       const money = await _computeFinanceMovement();
       insights.push({
-        icon:'KES',
+        icon:'💼',
         text:`Business pool: <strong>${fmt(money.businessPool)}</strong> · stock sold cost ${fmt(money.salesCostOut)} · profit ${fmt(money.salesProfit)}`,
         color: money.businessPool >= 0 ? 'var(--accent)' : 'var(--red)'
       });
     } catch(_) { /* finance insight is non-critical */ }
+
+    const prevRange = _dashPrevDateRange();
+    if (_dashPeriod !== 'all' && prevRange.from) {
+      const prevSales = _filterSalesByRange(allSales, prevRange);
+      const prevRev = prevSales.reduce((s, x) => s + (x.revenue || 0), 0);
+      const prevProf = prevSales.reduce((s, x) => s + (x.profit || 0), 0);
+      if (prevRev > 0 || totalRevenue > 0) {
+        const revChg = prevRev > 0 ? ((totalRevenue - prevRev) / prevRev * 100) : 100;
+        const dir = revChg >= 0 ? 'up' : 'down';
+        insights.push({
+          icon: dir === 'up' ? '📈' : '📉',
+          text: `Revenue ${dir} <strong>${Math.abs(revChg).toFixed(0)}%</strong> vs prior ${_dashPeriod === 'today' ? 'day' : _dashPeriod} (${fmt(prevRev)} → ${fmt(totalRevenue)}). Prior profit ${fmt(prevProf)}.`,
+          color: revChg >= 0 ? 'var(--green)' : 'var(--red)'
+        });
+      }
+    }
 
     // Stock turnover
     if (totalPiecesSold > 0 && totalQty > 0) {
@@ -3763,11 +4174,11 @@ async function renderDashboard() {
   const insightsEl = document.getElementById('d-insights');
   if (insightsEl) {
     insightsEl.innerHTML = insights.length ? insights.map(ins =>
-      `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-bottom:5px;">
-        <span style="font-size:16px;flex-shrink:0;">${ins.icon}</span>
-        <span style="font-size:12px;font-weight:600;color:${ins.color};line-height:1.5;">${ins.text}</span>
+      `<div class="dash-insight-row">
+        <span class="dash-insight-icon">${ins.icon}</span>
+        <span class="dash-insight-text" style="color:${ins.color};">${ins.text}</span>
       </div>`
-    ).join('') : '';
+    ).join('') : '<div style="color:var(--muted);font-size:12px;padding:8px 12px;">No insights for this period yet.</div>';
   }
 
   // ── Top sellers (period) ──────────────────────────────────
