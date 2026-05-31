@@ -492,6 +492,7 @@ body {
   font-weight: 600;
 }
 .tag-cyan { background: #e0f5f7; color: #0e7490; }
+.tag-blue { background: #dbeafe; color: #1d4ed8; }
 .tag-amber { background: var(--amber-light); color: var(--amber); }
 .tag-purple { background: var(--accent3-light); color: var(--accent3); }
 .tag-green { background: var(--green-light); color: var(--green); }
@@ -674,6 +675,7 @@ body {
 }
 .stock-monitor-pill.red { background: var(--red-light); color: var(--red); border: 1px solid #fca5a5; }
 .stock-monitor-pill.yellow { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.stock-monitor-pill.blue { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
 .stock-monitor-row {
   display: flex;
   align-items: center;
@@ -686,6 +688,7 @@ body {
 }
 .stock-monitor-row.out { border-left: 4px solid var(--red); }
 .stock-monitor-row.prospective { border-left: 4px solid #d97706; }
+.stock-monitor-row.unaccounted { border-left: 4px solid #1d4ed8; background: #eff6ff; cursor: pointer; }
 .stock-monitor-body { flex: 1; min-width: 0; }
 .stock-monitor-name {
   font-size: 13px;
@@ -762,6 +765,26 @@ body {
   display: block !important;
   padding: 0 !important;
   animation: none !important;
+}
+.inv-module {
+  display: block !important;
+  padding: 0 !important;
+  animation: none !important;
+}
+.inventory-tabs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.inventory-tabs .ops-tab {
+  gap: 5px;
+  padding: 10px 4px;
+  font-size: 11px;
+  min-width: 0;
+}
+#firebase-setup-card button[onclick="forcePushToFirebase()"],
+#firebase-setup-card button[onclick="pullFromFirebase()"],
+#firebase-setup-card button[onclick="disconnectFirebase()"] {
+  display: none !important;
 }
 
 /* SUCCESS SPLASH */

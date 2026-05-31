@@ -706,6 +706,56 @@ function getTypeObj(name) { return types.find(t => t.name === name) || { name, e
 // ===== PAGES =====
 let _operationsMounted = false;
 let _activeOperationsTab = 'day';
+let _inventoryMounted = false;
+let _activeInventoryTab = 'stock';
+
+function mountInventoryPage() {
+  if (_inventoryMounted) return;
+  const stockSlot = document.getElementById('inventory-stock-slot');
+  const wishSlot = document.getElementById('inventory-wishlist-slot');
+  const addSlot = document.getElementById('inventory-add-slot');
+  const stockPage = document.getElementById('page-list');
+  const wishPage = document.getElementById('page-wishlist');
+  const addPage = document.getElementById('page-add');
+  if (!stockSlot || !wishSlot || !addSlot || !stockPage || !wishPage || !addPage) return;
+
+  [stockPage, wishPage, addPage].forEach(page => {
+    page.classList.remove('page', 'active');
+    page.classList.add('inv-module');
+  });
+  stockSlot.appendChild(stockPage);
+  wishSlot.appendChild(wishPage);
+  addSlot.appendChild(addPage);
+  _inventoryMounted = true;
+}
+
+function showInventoryTab(tab) {
+  const allowed = ['stock', 'wishlist', 'monitor', 'add'];
+  _activeInventoryTab = allowed.includes(tab) ? tab : 'stock';
+  mountInventoryPage();
+  allowed.forEach(name => {
+    const btn = document.getElementById('inventory-tab-' + name);
+    const slot = document.getElementById('inventory-' + name + '-slot');
+    if (btn) btn.classList.toggle('active', name === _activeInventoryTab);
+    if (slot) slot.classList.toggle('active', name === _activeInventoryTab);
+  });
+  const sub = document.getElementById('inventory-sub');
+  if (sub) {
+    sub.textContent = {
+      stock: 'Current stock list',
+      wishlist: 'Prospective items to stock',
+      monitor: 'Out of stock and not accounted items',
+      add: 'Add or restock inventory'
+    }[_activeInventoryTab] || '';
+  }
+  if (_activeInventoryTab === 'stock') renderList();
+  if (_activeInventoryTab === 'wishlist') renderWishlistPage();
+  if (_activeInventoryTab === 'monitor') renderStockMonitor();
+  if (_activeInventoryTab === 'add') {
+    renderTypeSelect();
+    updateProfitPreview();
+  }
+}
 
 function mountOperationsPage() {
   if (_operationsMounted) return;
@@ -743,6 +793,10 @@ function showOperationsTab(tab) {
 }
 
 function showPage(id) {
+  if (id === 'list' || id === 'wishlist' || id === 'add' || id === 'monitor') {
+    _activeInventoryTab = id === 'list' ? 'stock' : id;
+    id = 'inventory';
+  }
   if (id === 'day' || id === 'finance') {
     _activeOperationsTab = id;
     id = 'operations';
@@ -754,8 +808,7 @@ function showPage(id) {
   const tabEl = document.getElementById('tab-' + id);
   if (tabEl) tabEl.classList.add('active');
   if (id === 'dash') renderDashboard();
-  if (id === 'list') renderList();
-  if (id === 'wishlist') renderWishlistPage();
+  if (id === 'inventory') showInventoryTab(_activeInventoryTab);
   if (id === 'operations') showOperationsTab(_activeOperationsTab);
   if (id === 'day') { updateDayLiveStats(); renderDaySessionsList(); renderDayState(); }
   if (id === 'sell') { renderSellPage(); setTimeout(()=>document.getElementById('sell-search').focus(),150); }
@@ -767,11 +820,13 @@ function showPage(id) {
 // Defined immediately after showPage so _origShowPage is available at startup
 const _origShowPage = showPage;
 showPage = function(id) {
-  if (currentUser && !currentUser.tabs.includes(id)) {
+  const requestedId = id;
+  const allowedId = (id === 'list' || id === 'wishlist' || id === 'add' || id === 'monitor') ? 'inventory' : id;
+  if (currentUser && !currentUser.tabs.includes(allowedId) && !currentUser.tabs.includes(requestedId)) {
     toast('⛔ Access denied', 'err');
     return;
   }
-  if (currentUser) localStorage.setItem(KEY_LAST_PAGE, id);
+  if (currentUser) localStorage.setItem(KEY_LAST_PAGE, allowedId);
   _origShowPage(id);
 };
 
@@ -1110,18 +1165,30 @@ async function saveItem() {
       if (!sizeRec) { toast('Size record not found', 'err'); return; }
       const addQty = parseInt(UI.el('f-qty')?.value);
       if (isNaN(addQty) || addQty <= 0) { toast('\u26a0\ufe0f Enter quantity to add', 'err'); return; }
+      const buy = parseFloat(UI.el('f-buy')?.value);
+      const sell = parseFloat(UI.el('f-sell')?.value);
+      const nextBuy = !isNaN(buy) ? buy : (sizeRec.buyPrice || item?.buyPrice || item?.buy || 0);
+      const nextSell = !isNaN(sell) ? sell : (sizeRec.sellPrice || item?.sellPrice || item?.sell || 0);
+      if (!Validate.price(nextBuy, nextSell, 'f-buy', 'f-sell')) return;
       const newQty = (sizeRec.qty || 0) + addQty;
       if (newQty > 999999) { toast('\u26a0\ufe0f Exceeds max 999,999', 'err'); return; }
       sizeRec.qty = newQty;
+      sizeRec.buyPrice = nextBuy;
+      sizeRec.sellPrice = nextSell;
+      sizeRec.profit = nextSell - nextBuy;
       sizeRec.updatedAt = new Date().toISOString();
       await dbPut('shoe_sizes', sizeRec);
       if (item) {
         const updSz = await getShoeSizes(item.code);
         item.qty = updSz.reduce((t, s) => t + s.qty, 0);
+        item.buyPrice = nextBuy;
+        item.sellPrice = nextSell;
+        item.profit = nextSell - nextBuy;
         item.updatedAt = new Date().toISOString();
         item.updatedBy = currentUser ? currentUser.username : 'system';
         await dbPut('items', item); fbSyncItem(item);
       }
+      await recordStockInvestment(item || sizeRec, addQty * nextBuy, addQty, 'Shoe restock');
       // Sync shoe size to Firebase
       if (fbReady && fbDb) {
         try {
@@ -1717,7 +1784,7 @@ async function getStockMonitorRows() {
   wishlist
     .filter(w => (w.status || 'prospective') !== 'stocked')
     .forEach(w => rows.push({
-      kind: 'prospective',
+      kind: (w.status || '') === 'unaccounted' ? 'unaccounted' : 'prospective',
       wishId: w.id,
       name: w.name || w.code || 'Prospective item',
       code: w.code || '',
@@ -1725,11 +1792,12 @@ async function getStockMonitorRows() {
       qty: w.qty || 0,
       buyPrice: w.estimatedCost || 0,
       note: w.note || '',
-      label: 'Prospective'
+      label: (w.status || '') === 'unaccounted' ? 'Not accounted' : 'Prospective'
     }));
 
   return rows.sort((a, b) => {
-    if (a.kind !== b.kind) return a.kind === 'out' ? -1 : 1;
+    const order = { out: 0, unaccounted: 1, prospective: 2 };
+    if (a.kind !== b.kind) return (order[a.kind] ?? 9) - (order[b.kind] ?? 9);
     return (a.name || '').localeCompare(b.name || '');
   });
 }
@@ -1772,30 +1840,27 @@ function closeStockMonitor() {
 }
 
 async function renderStockMonitor() {
-  const list = document.getElementById('stock-monitor-list');
-  const counts = document.getElementById('stock-monitor-counts');
-  if (!list) return;
-  const rows = filterStockRows(await getStockMonitorRows(), 'out');
-  const outCount = rows.length;
-  if (counts) {
-    counts.innerHTML = '<div class="stock-monitor-pill red">' + outCount + ' Out of stock</div>';
-  }
-  if (!rows.length) {
-    list.innerHTML = '<div class="empty" style="padding:28px 12px;"><div class="e-icon">OK</div><p>No out-of-stock items.</p></div>';
-    return;
-  }
-  list.innerHTML = rows.map(row => {
-    const cls = row.kind === 'out' ? 'out' : 'prospective';
+  const targets = [
+    { list: document.getElementById('stock-monitor-list'), counts: document.getElementById('stock-monitor-counts'), sheetOnly: true },
+    { list: document.getElementById('inventory-monitor-list'), counts: document.getElementById('inventory-monitor-counts'), sheetOnly: false }
+  ].filter(t => t.list);
+  if (!targets.length) return;
+  const allRows = await getStockMonitorRows();
+  const rows = allRows.filter(row => row.kind === 'out' || row.kind === 'unaccounted');
+  const outCount = rows.filter(row => row.kind === 'out').length;
+  const unaccountedCount = rows.filter(row => row.kind === 'unaccounted').length;
+  const html = rows.length ? rows.map(row => {
+    const cls = row.kind === 'out' ? 'out' : 'unaccounted';
     const status = row.kind === 'out'
       ? '<span class="tag tag-red">Out of stock</span>'
-      : '<span class="tag tag-amber">Prospective</span>';
+      : '<span class="tag tag-blue">Not accounted</span>';
     const restockAction = row.kind === 'out'
       ? 'restockFromMonitor(' + row.itemId + (row.size ? ',' + row.size : '') + ')'
       : 'startWishlistRestock(' + row.wishId + ')';
-    const deleteBtn = row.kind === 'prospective'
-      ? '<button class="stock-monitor-action delete" onclick="deleteWishlistItem(' + row.wishId + ')" title="Remove"><i class="fa-solid fa-trash"></i></button>'
+    const deleteBtn = row.kind !== 'out'
+      ? '<button class="stock-monitor-action delete" onclick="event.stopPropagation();deleteWishlistItem(' + row.wishId + ')" title="Remove"><i class="fa-solid fa-trash"></i></button>'
       : '';
-    return '<div class="stock-monitor-row ' + cls + '">' +
+    return '<div class="stock-monitor-row ' + cls + '" onclick="' + restockAction + '" role="button" tabindex="0">' +
       '<div class="stock-monitor-body">' +
         '<div class="stock-monitor-name">' + escapeHtml(row.name) + '</div>' +
         '<div class="stock-monitor-meta">' +
@@ -1809,11 +1874,20 @@ async function renderStockMonitor() {
         '</div>' +
       '</div>' +
       '<div class="stock-monitor-actions">' +
-        '<button class="stock-monitor-action restock" onclick="' + restockAction + '" title="Restock"><i class="fa-solid fa-boxes-stacked"></i></button>' +
+        '<button class="stock-monitor-action restock" onclick="event.stopPropagation();' + restockAction + '" title="Restock"><i class="fa-solid fa-boxes-stacked"></i></button>' +
         deleteBtn +
       '</div>' +
     '</div>';
-  }).join('');
+  }).join('') : '<div class="empty" style="padding:28px 12px;"><div class="e-icon">OK</div><p>No monitored items.</p></div>';
+
+  targets.forEach(target => {
+    if (target.counts) {
+      target.counts.innerHTML =
+        '<div class="stock-monitor-pill red">' + outCount + ' Out of stock</div>' +
+        '<div class="stock-monitor-pill blue">' + unaccountedCount + ' Not accounted</div>';
+    }
+    target.list.innerHTML = html;
+  });
 }
 
 async function renderWishlistPage() {
@@ -1827,7 +1901,7 @@ async function renderWishlistPage() {
     return;
   }
   list.innerHTML = rows.map(row => {
-    return '<div class="stock-monitor-row prospective">' +
+    return '<div class="stock-monitor-row prospective" onclick="startWishlistRestock(' + row.wishId + ')" role="button" tabindex="0">' +
       '<div class="stock-monitor-body">' +
         '<div class="stock-monitor-name">' + escapeHtml(row.name) + '</div>' +
         '<div class="stock-monitor-meta">' +
@@ -1841,8 +1915,8 @@ async function renderWishlistPage() {
         '</div>' +
       '</div>' +
       '<div class="stock-monitor-actions">' +
-        '<button class="stock-monitor-action restock" onclick="startWishlistRestock(' + row.wishId + ')" title="Restock"><i class="fa-solid fa-boxes-stacked"></i></button>' +
-        '<button class="stock-monitor-action delete" onclick="deleteWishlistItem(' + row.wishId + ')" title="Remove"><i class="fa-solid fa-trash"></i></button>' +
+        '<button class="stock-monitor-action restock" onclick="event.stopPropagation();startWishlistRestock(' + row.wishId + ')" title="Restock"><i class="fa-solid fa-boxes-stacked"></i></button>' +
+        '<button class="stock-monitor-action delete" onclick="event.stopPropagation();deleteWishlistItem(' + row.wishId + ')" title="Remove"><i class="fa-solid fa-trash"></i></button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -2913,6 +2987,67 @@ async function searchSell() {
   } catch(e) { console.error("[searchSell]", e); toast("Error: " + e.message, "err"); }
 }
 
+async function searchSell() {
+  try {
+    const q = (document.getElementById('sell-search')?.value || '').trim().toLowerCase();
+    const results = document.getElementById('sell-results');
+    if (!results) return;
+    const items = await dbAll('items');
+    const sizes = await dbAll('shoe_sizes');
+    const rows = [];
+
+    items.forEach(item => {
+      const t = getTypeObj(item.type);
+      const hay = [item.name, item.code, item.size, item.variant, item.type].join(' ').toLowerCase();
+      if (item.isShoe) {
+        sizes.filter(sz => sz.itemCode === item.code && (sz.qty || 0) > 0).forEach(sz => {
+          const sizeHay = (hay + ' ' + sz.size + ' ' + (sz.sizeGroup || '')).toLowerCase();
+          if (q && !sizeHay.includes(q)) return;
+          const price = sz.sellPrice || item.sellPrice || item.sell || 0;
+          const buy = sz.buyPrice || item.buyPrice || item.buy || 0;
+          rows.push({ item, t, label: item.name || item.code, meta: item.code + ' - Size ' + sz.size, qty: sz.qty || 0, price, profit: price - buy, action: 'openSellShoeModal(' + item.id + ',' + sz.size + ')', extraTag: '<span class="tag tag-gray">Size ' + escapeHtml(sz.size) + '</span>' });
+        });
+        return;
+      }
+      if ((item.qty || 0) <= 0) return;
+      if (q && !hay.includes(q)) return;
+      const price = item.sellPrice || item.sell || 0;
+      const buy = item.buyPrice || item.buy || 0;
+      rows.push({ item, t, label: item.name || item.code, meta: item.code + (item.size || item.variant ? ' - ' + (item.size || item.variant) : ''), qty: item.qty || 0, price, profit: price - buy, action: 'openSellModal(' + item.id + ')', extraTag: '' });
+    });
+
+    rows.sort((a, b) => (a.label || '').localeCompare(b.label || ''));
+    const visibleRows = rows.slice(0, 120);
+    const offStockButton = '<button onclick="openOffStockSale()" class="stock-add-wish-btn" style="margin-bottom:12px;background:#1d4ed8;"><i class="fa-solid fa-plus"></i> Sell item not in stock</button>';
+    if (!visibleRows.length) {
+      results.innerHTML = '<div class="empty" style="padding:24px 0;"><div class="e-icon" style="font-size:36px;">Search</div><p>No available stock found.</p></div>' + offStockButton;
+      return;
+    }
+    results.innerHTML = offStockButton + visibleRows.map(row => {
+      const stockColor = row.qty <= 3 ? 'var(--amber)' : 'var(--green)';
+      return '<div class="item-card" onclick="' + row.action + '" style="margin-bottom:10px;cursor:pointer;">' +
+        '<div class="item-top">' +
+          '<div class="item-icon" style="background:' + (row.t.color || 'var(--surface2)') + ';">' + row.t.emoji + '</div>' +
+          '<div class="item-body">' +
+            '<div class="item-code">' + escapeHtml(row.meta) + '</div>' +
+            '<div class="item-name">' + escapeHtml(row.label || '') + '</div>' +
+            '<div class="item-tags">' +
+              '<span class="tag tag-cyan">' + escapeHtml(row.item.type || '') + '</span>' +
+              row.extraTag +
+              '<span class="tag" style="background:' + (row.qty <= 3 ? 'var(--amber-light)' : 'var(--green-light)') + ';color:' + stockColor + ';">' + row.qty + ' pcs</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="item-right">' +
+            '<div style="font-size:18px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(row.price) + '</div>' +
+            '<div style="font-size:11px;color:' + (row.profit >= 0 ? 'var(--green)' : 'var(--red)') + ';font-family:var(--mono);margin-top:3px;">' + (row.profit >= 0 ? '+' : '') + fmt(row.profit) + ' profit</div>' +
+            '<div style="margin-top:8px;background:var(--accent);color:white;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;text-align:center;">Sell</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch(e) { console.error("[searchSell]", e); toast("Error: " + e.message, "err"); }
+}
+
 function selectPayment(method) {
   _selectedPayment = method;
   // Reset all payment buttons
@@ -2922,6 +3057,112 @@ function selectPayment(method) {
   const btnId = idMap[method] || 'pay-cash';
   const btn = document.getElementById(btnId);
   if (btn) btn.classList.add('active');
+}
+
+function renderOffstockTypeOptions() {
+  const sel = document.getElementById('off-type');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Category</option>' +
+    types.map(t => '<option value="' + escapeHtml(t.name) + '">' + escapeHtml(t.name) + '</option>').join('');
+  if (cur) sel.value = cur;
+}
+
+function openOffStockSale() {
+  renderOffstockTypeOptions();
+  const sheet = document.getElementById('offstock-sale-sheet');
+  if (sheet) sheet.classList.add('open');
+  setTimeout(() => document.getElementById('off-name')?.focus(), 80);
+}
+
+function closeOffStockSale() {
+  const sheet = document.getElementById('offstock-sale-sheet');
+  if (sheet) sheet.classList.remove('open');
+}
+
+async function confirmOffStockSale() {
+  const name = (document.getElementById('off-name')?.value || '').trim();
+  const code = sanitiseCode(document.getElementById('off-code')?.value || '');
+  const type = document.getElementById('off-type')?.value || '';
+  const size = (document.getElementById('off-size')?.value || '').trim();
+  const qty = parseInt(document.getElementById('off-qty')?.value || '0');
+  const buyPrice = parseFloat(document.getElementById('off-buy')?.value || '0') || 0;
+  const sellPrice = parseFloat(document.getElementById('off-sell')?.value || '0') || 0;
+  const paymentMethod = document.getElementById('off-payment')?.value || 'cash';
+  if (!name && !code) return Validate.fail('Enter item name or code', 'off-name');
+  if (!type) return Validate.fail('Select a category', 'off-type');
+  if (!Validate.restockQty(qty, 'off-qty')) return;
+  if (!Validate.salePrice(sellPrice, buyPrice, sellPrice)) return;
+
+  const revenue = qty * sellPrice;
+  const profit = qty * (sellPrice - buyPrice);
+  const sale = {
+    itemId: null,
+    itemCode: code,
+    itemName: name || code,
+    itemType: type,
+    itemSize: size,
+    qty,
+    buyPrice,
+    sellPrice,
+    actualPrice: sellPrice,
+    revenue,
+    profit,
+    overridden: false,
+    paymentMethod,
+    unaccounted: true,
+    soldBy: currentUser ? currentUser.username : 'system',
+    businessDate: todayDateStr(),
+    date: new Date().toISOString(),
+  };
+  sale.id = await dbAdd('sales', sale);
+  try { fbSyncSale(sale); } catch(_) { /* intentionally ignored */ }
+
+  const monitorRow = {
+    name: name || code,
+    code,
+    type,
+    qty,
+    estimatedCost: buyPrice,
+    note: 'Sold before stock count',
+    status: 'unaccounted',
+    saleId: sale.id,
+    createdAt: new Date().toISOString(),
+    createdBy: currentUser ? currentUser.username : 'system'
+  };
+  monitorRow.id = await dbAdd('wishlist', monitorRow);
+
+  try {
+    const finEntry = {
+      type: 'revenue',
+      amount: revenue,
+      costAmount: buyPrice * qty,
+      profit,
+      description: 'Sale not accounted: ' + (name || code) + ' x ' + qty,
+      category: 'sales',
+      paymentMethod,
+      saleId: sale.id,
+      itemCode: code,
+      date: todayDateStr(),
+      createdAt: new Date().toISOString(),
+      createdBy: currentUser ? currentUser.username : 'system',
+    };
+    finEntry.id = await dbAdd('finances', finEntry);
+  } catch(e) {
+    console.warn('[FINANCE] Off-stock auto-record failed:', e.message);
+  }
+
+  ['off-name','off-code','off-size','off-qty','off-buy','off-sell'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = id === 'off-qty' ? '1' : '';
+  });
+  closeOffStockSale();
+  await renderStockMonitor();
+  await renderSellPage();
+  try { renderDashboard(); } catch(_) { /* intentionally ignored */ }
+  try { if (activeDay) updateDayLiveStats(); } catch(_) { /* intentionally ignored */ }
+  scheduleSync();
+  toast('Sale recorded · monitor marked NOT ACCOUNTED', 'ok');
 }
 
 async function openSellModal(itemId) {
@@ -3181,6 +3422,7 @@ async function renderSellPage() {
   const todayProfit = todaySales.reduce((a, s) => a + s.profit, 0);
   document.getElementById('sell-today-rev').textContent = fmt(todayRev);
   document.getElementById('sell-today-profit').textContent = fmt(todayProfit);
+  await searchSell();
 
   // Apply date filter
   const filterEl = document.getElementById('sales-filter');
@@ -3200,7 +3442,7 @@ async function renderSellPage() {
     '<span style="font-size:12px;font-family:var(--mono);color:var(--accent2);">' + fmt(periodRevenue) + ' · <span style="color:var(--green);">+' + fmt(periodProfit) + '</span></span>' +
     '</div>' +
     filtered.map(s => {
-      const t = getTypeObj(s.type);
+      const t = getTypeObj(s.type || s.itemType);
       const d = new Date(s.date);
       const timeStr = d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' +
                       d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
@@ -4934,7 +5176,7 @@ function showUserProfile() {
   if (!currentUser) return;
   const roleColors = { super: '#92400e', user: '#1d4ed8', clerk: 'var(--green)' };
   const roleLabels = { super: '🟡 Super User — Full Access', user: '🔵 User — Standard Access', clerk: '🟢 Clerk — Limited Access' };
-  const tabLabels = { dash: 'Dashboard', list: 'Stock', wishlist: 'Wishlist', add: 'Add Item', sell: 'Sell', operations: 'Operations', settings: 'Settings' };
+  const tabLabels = { dash: 'Dashboard', inventory: 'Inventory', list: 'Stock', wishlist: 'Wishlist', add: 'Add Item', sell: 'Sale', operations: 'Operations', settings: 'Settings' };
   document.getElementById('profile-name').textContent = currentUser.name;
   document.getElementById('profile-username').textContent = currentUser.username;
   const roleEl = document.getElementById('profile-role');
@@ -4948,6 +5190,14 @@ function showUserProfile() {
 
 function closeProfileSheet() {
   document.getElementById('profile-sheet').classList.remove('open');
+}
+
+function tidySettingsPage() {
+  const primarySync = document.querySelector('#firebase-setup-card button[onclick="runSyncDebug()"]');
+  if (primarySync) primarySync.textContent = 'Sync Now';
+  document.querySelectorAll('#page-settings button[onclick="runSyncDebug()"]').forEach(btn => {
+    if (btn !== primarySync) btn.style.display = 'none';
+  });
 }
 
 // backdrop close
@@ -4966,7 +5216,7 @@ const USERS = [
     role: 'super',
     roleLabel: 'Super User',
     // Super: access to everything
-    tabs: ['dash','list','wishlist','add','history','operations','settings']
+    tabs: ['dash','inventory','sell','history','operations','settings']
   },
   {
     username: 'vanice',
@@ -4976,7 +5226,7 @@ const USERS = [
     role: 'user',
     roleLabel: 'User',
     // User: everything except Settings
-    tabs: ['dash','list','wishlist','add','history','operations']
+    tabs: ['dash','inventory','sell','history','operations']
   },
   {
     username: 'trevor',
@@ -4986,7 +5236,7 @@ const USERS = [
     role: 'clerk',
     roleLabel: 'Clerk',
     // Clerk: view stock + add stock
-    tabs: ['list','wishlist','add']
+    tabs: ['inventory','sell']
   }
 ];
 
@@ -5006,8 +5256,9 @@ let currentUser = null;
 
 
 function applyRoleRestrictions(user) {
+  tidySettingsPage();
   // Show/hide nav tabs based on role
-  const allTabs = ['dash','list','wishlist','add','history','operations','finance','day','settings'];
+  const allTabs = ['dash','inventory','sell','list','wishlist','add','history','operations','finance','day','settings'];
   allTabs.forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) {
@@ -5034,7 +5285,7 @@ function logout() {
   localStorage.removeItem(KEY_SESSION);
   localStorage.removeItem('mg_last_page');
   // Reset nav tabs visibility
-  ['dash','list','wishlist','add','sell','history','operations','finance','day','types','settings'].forEach(tab => {
+  ['dash','inventory','list','wishlist','add','sell','history','operations','finance','day','types','settings'].forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
     if (btn) btn.style.display = '';
   });
@@ -6046,6 +6297,7 @@ window.forcePushToFirebase = forcePushToFirebase;
 window.installAppUpdate = installAppUpdate;
 window.onCodeInput = onCodeInput;
 window.openStockMonitor = openStockMonitor;
+window.openOffStockSale = openOffStockSale;
 window.openSellFromSheet = openSellFromSheet;
 window.pickEmoji = pickEmoji;
 window.pullFromFirebase = pullFromFirebase;
@@ -6063,6 +6315,7 @@ window.saveWishlistItem = saveWishlistItem;
 window.searchSell = searchSell;
 window.selectPayment = selectPayment;
 window.showPage = showPage;
+window.showInventoryTab = showInventoryTab;
 window.showOperationsTab = showOperationsTab;
 window.showUserProfile = showUserProfile;
 window.toggleNotifPanel = toggleNotifPanel;
@@ -6075,6 +6328,8 @@ window.updateFinTypeColor = updateFinTypeColor;
 window.updateProfitPreview = updateProfitPreview;
 window.updateSellModal = updateSellModal;
 window.closeStockMonitor = closeStockMonitor;
+window.closeOffStockSale = closeOffStockSale;
+window.confirmOffStockSale = confirmOffStockSale;
 window.deleteWishlistItem = deleteWishlistItem;
 window.restockFromMonitor = restockFromMonitor;
 window.startWishlistRestock = startWishlistRestock;
@@ -6505,16 +6760,27 @@ async function openShoeSizeRestock(itemId, size) {
     UI.el('f-code').value  = item.code  || '';
     UI.el('f-name').value  = item.name  || '';
     UI.el('edit-id').value = 'shoe_restock_' + itemId + '_' + size;
+    UI.el('f-size').value  = size;
     UI.el('f-qty').value   = '';
     UI.el('f-buy').value   = sizeRec.buyPrice  || '';
     UI.el('f-sell').value  = sizeRec.sellPrice || '';
     onTypeChange();
-    ['f-code','f-type','f-name','f-size','f-buy','f-sell'].forEach(id => {
+    const shoePanel = UI.el('shoe-size-panel');
+    const stdPricing = UI.el('std-pricing-section');
+    const sizeField = document.getElementById('f-size-field');
+    if (shoePanel) shoePanel.style.display = 'none';
+    if (stdPricing) stdPricing.style.display = 'block';
+    if (sizeField) sizeField.style.display = 'block';
+    ['f-code','f-type','f-name','f-size'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.disabled = true; el.style.opacity = '0.45'; el.style.cursor = 'not-allowed'; }
     });
     const qtyEl = UI.el('f-qty');
     if (qtyEl) { qtyEl.disabled = false; qtyEl.style.opacity = '1'; qtyEl.style.cursor = ''; qtyEl.focus(); }
+    ['f-buy','f-sell'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.disabled = false; el.style.opacity = '1'; el.style.cursor = ''; }
+    });
     UI.el('save-btn').textContent = '📦 Add to Stock — Size ' + size + ' (currently ' + (sizeRec.qty||0) + ')';
     UI.el('form-mode-label').textContent = '📦 Restock Size ' + size + ' · Current: ' + (sizeRec.qty||0);
     UI.el('cancel-edit-btn').style.display = 'block';

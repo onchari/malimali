@@ -310,14 +310,11 @@
   <button class="nav-btn active" onclick="showPage('dash')" id="tab-dash">
     <span class="icon"><i class="fa-solid fa-house"></i></span>Dashboard
   </button>
-  <button class="nav-btn" onclick="showPage('list')" id="tab-list">
-    <span class="icon"><i class="fa-solid fa-boxes-stacked"></i></span>Stock
+  <button class="nav-btn" onclick="showPage('inventory')" id="tab-inventory">
+    <span class="icon"><i class="fa-solid fa-boxes-stacked"></i></span>Inventory
   </button>
-  <button class="nav-btn" onclick="showPage('wishlist')" id="tab-wishlist">
-    <span class="icon"><i class="fa-solid fa-clipboard-list"></i></span>Wishlist
-  </button>
-  <button class="nav-btn" onclick="showPage('add')" id="tab-add">
-    <span class="icon"><i class="fa-solid fa-plus"></i></span>Add
+  <button class="nav-btn" onclick="showPage('sell')" id="tab-sell">
+    <span class="icon"><i class="fa-solid fa-cash-register"></i></span>Sale
   </button>
   <button class="nav-btn" onclick="showPage('history')" id="tab-history">
     <span class="icon"><i class="fa-solid fa-clock-rotate-left"></i></span>History
@@ -523,6 +520,41 @@
 
 
 <!-- ==============================================================
+     PAGE: INVENTORY  (id="page-inventory")
+     Stock, Wishlist, Monitor, and Add are mounted here as inner tabs.
+     ============================================================== -->
+<div class="page" id="page-inventory" style="padding:12px 12px 0;">
+  <div class="ops-header inventory-header">
+    <div>
+      <div class="stock-title">Inventory</div>
+      <div class="stock-sub" id="inventory-sub">Stock, wishlist, monitor and add</div>
+    </div>
+  </div>
+  <div class="ops-tabs inventory-tabs">
+    <button class="ops-tab active" id="inventory-tab-stock" onclick="showInventoryTab('stock')">
+      <i class="fa-solid fa-boxes-stacked"></i> Stock
+    </button>
+    <button class="ops-tab" id="inventory-tab-wishlist" onclick="showInventoryTab('wishlist')">
+      <i class="fa-solid fa-clipboard-list"></i> Wish
+    </button>
+    <button class="ops-tab" id="inventory-tab-monitor" onclick="showInventoryTab('monitor')">
+      <i class="fa-solid fa-display"></i> Monitor
+    </button>
+    <button class="ops-tab" id="inventory-tab-add" onclick="showInventoryTab('add')">
+      <i class="fa-solid fa-plus"></i> Add
+    </button>
+  </div>
+  <div id="inventory-stock-slot" class="ops-slot active"></div>
+  <div id="inventory-wishlist-slot" class="ops-slot"></div>
+  <div id="inventory-monitor-slot" class="ops-slot">
+    <div id="inventory-monitor-counts" class="stock-monitor-counts"></div>
+    <div id="inventory-monitor-list"></div>
+  </div>
+  <div id="inventory-add-slot" class="ops-slot"></div>
+</div>
+
+
+<!-- ==============================================================
      PAGE: STOCK LIST  (id="page-list")
      Shows all items as compact clickable cards.
      renderList() in app.js builds the cards and injects into #item-list.
@@ -536,7 +568,7 @@
       <div class="stock-title">Stock</div>
       <div class="stock-sub" id="stock-monitor-sub">Out-of-stock monitor</div>
     </div>
-    <button class="stock-monitor-btn" onclick="openStockMonitor()" title="Stock monitor">
+    <button class="stock-monitor-btn" onclick="showInventoryTab('monitor')" title="Stock monitor">
       <i class="fa-solid fa-display"></i>
     </button>
   </div>
@@ -1019,7 +1051,7 @@
     <input type="hidden" id="fb-config-input">
 
     <!-- Action buttons -->
-    <button onclick="saveFirebaseConfig()"
+    <button onclick="runSyncDebug()"
             style="width:100%;padding:14px;background:var(--accent);color:white;
                    border:none;border-radius:var(--r);font-size:15px;font-weight:800;
                    cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
@@ -1280,6 +1312,16 @@
      ============================================================== -->
 <div class="page" id="page-sell">
 
+  <div class="stock-toolbar">
+    <div>
+      <div class="stock-title">Sale</div>
+      <div class="stock-sub">Available items and off-stock sales</div>
+    </div>
+    <button class="stock-monitor-btn" onclick="openOffStockSale()" title="Sell item not in stock">
+      <i class="fa-solid fa-plus"></i>
+    </button>
+  </div>
+
   <!-- Fast search -->
   <div class="search-wrap" style="margin-bottom:10px;">
     <span class="s-icon">🔍</span>
@@ -1466,6 +1508,47 @@
     </button>
   </div>
 </div><!-- /sell-modal -->
+
+
+<!-- Off-stock sale: records the sale and adds a NOT ACCOUNTED monitor row -->
+<div class="sheet-overlay" id="offstock-sale-sheet">
+  <div class="sheet" style="max-height:92vh;overflow:auto;">
+    <div class="sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+      <div>
+        <div class="sheet-title">Sell Not In Stock</div>
+        <div class="sheet-code">Records sale, then flags item for stock count</div>
+      </div>
+      <button onclick="closeOffStockSale()" class="stock-icon-btn" title="Close">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div class="stock-monitor-form">
+      <div class="stock-form-grid">
+        <input class="add-input" id="off-name" type="text" placeholder="Item name">
+        <input class="add-input add-mono" id="off-code" type="text" placeholder="Code optional">
+      </div>
+      <div class="stock-form-grid">
+        <select class="add-select" id="off-type"></select>
+        <input class="add-input" id="off-size" type="text" placeholder="Size / variant optional">
+      </div>
+      <div class="stock-form-grid">
+        <input class="add-input add-mono" id="off-qty" type="number" min="1" value="1" inputmode="numeric" placeholder="Qty sold">
+        <input class="add-input add-mono" id="off-buy" type="number" min="0" inputmode="decimal" placeholder="Buy price">
+      </div>
+      <div class="stock-form-grid">
+        <input class="add-input add-mono" id="off-sell" type="number" min="0" inputmode="decimal" placeholder="Sale price">
+        <select class="add-select" id="off-payment">
+          <option value="cash">Cash</option>
+          <option value="mpesa">M-Pesa</option>
+        </select>
+      </div>
+      <button onclick="confirmOffStockSale()" class="stock-add-wish-btn">
+        <i class="fa-solid fa-cash-register"></i> Sell
+      </button>
+    </div>
+  </div>
+</div>
 
 
 <!-- ==============================================================
