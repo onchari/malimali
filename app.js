@@ -3581,6 +3581,7 @@ async function resetAndRebuildDB() {
     };
     localStorage.clear();
     Object.entries(keep).forEach(([k, v]) => v && localStorage.setItem(k, v));
+    _clearAllDayReconKeys();
 
     // 5. Reload default types and re-render
     await loadTypes();
@@ -3637,7 +3638,7 @@ async function resetAllData() {
     if (fbReady && fbDb) {
       try {
         const { collection, getDocs, deleteDoc, doc, writeBatch } = await waitForFbImports();
-        for (const col of ['items', 'sales', 'business_days', 'shoe_sizes', 'wishlist']) {
+        for (const col of ['items', 'sales', 'business_days', 'shoe_sizes', 'finances', 'wishlist']) {
           const snap = await getDocs(collection(fbDb, col));
           if (!snap.empty) {
             // Use batched deletes (max 500 per batch)
@@ -3670,6 +3671,7 @@ async function resetAllData() {
     };
     localStorage.clear();
     Object.entries(keep).forEach(([k,v]) => { if (v) localStorage.setItem(k, v); });
+    _clearAllDayReconKeys();
 
     // ── 5. Reload default types + refresh UI ─────────────────────
     await loadTypes();
@@ -3687,6 +3689,130 @@ async function resetAllData() {
     console.error('[RESET] Error:', e);
   }
 }
+
+const _DATA_STORES = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances', 'wishlist'];
+const _FB_COLLECTIONS = ['items', 'sales', 'business_days', 'shoe_sizes', 'finances', 'wishlist'];
+
+function _clearAllDayReconKeys() {
+  const remove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('mgs_recon_')) remove.push(k);
+  }
+  remove.forEach(k => { try { localStorage.removeItem(k); } catch(_) {} });
+}
+
+function _preserveUserPrefs() {
+  return {
+    [KEY_SESSION]:     localStorage.getItem(KEY_SESSION),
+    [KEY_CURRENCY]:    localStorage.getItem(KEY_CURRENCY),
+    [KEY_SHOE_GROUPS]: localStorage.getItem(KEY_SHOE_GROUPS),
+  };
+}
+
+function _restoreUserPrefs(keep) {
+  localStorage.clear();
+  Object.entries(keep).forEach(([k, v]) => { if (v) localStorage.setItem(k, v); });
+}
+
+async function _clearIndexedDbStores() {
+  const stores = _DATA_STORES.filter(s => db.objectStoreNames.contains(s));
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(stores, 'readwrite');
+    tx.onerror = e => reject(e.target.error);
+    tx.oncomplete = () => resolve();
+    stores.forEach(s => tx.objectStore(s).clear());
+  });
+  allItems = [];
+  activeDay = null;
+}
+
+async function _deleteFirebaseCollections(cols) {
+  if (!fbReady || !fbDb) return;
+  const { collection, getDocs, writeBatch, doc } = await waitForFbImports();
+  for (const col of cols) {
+    const snap = await getDocs(collection(fbDb, col));
+    if (snap.empty) continue;
+    let batch = writeBatch(fbDb);
+    let n = 0;
+    for (const d of snap.docs) {
+      batch.delete(doc(fbDb, col, d.id));
+      if (++n % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); n = 0; }
+    }
+    if (n > 0) await batch.commit();
+  }
+}
+
+async function clearLocalDataAndPull() {
+  if (!confirm('Clear ALL data on this device and download from cloud?\n\nLocal-only changes will be lost.')) return;
+  if (!fbReady || !fbDb) {
+    toast('Connect to Firebase first (Settings → Reconnect)', 'err');
+    return;
+  }
+  try {
+    toast('Clearing local data…', '');
+    await _clearIndexedDbStores();
+    _clearAllDayReconKeys();
+    const keep = _preserveUserPrefs();
+    _restoreUserPrefs(keep);
+    window._financeCoherenceCleaned = false;
+    await pullFromFirebase(true);
+    await loadTypes();
+    allItems = await dbAll('items');
+    await enrichShoeItems(allItems);
+    renderList();
+    renderDashboard();
+    renderFinancePage();
+    renderDayState();
+    updateHeader();
+    toast('✅ Local cleared — cloud data loaded', 'ok');
+  } catch (e) {
+    toast('❌ Failed: ' + e.message, 'err');
+  }
+}
+
+async function clearCloudDataAndPush() {
+  if (!confirm('Delete ALL cloud data and upload what is on this device?\n\nOther devices will lose cloud copies.')) return;
+  if (!fbReady || !fbDb) {
+    toast('Connect to Firebase first (Settings → Reconnect)', 'err');
+    return;
+  }
+  try {
+    toast('Clearing cloud…', '');
+    await _deleteFirebaseCollections(_FB_COLLECTIONS);
+    await forcePushToFirebase(true);
+    toast('✅ Cloud cleared — this device is now the source', 'ok');
+  } catch (e) {
+    toast('❌ Failed: ' + e.message, 'err');
+  }
+}
+
+async function clearBothLocalAndCloud() {
+  if (!confirm('Permanently delete ALL local AND cloud data?\n\nItems, sales, finances, and day records. Cannot be undone.')) return;
+  await resetAllData();
+}
+
+async function clearAppCacheAndReload() {
+  if (!confirm('Clear cached app files and reload?\n\nFixes outdated screens; does not delete your business data.')) return;
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    if (swRegistration) {
+      try { await swRegistration.update(); } catch(_) {}
+    }
+    toast('Reloading…', '');
+    setTimeout(() => window.location.reload(), 400);
+  } catch (e) {
+    window.location.reload();
+  }
+}
+
+window.clearLocalDataAndPull = clearLocalDataAndPull;
+window.clearCloudDataAndPush = clearCloudDataAndPush;
+window.clearBothLocalAndCloud = clearBothLocalAndCloud;
+window.clearAppCacheAndReload = clearAppCacheAndReload;
 
 // ===== FIREBASE SYNC =====
 let fbApp = null, fbDb = null, fbUnsub = null;
@@ -4222,6 +4348,20 @@ async function pullFromFirebase(silent = false) {
       }
     } catch(_) { /* intentionally ignored */ }
 
+    // Pull business_days
+    try {
+      const bdSnap = await getDocs(collection(fbDb, 'business_days'));
+      const localBd = await dbAll('business_days');
+      const bdByFbId = Object.fromEntries(localBd.filter(b => b.fbId).map(b => [b.fbId, b]));
+      for (const d of bdSnap.docs) {
+        const data = { ...d.data(), fbId: d.id };
+        delete data.id;
+        const ex = bdByFbId[d.id];
+        if (ex) { data.id = ex.id; await dbPut('business_days', data); }
+        else { try { await dbAdd('business_days', data); } catch(_) { /* intentionally ignored */ } }
+      }
+    } catch(_) { /* intentionally ignored */ }
+
     await refreshUI({ sync: false });
     try { renderSellPage(); } catch(_) { /* intentionally ignored */ }
     setFbStatus('on');
@@ -4648,13 +4788,20 @@ async function voidSale(saleId) {
   // Delete sale record
   _rememberDeletedSale(sale);
   await fbDeleteSale(sale);
-  await fbDeleteFinanceEntry({
+  const finPayload = {
     type: 'revenue',
     saleId: sale.id,
     amount: sale.revenue,
     date: sale.businessDate || (sale.date || '').split('T')[0],
     description: 'Sale: ' + (sale.itemName || sale.itemCode || 'item')
-  });
+  };
+  await fbDeleteFinanceEntry(finPayload);
+  const localFin = await dbAll('finances');
+  for (const f of localFin) {
+    if (f.type === 'revenue' && (f.saleId === saleId || f.saleId === sale.id)) {
+      await dbDelete('finances', f.id);
+    }
+  }
   await dbDelete('sales', saleId);
 
   // Refresh
@@ -5245,7 +5392,17 @@ function tidySettingsPage() {
 }
 
 // backdrop close
+function initCleanNumericInputs() {
+  document.addEventListener('focusin', e => {
+    const el = e.target;
+    if (!el || el.tagName !== 'INPUT' || el.type !== 'number') return;
+    const v = (el.value || '').trim();
+    if (v === '0' || v === '0.0' || v === '0.00') el.value = '';
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  initCleanNumericInputs();
   const ps = document.getElementById('profile-sheet');
   if (ps) ps.addEventListener('click', e => { if (e.target === ps) closeProfileSheet(); });
 });
@@ -5816,8 +5973,8 @@ function updateFinTypeColor() {
 
 
 // ── Shoe group expand/collapse ────────────────────────────────────
-async function _cleanupFinanceCoherence() {
-  if (window._financeCoherenceCleaned) return;
+async function _cleanupFinanceCoherence(force) {
+  if (!force && window._financeCoherenceCleaned) return;
   window._financeCoherenceCleaned = true;
   const entries = await dbAll('finances');
   let changedAny = false;
@@ -5835,11 +5992,44 @@ async function _cleanupFinanceCoherence() {
   if (changedAny) scheduleSync();
 }
 
+async function reconcileFinances() {
+  if (!confirm(
+    'Rebuild finance figures from sales and manual entries?\n\n' +
+    'Removes duplicate auto-sale rows and old reconciliation entries.'
+  )) return;
+  window._financeCoherenceCleaned = false;
+  const sales = await dbAll('sales');
+  const saleIds = new Set(sales.map(s => s.id));
+  const finances = await dbAll('finances');
+  let removed = 0;
+  for (const e of finances) {
+    const drop =
+      e.type === 'reconciliation' ||
+      e.type === 'revenue' ||
+      (e.saleId && !saleIds.has(e.saleId));
+    if (!drop) continue;
+    if (e.fbId && fbReady && fbDb) {
+      try {
+        const { doc, deleteDoc } = await waitForFbImports();
+        await deleteDoc(doc(fbDb, 'finances', e.fbId));
+      } catch(_) { /* intentionally ignored */ }
+    }
+    await dbDelete('finances', e.id);
+    removed++;
+  }
+  await _cleanupFinanceCoherence(true);
+  if (fbReady && fbDb) await forcePushToFirebase(true);
+  renderFinancePage();
+  renderDashboard();
+  toast('✅ Finances reconciled — removed ' + removed + ' duplicate row(s)', 'ok');
+}
+window.reconcileFinances = reconcileFinances;
+
 async function _computeFinanceMovement() {
   await _cleanupFinanceCoherence();
   const finances = await dbAll('finances');
   const sales = await dbAll('sales');
-  const cleanFin = finances.filter(e => e.type !== 'reconciliation');
+  const cleanFin = finances.filter(e => e.type !== 'reconciliation' && e.type !== 'revenue');
   const cashToBusiness = cleanFin.filter(e => e.type === 'injection' || e.type === 'investment').reduce((s,e)=>s+(e.amount||0),0);
   const stockAdded = cleanFin.filter(e => e.type === 'stock_purchase').reduce((s,e)=>s+(e.amount||0),0);
   const businessSpend = cleanFin.filter(e => e.type === 'expense' || e.type === 'other').reduce((s,e)=>s+(e.amount||0),0);
@@ -6434,22 +6624,10 @@ function _renderReconcileInsights(data, today) {
     '<div style="text-align:center;font-size:10px;color:var(--muted);padding:6px 0;">Reconciled at '+new Date(data.reconciledAt||0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'</div>';
 }
 
-// ── dayStartOver ─────────────────────────────────────────────────
-function dayStartOver() {
-  const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
-  if (!confirm('Clear today\'s reconciliation and start over?')) return;
-  _clearDayRecon(today);
-  ['op-cash','op-till','op-mpesa','cl-injected','cl-cash','cl-till','cl-mpesa','cl-expenses','cl-withdrawn']
-    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  toast('Cleared', '');
-  renderDayState();
-}
-window.dayStartOver = dayStartOver;
-
 // ── Auto-close at 11:59 PM ───────────────────────────────────────
-function _zeroDayInputs() {
-  ['op-cash','op-till','op-mpesa','cl-injected','cl-cash','cl-till','cl-mpesa','cl-expenses','cl-withdrawn']
-    .forEach(id => { const el = document.getElementById(id); if (el && el.value === '') el.value = '0'; });
+function _clearClosingInputsOnly() {
+  ['cl-injected','cl-cash','cl-till','cl-mpesa','cl-expenses','cl-withdrawn']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 }
 
 function _moveSalesDetailsAfterOpening() {
@@ -6467,7 +6645,6 @@ renderDayState = function() {
   const subEl = document.getElementById('day-banner-sub');
   if (titleEl) titleEl.textContent = fmtFullDate(today);
   if (subEl) subEl.textContent = today;
-  _zeroDayInputs();
   const data = _getDayRecon(today);
   const step = data ? data.step : 'opening_form';
   const salesDetails = document.getElementById('day-sales-details');
@@ -6589,11 +6766,21 @@ _renderReconcileInsights = function(data) {
 
 dayStartOver = async function() {
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
-  if (!confirm("Delete today's opening and closing records and start over?")) return;
-  _clearDayRecon(today);
+  if (!confirm("Clear today's closing records only?\n\nOpening balances will be kept.")) return;
+  const data = _getDayRecon(today);
+  if (data && data.opening) {
+    _saveDayRecon(today, {
+      step: 'closing_form',
+      date: today,
+      lockedAt: data.lockedAt,
+      opening: data.opening
+    });
+  } else {
+    _clearDayRecon(today);
+  }
   const fins = await dbAll('finances');
   for (const e of fins) {
-    if (e.type === 'reconciliation' && (e.date || '').slice(0,10) === today) await dbDelete('finances', e.id);
+    if (e.type === 'reconciliation' && (e.date || '').slice(0, 10) === today) await dbDelete('finances', e.id);
   }
   if (activeDay) {
     activeDay.status = 'OPEN';
@@ -6601,8 +6788,8 @@ dayStartOver = async function() {
     await dbPut('business_days', activeDay);
     setDayMode(true);
   }
-  ['op-cash','op-till','op-mpesa','cl-injected','cl-cash','cl-till','cl-mpesa','cl-expenses','cl-withdrawn'].forEach(id => { const el = document.getElementById(id); if (el) el.value = '0'; });
-  toast('Day records deleted', '');
+  _clearClosingInputsOnly();
+  toast('Closing cleared — redo end-of-day', '');
   renderDayState();
   renderFinancePage();
 };
@@ -6682,6 +6869,11 @@ window.renderList = renderList;
 window.renderSellPage = renderSellPage;
 window.selectExistingItemFromDropdown = selectExistingItemFromDropdown;
 window.resetAllData = resetAllData;
+window.reconcileFinances = reconcileFinances;
+window.clearLocalDataAndPull = clearLocalDataAndPull;
+window.clearCloudDataAndPush = clearCloudDataAndPush;
+window.clearBothLocalAndCloud = clearBothLocalAndCloud;
+window.clearAppCacheAndReload = clearAppCacheAndReload;
 window.runSyncDebug = runSyncDebug;
 window.saveCurrency = saveCurrency;
 window.saveFinanceEntry = saveFinanceEntry;

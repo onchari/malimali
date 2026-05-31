@@ -991,6 +991,15 @@
                    border-radius:var(--r);font-size:14px;font-weight:800;cursor:pointer;font-family:var(--sans);">
       Save Entry
     </button>
+    <button onclick="reconcileFinances()"
+            style="width:100%;padding:11px;margin-top:8px;background:var(--surface2);color:var(--text);
+                   border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;font-weight:700;
+                   cursor:pointer;font-family:var(--sans);">
+      🔧 Reconcile finances with sales
+    </button>
+    <div id="fin-reconcile-hint" style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.4;">
+      Removes duplicate sale rows and fixes figures to match inventory sales.
+    </div>
   </div>
 
   <!-- ── Transactions ────────────────────────────────────────── -->
@@ -1164,31 +1173,43 @@
   <!-- ── Danger Zone ────────────────────────────────────────── -->
   <div class="sec-label" style="margin-top:16px;color:var(--red);">⚠️ Danger Zone</div>
   <div class="card" style="border:1px solid var(--red);padding:16px;" id="danger-zone-card">
-    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Reset All Data</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">
-      Permanently deletes all items, sales, and business day records. Cannot be undone.
-      Also clears Firebase if connected. Use to start fresh after testing.
-    </div>
-    <div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px;">
-      Loads 7 items · 9 sales · 13 finance entries for testing
+    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Historical data &amp; sync</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.45;">
+      Use these when figures disagree between devices or after testing.
+      Session login and currency preferences are kept.
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-      <button onclick="resetAllData()"
-              style="padding:13px;background:var(--red);color:white;border:none;
-                     border-radius:var(--r);font-size:13px;font-weight:800;cursor:pointer;
-                     font-family:var(--sans);">
-        🗑️ Clear Data
+    <div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">
+      <button onclick="clearLocalDataAndPull()"
+              style="padding:12px;background:var(--surface2);color:var(--text);border:1.5px solid var(--border);
+                     border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);text-align:left;">
+        📥 Clear local data &amp; pull from cloud
       </button>
-      <button onclick="resetAndRebuildDB()"
-              style="padding:13px;background:#7c3aed;color:white;border:none;
-                     border-radius:var(--r);font-size:13px;font-weight:800;cursor:pointer;
-                     font-family:var(--sans);">
-        🔧 Rebuild DB
+      <button onclick="clearCloudDataAndPush()"
+              style="padding:12px;background:var(--surface2);color:var(--text);border:1.5px solid var(--border);
+                     border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);text-align:left;">
+        📤 Clear cloud data &amp; push from this device
+      </button>
+      <button onclick="clearBothLocalAndCloud()"
+              style="padding:12px;background:var(--red);color:white;border:none;
+                     border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);text-align:left;">
+        🗑️ Clear both local &amp; cloud data
       </button>
     </div>
-    <div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:center;">
-      Rebuild DB wipes everything and recreates schema v9 clean
+
+    <button onclick="clearAppCacheAndReload()"
+            style="width:100%;padding:11px;background:transparent;border:1.5px solid var(--border);
+                   border-radius:var(--r);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);color:var(--muted);">
+      🧹 Clear app cache &amp; reload (fixes stale screens)
+    </button>
+
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">Full schema rebuild</div>
+      <button onclick="resetAndRebuildDB()"
+              style="width:100%;padding:12px;background:#7c3aed;color:white;border:none;
+                     border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);">
+        🔧 Rebuild database (type RESET to confirm)
+      </button>
     </div>
   </div>
 
@@ -1419,7 +1440,7 @@
                        font-size:24px;font-weight:700;cursor:pointer;color:var(--text);flex-shrink:0;">
           −
         </button>
-        <input id="sm-qty" type="number" value="0" min="0"
+        <input id="sm-qty" type="number" min="0"
                style="flex:1;border:none;text-align:center;font-size:24px;font-weight:800;
                       font-family:var(--mono);color:var(--text);background:transparent;
                       outline:none;padding:10px;"
@@ -1524,7 +1545,7 @@
         <input class="add-input" id="off-size" type="text" placeholder="Size / variant optional">
       </div>
       <div class="stock-form-grid">
-        <input class="add-input add-mono" id="off-qty" type="number" min="0" value="0" inputmode="numeric" placeholder="Qty sold">
+        <input class="add-input add-mono" id="off-qty" type="number" min="0" inputmode="numeric" placeholder="Qty sold">
         <input class="add-input add-mono" id="off-buy" type="number" min="0" inputmode="decimal" placeholder="Buy price">
       </div>
       <div class="stock-form-grid">
@@ -1939,7 +1960,7 @@
             <div class="day-recon-field-label">Cash at Hand</div>
             <div class="day-recon-field-sub">Loose notes &amp; coins (float)</div>
           </div>
-          <input id="op-cash" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
+          <input id="op-cash" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">🏧</span>
@@ -1947,7 +1968,7 @@
             <div class="day-recon-field-label">Amount in Till</div>
             <div class="day-recon-field-sub">Cash inside the register</div>
           </div>
-          <input id="op-till" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
+          <input id="op-till" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <div class="day-recon-row" style="border-bottom:none;">
           <span class="day-recon-emoji">📱</span>
@@ -1955,7 +1976,7 @@
             <div class="day-recon-field-label">M-Pesa Float</div>
             <div class="day-recon-field-sub">M-Pesa till balance</div>
           </div>
-          <input id="op-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
+          <input id="op-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <button onclick="lockOpeningBalances()" class="day-recon-btn" style="background:var(--green);">
           💾 Save &amp; Lock Opening
@@ -2001,7 +2022,7 @@
             <div class="day-recon-field-label">Cash Injected</div>
             <div class="day-recon-field-sub">Extra money added today</div>
           </div>
-          <input id="cl-injected" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
+          <input id="cl-injected" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">💵</span>
@@ -2009,7 +2030,7 @@
             <div class="day-recon-field-label">Cash at Hand</div>
             <div class="day-recon-field-sub">Loose notes &amp; coins now</div>
           </div>
-          <input id="cl-cash" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
+          <input id="cl-cash" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">🏧</span>
@@ -2017,7 +2038,7 @@
             <div class="day-recon-field-label">Amount in Till</div>
             <div class="day-recon-field-sub">Cash in register now</div>
           </div>
-          <input id="cl-till" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
+          <input id="cl-till" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">📱</span>
@@ -2025,7 +2046,7 @@
             <div class="day-recon-field-label">M-Pesa Float</div>
             <div class="day-recon-field-sub">M-Pesa balance now</div>
           </div>
-          <input id="cl-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
+          <input id="cl-mpesa" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <div class="day-recon-row">
           <span class="day-recon-emoji">💸</span>
@@ -2033,7 +2054,7 @@
             <div class="day-recon-field-label">Expenses Paid</div>
             <div class="day-recon-field-sub">Cash paid out for costs</div>
           </div>
-          <input id="cl-expenses" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
+          <input id="cl-expenses" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <div class="day-recon-row" style="border-bottom:none;">
           <span class="day-recon-emoji">🏧</span>
@@ -2041,7 +2062,7 @@
             <div class="day-recon-field-label">Amount Withdrawn</div>
             <div class="day-recon-field-sub">Cash taken by owner</div>
           </div>
-          <input id="cl-withdrawn" type="number" min="0" inputmode="decimal" placeholder="0" value="0" class="day-recon-input">
+          <input id="cl-withdrawn" type="number" min="0" inputmode="decimal" placeholder="0" class="day-recon-input">
         </div>
         <button onclick="reconcileDay()" class="day-recon-btn">
           🔍 Reconcile &amp; Close Day
@@ -2060,7 +2081,7 @@
     <div id="day-reconcile-insights"></div>
     <button onclick="dayStartOver()"
             style="width:100%;padding:11px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);color:var(--muted);margin-top:4px;">
-      🔄 Start Over
+      🔄 Redo closing only (keep opening)
     </button>
   </div>
 
