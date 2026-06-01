@@ -2443,10 +2443,21 @@ body.photo-lightbox-open { overflow: hidden; }
 /* ================================================================
    SHOE SYSTEM CSS
    ================================================================ */
+.add-card-shoe .sg-row-full {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: calc(100% + 28px);
+  max-width: none;
+  margin-left: -14px;
+  margin-right: -14px;
+  box-sizing: border-box;
+}
 .sg-row {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  width: 100%;
 }
 .sg-card {
   display: flex;
@@ -2454,12 +2465,21 @@ body.photo-lightbox-open { overflow: hidden; }
   align-items: center;
   gap: 10px;
   width: 100%;
+  max-width: 100%;
   min-width: 0;
   padding: 10px 12px;
   border: 1.5px solid var(--border);
-  border-radius: var(--r-lg);
+  border-radius: 0;
   background: var(--surface2);
   box-sizing: border-box;
+}
+.add-card-shoe .sg-row-full .sg-card:first-child {
+  border-top-left-radius: var(--r);
+  border-top-right-radius: var(--r);
+}
+.add-card-shoe .sg-row-full .sg-card:last-child {
+  border-bottom-left-radius: var(--r);
+  border-bottom-right-radius: var(--r);
 }
 .sg-card-active { background:#f0fdf4;border-color:#86efac; }
 .sg-card-head {
