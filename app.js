@@ -1021,7 +1021,10 @@ function showInventoryTab(tab) {
     }[_activeInventoryTab] || '';
   }
   if (_activeInventoryTab === 'stock') renderList();
-  if (_activeInventoryTab === 'wishlist') renderWishlistPage();
+  if (_activeInventoryTab === 'wishlist') {
+    renderWishlistPage();
+    if (typeof showWishlistSection === 'function') showWishlistSection('list');
+  }
   if (_activeInventoryTab === 'monitor') renderStockMonitor();
   if (_activeInventoryTab === 'add') {
     renderTypeSelect();
@@ -1751,8 +1754,13 @@ function renderTypeChips() {
 
 function setTypeFilter(name, el) {
   activeTypeFilter = name;
+  if (name === 'all' || !isFootwearType(name)) {
+    window._activeSizeGroupFilter = 'all';
+    document.querySelectorAll('[id^="sgf-"]').forEach(b => b.classList.remove('active'));
+  }
   document.querySelectorAll('#type-chips .chip').forEach(c => c.classList.remove('active'));
   if (el) el.classList.add('active');
+  _renderSizeGroupFilter();
   renderList();
 }
 
@@ -3258,7 +3266,7 @@ async function renderList() {
           const isOut      = sz.qty<=0;
           const isLow      = !isOut&&sz.qty<=LOW_STOCK_LEVEL;
           const stockColor = isOut?'tag-red':isLow?'tag-amber':'tag-green';
-          const stockLabel = isOut?'✕ Out':sz.qty+' prs';
+          const stockLabel = isOut?'✕ Out':sz.qty+' pcs';
           const soldQty    = salesBySize[item.code+'_'+sz.size]||0;
           cards.push(`
             <div class="item-card shoe-size-row${isOut?' shoe-out-card':''}" onclick="openShoeSizeCard('${escapeHtml(item.code)}',${sz.size})">
@@ -3463,17 +3471,34 @@ async function renderStockMonitor() {
   });
 }
 
+function showWishlistSection(section) {
+  const listPanel = document.getElementById('wishlist-list');
+  const addPanel = document.getElementById('wishlist-add-panel');
+  const tabList = document.getElementById('wish-tab-list');
+  const tabAdd = document.getElementById('wish-tab-add');
+  const isAdd = section === 'add';
+  if (listPanel) listPanel.style.display = isAdd ? 'none' : 'block';
+  if (addPanel) addPanel.style.display = isAdd ? 'block' : 'none';
+  if (tabList) tabList.classList.toggle('active', !isAdd);
+  if (tabAdd) tabAdd.classList.toggle('active', isAdd);
+  if (isAdd) document.getElementById('wish-name')?.focus();
+}
+window.showWishlistSection = showWishlistSection;
+
 async function renderWishlistPage() {
   renderWishlistTypeOptions();
   await renderStockMonitorSummary();
   const list = document.getElementById('wishlist-list');
   if (!list) return;
   const rows = filterStockRows(await getStockMonitorRows(), 'prospective');
+  const addBar = '<div class="wish-list-toolbar">' +
+    '<button type="button" class="wish-add-open-btn" onclick="showWishlistSection(\'add\')"><i class="fa-solid fa-plus"></i> Add item</button>' +
+    '</div>';
   if (!rows.length) {
-    list.innerHTML = '<div class="empty" style="padding:36px 12px;"><div class="e-icon">+</div><p>No prospective items yet.</p></div>';
+    list.innerHTML = addBar + '<div class="empty" style="padding:36px 12px;"><div class="e-icon">+</div><p>No prospective items yet.</p></div>';
     return;
   }
-  list.innerHTML = rows.map(row => {
+  list.innerHTML = addBar + rows.map(row => {
     const photo = getWishPhoto(row.wishId);
     const thumb = photo
       ? '<img src="' + photo + '" alt="" class="wish-list-thumb">'
@@ -3507,7 +3532,7 @@ async function saveWishlistItem() {
   const qtyRaw = Input.int('wish-qty');
   const costRaw = Input.money('wish-cost');
   const note = Input.text('wish-note');
-  if (!name && !code) return Validate.fail('Enter item name or code', 'wish-name');
+  if (!name) return Validate.fail('Enter item name', 'wish-name');
   if (!Validate.intOptional(qtyRaw, 'wish-qty', 'Quantity')) return;
   if (!Validate.moneyOptional(costRaw, 'wish-cost', 'Estimated cost')) return;
   const qty = (qtyRaw === null || qtyRaw <= 0) ? 1 : qtyRaw;
@@ -3531,6 +3556,7 @@ async function saveWishlistItem() {
   });
   clearWishPhotoForm();
   scheduleSync();
+  showWishlistSection('list');
   await renderWishlistPage();
   await renderStockMonitorSummary();
   toast('Added to wishlist', 'ok');
@@ -3619,15 +3645,15 @@ async function openShoeSizeCard(itemCode, size) {
   const isOut    = sizeRec.qty <= 0;
   const isLow    = !isOut && sizeRec.qty <= LOW_STOCK_LEVEL;
   const stockCol = isOut ? 'var(--red)' : isLow ? '#d97706' : 'var(--green)';
-  const stockLbl = isOut ? 'Out of stock' : sizeRec.qty + ' pairs in stock';
+  const stockLbl = isOut ? 'Out of stock' : sizeRec.qty + ' pcs in stock';
+  const groupLbl = sizeRec.sizeGroup === 'S' ? 'Children' : sizeRec.sizeGroup === 'M' ? 'Teens' : 'Adults';
 
-  // Reuse or create size action sheet
   let sheet = document.getElementById('shoe-size-action-sheet');
   if (!sheet) {
     sheet = document.createElement('div');
     sheet.id = 'shoe-size-action-sheet';
     sheet.className = 'sheet-overlay';
-    sheet.innerHTML = '<div class="sheet" id="shoe-size-action-inner"></div>';
+    sheet.innerHTML = '<div class="sheet detail-sheet-unified" id="shoe-size-action-inner"></div>';
     sheet.addEventListener('click', e => { if (e.target === sheet) closeShoeSizeActions(); });
     document.body.appendChild(sheet);
   }
@@ -3635,44 +3661,35 @@ async function openShoeSizeCard(itemCode, size) {
   const inner = document.getElementById('shoe-size-action-inner');
   inner.innerHTML = `
     <div class="sheet-handle"></div>
-
-    <!-- Size header -->
-    <div style="display:flex;align-items:center;gap:14px;padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:16px;">
-      <div class="shoe-size-badge ${isOut?'out':isLow?'low':''}" style="width:64px;height:64px;font-size:28px;">${size}</div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:18px;font-weight:900;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name || item.code)}</div>
-        <div style="font-size:12px;font-family:var(--mono);color:var(--muted);margin-top:2px;">${escapeHtml(item.code)} · ${sizeRec.sizeGroup==='S'?'Children':sizeRec.sizeGroup==='M'?'Teens':'Adults'}</div>
-        <div style="font-size:13px;font-weight:700;color:${stockCol};margin-top:4px;">${stockLbl}</div>
+    <button type="button" class="detail-sheet-close" onclick="closeShoeSizeActions()" aria-label="Close">✕</button>
+    <div class="detail-sheet-hero">
+      <div class="shoe-size-badge ${isOut ? 'out' : isLow ? 'low' : ''}" style="width:56px;height:56px;font-size:24px;">${size}</div>
+      <div class="detail-sheet-hero-text">
+        <div class="detail-sheet-title">${escapeHtml(item.name || item.code)}</div>
+        <div class="detail-sheet-sub">${escapeHtml(item.code)} · Size ${size} · ${groupLbl}</div>
+        <div class="detail-sheet-stock" style="color:${stockCol};">${stockLbl}</div>
       </div>
     </div>
-
-    <!-- Price stats -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">
-      <div class="sh-stat-box"><div class="sh-stat-lbl">Buy</div><div class="sh-stat-val muted">${fmt(buy)}</div></div>
-      <div class="sh-stat-box"><div class="sh-stat-lbl">Sell</div><div class="sh-stat-val accent2">${fmt(price)}</div></div>
-      <div class="sh-stat-box ${profit>0?'accent-bg':''}"><div class="sh-stat-lbl">Profit</div><div class="sh-stat-val ${profit>0?'green':'muted'}">${fmt(profit)}</div></div>
+    <div id="sh-price-cols" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin:0 12px 10px;">
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Buying</div><div class="sh-stat-val muted">${fmt(buy)}</div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Selling</div><div class="sh-stat-val accent2">${fmt(price)}</div></div>
+      <div class="sh-stat-box accent-bg"><div class="sh-stat-lbl">Profit</div><div class="sh-stat-val ${profit > 0 ? 'green' : 'muted'}">${fmt(profit)}</div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Stock</div><div class="sh-stat-val accent">${sizeRec.qty} pcs</div></div>
     </div>
-
-    <!-- Action buttons -->
-    <div style="display:flex;flex-direction:column;gap:8px;">
-      ${!isOut ? `
-        <button onclick="closeShoeSizeActions();closeSheet();openSellShoeModal(${item.id},${size})"
-                style="width:100%;padding:16px;background:#1e7a3e;color:white;border:none;border-radius:var(--r);font-size:16px;font-weight:800;cursor:pointer;font-family:var(--sans);display:flex;align-items:center;justify-content:center;gap:10px;">
-          <i class="fa-solid fa-cash-register"></i> Sell — Size ${size}
-        </button>` : isOut ? `
-        <div style="padding:12px;text-align:center;font-size:13px;color:var(--muted);background:var(--surface2);border-radius:var(--r);">Out of stock — restock first</div>` : ''}
-      <button onclick="closeShoeSizeActions();openShoeSizeRestock(${item.id},${size})"
-              style="width:100%;padding:14px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);display:flex;align-items:center;justify-content:center;gap:10px;">
-        <i class="fa-solid fa-boxes-stacked"></i> Restock — Size ${size}
+    <div class="detail-action-row">
+      <button type="button" class="btn-del detail-action-btn" onclick="closeShoeSizeActions();openSheet(${item.id})">
+        <i class="fa-solid fa-box"></i> Product
       </button>
-      <button onclick="closeShoeSizeActions();openShoeSizeEdit(${item.id},${size})"
-              style="width:100%;padding:14px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);display:flex;align-items:center;justify-content:center;gap:10px;">
-        <i class="fa-solid fa-pen-to-square"></i> Edit Price — Size ${size}
+      <button type="button" class="detail-action-btn detail-action-restock" onclick="closeShoeSizeActions();openShoeSizeRestock(${item.id},${size})">
+        <i class="fa-solid fa-boxes-stacked"></i> Restock
       </button>
-      <button onclick="closeShoeSizeActions()"
-              style="width:100%;padding:13px;background:transparent;border:1px solid var(--border);border-radius:var(--r);font-size:14px;color:var(--muted);cursor:pointer;font-family:var(--sans);">
-        Close
-      </button>
+    </div>
+    <div class="detail-sell-wrap">
+      ${!isOut ? `<button type="button" class="detail-sell-btn" onclick="closeShoeSizeActions();closeSheet();openSellShoeModal(${item.id},${size})">💰 SELL — Size ${size}</button>` :
+        `<div class="detail-sell-muted">Out of stock — restock first</div>`}
+    </div>
+    <div style="padding:0 12px 16px;text-align:center;">
+      <button type="button" class="detail-link-btn" onclick="closeShoeSizeActions();openShoeSizeEdit(${item.id},${size})">Edit prices</button>
     </div>`;
 
   sheet.classList.add('open');
@@ -3928,6 +3945,7 @@ async function openSheet(id) {
 
   // ── SHOE ITEMS — load fresh sizes, show size grid ─────────────
   const priceCols = document.getElementById('sh-price-cols');
+  if (priceCols) priceCols.style.display = 'grid';
   const sizeSec   = document.getElementById('sh-shoe-sizes');
   const sizebar   = document.getElementById('sh-selected-size-bar');
   _selectedShoeSize = null; // reset selection
@@ -3940,14 +3958,14 @@ async function openSheet(id) {
     // Show shoe buy/sell from defaults
     set('sh-buy',  fmt(item.defaultBuy  || 0));
     set('sh-sell', fmt(item.defaultSell || 0));
-    set('sh-qty',  totalQty + ' prs');
+    set('sh-qty',  totalQty + ' pcs');
     if (sizeSec) sizeSec.style.display = 'block';
     if (sizebar) { sizebar.style.display = 'none'; sizebar.textContent = ''; }
     await renderShoeDetailGrid(item);
   } else {
     set('sh-buy',  fmt(item.buy  || 0));
     set('sh-sell', fmt(item.sell || 0));
-    set('sh-qty',  item.qty);
+    set('sh-qty',  item.qty + ' pcs');
     if (sizeSec) sizeSec.style.display = 'none';
     if (sizebar) sizebar.style.display = 'none';
   }
@@ -4139,15 +4157,32 @@ function _filterSalesByRange(allSales, range) {
   });
 }
 
-function _dashSumCard(icon, val, lbl, note, tone) {
+function _dashSumCard(icon, val, lbl, note, tone, navTarget) {
   const toneStyle = tone ? ` style="color:${tone};"` : '';
-  return '<div class="dash-sum-card">' +
+  const navAttr = navTarget
+    ? ' class="dash-sum-card dash-sum-card-link" role="button" tabindex="0" onclick="goDashNav(\'' + navTarget + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();goDashNav(\'' + navTarget + '\');}"'
+    : ' class="dash-sum-card"';
+  return '<div' + navAttr + '>' +
     '<div class="dash-sum-card-icon">' + icon + '</div>' +
     '<div class="dash-sum-card-val"' + toneStyle + '>' + val + '</div>' +
     '<div class="dash-sum-card-lbl">' + lbl + '</div>' +
     (note ? '<div class="dash-sum-card-note">' + note + '</div>' : '') +
   '</div>';
 }
+
+function goDashNav(target) {
+  if (target === 'stock') {
+    showPage('inventory');
+    showInventoryTab('stock');
+    return;
+  }
+  if (target === 'wishlist') {
+    showPage('inventory');
+    showInventoryTab('wishlist');
+    if (typeof showWishlistSection === 'function') showWishlistSection('list');
+  }
+}
+window.goDashNav = goDashNav;
 
 async function _renderDashSummary(ctx) {
   const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -4202,7 +4237,7 @@ async function _renderDashSummary(ctx) {
   setEl('d-summary-headline', headlineParts.join(' '));
 
   const cards = [];
-  cards.push(_dashSumCard('📦', fmtN(totalItems) + ' SKUs', 'Inventory', fmtN(totalQty) + ' pcs · retail ' + fmt(stockRetail)));
+  cards.push(_dashSumCard('📦', fmtN(totalItems) + ' SKUs', 'Inventory', fmtN(totalQty) + ' pcs · retail ' + fmt(stockRetail), null, 'stock'));
   cards.push(_dashSumCard('💰', fmt(totalRevenue), periodLbl + ' revenue', trendNote || (fmt(totalProfitEarned) + ' profit · ' + margin.toFixed(1) + '% margin'), totalProfitEarned >= 0 ? 'var(--green)' : 'var(--red)'));
   cards.push(_dashSumCard('🛒', fmtN(totalSalesCount), 'Sales · ' + fmtN(totalPiecesSold) + ' pcs', totalSalesCount ? 'Avg ' + fmt(totalRevenue / totalSalesCount) + ' per sale' : 'No sales in period'));
   cards.push(_dashSumCard(
@@ -4213,15 +4248,24 @@ async function _renderDashSummary(ctx) {
       ? fmtN(todayDashSales.length) + ' sales · ' + fmt(todayDashProf) + ' profit today'
       : (money ? 'Pool ' + fmt(money.businessPool) : dayLabel)
   ));
-  if (wishCount > 0 || alertCount > 0) {
+  if (wishCount > 0) {
     cards.push(_dashSumCard(
-      alertCount ? '⚠️' : '📋',
-      alertCount ? fmtN(alertCount) + ' alerts' : fmtN(wishCount),
-      alertCount ? 'Needs attention' : 'Wishlist',
-      alertCount
-        ? (outStk.length ? outStk.length + ' out · ' : '') + (lowStk.length ? lowStk.length + ' low' : '')
-        : wishCount + ' item' + (wishCount !== 1 ? 's' : '') + ' to stock',
-      alertCount ? 'var(--amber)' : 'var(--accent)'
+      '📋',
+      fmtN(wishCount),
+      'Wishlist',
+      wishCount + ' item' + (wishCount !== 1 ? 's' : '') + ' to stock — tap to open',
+      'var(--accent)',
+      'wishlist'
+    ));
+  }
+  if (alertCount > 0) {
+    cards.push(_dashSumCard(
+      '⚠️',
+      fmtN(alertCount) + ' alerts',
+      'Needs attention',
+      (outStk.length ? outStk.length + ' out · ' : '') + (lowStk.length ? lowStk.length + ' low' : ''),
+      'var(--amber)',
+      'stock'
     ));
   }
   if (money && (money.businessPool || money.salesProfit)) {
@@ -4354,131 +4398,6 @@ async function renderDashboard() {
     alertEl.innerHTML = html;
   }
 
-  // ── Insights ──────────────────────────────────────────────
-  const insights = [];
-  if (totalItems === 0) {
-    insights.push({ icon:'📦', text:'No items yet — tap ➕ Add to get started', color:'var(--muted)' });
-  } else {
-    if (totalSalesCount > 0) {
-      insights.push({ icon:'🛒', text:`${fmtN(totalSalesCount)} sale${totalSalesCount!==1?'s':''} · avg ${fmt(avgSale)} per sale`, color:'var(--accent2)' });
-    }
-    if (_dashPeriod === 'today') {
-      if (todayDashSales.length === 0) {
-        insights.push({ icon:'📅', text:'No sales recorded today yet. Keep the day open and record each sale as it happens.', color:'var(--muted)' });
-      } else {
-        const avgToday = todayDashRev / Math.max(todayDashSales.length, 1);
-        insights.push({ icon:'📅', text:`Today: <strong>${fmtN(todayDashSales.length)}</strong> sales, revenue <strong>${fmt(todayDashRev)}</strong>, profit <strong>${fmt(todayDashProf)}</strong>, avg sale ${fmt(avgToday)}.`, color: todayDashProf >= 0 ? 'var(--green)' : 'var(--red)' });
-      }
-      if (todayDashVariance !== null) {
-        const ok = Math.abs(todayDashVariance) < 1;
-        insights.push({ icon:'✅', text:`Day money check: ${ok ? 'balanced' : 'variance ' + ((todayDashVariance>=0?'+':'') + fmt(todayDashVariance))}.`, color: ok ? 'var(--green)' : 'var(--red)' });
-      }
-    }
-    if (margin < 0 && totalRevenue > 0) insights.push({ icon:'🚨', text:`Negative margin (${margin.toFixed(1)}%) — selling below cost!`, color:'var(--red)' });
-    else if (margin < 10 && totalRevenue > 0) insights.push({ icon:'⚠️', text:`Low margin ${margin.toFixed(1)}% — consider reviewing prices`, color:'#d97706' });
-    else if (margin >= 30 && totalRevenue > 0) insights.push({ icon:'🎯', text:`Strong margin: ${margin.toFixed(1)}%`, color:'var(--green)' });
-
-    // Best selling item in period
-    if (sales.length > 0) {
-      const itemRev = {};
-      sales.forEach(s => { itemRev[s.itemCode]=(itemRev[s.itemCode]||0)+(s.revenue||0); });
-      const bestCode = Object.entries(itemRev).sort((a,b)=>b[1]-a[1])[0];
-      if (bestCode) {
-        const bestItem = allItems.find(i=>i.code===bestCode[0]);
-        insights.push({ icon:'🏆', text:`Best seller: <strong>${escapeHtml(bestItem?.name||bestCode[0])}</strong> (${fmt(bestCode[1])})`, color:'var(--accent2)' });
-      }
-    }
-
-    // Best selling category
-    if (sales.length > 0) {
-      const typeRev = {};
-      sales.forEach(s => { typeRev[s.itemType||s.type]=(typeRev[s.itemType||s.type]||0)+(s.revenue||0); });
-      const bestType = Object.entries(typeRev).filter(([k])=>k).sort((a,b)=>b[1]-a[1])[0];
-      if (bestType) insights.push({ icon:'📂', text:`Top category: <strong>${escapeHtml(bestType[0])}</strong> (${fmt(bestType[1])})`, color:'var(--accent)' });
-    }
-
-    // Potential profit still in stock
-    if (potProfit > 0) insights.push({ icon:'💎', text:`Potential profit in stock: <strong>${fmt(potProfit)}</strong>`, color:'var(--green)' });
-
-    try {
-      const money = await _computeFinanceMovement();
-      insights.push({
-        icon:'💼',
-        text:`Business pool: <strong>${fmt(money.businessPool)}</strong> · stock sold cost ${fmt(money.salesCostOut)} · profit ${fmt(money.salesProfit)}`,
-        color: money.businessPool >= 0 ? 'var(--accent)' : 'var(--red)'
-      });
-    } catch(_) { /* finance insight is non-critical */ }
-
-    const prevRange = _dashPrevDateRange();
-    if (_dashPeriod !== 'all' && prevRange.from) {
-      const prevSales = _filterSalesByRange(allSales, prevRange);
-      const prevRev = prevSales.reduce((s, x) => s + (x.revenue || 0), 0);
-      const prevProf = prevSales.reduce((s, x) => s + (x.profit || 0), 0);
-      if (prevRev > 0 || totalRevenue > 0) {
-        const revChg = prevRev > 0 ? ((totalRevenue - prevRev) / prevRev * 100) : 100;
-        const dir = revChg >= 0 ? 'up' : 'down';
-        insights.push({
-          icon: dir === 'up' ? '📈' : '📉',
-          text: `Revenue ${dir} <strong>${Math.abs(revChg).toFixed(0)}%</strong> vs prior ${_dashPeriod === 'today' ? 'day' : _dashPeriod} (${fmt(prevRev)} → ${fmt(totalRevenue)}). Prior profit ${fmt(prevProf)}.`,
-          color: revChg >= 0 ? 'var(--green)' : 'var(--red)'
-        });
-      }
-    }
-
-    // Stock turnover
-    if (totalPiecesSold > 0 && totalQty > 0) {
-      const ratio = (totalPiecesSold/(totalPiecesSold+totalQty)*100).toFixed(0);
-      insights.push({ icon:'🔄', text:`${ratio}% of all stock has been sold`, color:'var(--accent)' });
-    }
-    if (insights.length === 0 && totalItems > 0) insights.push({ icon:'✅', text:'Stock levels healthy — all good', color:'var(--green)' });
-  }
-
-  const insightsEl = document.getElementById('d-insights');
-  if (insightsEl) {
-    insightsEl.innerHTML = insights.length ? insights.map(ins =>
-      `<div class="dash-insight-row">
-        <span class="dash-insight-icon">${ins.icon}</span>
-        <span class="dash-insight-text" style="color:${ins.color};">${ins.text}</span>
-      </div>`
-    ).join('') : '<div style="color:var(--muted);font-size:12px;padding:8px 12px;">No insights for this period yet.</div>';
-  }
-
-  // ── Top sellers (period) ──────────────────────────────────
-  const topSellersEl = document.getElementById('d-top-sellers');
-  if (topSellersEl) {
-    if (sales.length === 0) {
-      topSellersEl.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:8px;">No sales in this period</div>`;
-    } else {
-      const codeRev = {};
-      const codeQty = {};
-      sales.forEach(s => {
-        codeRev[s.itemCode]=(codeRev[s.itemCode]||0)+(s.revenue||0);
-        codeQty[s.itemCode]=(codeQty[s.itemCode]||0)+(s.qty||0);
-      });
-      const topSellers = Object.entries(codeRev).sort((a,b)=>b[1]-a[1]).slice(0,5);
-      const maxRev = topSellers[0]?.[1] || 1;
-      topSellersEl.innerHTML = topSellers.map(([code,rev],idx) => {
-        const item = allItems.find(i=>i.code===code);
-        const t    = getTypeObj(item?.type||'');
-        const pct  = Math.max(8, Math.round(rev/maxRev*100));
-        const qty  = codeQty[code]||0;
-        return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:6px;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span style="font-size:16px;">${t.emoji}</span>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item?.name||code)}</div>
-              <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${escapeHtml(code)} · ${fmtN(qty)} pcs sold</div>
-            </div>
-            <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(rev)}</div>
-          </div>
-          <div style="background:var(--surface2);border-radius:3px;height:5px;overflow:hidden;">
-            <div style="height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:${pct}%;border-radius:3px;"></div>
-          </div>
-        </div>`;
-      }).join('');
-    }
-  }
-
   // ── Top items by stock value ──────────────────────────────
   const topEl = document.getElementById('d-top-items');
   if (topEl) {
@@ -4506,50 +4425,6 @@ async function renderDashboard() {
           </div>
           <div style="background:var(--surface2);border-radius:3px;height:5px;overflow:hidden;">
             <div style="height:100%;background:linear-gradient(90deg,var(--accent3),var(--accent2));width:${pct}%;border-radius:3px;"></div>
-          </div>
-        </div>`;
-      }).join('');
-    }
-  }
-
-  // ── By type ───────────────────────────────────────────────
-  const byType = {};
-  allItems.forEach(item => {
-    const tp = item.type || 'Unknown';
-    if (!byType[tp]) byType[tp] = { qty:0, cost:0, retail:0, count:0, sold:0 };
-    byType[tp].qty    += item.qty||0;
-    byType[tp].cost   += (item.buyPrice||item.buy||0)*(item.qty||0);
-    byType[tp].retail += (item.sellPrice||item.sell||0)*(item.qty||0);
-    byType[tp].count++;
-  });
-  sales.forEach(s => {
-    const tp = s.itemType||s.type||'Unknown';
-    if (!byType[tp]) byType[tp] = { qty:0, cost:0, retail:0, count:0, sold:0 };
-    byType[tp].sold += s.revenue||0;
-  });
-
-  const typeEl = document.getElementById('d-by-type');
-  if (typeEl) {
-    if (!Object.keys(byType).length) { typeEl.innerHTML=''; }
-    else {
-      typeEl.innerHTML = Object.entries(byType).sort((a,b)=>b[1].retail-a[1].retail).map(([type,data]) => {
-        const t = getTypeObj(type);
-        const margin = data.retail > 0 ? ((data.retail-data.cost)/data.retail*100).toFixed(0) : 0;
-        return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px;margin-bottom:8px;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-            <span style="font-size:22px;">${t.emoji}</span>
-            <div style="flex:1;">
-              <div style="font-weight:700;font-size:13px;">${escapeHtml(type)}</div>
-              <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${data.count} SKU${data.count!==1?'s':''} · ${fmtN(data.qty)} pcs in stock</div>
-            </div>
-            <div style="text-align:right;">
-              <div style="font-size:10px;font-weight:700;color:var(--green);">Margin ${margin}%</div>
-              ${data.sold>0?`<div style="font-size:10px;color:var(--accent2);font-weight:600;">Sold ${fmt(data.sold)}</div>`:''}
-            </div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-            <div class="detail-box" style="padding:8px;"><div class="detail-key" style="font-size:9px;">COST VALUE</div><div class="detail-val" style="font-size:12px;color:var(--text2);">${fmt(data.cost)}</div></div>
-            <div class="detail-box" style="padding:8px;"><div class="detail-key" style="font-size:9px;">RETAIL VALUE</div><div class="detail-val" style="font-size:12px;color:var(--accent2);">${fmt(data.retail)}</div></div>
           </div>
         </div>`;
       }).join('');
@@ -6800,14 +6675,19 @@ async function renderDaySessionsList() {
 // ═══════════════════════════════════════════════════════════
 // RESTOCK
 // ═══════════════════════════════════════════════════════════
-function toggleRestock() {
+async function toggleRestock() {
   const panel = document.getElementById('restock-panel');
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-  if (panel.style.display === 'block') {
-    document.getElementById('restock-qty').value = '';
-    updateDetailRestockBtnLabel();
-    document.getElementById('restock-qty').focus();
-  }
+  if (panel.style.display !== 'block') return;
+  const item = currentDetailId ? await dbGet('items', currentDetailId) : null;
+  const buyEl = document.getElementById('restock-buy');
+  const sellEl = document.getElementById('restock-sell');
+  const qtyEl = document.getElementById('restock-qty');
+  if (item && buyEl) buyEl.value = item.buyPrice ?? item.buy ?? item.defaultBuy ?? '';
+  if (item && sellEl) sellEl.value = item.sellPrice ?? item.sell ?? item.defaultSell ?? '';
+  if (qtyEl) qtyEl.value = '';
+  updateDetailRestockBtnLabel();
+  (qtyEl || buyEl)?.focus();
 }
 
 function updateDetailRestockBtnLabel() {
@@ -6825,22 +6705,37 @@ async function confirmRestock() {
   try {
     const qty = parseInt(document.getElementById('restock-qty').value);
     if (!Validate.restockQty(qty, 'restock-qty')) return;
+    const buyRaw = Input.money('restock-buy');
+    const sellRaw = Input.money('restock-sell');
+    if (buyRaw !== null && buyRaw < 0) return Validate.fail('Invalid buy price', 'restock-buy');
+    if (sellRaw !== null && sellRaw < 0) return Validate.fail('Invalid sell price', 'restock-sell');
     const item = await dbGet('items', currentDetailId);
     if (!item) { toast('⚠️ Item not found', 'err'); return; }
+    const unitBuy = buyRaw !== null ? buyRaw : (item.buyPrice || item.buy || 0);
+    if (sellRaw !== null) {
+      item.sellPrice = sellRaw;
+      item.sell = sellRaw;
+    }
+    if (buyRaw !== null) {
+      item.buyPrice = buyRaw;
+      item.buy = buyRaw;
+    }
     item.qty += qty;
     item.updatedAt = new Date().toISOString();
     await dbPut('items', item);
-    await recordStockInvestment(item, qty * (item.buyPrice || item.buy || 0), qty, 'Restock');
+    await recordStockInvestment(item, qty * unitBuy, qty, 'Restock');
     fbSyncItem(item);
     scheduleSync();
-    const qtyEl = document.getElementById('sh-qty');
-    if (qtyEl) qtyEl.textContent = item.qty + (item.isShoe ? ' prs' : ' pcs');
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    set('sh-buy', fmt(item.buyPrice || item.buy || 0));
+    set('sh-sell', fmt(item.sellPrice || item.sell || 0));
+    set('sh-qty', item.qty + ' pcs');
     document.getElementById('restock-panel').style.display = 'none';
     allItems = await dbAll('items');
     await enrichShoeItems(allItems);
     renderList(); renderDashboard(); updateHeader();
     updateLowStockBadge();
-    toast('✅ Added ' + qty + (item.isShoe ? ' prs' : ' pcs') + ' to ' + (item.name || item.code), 'ok');
+    toast('✅ Added ' + qty + ' pcs to ' + (item.name || item.code), 'ok');
   } catch(e) {
     console.error('[confirmRestock]', e);
     toast('⚠️ Restock failed: ' + e.message, 'err');
@@ -7653,6 +7548,8 @@ async function reconcileFinances() {
   }
   await _cleanupFinanceCoherence(true);
   if (fbReady && fbDb) await forcePushToFirebase(true);
+  window._finReconcileUnlocked = false;
+  _showFinReconcile(false);
   renderFinancePage();
   renderDashboard();
   toast('✅ Finances reconciled — removed ' + removed + ' duplicate row(s)', 'ok');
@@ -7703,16 +7600,16 @@ renderFinancePage = async function() {
   };
   setLabel('fin-net', 'Business Pool');
   setLabel('fin-invested', 'Sales Out');
+  setLabel('fin-revenue', 'Revenue');
+  setLabel('fin-profit', 'Profit Realized');
   setLabel('fin-expenses', 'Business Spend');
-  setLabel('fin-withdrawn', 'Personal Withdraws');
+  setLabel('fin-withdrawn', 'Personal Withdraw');
   setT('fin-net', money.businessPool);
   setT('fin-invested', money.salesCostOut);
-  setT('fin-expenses', money.businessSpend);
-  setT('fin-withdrawn', money.personalWithdraws);
   setT('fin-revenue', money.salesRevenue);
   setT('fin-profit', money.salesProfit);
-  const marginEl = document.getElementById('fin-margin');
-  if (marginEl) marginEl.textContent = money.salesRevenue > 0 ? (money.salesProfit / money.salesRevenue * 100).toFixed(1) + '%' : '0%';
+  setT('fin-expenses', money.businessSpend);
+  setT('fin-withdrawn', money.personalWithdraws);
   const netEl = document.getElementById('fin-net');
   const netKpi = document.getElementById('fin-net-kpi');
   if (netEl) netEl.style.color = money.businessPool >= 0 ? 'var(--green)' : 'var(--red)';
@@ -7743,6 +7640,7 @@ renderFinancePage = async function() {
     summaryLine.textContent = 'Pool ' + fmt(money.businessPool) + ' · Cash in ' + fmt(money.cashToBusiness) + ' · Stock added ' + fmt(money.stockAdded) + ' · Profit ' + fmt(money.salesProfit);
   }
   renderFinList(listEntries);
+  if (!window._finReconcileUnlocked) _showFinReconcile(false);
 };
 
 renderFinList = function(entries) {
@@ -7815,11 +7713,21 @@ saveFinanceEntry = async function() {
   document.getElementById('fin-amount').value = '';
   document.getElementById('fin-desc').value   = '';
   document.getElementById('fin-date').value   = todayDateStr();
+  window._finReconcileUnlocked = true;
+  _showFinReconcile(true);
   renderFinancePage();
   renderDashboard();
   scheduleSync();
   toast('Transaction recorded: ' + fmt(amount), 'ok');
 };
+
+function _showFinReconcile(show) {
+  const btn = document.getElementById('fin-reconcile-btn');
+  const hint = document.getElementById('fin-reconcile-hint');
+  if (btn) btn.style.display = show ? 'block' : 'none';
+  if (hint) hint.style.display = show ? 'block' : 'none';
+}
+window._showFinReconcile = _showFinReconcile;
 
 let _expandedShoeGroups = new Set();
 window._activeSizeGroupFilter = 'all';
@@ -7836,8 +7744,8 @@ window.toggleShoeGroup = toggleShoeGroup;
 
 function setSizeGroupFilter(group) {
   window._activeSizeGroupFilter = group;
-  document.querySelectorAll('[id^="sgf-"]').forEach(b=>b.classList.remove('active'));
-  const btn = document.getElementById('sgf-'+group);
+  document.querySelectorAll('[id^="sgf-"]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('sgf-' + group);
   if (btn) btn.classList.add('active');
   renderList();
 }
@@ -7846,9 +7754,12 @@ window.setSizeGroupFilter = setSizeGroupFilter;
 function _renderSizeGroupFilter() {
   const wrap = document.getElementById('shoe-size-filter');
   if (!wrap) return;
-  // Show only when a shoe type is active or search has results with shoes
-  const hasShoe = allItems.some(i=>i.isShoe && (activeTypeFilter==='all'||i.type===activeTypeFilter));
-  wrap.style.display = hasShoe ? 'flex' : 'none';
+  const footwearSelected = activeTypeFilter !== 'all' && isFootwearType(activeTypeFilter);
+  wrap.style.display = footwearSelected ? 'flex' : 'none';
+  if (!footwearSelected) {
+    window._activeSizeGroupFilter = 'all';
+    document.querySelectorAll('[id^="sgf-"]').forEach(b => b.classList.remove('active'));
+  }
 }
 
 
