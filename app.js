@@ -517,17 +517,27 @@ function isAddFormFootwearContext() {
   return false;
 }
 
-/** Footwear add: show S/M/L cards only; sizes appear after user taps a card. */
+function _isFootwearAddFormActive() {
+  return !!document.getElementById('page-add')?.classList.contains('footwear-add-mode');
+}
+
+/** Show shared qty/price row for footwear (visible before sizes are picked). */
+function showShoePricingPanel() {
+  if (!_isFootwearAddFormActive()) return;
+  const rowsWrap = document.getElementById('shoe-rows-wrap');
+  const sharedWrap = document.getElementById('shoe-shared-wrap');
+  if (rowsWrap) rowsWrap.style.display = 'block';
+  if (sharedWrap && !_shoeState.perSizeMode) sharedWrap.style.display = 'block';
+}
+
+/** Footwear add: S/M/L cards only until tapped; qty/prices always visible. */
 function prepareShoeSizePickerUI() {
   const grid = document.getElementById('sz-grid');
   if (grid) grid.innerHTML = '';
   _shoeState.shownGroups.clear();
   const szGrid = document.getElementById('shoe-sizes-grid');
-  const rowsWrap = document.getElementById('shoe-rows-wrap');
-  const sharedWrap = document.getElementById('shoe-shared-wrap');
   if (szGrid) szGrid.style.display = 'none';
-  if (rowsWrap) rowsWrap.style.display = 'none';
-  if (sharedWrap && !_shoeState.perSizeMode) sharedWrap.style.display = 'none';
+  showShoePricingPanel();
   renderShoeGroupButtons();
 }
 
@@ -553,6 +563,7 @@ function applyAddFormFootwearUI(isShoe) {
     if (sizeField) sizeField.style.display = 'none';
     renderShoeGroupButtons();
     prepareShoeSizePickerUI();
+    showShoePricingPanel();
   } else {
     if (shoePanel) shoePanel.style.display = 'none';
     if (stdPricing) stdPricing.style.removeProperty('display');
@@ -1557,6 +1568,8 @@ function mountCategoryCascadeField(opts) {
     opts.valueEl.parentNode.insertBefore(wrap, opts.valueEl);
   }
   opts.valueEl.classList.add('cat-pick-hidden-select');
+  opts.valueEl.setAttribute('tabindex', '-1');
+  opts.valueEl.setAttribute('aria-hidden', 'true');
   const config = _makeCascadeConfig({ ...opts, wrap, idPrefix });
   renderCategoryCascade(config, opts.valueEl.value || '', { skipChange: true });
   return config;
@@ -1706,7 +1719,7 @@ function openCategoryPicker(opts) {
   document.body.appendChild(sheet);
   requestAnimationFrame(() => {
     sheet.classList.add('open');
-    searchEl.focus();
+    if (opts.focusSearch) searchEl.focus();
   });
 }
 window.openCategoryPicker = openCategoryPicker;
@@ -1857,7 +1870,7 @@ function resetShoeUiPanels() {
   const szWrap = UI.el('shoe-rows-wrap');
   const szInner = UI.el('sz-grid');
   if (szGrid) szGrid.style.display = 'none';
-  if (szWrap) szWrap.style.display = 'none';
+  if (!_isFootwearAddFormActive() && szWrap) szWrap.style.display = 'none';
   if (szInner) szInner.innerHTML = '';
   _shoeState.shownGroups.clear();
   const sum = UI.el('shoe-selected-summary');
@@ -2911,119 +2924,41 @@ function renderWishShoeOverlay(wish) {
   }
 }
 
-function buildWishVendorTableHtml(quotes) {
+function buildWishVendorDetailHtml(quotes) {
   const sorted = sortWishVendorQuotes(quotes);
   if (!sorted.length) {
-    return '<p class="wish-vendor-empty">No vendors yet</p>';
+    return '<p class="wish-vendor-empty">No vendor prices</p>';
   }
-  const rows = sorted.map((q, i) => {
+  return '<div class="wd-vendor-prices">' + sorted.map((q, i) => {
     const best = i === 0;
-    return '<tr class="wish-vendor-row' + (best ? ' wish-vendor-row-best' : '') + '">' +
-      '<td class="wish-vendor-td-name">' + escapeHtml(q.vendor) + (best ? '<span class="wish-vendor-best-tag">Best</span>' : '') + '</td>' +
-      '<td class="wish-vendor-td-price">' + fmt(q.price) + '</td>' +
-      '<td class="wish-vendor-td-act">' +
-        '<button type="button" class="wish-vendor-del" data-quote-id="' + escapeHtml(String(q.id)) +
-          '" onclick="deleteWishVendorQuote(this.getAttribute(\'data-quote-id\'))" aria-label="Remove">✕</button>' +
-      '</td></tr>';
-  }).join('');
-  return '<table class="wish-vendor-table"><thead><tr>' +
-    '<th>Vendor</th><th class="wish-vendor-th-price">Price</th><th></th>' +
-    '</tr></thead><tbody>' + rows + '</tbody></table>';
+    return '<div class="wd-vendor-price-row' + (best ? ' wd-vendor-price-row-best' : '') + '">' +
+      '<span class="wd-vendor-price-name">' + escapeHtml(q.vendor) + '</span>' +
+      '<span class="wd-vendor-price-val">' + fmt(q.price) + '</span>' +
+      (best ? '<span class="wd-vendor-lowest">Lowest</span>' : '') +
+    '</div>';
+  }).join('') + '</div>';
 }
 
 function buildWishListVendorsHtml(quotes) {
   const sorted = sortWishVendorQuotes(normalizeWishVendorQuotes({ vendorQuotes: quotes }));
   if (!sorted.length) {
-    return '<div class="wish-list-vendors wish-list-vendors-empty">—</div>';
+    return '<div class="wish-list-vendors wish-list-vendors-empty">No prices</div>';
   }
-  return '<div class="wish-list-vendors">' + sorted.map((q, i) =>
-    '<div class="wish-list-vendor' + (i === 0 ? ' wish-list-vendor-best' : '') + '">' +
+  return '<div class="wish-list-vendors">' + sorted.map((q, i) => {
+    const best = i === 0;
+    return '<div class="wish-list-vendor' + (best ? ' wish-list-vendor-best' : '') + '">' +
+      (best ? '<span class="wish-list-lowest">Lowest</span>' : '') +
       '<span class="wish-list-vendor-name">' + escapeHtml(q.vendor) + '</span>' +
       '<span class="wish-list-vendor-price">' + fmt(q.price) + '</span>' +
-    '</div>'
-  ).join('') + '</div>';
+    '</div>';
+  }).join('') + '</div>';
 }
 
 function renderWishVendorSection(wish) {
   const quotes = normalizeWishVendorQuotes(wish);
   const listEl = document.getElementById('wd-vendor-list');
-  if (listEl) listEl.innerHTML = buildWishVendorTableHtml(quotes);
+  if (listEl) listEl.innerHTML = buildWishVendorDetailHtml(quotes);
 }
-
-function toggleWishVendorForm(show) {
-  const form = document.getElementById('wd-vendor-form');
-  const btn = document.getElementById('wd-vendor-add-btn');
-  if (show) {
-    if (form) form.classList.remove('is-hidden');
-    if (btn) btn.style.display = 'none';
-    setTimeout(() => document.getElementById('wd-vendor-name')?.focus(), 120);
-  } else {
-    if (form) form.classList.add('is-hidden');
-    if (btn) btn.style.display = '';
-    clearWishVendorForm();
-  }
-}
-window.toggleWishVendorForm = toggleWishVendorForm;
-
-function clearWishVendorForm() {
-  const nameEl = document.getElementById('wd-vendor-name');
-  const priceEl = document.getElementById('wd-vendor-price');
-  if (nameEl) nameEl.value = '';
-  if (priceEl) priceEl.value = '';
-}
-
-async function saveWishVendorQuote() {
-  const wishId = _currentWishDetailId;
-  if (!wishId) return;
-  const vendor = (document.getElementById('wd-vendor-name')?.value || '').trim();
-  const priceRaw = Input.money('wd-vendor-price');
-  if (!vendor) return Validate.fail('Enter vendor name', 'wd-vendor-name');
-  if (!Validate.moneyRequired(priceRaw, 'wd-vendor-price', 'Price')) return;
-
-  const wish = await dbGet('wishlist', wishId);
-  if (!wish) {
-    toast('Wishlist item not found', 'err');
-    return;
-  }
-  const quotes = normalizeWishVendorQuotes(wish);
-  const vendorKey = vendor.toLowerCase();
-  const existing = quotes.find(q => q.vendor.toLowerCase() === vendorKey);
-  if (existing) {
-    existing.vendor = vendor;
-    existing.price = priceRaw;
-    existing.updatedAt = new Date().toISOString();
-  } else {
-    quotes.push({
-      id: 'vq_' + Date.now(),
-      vendor,
-      price: priceRaw,
-      updatedAt: new Date().toISOString()
-    });
-  }
-  wish.vendorQuotes = quotes;
-  await dbPut('wishlist', wish);
-  clearWishVendorForm();
-  toggleWishVendorForm(false);
-  renderWishVendorSection(wish);
-  scheduleSync();
-  await renderWishlistPage();
-  toast(existing ? 'Updated' : 'Saved', 'ok');
-}
-window.saveWishVendorQuote = saveWishVendorQuote;
-
-async function deleteWishVendorQuote(quoteId) {
-  const wishId = _currentWishDetailId;
-  if (!wishId || !quoteId) return;
-  const wish = await dbGet('wishlist', wishId);
-  if (!wish) return;
-  wish.vendorQuotes = normalizeWishVendorQuotes(wish).filter(q => q.id !== quoteId);
-  await dbPut('wishlist', wish);
-  renderWishVendorSection(wish);
-  scheduleSync();
-  await renderWishlistPage();
-  toast('Vendor removed', 'ok');
-}
-window.deleteWishVendorQuote = deleteWishVendorQuote;
 
 async function openWishlistDetail(wishId) {
   const wish = await dbGet('wishlist', wishId);
@@ -3074,7 +3009,6 @@ async function openWishlistDetail(wishId) {
       noteEl.style.display = 'none';
     }
   }
-  toggleWishVendorForm(false);
   renderWishVendorSection(wish);
   if (sheet) sheet.classList.add('open');
 }
@@ -3084,7 +3018,6 @@ function closeWishlistDetail() {
   const sheet = document.getElementById('wishlist-detail-sheet');
   if (sheet) sheet.classList.remove('open');
   _currentWishDetailId = null;
-  toggleWishVendorForm(false);
 }
 window.closeWishlistDetail = closeWishlistDetail;
 
@@ -3908,7 +3841,6 @@ function showWishlistSection(section) {
   if (addPanel) addPanel.style.display = isAdd ? 'block' : 'none';
   if (tabList) tabList.classList.toggle('active', !isAdd);
   if (tabAdd) tabAdd.classList.toggle('active', isAdd);
-  if (isAdd) document.getElementById('wish-name')?.focus();
 }
 window.showWishlistSection = showWishlistSection;
 
@@ -3919,7 +3851,7 @@ async function renderWishlistPage() {
   if (!list) return;
   const rows = filterStockRows(await getStockMonitorRows(), 'prospective');
   const addBar = '<div class="wish-list-toolbar">' +
-    '<button type="button" class="wish-add-open-btn" onclick="showWishlistSection(\'add\')"><i class="fa-solid fa-plus"></i> Add item</button>' +
+    '<button type="button" class="wish-add-open-btn" onclick="showWishlistSection(\'add\')">ADD</button>' +
     '</div>';
   if (!rows.length) {
     list.innerHTML = addBar + '<div class="empty" style="padding:36px 12px;"><div class="e-icon">+</div><p>No prospective items yet.</p></div>';
@@ -3958,11 +3890,18 @@ async function saveWishlistItem() {
   const qtyRaw = Input.int('wish-qty');
   const costRaw = Input.money('wish-cost');
   const note = Input.text('wish-note');
+  const vendorName = Input.text('wish-vendor-name').trim();
+  const vendorPriceRaw = Input.money('wish-vendor-price');
   if (!name) return Validate.fail('Enter item name', 'wish-name');
   if (!Validate.intOptional(qtyRaw, 'wish-qty', 'Quantity')) return;
   if (!Validate.moneyOptional(costRaw, 'wish-cost', 'Estimated cost')) return;
+  if (vendorName && !Validate.moneyRequired(vendorPriceRaw, 'wish-vendor-price', 'Vendor price')) return;
+  if (!vendorName && vendorPriceRaw > 0) return Validate.fail('Enter vendor name', 'wish-vendor-name');
   const qty = (qtyRaw === null || qtyRaw <= 0) ? 1 : qtyRaw;
   const estimatedCost = costRaw === null ? 0 : costRaw;
+  const vendorQuotes = vendorName
+    ? [{ id: 'vq_' + Date.now(), vendor: vendorName, price: vendorPriceRaw, updatedAt: new Date().toISOString() }]
+    : [];
   const entry = {
     name,
     code,
@@ -3970,14 +3909,14 @@ async function saveWishlistItem() {
     qty,
     estimatedCost,
     note,
-    vendorQuotes: [],
+    vendorQuotes,
     status: 'prospective',
     createdAt: new Date().toISOString(),
     createdBy: currentUser ? currentUser.username : 'system'
   };
   entry.id = await dbAdd('wishlist', entry);
   if (_wishFormPhotoData) await setWishPhoto(entry.id, _wishFormPhotoData);
-  ['wish-name','wish-code','wish-qty','wish-cost','wish-note'].forEach(id => {
+  ['wish-name','wish-code','wish-qty','wish-cost','wish-note','wish-vendor-name','wish-vendor-price'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -9266,8 +9205,7 @@ function selectSizeGroup(g) {
   }
 
   renderShoeGroupButtons();
-  const szWrap = UI.el('shoe-rows-wrap');
-  if (szWrap && _shoeState.sizes.size > 0) szWrap.style.display = 'block';
+  showShoePricingPanel();
   // Rebuild per-size rows if in per-size mode
   if (_shoeState.perSizeMode) renderShoeRows();
 }
@@ -9433,8 +9371,7 @@ function deselectSizeGroup(g) {
   const grid   = UI.el('sz-grid');
   const szGrid = UI.el('shoe-sizes-grid');
   if (szGrid && grid && grid.children.length === 0) szGrid.style.display = 'none';
-  const szWrap = UI.el('shoe-rows-wrap');
-  if (szWrap && _shoeState.sizes.size === 0) szWrap.style.display = 'none';
+  showShoePricingPanel();
   renderShoeGroupButtons();
   renderShoeSummary();
   renderShoeRows();
@@ -9449,8 +9386,7 @@ function toggleShoeSize(s) {
     b.classList.toggle('sz-active', _shoeState.sizes.has(parseInt(b.textContent)));
   });
 
-  const szWrap = UI.el('shoe-rows-wrap');
-  if (szWrap) szWrap.style.display = _shoeState.sizes.size > 0 ? 'block' : 'none';
+  showShoePricingPanel();
 
   // If switching to persize and rows already rendered, rebuild them
   if (_shoeState.perSizeMode) renderShoeRows();

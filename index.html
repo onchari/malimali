@@ -625,14 +625,14 @@
   </div>
 
   <div class="wish-inv-tabs">
+    <button type="button" class="wish-inv-tab wish-inv-tab-add" id="wish-tab-add" onclick="showWishlistSection('add')">ADD</button>
     <button type="button" class="wish-inv-tab active" id="wish-tab-list" onclick="showWishlistSection('list')">List</button>
-    <button type="button" class="wish-inv-tab" id="wish-tab-add" onclick="showWishlistSection('add')">Add</button>
   </div>
 
   <div id="wishlist-list" class="wish-list-panel" style="padding-bottom:12px;"></div>
 
   <div id="wishlist-add-panel" class="stock-monitor-form" style="display:none;">
-    <div class="stock-form-title">Add prospective item</div>
+    <button type="button" onclick="saveWishlistItem()" class="wish-add-submit-primary">ADD</button>
     <div class="stock-form-grid">
       <input class="add-input" id="wish-name" type="text" placeholder="Item name *" required>
       <input class="add-input add-mono" id="wish-code" type="text" placeholder="SHOECODE (optional)">
@@ -649,6 +649,10 @@
       <input class="add-input" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Est. buy price">
       <input class="add-input" id="wish-note" type="text" maxlength="160" placeholder="Note optional">
     </div>
+    <div class="stock-form-grid">
+      <input class="add-input" id="wish-vendor-name" type="text" maxlength="80" placeholder="Vendor (optional)">
+      <input class="add-input add-center" id="wish-vendor-price" type="number" min="0" inputmode="decimal" placeholder="Vendor price">
+    </div>
     <div class="add-photo-box wish-photo-box">
       <img id="wish-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
       <div id="wish-photo-placeholder" class="add-photo-ph" onclick="triggerWishPhotoUpload()">
@@ -661,10 +665,7 @@
     <button type="button" class="wish-screenshot-btn" onclick="startWishlistScreenshotImport()">
       📋 Screenshot from another app
     </button>
-    <button type="button" onclick="saveWishlistItem()" class="stock-add-wish-btn">
-      <i class="fa-solid fa-plus"></i> Add to wishlist
-    </button>
-    <button type="button" class="wish-back-list-btn" onclick="showWishlistSection('list')">← Back to list</button>
+    <button type="button" class="wish-back-list-btn" onclick="showWishlistSection('list')">← List</button>
   </div>
 </div>
 
@@ -774,7 +775,7 @@
   <!-- Shoe sizes (footwear categories) -->
   <div id="shoe-size-panel" class="add-card add-card-shoe">
     <h2 class="add-card-title"><span class="add-step-badge">3</span> Shoe sizes</h2>
-    <p class="add-card-hint" style="margin:0 0 10px;">Tap Children, Teens, or Adults to show sizes, then tap numbers to stock.</p>
+    <p class="add-card-hint" style="margin:0 0 10px;">Tap S / M / L, then pick sizes. Qty &amp; prices below apply to all selected sizes.</p>
     <div class="add-section add-section-inset">
       <div class="sg-row">
         <button type="button" class="sg-btn" id="sg-btn-S" onclick="selectSizeGroup('S')">
@@ -803,7 +804,7 @@
       </div>
     </div>
 
-    <div id="shoe-rows-wrap" style="display:none;">
+    <div id="shoe-rows-wrap">
       <p class="add-card-hint" style="margin:10px 0 6px;">Quantity &amp; pricing</p>
       <div class="add-section add-section-inset" style="padding-bottom:10px;">
 
@@ -1621,23 +1622,8 @@
       <div id="wd-note" class="wish-detail-note" style="display:none;"></div>
 
       <section class="wish-vendor-section" aria-label="Vendor prices">
-        <div class="wish-vendor-section-head">
-          <h3 class="wish-vendor-heading">Vendors</h3>
-          <button type="button" id="wd-vendor-add-btn" class="wish-vendor-add-btn" onclick="toggleWishVendorForm(true)">+ Add</button>
-        </div>
+        <h3 class="wish-vendor-heading">Vendors</h3>
         <div id="wd-vendor-list"></div>
-        <div id="wd-vendor-form" class="wish-vendor-form is-hidden">
-          <div class="wish-vendor-form-row">
-            <input class="add-input" id="wd-vendor-name" type="text" maxlength="80"
-                   placeholder="Vendor *" aria-label="Vendor name" autocomplete="off">
-            <input class="add-input add-center" id="wd-vendor-price" type="number" min="0"
-                   inputmode="decimal" placeholder="KES *" aria-label="Vendor price">
-          </div>
-          <div class="wish-vendor-form-actions">
-            <button type="button" class="wish-vendor-save-btn" onclick="saveWishVendorQuote()">Save</button>
-            <button type="button" class="wish-vendor-cancel-btn" onclick="toggleWishVendorForm(false)">Cancel</button>
-          </div>
-        </div>
       </section>
     </div>
 
