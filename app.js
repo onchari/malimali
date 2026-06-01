@@ -517,20 +517,22 @@ function isAddFormFootwearContext() {
   return false;
 }
 
-function openAllShoeSizeGroupsForAdd() {
+/** Footwear add: show S/M/L cards only; sizes appear after user taps a card. */
+function prepareShoeSizePickerUI() {
   const grid = document.getElementById('sz-grid');
-  if (!grid) return;
-  ['S', 'M', 'L'].forEach(g => ensureSizeGroupOpen(g));
+  if (grid) grid.innerHTML = '';
+  _shoeState.shownGroups.clear();
   const szGrid = document.getElementById('shoe-sizes-grid');
   const rowsWrap = document.getElementById('shoe-rows-wrap');
   const sharedWrap = document.getElementById('shoe-shared-wrap');
-  if (szGrid) szGrid.style.removeProperty('display');
-  if (rowsWrap) rowsWrap.style.display = 'block';
-  if (sharedWrap && !_shoeState.perSizeMode) sharedWrap.style.display = 'block';
+  if (szGrid) szGrid.style.display = 'none';
+  if (rowsWrap) rowsWrap.style.display = 'none';
+  if (sharedWrap && !_shoeState.perSizeMode) sharedWrap.style.display = 'none';
+  renderShoeGroupButtons();
 }
 
 function revealShoeSizePickerUI() {
-  openAllShoeSizeGroupsForAdd();
+  prepareShoeSizePickerUI();
 }
 
 function applyAddFormFootwearUI(isShoe) {
@@ -550,7 +552,7 @@ function applyAddFormFootwearUI(isShoe) {
     if (stdPricing) stdPricing.style.display = 'none';
     if (sizeField) sizeField.style.display = 'none';
     renderShoeGroupButtons();
-    openAllShoeSizeGroupsForAdd();
+    prepareShoeSizePickerUI();
   } else {
     if (shoePanel) shoePanel.style.display = 'none';
     if (stdPricing) stdPricing.style.removeProperty('display');
@@ -979,6 +981,19 @@ async function migrateData() {
       if (changed) { await dbPut('shoe_sizes', sz); szFixed++; }
     }
     console.log(`[MIGRATE v9] shoe_sizes: ${szFixed} updated`);
+
+    if (db.objectStoreNames.contains('wishlist')) {
+      const wishes = await dbAll('wishlist');
+      let wFixed = 0;
+      for (const w of wishes) {
+        if (!Array.isArray(w.vendorQuotes)) {
+          w.vendorQuotes = [];
+          await dbPut('wishlist', w);
+          wFixed++;
+        }
+      }
+      if (wFixed) console.log(`[MIGRATE] wishlist vendorQuotes: ${wFixed} initialized`);
+    }
 
     // ── 3. sales: normalize businessDate field ─────────────────────
     const sales = await dbAll('sales');
@@ -1844,8 +1859,10 @@ function resetShoeUiPanels() {
   if (szGrid) szGrid.style.display = 'none';
   if (szWrap) szWrap.style.display = 'none';
   if (szInner) szInner.innerHTML = '';
+  _shoeState.shownGroups.clear();
   const sum = UI.el('shoe-selected-summary');
   if (sum) sum.innerHTML = '';
+  renderShoeGroupButtons();
 }
 
 function setAddFormType(typeName, opts) {
@@ -2792,12 +2809,154 @@ async function markWishlistStockedById(wishId, itemId) {
   await dbPut('wishlist', wish);
 }
 
+function normalizeWishVendorQuotes(wish) {
+  if (!wish || !Array.isArray(wish.vendorQuotes)) return [];
+  return wish.vendorQuotes
+    .map(q => ({
+      id: q.id || ('vq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)),
+      vendor: String(q.vendor || '').trim(),
+      price: parseFloat(q.price),
+      updatedAt: q.updatedAt || q.createdAt || new Date().toISOString()
+    }))
+    .filter(q => q.vendor && Number.isFinite(q.price) && q.price >= 0);
+}
+
+function sortWishVendorQuotes(quotes) {
+  return [...quotes].sort((a, b) => a.price - b.price || a.vendor.localeCompare(b.vendor));
+}
+
+function getCheapestWishVendorQuote(quotes) {
+  const sorted = sortWishVendorQuotes(quotes);
+  return sorted.length ? sorted[0] : null;
+}
+
+function buildWishVendorInsightsHtml(quotes, wish) {
+  const sorted = sortWishVendorQuotes(quotes);
+  if (!sorted.length) {
+    return '<div class="wish-vendor-insights wish-vendor-insights-empty">Add vendor prices below to see who is cheapest.</div>';
+  }
+  const cheapest = sorted[0];
+  const priciest = sorted[sorted.length - 1];
+  const spread = priciest.price - cheapest.price;
+  let html = '<div class="wish-vendor-insights-card">';
+  html += '<div class="wish-vendor-insight-title">Insights</div>';
+  html += '<div class="wish-vendor-insight-best"><span class="wish-vendor-insight-label">Cheapest</span> ' +
+    '<strong>' + escapeHtml(cheapest.vendor) + '</strong> · ' + fmt(cheapest.price) + '</div>';
+  if (sorted.length > 1) {
+    html += '<div class="wish-vendor-insight-row"><span>Most expensive</span> ' +
+      escapeHtml(priciest.vendor) + ' · ' + fmt(priciest.price) + '</div>';
+    html += '<div class="wish-vendor-insight-row"><span>You save</span> <strong>' + fmt(spread) + '</strong> vs highest</div>';
+    if (priciest.price > 0) {
+      const pct = Math.round((spread / priciest.price) * 100);
+      html += '<div class="wish-vendor-insight-hint">' + pct + '% cheaper at ' + escapeHtml(cheapest.vendor) + '</div>';
+    }
+  }
+  const qty = wish && wish.qty > 1 ? wish.qty : 0;
+  if (qty > 1) {
+    html += '<div class="wish-vendor-insight-row"><span>Est. ' + qty + ' pcs @ best</span> <strong>' +
+      fmt(cheapest.price * qty) + '</strong></div>';
+  }
+  html += '<div class="wish-vendor-insight-count">' + sorted.length + ' vendor' + (sorted.length > 1 ? 's' : '') + ' compared</div>';
+  html += '</div>';
+  return html;
+}
+
+function buildWishVendorListHtml(quotes) {
+  const sorted = sortWishVendorQuotes(quotes);
+  if (!sorted.length) {
+    return '<div class="wish-vendor-list-empty">No vendor prices yet — use the form below.</div>';
+  }
+  return '<ol class="wish-vendor-list" start="1">' + sorted.map((q, i) => {
+    const rank = i + 1;
+    let extra = '';
+    if (rank === 1) extra = ' <span class="tag tag-green">Cheapest</span>';
+    else if (rank === sorted.length && sorted.length > 1) extra = ' <span class="tag tag-amber">Highest</span>';
+    return '<li class="wish-vendor-item">' +
+      '<span class="wish-vendor-rank" aria-hidden="true">' + rank + '</span>' +
+      '<div class="wish-vendor-item-main">' +
+        '<div class="wish-vendor-item-name">' + escapeHtml(q.vendor) + extra + '</div>' +
+        '<div class="wish-vendor-item-price">' + fmt(q.price) + '</div>' +
+      '</div>' +
+      '<button type="button" class="wish-vendor-del" data-quote-id="' + escapeHtml(String(q.id)) +
+        '" onclick="deleteWishVendorQuote(this.getAttribute(\'data-quote-id\'))" aria-label="Remove quote">✕</button>' +
+      '</li>';
+  }).join('') + '</ol>';
+}
+
+function renderWishVendorSection(wish) {
+  const quotes = normalizeWishVendorQuotes(wish);
+  const insightsEl = document.getElementById('wd-vendor-insights');
+  const listEl = document.getElementById('wd-vendor-list');
+  if (insightsEl) insightsEl.innerHTML = buildWishVendorInsightsHtml(quotes, wish);
+  if (listEl) listEl.innerHTML = buildWishVendorListHtml(quotes);
+}
+
+function clearWishVendorForm() {
+  const nameEl = document.getElementById('wd-vendor-name');
+  const priceEl = document.getElementById('wd-vendor-price');
+  if (nameEl) nameEl.value = '';
+  if (priceEl) priceEl.value = '';
+}
+
+async function saveWishVendorQuote() {
+  const wishId = _currentWishDetailId;
+  if (!wishId) return;
+  const vendor = (document.getElementById('wd-vendor-name')?.value || '').trim();
+  const priceRaw = Input.money('wd-vendor-price');
+  if (!vendor) return Validate.fail('Enter vendor name', 'wd-vendor-name');
+  if (!Validate.moneyRequired(priceRaw, 'wd-vendor-price', 'Price')) return;
+
+  const wish = await dbGet('wishlist', wishId);
+  if (!wish) {
+    toast('Wishlist item not found', 'err');
+    return;
+  }
+  const quotes = normalizeWishVendorQuotes(wish);
+  const vendorKey = vendor.toLowerCase();
+  const existing = quotes.find(q => q.vendor.toLowerCase() === vendorKey);
+  if (existing) {
+    existing.vendor = vendor;
+    existing.price = priceRaw;
+    existing.updatedAt = new Date().toISOString();
+  } else {
+    quotes.push({
+      id: 'vq_' + Date.now(),
+      vendor,
+      price: priceRaw,
+      updatedAt: new Date().toISOString()
+    });
+  }
+  wish.vendorQuotes = quotes;
+  await dbPut('wishlist', wish);
+  clearWishVendorForm();
+  renderWishVendorSection(wish);
+  scheduleSync();
+  await renderWishlistPage();
+  toast(existing ? 'Vendor price updated' : 'Vendor price saved', 'ok');
+}
+window.saveWishVendorQuote = saveWishVendorQuote;
+
+async function deleteWishVendorQuote(quoteId) {
+  const wishId = _currentWishDetailId;
+  if (!wishId || !quoteId) return;
+  const wish = await dbGet('wishlist', wishId);
+  if (!wish) return;
+  wish.vendorQuotes = normalizeWishVendorQuotes(wish).filter(q => q.id !== quoteId);
+  await dbPut('wishlist', wish);
+  renderWishVendorSection(wish);
+  scheduleSync();
+  await renderWishlistPage();
+  toast('Vendor removed', 'ok');
+}
+window.deleteWishVendorQuote = deleteWishVendorQuote;
+
 async function openWishlistDetail(wishId) {
   const wish = await dbGet('wishlist', wishId);
   if (!wish) {
     toast('Wishlist item not found', 'err');
     return;
   }
+  if (!Array.isArray(wish.vendorQuotes)) wish.vendorQuotes = [];
   _currentWishDetailId = wishId;
   const sheet = document.getElementById('wishlist-detail-sheet');
   const photo = getWishPhoto(wishId);
@@ -2835,7 +2994,10 @@ async function openWishlistDetail(wishId) {
       noteEl.style.display = 'none';
     }
   }
+  clearWishVendorForm();
+  renderWishVendorSection(wish);
   if (sheet) sheet.classList.add('open');
+  setTimeout(() => document.getElementById('wd-vendor-name')?.focus(), 200);
 }
 window.openWishlistDetail = openWishlistDetail;
 
@@ -2843,6 +3005,7 @@ function closeWishlistDetail() {
   const sheet = document.getElementById('wishlist-detail-sheet');
   if (sheet) sheet.classList.remove('open');
   _currentWishDetailId = null;
+  clearWishVendorForm();
 }
 window.closeWishlistDetail = closeWishlistDetail;
 
@@ -3683,11 +3846,20 @@ async function renderWishlistPage() {
     list.innerHTML = addBar + '<div class="empty" style="padding:36px 12px;"><div class="e-icon">+</div><p>No prospective items yet.</p></div>';
     return;
   }
+  const wishById = new Map();
+  if (db.objectStoreNames.contains('wishlist')) {
+    (await dbAll('wishlist')).forEach(w => wishById.set(w.id, w));
+  }
   list.innerHTML = addBar + rows.map(row => {
     const photo = getWishPhoto(row.wishId);
     const thumb = photo
       ? '<img src="' + photo + '" alt="" class="wish-list-thumb">'
       : '<div class="wish-list-thumb wish-list-thumb-empty">📷</div>';
+    const wishRec = wishById.get(row.wishId);
+    const cheapest = wishRec ? getCheapestWishVendorQuote(normalizeWishVendorQuotes(wishRec)) : null;
+    const vendorHint = cheapest
+      ? '<span class="tag tag-green">Best: ' + escapeHtml(cheapest.vendor) + ' ' + fmt(cheapest.price) + '</span>'
+      : '';
     return '<div class="stock-monitor-row prospective" onclick="openWishlistDetail(' + row.wishId + ')" role="button" tabindex="0">' +
       thumb +
       '<div class="stock-monitor-body">' +
@@ -3695,10 +3867,11 @@ async function renderWishlistPage() {
         '<div class="stock-monitor-meta">' +
           escapeHtml(row.code || 'No code') + (row.type ? ' · ' + escapeHtml(row.type) : '') +
           (row.qty ? ' · target ' + row.qty : '') +
-          (row.buyPrice ? ' · ' + fmt(row.buyPrice) : '') +
+          (row.buyPrice ? ' · est. ' + fmt(row.buyPrice) : '') +
         '</div>' +
         '<div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;">' +
           '<span class="tag tag-amber">Prospective</span>' +
+          vendorHint +
           (row.note ? '<span class="tag tag-gray">' + escapeHtml(row.note) + '</span>' : '') +
         '</div>' +
       '</div>' +
@@ -3729,6 +3902,7 @@ async function saveWishlistItem() {
     qty,
     estimatedCost,
     note,
+    vendorQuotes: [],
     status: 'prospective',
     createdAt: new Date().toISOString(),
     createdBy: currentUser ? currentUser.username : 'system'
@@ -8987,8 +9161,6 @@ function ensureSizeGroupOpen(g) {
   const block = document.createElement('div');
   block.id = 'sz-group-block-' + g;
   block.className = 'sz-group-block sz-group-block-' + g;
-  block.style.order = { S: 1, M: 2, L: 3 }[g] || 9;
-  block.style.gridColumn = { S: 1, M: 2, L: 3 }[g] || 'auto';
 
   const label = document.createElement('div');
   label.className = 'sz-group-divider';
@@ -9349,8 +9521,7 @@ function renderShoeGroupButtons() {
   ['S','M','L'].forEach(g => {
     const btn = document.getElementById('sg-btn-' + g);
     const rng = document.getElementById('sg-range-' + g);
-    const hasSelected = _getGroupSizes(g).some(s => _shoeState.sizes.has(s));
-    if (btn) btn.classList.toggle('sg-active', hasSelected || _shoeState.shownGroups.has(g));
+    if (btn) btn.classList.toggle('sg-active', _shoeState.shownGroups.has(g));
     if (rng && groups[g]) {
       const lbl = groups[g].label ? groups[g].label + ' · ' : '';
       rng.textContent = lbl + groups[g].min + '–' + groups[g].max;

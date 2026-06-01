@@ -99,10 +99,6 @@
 #page-add.footwear-add-mode:not(.restock-mode) #f-size-field {
   display: none !important;
 }
-#page-add.footwear-add-mode:not(.restock-mode) #shoe-sizes-grid,
-#page-add.footwear-add-mode:not(.restock-mode) #shoe-rows-wrap {
-  display: block !important;
-}
 #shoe-size-panel {
   display: none;
 }
@@ -1373,6 +1369,188 @@ body {
   color: var(--text2);
   line-height: 1.45;
 }
+.wish-vendor-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.wish-vendor-heading {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+.wish-vendor-insights-card {
+  padding: 12px;
+  border-radius: var(--r);
+  background: linear-gradient(135deg, #ecfdf3 0%, #f0fdf4 100%);
+  border: 1px solid #86efac;
+  margin-bottom: 12px;
+}
+.wish-vendor-insights-empty {
+  padding: 12px;
+  border-radius: var(--r);
+  background: var(--surface2);
+  border: 1px dashed var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 12px;
+  line-height: 1.45;
+}
+.wish-vendor-insight-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.wish-vendor-insight-best {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
+}
+.wish-vendor-insight-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+.wish-vendor-insight-row {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.wish-vendor-insight-row span { color: var(--muted); margin-right: 4px; }
+.wish-vendor-insight-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.wish-vendor-insight-count {
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+.wish-vendor-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wish-vendor-list-empty {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 12px;
+  padding: 10px 0;
+}
+.wish-vendor-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.wish-vendor-item:first-child {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.wish-vendor-rank {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface2);
+  font-size: 12px;
+  font-weight: 800;
+  font-family: var(--mono);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+}
+.wish-vendor-item:first-child .wish-vendor-rank {
+  background: var(--accent);
+  color: #fff;
+}
+.wish-vendor-item-main { flex: 1; min-width: 0; }
+.wish-vendor-item-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.wish-vendor-item-price {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 800;
+  font-family: var(--mono);
+  color: var(--accent2);
+}
+.wish-vendor-del {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+.wish-vendor-form {
+  padding: 12px;
+  border-radius: var(--r);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+.wish-vendor-form-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text2);
+  margin-bottom: 10px;
+}
+.wish-vendor-form-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(110px, 38%);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.wish-vendor-save-btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: var(--r);
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: var(--sans);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.wish-vendor-form-hint {
+  margin: 10px 0 0;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.4;
+}
 .wish-detail-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2264,14 +2442,14 @@ body.photo-lightbox-open { overflow: hidden; }
 /* ================================================================
    SHOE SYSTEM CSS
    ================================================================ */
-.sg-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
-.sg-btn { display:flex;flex-direction:column;align-items:center;gap:2px;padding:12px 6px 10px;border:1.5px solid var(--border);border-radius:var(--r-lg);background:var(--surface2);cursor:pointer;font-family:var(--sans);transition:all .12s; }
+.sg-row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; align-items:stretch; }
+.sg-btn { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:88px;padding:12px 6px 10px;border:1.5px solid var(--border);border-radius:var(--r-lg);background:var(--surface2);cursor:pointer;font-family:var(--sans);transition:all .12s;width:100%;box-sizing:border-box; }
 .sg-btn.sg-active { background:#EAF3DE;border-color:var(--green); }
 .sg-ltr  { font-size:22px;font-weight:800;color:var(--text);line-height:1; }
 .sg-btn.sg-active .sg-ltr { color:var(--green); }
 .sg-range{ font-size:10px;font-weight:700;font-family:var(--mono);color:var(--muted); }
 .sg-name { font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted); }
-#sz-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:start; }
+#sz-grid { display:flex;flex-direction:column;gap:12px;align-items:stretch; }
 .sz-group-block { min-width:0; }
 .sz-group-divider { width:100%;display:flex;align-items:center;justify-content:center;margin:0 0 7px; }
 .sz-group-tag { max-width:100%;font-size:9px;font-weight:700;padding:3px 7px;border-radius:20px;cursor:pointer;text-align:center;white-space:normal;line-height:1.2; }

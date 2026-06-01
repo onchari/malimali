@@ -774,7 +774,7 @@
   <!-- Shoe sizes (footwear categories) -->
   <div id="shoe-size-panel" class="add-card add-card-shoe">
     <h2 class="add-card-title"><span class="add-step-badge">3</span> Shoe sizes</h2>
-    <p class="add-card-hint" style="margin:0 0 10px;">Tap size numbers to select. Use S / M / L filters if you only need one range.</p>
+    <p class="add-card-hint" style="margin:0 0 10px;">Tap Children, Teens, or Adults to show sizes, then tap numbers to stock.</p>
     <div class="add-section add-section-inset">
       <div class="sg-row">
         <button type="button" class="sg-btn" id="sg-btn-S" onclick="selectSizeGroup('S')">
@@ -1618,6 +1618,25 @@
       <div id="wd-code" class="wish-detail-code"></div>
       <div id="wd-meta" class="wish-detail-meta"></div>
       <div id="wd-note" class="wish-detail-note" style="display:none;"></div>
+
+      <section class="wish-vendor-section" aria-labelledby="wd-vendor-heading">
+        <h3 id="wd-vendor-heading" class="wish-vendor-heading">Vendor price comparison</h3>
+        <div id="wd-vendor-insights"></div>
+        <div id="wd-vendor-list"></div>
+        <div class="wish-vendor-form">
+          <div class="wish-vendor-form-title">Add / update vendor quote</div>
+          <div class="wish-vendor-form-row">
+            <input class="add-input" id="wd-vendor-name" type="text" maxlength="80"
+                   placeholder="Vendor name *" aria-label="Vendor name" autocomplete="off">
+            <input class="add-input add-center" id="wd-vendor-price" type="number" min="0"
+                   inputmode="decimal" placeholder="Price (KES) *" aria-label="Vendor price">
+          </div>
+          <button type="button" class="wish-vendor-save-btn" onclick="saveWishVendorQuote()">
+            <i class="fa-solid fa-floppy-disk"></i> Save vendor price
+          </button>
+          <p class="wish-vendor-form-hint">Saved quotes are sorted cheapest → most expensive. Same vendor name updates the existing quote.</p>
+        </div>
+      </section>
     </div>
 
     <div class="wish-detail-actions">
