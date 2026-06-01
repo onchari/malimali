@@ -450,6 +450,25 @@ function isFootwearType(typeName) {
   return _legacyFootwearName(typeName);
 }
 
+function getAddCascadePathRecords() {
+  return _getCascadePathFromWrap(document.getElementById('f-type-cascade'))
+    .map(id => getTypeById(id))
+    .filter(Boolean);
+}
+
+/** Footwear UI on Add: committed leaf OR any category picked in the cascade path (e.g. parent Footwear). */
+function isAddFormFootwearContext() {
+  const type = (UI.el('f-type')?.value || '').trim();
+  if (type && isFootwearType(type)) return true;
+  return getAddCascadePathRecords().some(rec => isFootwearType(rec.name));
+}
+
+function revealShoeSizePickerUI() {
+  ['S', 'M', 'L'].forEach(g => ensureSizeGroupOpen(g));
+  const szGrid = UI.el('shoe-sizes-grid');
+  if (szGrid) szGrid.style.display = 'block';
+}
+
 function _sortTypes(a, b) {
   return (a.sortOrder || 0) - (b.sortOrder || 0) || String(a.name || '').localeCompare(String(b.name || ''));
 }
@@ -2994,6 +3013,7 @@ function clearForm() {
 
   _shoeState.reset();
   resetShoeUiPanels();
+  _addFormWasFootwear = false;
   _preloadShoeCode = '';
   ['shoe-shared-qty','shoe-shared-buy','shoe-shared-sell'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
@@ -3013,6 +3033,7 @@ let _codeDropdownActive = false;
 let _editOriginItemId   = null;
 let _editingItemId      = null;  // tracks current edit ID reliably (backup to hidden input)
 let _lastAddFormType    = '';    // last f-type value — avoid wiping shoe sizes on tab switch
+let _addFormWasFootwear = false;
 let _preloadShoeCode    = '';
 let _selectedShoeSize   = null;
 let _selectedShoeSizes  = new Set();
@@ -8421,19 +8442,24 @@ function onTypeChange() {
     return;
   }
 
-  const isShoe = !!type && isFootwearType(type);
-  const wasShoe = !!_lastAddFormType && isFootwearType(_lastAddFormType);
+  const isShoe = isAddFormFootwearContext();
   _lastAddFormType = type;
 
   shoePanel.style.display  = isShoe ? 'block' : 'none';
   stdPricing.style.display = isShoe ? 'none'  : 'block';
   if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
 
-  if (isShoe !== wasShoe) {
+  if (isShoe !== _addFormWasFootwear) {
     _shoeState.reset();
     resetShoeUiPanels();
+    _preloadShoeCode = '';
   }
-  if (isShoe) renderShoeGroupButtons();
+  _addFormWasFootwear = isShoe;
+
+  if (isShoe) {
+    renderShoeGroupButtons();
+    revealShoeSizePickerUI();
+  }
 }
 window.onTypeChange = onTypeChange;
 
