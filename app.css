@@ -92,6 +92,16 @@
 #page-add.restock-mode .add-card-photo {
   display: none !important;
 }
+#page-add.footwear-add-mode:not(.restock-mode) #shoe-size-panel {
+  display: block !important;
+}
+#page-add.footwear-add-mode:not(.restock-mode) #std-pricing-section,
+#page-add.footwear-add-mode:not(.restock-mode) #f-size-field {
+  display: none !important;
+}
+#page-add.footwear-add-mode:not(.restock-mode) #shoe-sizes-grid {
+  display: block !important;
+}
 #page-add.restock-mode .add-flow #std-pricing-section {
   display: none !important;
 }

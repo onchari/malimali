@@ -456,17 +456,56 @@ function getAddCascadePathRecords() {
     .filter(Boolean);
 }
 
+/** True when a category row (or its ancestors) is footwear / size-grid mode. */
+function categoryRecordIsFootwear(rec) {
+  if (!rec) return false;
+  if (rec.isFootwear === true) return true;
+  if (rec.isFootwear === false) {
+    return getCategoryAncestors(rec).some(a => a.isFootwear === true);
+  }
+  return isFootwearType(rec.name);
+}
+
 /** Footwear UI on Add: committed leaf OR any category picked in the cascade path (e.g. parent Footwear). */
 function isAddFormFootwearContext() {
   const type = (UI.el('f-type')?.value || '').trim();
   if (type && isFootwearType(type)) return true;
-  return getAddCascadePathRecords().some(rec => isFootwearType(rec.name));
+  const pathRecs = getAddCascadePathRecords();
+  if (pathRecs.some(categoryRecordIsFootwear)) return true;
+  const pathIds = _getCascadePathFromWrap(document.getElementById('f-type-cascade'));
+  return pathIds.some(id => {
+    const rec = getTypeById(id);
+    return rec && categoryRecordIsFootwear(rec);
+  });
 }
 
 function revealShoeSizePickerUI() {
   ['S', 'M', 'L'].forEach(g => ensureSizeGroupOpen(g));
   const szGrid = UI.el('shoe-sizes-grid');
   if (szGrid) szGrid.style.display = 'block';
+  const rowsWrap = document.getElementById('shoe-rows-wrap');
+  if (rowsWrap && !_shoeState.perSizeMode) rowsWrap.style.display = 'block';
+}
+
+function applyAddFormFootwearUI(isShoe) {
+  const pageAdd = document.getElementById('page-add');
+  if (pageAdd) pageAdd.classList.toggle('footwear-add-mode', !!isShoe);
+  const shoePanel  = UI.el('shoe-size-panel');
+  const stdPricing = UI.el('std-pricing-section');
+  const sizeField  = document.getElementById('f-size-field');
+  const inRestock  = pageAdd?.classList.contains('restock-mode');
+  if (inRestock) {
+    if (shoePanel) shoePanel.style.display = 'none';
+    if (stdPricing) stdPricing.style.display = 'block';
+    return;
+  }
+  if (shoePanel) shoePanel.style.display = isShoe ? 'block' : 'none';
+  if (stdPricing) stdPricing.style.display = isShoe ? 'none' : 'block';
+  if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
+  if (isShoe) {
+    renderShoeGroupButtons();
+    revealShoeSizePickerUI();
+  }
 }
 
 function _sortTypes(a, b) {
@@ -1714,8 +1753,6 @@ function hideRestockView() {
   const flow = document.querySelector('#page-add .add-flow');
   if (flow) {
     flow.querySelectorAll('.add-card').forEach(card => { card.style.display = ''; });
-    const shoePanel = document.getElementById('shoe-size-panel');
-    if (shoePanel) shoePanel.style.display = 'none';
   }
   const footer = document.getElementById('add-footer');
   const cancelBtn = document.getElementById('restock-cancel-btn');
@@ -3015,6 +3052,8 @@ function clearForm() {
   resetShoeUiPanels();
   _addFormWasFootwear = false;
   _preloadShoeCode = '';
+  const pageAdd = document.getElementById('page-add');
+  if (pageAdd) pageAdd.classList.remove('footwear-add-mode');
   ['shoe-shared-qty','shoe-shared-buy','shoe-shared-sell'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
@@ -3087,15 +3126,14 @@ async function onCodeInput() {
   if (!matches.length) { clearCodeMatchSelect('No match'); hideCodeDropdown(); return; }
   showCodeDropdown(matches, clean);
 
-  const type = UI.el('f-type')?.value || '';
-  const exact = matches.filter(i => i.code === clean);
-  if (exact.length === 1 && exact[0].isShoe && isFootwearType(type) && !UI.el('edit-id')?.value) {
-    await preloadShoeSizesForAdd(exact[0].code);
+  const exactMatches = matches.filter(i => i.code === clean);
+  if (exactMatches.length === 1 && exactMatches[0].isShoe && isAddFormFootwearContext() && !UI.el('edit-id')?.value) {
+    await preloadShoeSizesForAdd(exactMatches[0].code);
   }
 }
 
 async function preloadShoeSizesForAdd(code) {
-  if (!code || !isFootwearType(UI.el('f-type')?.value || '')) return;
+  if (!code || !isAddFormFootwearContext()) return;
   const items = (allItems && allItems.length) ? allItems : await dbAll('items');
   const product = items.find(i => i.code === code && i.isShoe);
   if (!product) return;
@@ -8428,26 +8466,14 @@ window.restockFromMonitor = restockFromMonitor;
 window.startWishlistRestock = startWishlistRestock;
 
 function onTypeChange() {
-  const typeEl     = UI.el('f-type');
-  const type       = typeEl ? String(typeEl.value || '').trim() : '';
+  const typeEl = UI.el('f-type');
+  const type   = typeEl ? String(typeEl.value || '').trim() : '';
   const shoePanel  = UI.el('shoe-size-panel');
   const stdPricing = UI.el('std-pricing-section');
-  const sizeField  = document.getElementById('f-size-field');
   if (!shoePanel || !stdPricing) return;
-
-  const inRestock = document.getElementById('page-add')?.classList.contains('restock-mode');
-  if (inRestock) {
-    shoePanel.style.display = 'none';
-    stdPricing.style.display = 'block';
-    return;
-  }
 
   const isShoe = isAddFormFootwearContext();
   _lastAddFormType = type;
-
-  shoePanel.style.display  = isShoe ? 'block' : 'none';
-  stdPricing.style.display = isShoe ? 'none'  : 'block';
-  if (sizeField) sizeField.style.display = isShoe ? 'none' : 'block';
 
   if (isShoe !== _addFormWasFootwear) {
     _shoeState.reset();
@@ -8456,10 +8482,7 @@ function onTypeChange() {
   }
   _addFormWasFootwear = isShoe;
 
-  if (isShoe) {
-    renderShoeGroupButtons();
-    revealShoeSizePickerUI();
-  }
+  applyAddFormFootwearUI(isShoe);
 }
 window.onTypeChange = onTypeChange;
 
