@@ -2875,66 +2875,95 @@ function getCheapestWishVendorQuote(quotes) {
   return sorted.length ? sorted[0] : null;
 }
 
-function buildWishVendorInsightsHtml(quotes, wish) {
-  const sorted = sortWishVendorQuotes(quotes);
-  if (!sorted.length) {
-    return '<div class="wish-vendor-insights wish-vendor-insights-empty">Add vendor prices below to see who is cheapest.</div>';
-  }
-  const cheapest = sorted[0];
-  const priciest = sorted[sorted.length - 1];
-  const spread = priciest.price - cheapest.price;
-  let html = '<div class="wish-vendor-insights-card">';
-  html += '<div class="wish-vendor-insight-title">Insights</div>';
-  html += '<div class="wish-vendor-insight-best"><span class="wish-vendor-insight-label">Cheapest</span> ' +
-    '<strong>' + escapeHtml(cheapest.vendor) + '</strong> · ' + fmt(cheapest.price) + '</div>';
-  if (sorted.length > 1) {
-    html += '<div class="wish-vendor-insight-row"><span>Most expensive</span> ' +
-      escapeHtml(priciest.vendor) + ' · ' + fmt(priciest.price) + '</div>';
-    html += '<div class="wish-vendor-insight-row"><span>You save</span> <strong>' + fmt(spread) + '</strong> vs highest</div>';
-    if (priciest.price > 0) {
-      const pct = Math.round((spread / priciest.price) * 100);
-      html += '<div class="wish-vendor-insight-hint">' + pct + '% cheaper at ' + escapeHtml(cheapest.vendor) + '</div>';
-    }
-  }
-  const qty = wish && wish.qty > 1 ? wish.qty : 0;
-  if (qty > 1) {
-    html += '<div class="wish-vendor-insight-row"><span>Est. ' + qty + ' pcs @ best</span> <strong>' +
-      fmt(cheapest.price * qty) + '</strong></div>';
-  }
-  html += '<div class="wish-vendor-insight-count">' + sorted.length + ' vendor' + (sorted.length > 1 ? 's' : '') + ' compared</div>';
-  html += '</div>';
-  return html;
+/** Parse "… 36-42" from wish name → size numbers for grid. */
+function parseWishShoeSizeRange(text) {
+  const s = String(text || '');
+  const m = s.match(/(\d+)\s*[-–—]\s*(\d+)\s*$/);
+  if (!m) return null;
+  const min = parseInt(m[1], 10);
+  const max = parseInt(m[2], 10);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max || max - min > 40) return null;
+  const sizes = [];
+  for (let i = min; i <= max; i++) sizes.push(i);
+  return { min, max, label: min + '–' + max, sizes };
 }
 
-function buildWishVendorListHtml(quotes) {
+function buildWishShoeOverlayHtml(wish) {
+  const range = parseWishShoeSizeRange(wish?.name || '') || parseWishShoeSizeRange(wish?.code || '');
+  if (!range) return '';
+  const cells = range.sizes.map(sz =>
+    '<span class="wd-shoe-sz">' + sz + '</span>'
+  ).join('');
+  return '<div class="wd-shoe-range">' + escapeHtml(range.label) + '</div>' +
+    '<div class="wd-shoe-grid">' + cells + '</div>';
+}
+
+function renderWishShoeOverlay(wish) {
+  const el = document.getElementById('wd-shoe-overlay');
+  if (!el) return;
+  const html = buildWishShoeOverlayHtml(wish);
+  if (html) {
+    el.innerHTML = html;
+    el.hidden = false;
+  } else {
+    el.innerHTML = '';
+    el.hidden = true;
+  }
+}
+
+function buildWishVendorTableHtml(quotes) {
   const sorted = sortWishVendorQuotes(quotes);
   if (!sorted.length) {
-    return '<div class="wish-vendor-list-empty">No vendor prices yet — use the form below.</div>';
+    return '<p class="wish-vendor-empty">No vendors yet</p>';
   }
-  return '<ol class="wish-vendor-list" start="1">' + sorted.map((q, i) => {
-    const rank = i + 1;
-    let extra = '';
-    if (rank === 1) extra = ' <span class="tag tag-green">Cheapest</span>';
-    else if (rank === sorted.length && sorted.length > 1) extra = ' <span class="tag tag-amber">Highest</span>';
-    return '<li class="wish-vendor-item">' +
-      '<span class="wish-vendor-rank" aria-hidden="true">' + rank + '</span>' +
-      '<div class="wish-vendor-item-main">' +
-        '<div class="wish-vendor-item-name">' + escapeHtml(q.vendor) + extra + '</div>' +
-        '<div class="wish-vendor-item-price">' + fmt(q.price) + '</div>' +
-      '</div>' +
-      '<button type="button" class="wish-vendor-del" data-quote-id="' + escapeHtml(String(q.id)) +
-        '" onclick="deleteWishVendorQuote(this.getAttribute(\'data-quote-id\'))" aria-label="Remove quote">✕</button>' +
-      '</li>';
-  }).join('') + '</ol>';
+  const rows = sorted.map((q, i) => {
+    const best = i === 0;
+    return '<tr class="wish-vendor-row' + (best ? ' wish-vendor-row-best' : '') + '">' +
+      '<td class="wish-vendor-td-name">' + escapeHtml(q.vendor) + (best ? '<span class="wish-vendor-best-tag">Best</span>' : '') + '</td>' +
+      '<td class="wish-vendor-td-price">' + fmt(q.price) + '</td>' +
+      '<td class="wish-vendor-td-act">' +
+        '<button type="button" class="wish-vendor-del" data-quote-id="' + escapeHtml(String(q.id)) +
+          '" onclick="deleteWishVendorQuote(this.getAttribute(\'data-quote-id\'))" aria-label="Remove">✕</button>' +
+      '</td></tr>';
+  }).join('');
+  return '<table class="wish-vendor-table"><thead><tr>' +
+    '<th>Vendor</th><th class="wish-vendor-th-price">Price</th><th></th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function buildWishListVendorsHtml(quotes) {
+  const sorted = sortWishVendorQuotes(normalizeWishVendorQuotes({ vendorQuotes: quotes }));
+  if (!sorted.length) {
+    return '<div class="wish-list-vendors wish-list-vendors-empty">—</div>';
+  }
+  return '<div class="wish-list-vendors">' + sorted.map((q, i) =>
+    '<div class="wish-list-vendor' + (i === 0 ? ' wish-list-vendor-best' : '') + '">' +
+      '<span class="wish-list-vendor-name">' + escapeHtml(q.vendor) + '</span>' +
+      '<span class="wish-list-vendor-price">' + fmt(q.price) + '</span>' +
+    '</div>'
+  ).join('') + '</div>';
 }
 
 function renderWishVendorSection(wish) {
   const quotes = normalizeWishVendorQuotes(wish);
-  const insightsEl = document.getElementById('wd-vendor-insights');
   const listEl = document.getElementById('wd-vendor-list');
-  if (insightsEl) insightsEl.innerHTML = buildWishVendorInsightsHtml(quotes, wish);
-  if (listEl) listEl.innerHTML = buildWishVendorListHtml(quotes);
+  if (listEl) listEl.innerHTML = buildWishVendorTableHtml(quotes);
 }
+
+function toggleWishVendorForm(show) {
+  const form = document.getElementById('wd-vendor-form');
+  const btn = document.getElementById('wd-vendor-add-btn');
+  if (show) {
+    if (form) form.classList.remove('is-hidden');
+    if (btn) btn.style.display = 'none';
+    setTimeout(() => document.getElementById('wd-vendor-name')?.focus(), 120);
+  } else {
+    if (form) form.classList.add('is-hidden');
+    if (btn) btn.style.display = '';
+    clearWishVendorForm();
+  }
+}
+window.toggleWishVendorForm = toggleWishVendorForm;
 
 function clearWishVendorForm() {
   const nameEl = document.getElementById('wd-vendor-name');
@@ -2974,10 +3003,11 @@ async function saveWishVendorQuote() {
   wish.vendorQuotes = quotes;
   await dbPut('wishlist', wish);
   clearWishVendorForm();
+  toggleWishVendorForm(false);
   renderWishVendorSection(wish);
   scheduleSync();
   await renderWishlistPage();
-  toast(existing ? 'Vendor price updated' : 'Vendor price saved', 'ok');
+  toast(existing ? 'Updated' : 'Saved', 'ok');
 }
 window.saveWishVendorQuote = saveWishVendorQuote;
 
@@ -3021,15 +3051,20 @@ async function openWishlistDetail(wishId) {
   const codeEl = document.getElementById('wd-code');
   const metaEl = document.getElementById('wd-meta');
   const noteEl = document.getElementById('wd-note');
-  if (nameEl) nameEl.textContent = wish.name || wish.code || 'Prospective item';
-  if (codeEl) codeEl.textContent = wish.code ? 'Code: ' + wish.code : 'No code';
+  if (nameEl) nameEl.textContent = wish.name || wish.code || 'Item';
+  if (codeEl) {
+    codeEl.textContent = wish.code || '';
+    codeEl.style.display = wish.code ? '' : 'none';
+  }
   if (metaEl) {
     const parts = [];
     if (wish.type) parts.push(wish.type);
-    if (wish.qty) parts.push('Target qty: ' + wish.qty);
-    if (wish.estimatedCost) parts.push('Est. buy: ' + fmt(wish.estimatedCost));
-    metaEl.textContent = parts.length ? parts.join(' · ') : 'No extra details';
+    if (wish.qty > 0) parts.push('Qty ' + wish.qty);
+    if (wish.estimatedCost) parts.push(fmt(wish.estimatedCost));
+    metaEl.textContent = parts.join(' · ');
+    metaEl.style.display = parts.length ? '' : 'none';
   }
+  renderWishShoeOverlay(wish);
   if (noteEl) {
     if (wish.note) {
       noteEl.textContent = wish.note;
@@ -3039,10 +3074,9 @@ async function openWishlistDetail(wishId) {
       noteEl.style.display = 'none';
     }
   }
-  clearWishVendorForm();
+  toggleWishVendorForm(false);
   renderWishVendorSection(wish);
   if (sheet) sheet.classList.add('open');
-  setTimeout(() => document.getElementById('wd-vendor-name')?.focus(), 200);
 }
 window.openWishlistDetail = openWishlistDetail;
 
@@ -3050,7 +3084,7 @@ function closeWishlistDetail() {
   const sheet = document.getElementById('wishlist-detail-sheet');
   if (sheet) sheet.classList.remove('open');
   _currentWishDetailId = null;
-  clearWishVendorForm();
+  toggleWishVendorForm(false);
 }
 window.closeWishlistDetail = closeWishlistDetail;
 
@@ -3901,29 +3935,18 @@ async function renderWishlistPage() {
       ? '<img src="' + photo + '" alt="" class="wish-list-thumb">'
       : '<div class="wish-list-thumb wish-list-thumb-empty">📷</div>';
     const wishRec = wishById.get(row.wishId);
-    const cheapest = wishRec ? getCheapestWishVendorQuote(normalizeWishVendorQuotes(wishRec)) : null;
-    const vendorHint = cheapest
-      ? '<span class="tag tag-green">Best: ' + escapeHtml(cheapest.vendor) + ' ' + fmt(cheapest.price) + '</span>'
-      : '';
-    return '<div class="stock-monitor-row prospective" onclick="openWishlistDetail(' + row.wishId + ')" role="button" tabindex="0">' +
+    const vendorsCol = buildWishListVendorsHtml(wishRec ? wishRec.vendorQuotes : []);
+    return '<div class="stock-monitor-row prospective wish-list-row" onclick="openWishlistDetail(' + row.wishId + ')" role="button" tabindex="0">' +
       thumb +
       '<div class="stock-monitor-body">' +
         '<div class="stock-monitor-name">' + escapeHtml(row.name) + '</div>' +
         '<div class="stock-monitor-meta">' +
-          escapeHtml(row.code || 'No code') + (row.type ? ' · ' + escapeHtml(row.type) : '') +
-          (row.qty ? ' · target ' + row.qty : '') +
-          (row.buyPrice ? ' · est. ' + fmt(row.buyPrice) : '') +
-        '</div>' +
-        '<div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;">' +
-          '<span class="tag tag-amber">Prospective</span>' +
-          vendorHint +
-          (row.note ? '<span class="tag tag-gray">' + escapeHtml(row.note) + '</span>' : '') +
+          escapeHtml(row.code || '') +
+          (row.type ? (row.code ? ' · ' : '') + escapeHtml(row.type) : '') +
+          (row.qty ? ' · ' + row.qty + ' pcs' : '') +
         '</div>' +
       '</div>' +
-      '<div class="stock-monitor-actions">' +
-        '<button class="stock-monitor-action restock" onclick="event.stopPropagation();openWishlistDetail(' + row.wishId + ')" title="View"><i class="fa-solid fa-eye"></i></button>' +
-        '<button class="stock-monitor-action restock" onclick="event.stopPropagation();startWishlistRestock(' + row.wishId + ')" title="Stock it"><i class="fa-solid fa-boxes-stacked"></i></button>' +
-      '</div>' +
+      vendorsCol +
     '</div>';
   }).join('');
 }

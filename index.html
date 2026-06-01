@@ -1611,6 +1611,7 @@
     <div id="wd-photo-wrap" class="wish-detail-photo-wrap">
       <img id="wd-photo-img" class="wish-detail-photo" src="" alt="" style="display:none;">
       <div id="wd-photo-empty" class="wish-detail-photo-empty">📷</div>
+      <div id="wd-shoe-overlay" class="wd-shoe-overlay" hidden></div>
     </div>
 
     <div class="wish-detail-body">
@@ -1619,22 +1620,23 @@
       <div id="wd-meta" class="wish-detail-meta"></div>
       <div id="wd-note" class="wish-detail-note" style="display:none;"></div>
 
-      <section class="wish-vendor-section" aria-labelledby="wd-vendor-heading">
-        <h3 id="wd-vendor-heading" class="wish-vendor-heading">Vendor price comparison</h3>
-        <div id="wd-vendor-insights"></div>
+      <section class="wish-vendor-section" aria-label="Vendor prices">
+        <div class="wish-vendor-section-head">
+          <h3 class="wish-vendor-heading">Vendors</h3>
+          <button type="button" id="wd-vendor-add-btn" class="wish-vendor-add-btn" onclick="toggleWishVendorForm(true)">+ Add</button>
+        </div>
         <div id="wd-vendor-list"></div>
-        <div class="wish-vendor-form">
-          <div class="wish-vendor-form-title">Add / update vendor quote</div>
+        <div id="wd-vendor-form" class="wish-vendor-form is-hidden">
           <div class="wish-vendor-form-row">
             <input class="add-input" id="wd-vendor-name" type="text" maxlength="80"
-                   placeholder="Vendor name *" aria-label="Vendor name" autocomplete="off">
+                   placeholder="Vendor *" aria-label="Vendor name" autocomplete="off">
             <input class="add-input add-center" id="wd-vendor-price" type="number" min="0"
-                   inputmode="decimal" placeholder="Price (KES) *" aria-label="Vendor price">
+                   inputmode="decimal" placeholder="KES *" aria-label="Vendor price">
           </div>
-          <button type="button" class="wish-vendor-save-btn" onclick="saveWishVendorQuote()">
-            <i class="fa-solid fa-floppy-disk"></i> Save vendor price
-          </button>
-          <p class="wish-vendor-form-hint">Saved quotes are sorted cheapest → most expensive. Same vendor name updates the existing quote.</p>
+          <div class="wish-vendor-form-actions">
+            <button type="button" class="wish-vendor-save-btn" onclick="saveWishVendorQuote()">Save</button>
+            <button type="button" class="wish-vendor-cancel-btn" onclick="toggleWishVendorForm(false)">Cancel</button>
+          </div>
         </div>
       </section>
     </div>
