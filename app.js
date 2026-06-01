@@ -112,6 +112,7 @@ function initDB() {
   req.onerror = e => {
     console.error('[DB] Open error:', e.target.error);
     toast('Database error — try refreshing', 'err');
+    setLoginReady(true);
   };
 
   req.onsuccess = e => {
@@ -129,6 +130,10 @@ function initDB() {
       if (sessionRestored && currentUser) {
         _origShowPage(resolveLandingPage(currentUser, localStorage.getItem(KEY_LAST_PAGE)));
       }
+    }).catch(err => {
+      console.error('[DB] Bootstrap error:', err);
+      toast('Database setup failed — refresh the page', 'err');
+      setLoginReady(true);
     });
   };
 }
@@ -1095,19 +1100,24 @@ function showOperationsTab(tab) {
   }
 }
 
-function showPage(id) {
+function resolvePageRoute(id) {
   if (id === 'list' || id === 'wishlist' || id === 'add' || id === 'monitor') {
     _activeInventoryTab = id === 'list' ? 'stock' : id;
-    id = 'inventory';
+    return 'inventory';
   }
   if (id === 'day' || id === 'finance') {
     _activeOperationsTab = id;
-    id = 'operations';
+    return 'operations';
   }
   if (id === 'history') {
     _activeSalesTab = 'history';
-    id = 'sell';
+    return 'sell';
   }
+  return id;
+}
+
+function showPage(id) {
+  id = resolvePageRoute(id);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   const pageEl = document.getElementById('page-' + id);
@@ -1135,6 +1145,11 @@ showPage = function(id) {
   clearDayTabLocks();
   _origShowPage(id);
 };
+
+function navigateToStock() {
+  goDashNav('stock');
+}
+window.navigateToStock = navigateToStock;
 
 // ===== TYPES =====
 const DEFAULT_TYPES = [
@@ -2809,7 +2824,7 @@ async function saveItem() {
       clearForm();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
       renderList();renderDashboard();updateHeader();scheduleSync();
-      toast('\u2705 Size '+size+' updated \u00b7 '+qty+' pairs \u00b7 '+fmt(sell),'ok');
+      toast('\u2705 Size '+size+' updated \u00b7 '+qty+' pcs \u00b7 '+fmt(sell),'ok');
       showPage('list');return;
     }
 
@@ -3994,12 +4009,22 @@ async function openSheet(id) {
   const shSellBtn  = document.getElementById('sh-sell-btn');
   const delBtn     = document.querySelector('#detail-sheet .btn-del');
   const editBtn    = document.querySelector('#detail-sheet .btn-edit');
-  const restockBtn = document.querySelector('[onclick="toggleRestock()"]');
+  const restockBtn = document.querySelector('#detail-sheet .detail-action-restock');
   const actionRow  = document.getElementById('sh-action-row');
-  [shSellBtn, delBtn, editBtn, restockBtn].forEach(b => {
+  [shSellBtn, delBtn, editBtn].forEach(b => {
     if (b) { b.style.display = ''; b.style.opacity = '1'; b.style.pointerEvents = 'auto'; }
   });
-  if (actionRow) actionRow.style.display = '';
+  if (restockBtn) {
+    const showRestock = !item.isShoe;
+    restockBtn.style.display = showRestock ? '' : 'none';
+    restockBtn.style.opacity = showRestock ? '1' : '0';
+    restockBtn.style.pointerEvents = showRestock ? 'auto' : 'none';
+  }
+  if (actionRow) {
+    actionRow.style.display = '';
+    actionRow.style.justifyContent = item.isShoe ? 'flex-start' : 'space-between';
+  }
+  if (item.isShoe && restockPanel) restockPanel.style.display = 'none';
   const notice = document.getElementById('sh-day-notice');
   if (notice) notice.style.display = 'none';
 }
@@ -4021,6 +4046,18 @@ async function deleteItem() {
   let msg = 'Delete "' + (toDelete.name || toDelete.code) + '"?';
   if (itemSales.length > 0) msg += '\n\n⚠️ This item has ' + itemSales.length + ' sale record(s). The sales history will remain but the item cannot be restocked.';
   if (!confirm(msg)) return;
+  if (toDelete.isShoe) {
+    const sizes = await getShoeSizes(toDelete.code);
+    for (const sz of sizes) {
+      await dbDelete('shoe_sizes', sz.id);
+      if (sz.fbId && fbReady && fbDb) {
+        try {
+          const { doc, deleteDoc } = await waitForFbImports();
+          await deleteDoc(doc(fbDb, 'shoe_sizes', sz.fbId));
+        } catch (_) { /* intentionally ignored */ }
+      }
+    }
+  }
   await dbDelete('items', currentDetailId);
   await removeItemPhoto(currentDetailId);
   if (toDelete && toDelete.fbId) fbDeleteItem(toDelete.fbId);
@@ -4393,8 +4430,9 @@ async function renderDashboard() {
   const alertEl = document.getElementById('d-alerts');
   if (alertEl) {
     let html = '';
-    if (outStk.length) html += `<div style="background:var(--red-light);border:1px solid rgba(192,57,43,0.25);border-radius:var(--r);padding:10px 12px;margin-bottom:6px;font-size:12px;color:var(--red);font-weight:600;">⚠️ <strong>${outStk.length}</strong> out of stock — ${outStk.slice(0,4).map(i=>escapeHtml(i.code)).join(', ')}${outStk.length>4?' +more':''}</div>`;
-    if (lowStk.length) html += `<div style="background:var(--amber-light);border:1px solid #f5d9a0;border-radius:var(--r);padding:10px 12px;margin-bottom:6px;font-size:12px;color:var(--amber);font-weight:600;">📉 <strong>${lowStk.length}</strong> running low — ${lowStk.slice(0,4).map(i=>escapeHtml(i.code)).join(', ')}${lowStk.length>4?' +more':''}</div>`;
+    const alertStyle = 'cursor:pointer;border-radius:var(--r);padding:10px 12px;margin-bottom:6px;font-size:12px;font-weight:600;';
+    if (outStk.length) html += `<div role="button" tabindex="0" onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}" style="background:var(--red-light);border:1px solid rgba(192,57,43,0.25);color:var(--red);${alertStyle}">⚠️ <strong>${outStk.length}</strong> out of stock — tap to view stock</div>`;
+    if (lowStk.length) html += `<div role="button" tabindex="0" onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}" style="background:var(--amber-light);border:1px solid #f5d9a0;color:var(--amber);${alertStyle}">📉 <strong>${lowStk.length}</strong> running low — tap to view stock</div>`;
     alertEl.innerHTML = html;
   }
 
@@ -6677,9 +6715,14 @@ async function renderDaySessionsList() {
 // ═══════════════════════════════════════════════════════════
 async function toggleRestock() {
   const panel = document.getElementById('restock-panel');
+  if (!panel) return;
+  const item = currentDetailId ? await dbGet('items', currentDetailId) : null;
+  if (item?.isShoe) {
+    toast('Pick a size from the grid, then restock that size', 'err');
+    return;
+  }
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   if (panel.style.display !== 'block') return;
-  const item = currentDetailId ? await dbGet('items', currentDetailId) : null;
   const buyEl = document.getElementById('restock-buy');
   const sellEl = document.getElementById('restock-sell');
   const qtyEl = document.getElementById('restock-qty');
@@ -6711,6 +6754,10 @@ async function confirmRestock() {
     if (sellRaw !== null && sellRaw < 0) return Validate.fail('Invalid sell price', 'restock-sell');
     const item = await dbGet('items', currentDetailId);
     if (!item) { toast('⚠️ Item not found', 'err'); return; }
+    if (item.isShoe) {
+      toast('Restock a shoe size from the size list', 'err');
+      return;
+    }
     const unitBuy = buyRaw !== null ? buyRaw : (item.buyPrice || item.buy || 0);
     if (sellRaw !== null) {
       item.sellPrice = sellRaw;
@@ -6730,7 +6777,8 @@ async function confirmRestock() {
     set('sh-buy', fmt(item.buyPrice || item.buy || 0));
     set('sh-sell', fmt(item.sellPrice || item.sell || 0));
     set('sh-qty', item.qty + ' pcs');
-    document.getElementById('restock-panel').style.display = 'none';
+    const panel = document.getElementById('restock-panel');
+    if (panel) panel.style.display = 'none';
     allItems = await dbAll('items');
     await enrichShoeItems(allItems);
     renderList(); renderDashboard(); updateHeader();
@@ -7079,7 +7127,7 @@ function initCleanNumericInputs() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  setLoginReady(false);
+  setLoginReady(!!_appDbReady);
   initCleanNumericInputs();
   initWishlistScreenshotWatch();
   const ps = document.getElementById('profile-sheet');
@@ -7130,7 +7178,6 @@ async function hashPin(pin) {
   return null;
 }
 
-let _loginAttempts = 0, _loginLockedUntil = 0;
 let currentUser = null;
 let _appDbReady = false;
 let _appDataBootstrapped = false;
@@ -8769,7 +8816,7 @@ async function openShoeSizeRestock(itemId, size) {
       type: item.type,
       size,
       stock: sizeRec.qty || 0,
-      stockUnit: ' pairs',
+      stockUnit: ' pcs',
       buy: sizeRec.buyPrice || item.buyPrice || 0,
       sell: sizeRec.sellPrice || item.sellPrice || 0
     });
