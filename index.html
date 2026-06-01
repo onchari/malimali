@@ -797,16 +797,33 @@
     </div>
 
     <div id="shoe-sizes-grid">
-      <p class="add-card-hint" style="margin:10px 0 6px;">Tap sizes to stock</p>
       <div class="add-section add-section-inset" style="padding-bottom:10px;">
-        <div id="sz-grid"></div>
-        <div id="shoe-selected-summary"></div>
+        <div id="sz-grid" class="sz-grid-unified"></div>
       </div>
     </div>
 
     <div id="shoe-rows-wrap">
-      <p class="add-card-hint" style="margin:10px 0 6px;">Quantity &amp; pricing</p>
-      <div class="add-section add-section-inset" style="padding-bottom:10px;">
+      <div class="add-section add-section-inset shoe-pricing-panel" style="padding-bottom:10px;">
+        <div id="shoe-stock-summary" class="shoe-stock-summary">
+          <div class="shoe-stock-summary-top">
+            <span class="shoe-stock-lbl">Selected</span>
+            <div id="shoe-selected-summary" class="shoe-selected-chips"></div>
+          </div>
+          <div class="shoe-stock-metrics">
+            <div class="shoe-metric">
+              <span class="shoe-metric-lbl">Total qty</span>
+              <strong id="shoe-metric-qty" class="shoe-metric-val">0</strong>
+            </div>
+            <div class="shoe-metric">
+              <span class="shoe-metric-lbl">BP</span>
+              <strong id="shoe-metric-bp" class="shoe-metric-val">—</strong>
+            </div>
+            <div class="shoe-metric">
+              <span class="shoe-metric-lbl">SP</span>
+              <strong id="shoe-metric-sp" class="shoe-metric-val">—</strong>
+            </div>
+          </div>
+        </div>
 
         <!-- ── Mode toggle tabs ─────────────────────────────── -->
         <div class="shoe-mode-tabs">
@@ -822,24 +839,23 @@
 
         <!-- ── Shared mode (default) ────────────────────────── -->
         <div id="shoe-shared-wrap">
-          <div class="shoe-info-bar">
-            <i class="fa-solid fa-circle-info"></i>
-            Same qty &amp; price for all selected sizes
+          <div class="shoe-price-labels add-row-3">
+            <span>Qty / size</span><span>BP</span><span>SP</span>
           </div>
           <div class="add-row-3">
             <div class="add-field">
               <input class="add-input add-center" id="shoe-shared-qty"
-                     type="number" min="0" inputmode="numeric" placeholder="Qty/size *"
+                     type="number" min="0" inputmode="numeric" placeholder="0"
                      aria-label="Quantity per size">
             </div>
             <div class="add-field">
               <input class="add-input add-center" id="shoe-shared-buy"
-                     type="number" min="0" inputmode="decimal" placeholder="Buy (KES) *"
+                     type="number" min="0" inputmode="decimal" placeholder="0"
                      aria-label="Buy price">
             </div>
             <div class="add-field">
               <input class="add-input add-center" id="shoe-shared-sell"
-                     type="number" min="0" inputmode="decimal" placeholder="Sell (KES) *"
+                     type="number" min="0" inputmode="decimal" placeholder="0"
                      aria-label="Sell price">
             </div>
           </div>

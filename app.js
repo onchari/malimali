@@ -564,6 +564,8 @@ function applyAddFormFootwearUI(isShoe) {
     renderShoeGroupButtons();
     prepareShoeSizePickerUI();
     showShoePricingPanel();
+    initShoeCollectiveSummaryListeners();
+    updateShoeCollectiveSummary();
   } else {
     if (shoePanel) shoePanel.style.display = 'none';
     if (stdPricing) stdPricing.style.removeProperty('display');
@@ -3408,6 +3410,7 @@ async function preloadShoeSizesForAdd(code) {
   renderShoeGroupButtons();
   renderShoeSummary();
   if (_shoeState.perSizeMode) renderShoeRows();
+  updateShoeCollectiveSummary();
 }
 
 function showCodeDropdown(items, typedCode) {
@@ -9208,6 +9211,7 @@ function selectSizeGroup(g) {
   showShoePricingPanel();
   // Rebuild per-size rows if in per-size mode
   if (_shoeState.perSizeMode) renderShoeRows();
+  updateShoeCollectiveSummary();
 }
 window.selectSizeGroup = selectSizeGroup;
 
@@ -9226,8 +9230,89 @@ function setShoeMode(mode) {
 
   // Rebuild per-size rows when switching to per-size
   if (_shoeState.perSizeMode) renderShoeRows();
+  updateShoeCollectiveSummary();
 }
 window.setShoeMode = setShoeMode;
+
+let _shoeCollectiveListenersOn = false;
+
+function initShoeCollectiveSummaryListeners() {
+  if (_shoeCollectiveListenersOn) return;
+  _shoeCollectiveListenersOn = true;
+  ['shoe-shared-qty', 'shoe-shared-buy', 'shoe-shared-sell'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', updateShoeCollectiveSummary);
+  });
+  const rows = document.getElementById('shoe-rows');
+  if (rows) {
+    rows.addEventListener('input', e => {
+      if (e.target && e.target.classList && e.target.classList.contains('shoe-cell')) {
+        updateShoeCollectiveSummary();
+      }
+    });
+  }
+}
+
+function updateShoeCollectiveSummary() {
+  renderShoeSummary();
+  const qtyEl = document.getElementById('shoe-metric-qty');
+  const bpEl = document.getElementById('shoe-metric-bp');
+  const spEl = document.getElementById('shoe-metric-sp');
+  if (!qtyEl || !bpEl || !spEl) return;
+
+  const sorted = _shoeState.sortedSizes;
+  const n = sorted.length;
+  if (!n) {
+    qtyEl.textContent = '0';
+    bpEl.textContent = '—';
+    spEl.textContent = '—';
+    bpEl.classList.remove('accent');
+    spEl.classList.remove('accent');
+    return;
+  }
+
+  if (!_shoeState.perSizeMode) {
+    const qPer = parseInt(UI.el('shoe-shared-qty')?.value || '0', 10) || 0;
+    const bp = parseFloat(UI.el('shoe-shared-buy')?.value || '0') || 0;
+    const sp = parseFloat(UI.el('shoe-shared-sell')?.value || '0') || 0;
+    const totalQty = qPer * n;
+    qtyEl.textContent = String(totalQty);
+    bpEl.textContent = bp > 0 ? fmt(bp) : '—';
+    spEl.textContent = sp > 0 ? fmt(sp) : '—';
+    bpEl.classList.toggle('accent', bp > 0);
+    spEl.classList.toggle('accent', sp > 0);
+    return;
+  }
+
+  let totalQty = 0;
+  let buySum = 0;
+  let sellSum = 0;
+  let priced = 0;
+  sorted.forEach(s => {
+    const q = parseInt(UI.el('shr-qty-' + s)?.value || '0', 10) || 0;
+    const b = parseFloat(UI.el('shr-buy-' + s)?.value || '0') || 0;
+    const p = parseFloat(UI.el('shr-sell-' + s)?.value || '0') || 0;
+    totalQty += q;
+    if (b > 0 || p > 0) {
+      buySum += b;
+      sellSum += p;
+      priced += 1;
+    }
+  });
+  qtyEl.textContent = String(totalQty);
+  if (priced) {
+    bpEl.textContent = fmt(Math.round(buySum / priced));
+    spEl.textContent = fmt(Math.round(sellSum / priced));
+    bpEl.classList.add('accent');
+    spEl.classList.add('accent');
+  } else {
+    bpEl.textContent = '—';
+    spEl.textContent = '—';
+    bpEl.classList.remove('accent');
+    spEl.classList.remove('accent');
+  }
+}
+window.updateShoeCollectiveSummary = updateShoeCollectiveSummary;
 
 async function upsertShoeSize(record, opts) {
   const addQty = !!(opts && opts.addQty);
@@ -9375,6 +9460,7 @@ function deselectSizeGroup(g) {
   renderShoeGroupButtons();
   renderShoeSummary();
   renderShoeRows();
+  updateShoeCollectiveSummary();
 }
 window.deselectSizeGroup = deselectSizeGroup;
 
@@ -9391,6 +9477,7 @@ function toggleShoeSize(s) {
   // If switching to persize and rows already rendered, rebuild them
   if (_shoeState.perSizeMode) renderShoeRows();
   renderShoeSummary();
+  updateShoeCollectiveSummary();
 }
 window.toggleShoeSize = toggleShoeSize;
 
@@ -9545,19 +9632,22 @@ function renderShoeRows() {
     '<input type="number" class="shoe-cell" id="shr-sell-' + s + '" min="0" inputmode="decimal" placeholder="Sell">' +
     '</div>'
   ).join('');
+  updateShoeCollectiveSummary();
 }
 function renderShoeSummary() {
   const el = UI.el('shoe-selected-summary');
   if (!el) return;
-  if (_shoeState.sizes.size === 0) { el.innerHTML = ''; return; }
   const sorted = _shoeState.sortedSizes;
-  el.innerHTML = '<div class="shoe-pills-row">' +
-    sorted.map(s => '<span class="shoe-pill">' + s + '</span>').join('') +
-    '<span style="font-size:11px;color:var(--muted);margin-left:4px;align-self:center;">' +
-    sorted.length + ' size' + (sorted.length>1?'s':'') + ' selected</span></div>';
+  if (!sorted.length) {
+    el.innerHTML = '<span class="shoe-selected-chips-empty">Tap sizes above</span>';
+  } else {
+    el.innerHTML = sorted.map(s =>
+      '<span class="shoe-selected-chip">' + s + '</span>'
+    ).join('');
+  }
   const saveBtn = UI.el('save-btn');
   const panel   = UI.el('shoe-size-panel');
-  if (saveBtn && panel && panel.style.display !== 'none') {
-    setSaveBtnLabel('Save ' + sorted.length + ' shoe size' + (sorted.length > 1 ? 's' : ''));
+  if (saveBtn && panel && panel.style.display !== 'none' && sorted.length) {
+    setSaveBtnLabel('Save ' + sorted.length + ' size' + (sorted.length > 1 ? 's' : ''));
   }
 }
