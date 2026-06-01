@@ -122,28 +122,13 @@ function initDB() {
       updateCurrencyUI();
       await migrateData();
       await initPhotoStore();
+      _appDbReady = true;
+      setLoginReady(true);
+      await bootstrapAppData();
       const sessionRestored = checkSession();
-      if (!sessionRestored) return;
-
-      await loadActiveDay();
-      try { await _cleanupFinanceCoherence(true); } catch(_) { /* intentionally ignored */ }
-      renderDashboard();
-      renderList();
-      renderSummary();
-      renderSellPage();
-      updateLowStockBadge();
-
-      const rawLastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
-      let lastPage = (rawLastPage === 'day' || rawLastPage === 'finance') ? 'operations' : rawLastPage;
-      if (lastPage === 'history') {
-        _activeSalesTab = 'history';
-        lastPage = 'sell';
+      if (sessionRestored && currentUser) {
+        _origShowPage(resolveLandingPage(currentUser, localStorage.getItem(KEY_LAST_PAGE)));
       }
-      const allowedPage = currentUser && (
-        currentUser.tabs.includes(lastPage) ||
-        (lastPage === 'sell' && currentUser.tabs.includes('history'))
-      ) ? lastPage : currentUser.tabs[0];
-      _origShowPage(allowedPage);
     });
   };
 }
@@ -1139,14 +1124,12 @@ function showPage(id) {
 // Defined immediately after showPage so _origShowPage is available at startup
 const _origShowPage = showPage;
 showPage = function(id) {
-  const requestedId = id;
-  let allowedId = (id === 'list' || id === 'wishlist' || id === 'add' || id === 'monitor') ? 'inventory' : id;
-  if (id === 'history') allowedId = 'sell';
-  if (currentUser && !currentUser.tabs.includes(allowedId) && !currentUser.tabs.includes(requestedId)) {
+  if (currentUser && !userCanAccessNav(id, currentUser)) {
     toast('⛔ Access denied', 'err');
     return;
   }
-  if (currentUser) localStorage.setItem(KEY_LAST_PAGE, allowedId);
+  if (currentUser) localStorage.setItem(KEY_LAST_PAGE, navAccessKey(id));
+  clearDayTabLocks();
   _origShowPage(id);
 };
 
@@ -2854,14 +2837,10 @@ async function saveItem() {
     if(!code){toast('\u26a0\ufe0f Enter item code','err');return;}
     if (!editIdRaw) {
       const codeMatches = await findCodeMatchesForSave(code);
-<<<<<<< HEAD
       const existingCode = codeMatches.find(i => i.code === code);
       // Footwear: same code is OK when adding/updating sizes on an existing shoe SKU
       const addingShoeSizes = existingCode && isFootwearType(type) && existingCode.isShoe;
       if (existingCode && !addingShoeSizes) {
-=======
-      if (codeMatches.some(i => i.code === code)) {
->>>>>>> e5edd28096567e933e7388db223404d66f085c14
         showCodeDropdown(codeMatches, code);
         toast('\u26a0\ufe0f Item code already exists — select it from the dropdown', 'err');
         UI.el('f-code')?.focus();
@@ -3994,48 +3973,17 @@ async function openSheet(id) {
   if (restockPanel) restockPanel.style.display = 'none';
   updateDetailRestockBtnLabel();
 
-  // Show/hide action buttons based on day state
-  const dayOpen = isDayOpen();
-  const status  = activeDay ? activeDay.status : 'PENDING';
-
   const shSellBtn  = document.getElementById('sh-sell-btn');
   const delBtn     = document.querySelector('#detail-sheet .btn-del');
   const editBtn    = document.querySelector('#detail-sheet .btn-edit');
   const restockBtn = document.querySelector('[onclick="toggleRestock()"]');
   const actionRow  = document.getElementById('sh-action-row');
-
-  if (dayOpen) {
-    // OPEN: show all action buttons
-    [shSellBtn, delBtn, editBtn, restockBtn].forEach(b => { if (b) { b.style.display = ''; b.style.opacity = '1'; b.style.pointerEvents = 'auto'; } });
-    if (actionRow) actionRow.style.display = '';
-  } else {
-    // Not OPEN: hide write actions, show read-only notice
-    [shSellBtn, delBtn, editBtn, restockBtn].forEach(b => { if (b) { b.style.display = 'none'; } });
-    if (actionRow) actionRow.style.display = 'none';
-  }
-
-  // Status-specific notice in the detail sheet
-  let notice = document.getElementById('sh-day-notice');
-  if (!dayOpen) {
-    const noticeText = {
-      PENDING:    '📅 Open the business day to edit or sell items.',
-      PAUSED:     '⏸ Day is paused — resume to make changes.',
-      CLOSED:     '🌙 Day is closed — reopen from the Day tab to make changes.',
-      RECONCILED: '✅ Day is reconciled and permanently archived.',
-      LOCKED:     '🔒 This is an archived day — read only.',
-    };
-    if (!notice) {
-      notice = document.createElement('div');
-      notice.id = 'sh-day-notice';
-      notice.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;margin-bottom:10px;font-size:12px;font-weight:600;color:var(--text2);text-align:center;';
-      const infoArea = document.querySelector('#detail-sheet .sheet > div:last-child');
-      if (infoArea) infoArea.insertBefore(notice, infoArea.firstChild);
-    }
-    notice.textContent = noticeText[status] || '🔒 Actions unavailable.';
-    notice.style.display = 'block';
-  } else {
-    if (notice) notice.style.display = 'none';
-  }
+  [shSellBtn, delBtn, editBtn, restockBtn].forEach(b => {
+    if (b) { b.style.display = ''; b.style.opacity = '1'; b.style.pointerEvents = 'auto'; }
+  });
+  if (actionRow) actionRow.style.display = '';
+  const notice = document.getElementById('sh-day-notice');
+  if (notice) notice.style.display = 'none';
 }
 
 function closeSheet() {
@@ -6297,81 +6245,18 @@ async function runSyncDebug() {
 
 
 // ===================================================================
-// DAY MODE CONTROL - enable/disable tabs based on day status
+// Day status is tracked in Operations → Day (reports/reconciliation only).
+// It does not lock tabs, sheets, sales, or inventory actions.
 // ===================================================================
 
-// Tabs that require an open day
-const DAY_RESTRICTED_TABS = ['dash', 'add', 'list'];
-
-function setDayMode(isOpen) {
-  const status = activeDay ? activeDay.status : 'PENDING';
-  // Dashboard: accessible when OPEN or PAUSED (progress view), blocked otherwise
-  const dashOk = isOpen || status === 'PAUSED';
-  const dashBtn = document.getElementById('tab-dash');
-  if (dashBtn && dashBtn.style.display !== 'none') {
-    dashBtn.classList.toggle('disabled', !dashOk);
-    if (!dashOk) dashBtn.classList.remove('active');
-  }
-
-  // Add tab: only when OPEN
-  const addBtn = document.getElementById('tab-add');
-  if (addBtn && addBtn.style.display !== 'none') {
-    addBtn.classList.toggle('disabled', !isOpen);
-    if (!isOpen) addBtn.classList.remove('active');
-  }
-
-  // Stock tab: viewable always, but grayed to signal read-only when not OPEN
-  const listBtn = document.getElementById('tab-list');
-  if (listBtn && listBtn.style.display !== 'none') {
-    listBtn.classList.toggle('disabled', !isOpen);
-    if (!isOpen) listBtn.classList.remove('active');
-  }
-
-  // Redirect if on a now-blocked page
-  if (!isOpen) {
-    const activePage = document.querySelector('.page.active');
-    if (activePage) {
-      const pageId = activePage.id.replace('page-', '');
-      if (pageId === 'add') _origShowPage('day');
-      if (pageId === 'dash' && !dashOk) _origShowPage('day');
-      if (pageId === 'list') renderList(); // refresh to show/hide action buttons
-    }
-  }
-}
-
-function showDayClosedOverlay(pageId) {
-  const overlay = document.getElementById('day-closed-overlay');
-  const msg = document.getElementById('day-closed-msg');
-  if (!overlay) return;
-  const status = activeDay ? activeDay.status : 'PENDING';
-  if (status === 'LOCKED') {
-    msg.textContent = 'Open today\'s business day from the Day tab to continue.';
-  } else if (status === 'CLOSED') {
-    msg.textContent = 'The business day is closed. You can reopen it from the Day tab before 11:59 PM.';
-  } else {
-    msg.textContent = 'Please open the business day first to access this section.';
-  }
-  overlay.classList.add('show');
-}
-
-function hideDayClosedOverlay() {
+function clearDayTabLocks() {
+  document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('disabled'));
   const overlay = document.getElementById('day-closed-overlay');
   if (overlay) overlay.classList.remove('show');
 }
 
 // ===================================================================
-// BUSINESS DAY MANAGEMENT
-//
-// Simple two-state model:
-//   OPEN   → day is active, all operations allowed
-//   CLOSED → day is closed, operations blocked
-//
-// Rules:
-//   • User can open and close the day as many times as needed
-//     within the same calendar date
-//   • On date change, the system auto-creates and opens a new day
-//   • At midnight, current day closes automatically
-//   • Past days are LOCKED (read-only archive)
+// BUSINESS DAY MANAGEMENT (Operations tab — tracking & reconciliation)
 // ===================================================================
 
 let activeDay = null;
@@ -6397,11 +6282,8 @@ function fmtFullDate(dateStr) {
   });
 }
 
-// ── STATE CHECKS ─────────────────────────────────────────────────────
-// isDayOpen() removed — system always active, date-based tracking
+// Legacy helpers — day state no longer gates the rest of the app
 function isDayOpen() { return true; }
-
-// requireOpenDay removed — always returns true
 function requireOpenDay() { return true; }
 
 // ── LOAD ACTIVE DAY ON APP START ─────────────────────────────────────
@@ -6415,6 +6297,8 @@ async function loadActiveDay() {
     let bday = await getBusinessDay(today);
     if (!bday) bday = await createDayRecord(today);
     activeDay = bday;
+    clearDayTabLocks();
+    updateDayBanner();
   } catch(e) { console.warn('[DAY]', e.message); }
 }
 
@@ -6434,7 +6318,7 @@ async function createDayRecord(dateStr) {
   const id = await dbAdd('business_days', {
     businessDate:   dateStr,
     business_date:  dateStr,   // keep for legacy index
-    status:        'CLOSED',   // starts CLOSED, user opens it manually
+    status:        'OPEN',
     openedAt:      null,
     closedAt:      null,
     reopenedCount: 0,
@@ -6451,7 +6335,7 @@ async function createDayRecord(dateStr) {
 // ── GET BUSINESS DAY ─────────────────────────────────────────────────
 async function getBusinessDay(dateStr) {
   const all = await dbAll('business_days');
-  return all.find(d => d.business_date === dateStr) || null;
+  return all.find(d => (d.businessDate || d.business_date) === dateStr) || null;
 }
 
 // ── OPEN DAY ─────────────────────────────────────────────────────────
@@ -6479,7 +6363,7 @@ async function openDay() {
 
   await dbPut('business_days', bday);
   activeDay = bday;
-  setDayMode(true);
+  clearDayTabLocks();
   updateDayBanner();
   updateDayLiveStats();
   renderDaySessionsList();
@@ -6488,7 +6372,7 @@ async function openDay() {
 
 // ── CLOSE DAY ────────────────────────────────────────────────────────
 async function closeDay() {
-  if (!isDayOpen()) { toast('No open day to close.', 'err'); return; }
+  if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day to close.', 'err'); return; }
 
   const sales = await dbAll('sales');
   const _dayDate = (activeDay.businessDate || activeDay.business_date);
@@ -6584,12 +6468,11 @@ async function confirmCloseDay() {
 
   await dbPut('business_days', activeDay);
   document.getElementById('day-summary-sheet').classList.remove('open');
-  setDayMode(false);
+  clearDayTabLocks();
   updateDayBanner();
   renderDaySessionsList();
   renderDashboard();
-  _origShowPage('day');
-  toast('🌙 Day closed. Tap Open Day to continue anytime.', 'ok');
+  toast('🌙 Day closed. You can reopen it from Operations → Day anytime.', 'ok');
   scheduleSync();
 }
 
@@ -6712,7 +6595,7 @@ function updateDayBanner() {
       + ' · ' + dur + ' running'
       + (reopened_count > 0 ? ' · Reopened ' + reopened_count + 'x' : '');
     if (actionArea) actionArea.innerHTML = '';  // Day tab handles its own buttons now
-    setDayMode(true);
+    clearDayTabLocks();
     updateDayLiveStats();
   } else if (status === 'CLOSED') {
     banner.style.cssText = 'background:#fef3c7;border:2px solid #f5d9a0;border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
@@ -6725,7 +6608,7 @@ function updateDayBanner() {
       ? 'Closed at ' + fmtTime(closed_at) + (auto_closed ? ' · auto' : '') + (reopened_count > 0 ? ' · Opened ' + (reopened_count + 1) + 'x today' : '') + ' · Tap to reopen'
       : 'Tap Open Day to begin — ' + fmtFullDate(todayDateStr());
     if (actionArea) actionArea.innerHTML = '';
-    setDayMode(false);
+    clearDayTabLocks();
     updateDayLiveStats();
   } else if (status === 'LOCKED') {
     banner.style.cssText = 'background:var(--surface2);border:2px solid var(--border);border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
@@ -6734,9 +6617,9 @@ function updateDayBanner() {
     badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:var(--surface2);color:var(--muted);';
     title.textContent = 'Archived Day';
     title.style.color = 'var(--muted)';
-    sub.textContent   = fmtFullDate((activeDay.businessDate || activeDay.business_date)) + ' — read only';
+    sub.textContent   = fmtFullDate((activeDay.businessDate || activeDay.business_date)) + ' — archived';
     if (actionArea) actionArea.innerHTML = '';
-    setDayMode(false);
+    clearDayTabLocks();
     updateDayLiveStats();
   }
 }
@@ -7301,6 +7184,7 @@ function initCleanNumericInputs() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  setLoginReady(false);
   initCleanNumericInputs();
   initWishlistScreenshotWatch();
   const ps = document.getElementById('profile-sheet');
@@ -7353,12 +7237,102 @@ async function hashPin(pin) {
 
 let _loginAttempts = 0, _loginLockedUntil = 0;
 let currentUser = null;
+let _appDbReady = false;
+let _appDataBootstrapped = false;
 
+function navAccessKey(id) {
+  if (id === 'list' || id === 'wishlist' || id === 'add' || id === 'monitor') return 'inventory';
+  if (id === 'day' || id === 'finance') return 'operations';
+  if (id === 'history') return 'sell';
+  return id;
+}
 
+function userCanAccessNav(id, user) {
+  const key = navAccessKey(id);
+  if (key === 'sell' && user.tabs.includes('history')) return true;
+  return user.tabs.includes(key);
+}
+
+function resolveLandingPage(user, rawLastPage) {
+  let last = rawLastPage || 'dash';
+  if (last === 'day' || last === 'finance') {
+    _activeOperationsTab = last;
+    last = 'operations';
+  }
+  if (last === 'list' || last === 'wishlist' || last === 'add' || last === 'monitor') {
+    _activeInventoryTab = last === 'list' ? 'stock' : last;
+    last = 'inventory';
+  }
+  if (last === 'history') {
+    _activeSalesTab = 'history';
+    last = 'sell';
+  }
+  if (userCanAccessNav(last, user)) return last;
+  if (user.role === 'clerk' && user.tabs.includes('inventory')) {
+    _activeInventoryTab = 'add';
+    return 'inventory';
+  }
+  return user.tabs[0] || 'dash';
+}
+
+async function waitForAppDb(timeoutMs = 30000) {
+  if (_appDbReady && db) return;
+  const start = Date.now();
+  while (!_appDbReady || !db) {
+    if (Date.now() - start > timeoutMs) throw new Error('Database not ready');
+    await new Promise(r => setTimeout(r, 50));
+  }
+}
+
+async function bootstrapAppData() {
+  if (_appDataBootstrapped) return;
+  _appDataBootstrapped = true;
+  await loadActiveDay();
+  try { await _cleanupFinanceCoherence(true); } catch (_) { /* intentionally ignored */ }
+  renderDashboard();
+  renderList();
+  renderSummary();
+  renderSellPage();
+  updateLowStockBadge();
+}
+
+function setLoginReady(ready) {
+  const btn = document.querySelector('#login-screen .login-btn');
+  if (!btn) return;
+  if (ready) {
+    btn.disabled = false;
+    if (btn.dataset.loadingLabel) btn.textContent = btn.dataset.loadingLabel;
+    delete btn.dataset.loadingLabel;
+  } else {
+    if (!btn.dataset.loadingLabel) btn.dataset.loadingLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Loading app…';
+  }
+}
+
+function shakeLogin() {
+  const card = document.querySelector('#login-screen .login-card');
+  if (!card) return;
+  card.classList.remove('login-shake');
+  void card.offsetWidth;
+  card.classList.add('login-shake');
+}
+
+function finishAuthUI(user) {
+  document.getElementById('login-screen').style.display = 'none';
+  applyRoleRestrictions(user);
+  clearDayTabLocks();
+  const pill = document.getElementById('user-pill');
+  if (pill) {
+    pill.style.display = 'inline-flex';
+    pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + user.name;
+  }
+  const wrap = document.getElementById('user-menu-wrap');
+  if (wrap) wrap.style.display = 'block';
+}
 
 function applyRoleRestrictions(user) {
   tidySettingsPage();
-  // Show/hide nav tabs based on role
   const allTabs = ['dash','inventory','sell','list','wishlist','add','history','operations','finance','day','settings'];
   allTabs.forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
@@ -7368,17 +7342,26 @@ function applyRoleRestrictions(user) {
       return;
     }
     if (tab === 'sell') {
-      btn.style.display = (user.tabs.includes('sell') || user.tabs.includes('history')) ? '' : 'none';
+      btn.style.display = userCanAccessNav('sell', user) ? '' : 'none';
+      return;
+    }
+    if (tab === 'list' || tab === 'wishlist' || tab === 'add') {
+      btn.style.display = 'none';
+      return;
+    }
+    if (tab === 'finance' || tab === 'day') {
+      btn.style.display = userCanAccessNav(tab, user) ? '' : 'none';
       return;
     }
     btn.style.display = user.tabs.includes(tab) ? '' : 'none';
   });
 
-  // Clerk specific: only show Add page with a simplified header
-  if (user.role === 'clerk') {
-    const header = document.querySelector('.header-title');
-    if (header) header.textContent = 'Add Stock — Mandela';
-
+  const header = document.querySelector('.header-title');
+  if (header) {
+    header.textContent = user.role === 'clerk' ? 'Add Stock — Mandela' : 'Mandela General Stores';
+  }
+  if (user.role === 'clerk' && user.tabs.includes('inventory')) {
+    _activeInventoryTab = 'add';
   }
 }
 
@@ -7391,7 +7374,7 @@ function confirmLogout() {
 function logout() {
   currentUser = null;
   localStorage.removeItem(KEY_SESSION);
-  localStorage.removeItem('mg_last_page');
+  localStorage.removeItem(KEY_LAST_PAGE);
   // Reset nav tabs visibility
   ['dash','inventory','list','wishlist','add','sell','history','operations','finance','day','types','settings'].forEach(tab => {
     const btn = document.getElementById('tab-' + tab);
@@ -7411,50 +7394,42 @@ function logout() {
 
 
 
-function attemptLogin() {
+async function attemptLogin() {
   const username = document.getElementById('login-user').value.trim().toLowerCase();
   const pin = document.getElementById('login-pin').value.trim();
   const err = document.getElementById('login-error');
+
+  if (!username || !pin) {
+    err.style.display = 'block';
+    shakeLogin();
+    return;
+  }
 
   const user = USERS.find(u => u.username === username && u.pin === pin);
   if (!user) {
     err.style.display = 'block';
     document.getElementById('login-pin').value = '';
     document.getElementById('login-pin').focus();
-    if (typeof shakeLogin !== 'undefined') shakeLogin();
+    shakeLogin();
     return;
   }
 
   err.style.display = 'none';
-  currentUser = user; // SET BEFORE showPage is called
+  currentUser = user;
   localStorage.setItem(KEY_SESSION, JSON.stringify({ username: user.username, ts: Date.now() }));
 
-  // Hide login screen
-  document.getElementById('login-screen').style.display = 'none';
-
-  // Apply role restrictions
-  applyRoleRestrictions(user);
-
-  // Update user pill
-  const pill = document.getElementById('user-pill');
-  if (pill) {
-    pill.style.display = 'inline-flex';
-    pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + user.name;
+  try {
+    await waitForAppDb();
+    await bootstrapAppData();
+  } catch (e) {
+    currentUser = null;
+    localStorage.removeItem(KEY_SESSION);
+    toast('App still loading — try again in a moment', 'err');
+    return;
   }
 
-  // Go to day page if day not open, otherwise last visited page
-  const rawLastPage = localStorage.getItem(KEY_LAST_PAGE) || 'dash';
-  let lastPage = (rawLastPage === 'day' || rawLastPage === 'finance') ? 'operations' : rawLastPage;
-  if (lastPage === 'history') {
-    _activeSalesTab = 'history';
-    lastPage = 'sell';
-  }
-  const allowedPage = (user.tabs.includes(lastPage) || (lastPage === 'sell' && user.tabs.includes('history')))
-    ? lastPage : user.tabs[0];
-
-  // Check day status
-  // No forced redirect to day — user navigates manually
-  _origShowPage(allowedPage);
+  finishAuthUI(user);
+  _origShowPage(resolveLandingPage(user, localStorage.getItem(KEY_LAST_PAGE)));
   toast('Welcome, ' + user.name + '! 👋', 'ok');
 }
 
@@ -7474,18 +7449,9 @@ function checkSession() {
     const user     = USERS.find(u => u.username === username);
 
     if (user && !expired) {
-      // Refresh timestamp
       localStorage.setItem(KEY_SESSION, JSON.stringify({ username, ts: Date.now() }));
       currentUser = user;
-      document.getElementById('login-screen').style.display = 'none';
-      applyRoleRestrictions(user);
-      const pill = document.getElementById('user-pill');
-      if (pill) {
-        pill.style.display = 'inline-flex';
-        pill.innerHTML = '<i class="fa-solid fa-user" style="font-size:12px;"></i> ' + user.name;
-      }
-      const wrap = document.getElementById('user-menu-wrap');
-      if (wrap) wrap.style.display = 'block';
+      finishAuthUI(user);
       return true;
     } else {
       localStorage.removeItem(KEY_SESSION);
@@ -7957,7 +7923,7 @@ async function _doCloseDay() {
   activeDay.itemsSold    = daySales.reduce((s,x)=>s+x.qty,0);
   activeDay.closingStockCost = items.reduce((s,i)=>s+i.buy*i.qty,0);
   await dbPut('business_days', activeDay);
-  setDayMode(false);
+  clearDayTabLocks();
   renderDashboard();
 }
 
@@ -8209,7 +8175,12 @@ renderDayState = function() {
 window.renderDayState = renderDayState;
 
 lockOpeningBalances = async function() {
-  if (!activeDay || activeDay.status !== 'OPEN') await openDay();
+  if (!activeDay) {
+    const today = todayDateStr();
+    let bday = await getBusinessDay(today);
+    if (!bday) bday = await createDayRecord(today);
+    activeDay = bday;
+  }
   const cashRaw = Input.money('op-cash');
   const tillRaw = Input.money('op-till');
   const mpesaRaw = Input.money('op-mpesa');
@@ -8331,7 +8302,7 @@ dayStartOver = async function() {
     activeDay.status = 'OPEN';
     activeDay.closed_at = null;
     await dbPut('business_days', activeDay);
-    setDayMode(true);
+    clearDayTabLocks();
   }
   _clearClosingInputsOnly();
   toast('Closing cleared — redo end-of-day', '');
@@ -8340,24 +8311,7 @@ dayStartOver = async function() {
 };
 window.dayStartOver = dayStartOver;
 
-function _checkAutoClose() {
-  const now = new Date();
-  if (now.getHours() === 23 && now.getMinutes() === 59) {
-    const today = todayDateStr();
-    const data  = _getDayRecon(today);
-    // Only auto-close if day is open but not yet reconciled
-    if (activeDay && activeDay.status === 'OPEN' && (!data || data.step !== 'reconciled')) {
-      toast('🌙 Auto-closing day at 11:59 PM…', '');
-      // Move to closing_form step so user sees it's needed on next open
-      _saveDayRecon(today, { ...(data||{}), step: 'closing_form', date: today, autoClosedAt: now.toISOString() });
-      _doCloseDay();
-      renderDayState();
-      renderDaySessionsList();
-    }
-  }
-}
-// Check every minute
-setInterval(_checkAutoClose, 60000);
+// Midnight auto-close removed — day status is for Operations reporting only.
 
 
 // ═══════════════════════════════════════════════════════════

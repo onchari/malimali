@@ -305,7 +305,7 @@
      BOTTOM NAVIGATION BAR
      Nav: Dashboard · Inventory · Sales · Operations · Settings
      Role-gated: app.js hides tabs based on currentUser.tabs[]
-     All tabs accessible without manual day management
+     Day open/close (Operations) does not lock or gray out these tabs
      ============================================================== -->
 <div class="nav">
   <button class="nav-btn active" onclick="showPage('dash')" id="tab-dash">
@@ -1870,31 +1870,6 @@
     </div>
   </div>
 </div><!-- /splash -->
-
-
-<!-- ==============================================================
-     OVERLAY: DAY CLOSED
-     Full-screen overlay shown on restricted pages (Dash, Add)
-     when the business day is not OPEN.
-     showDayClosedOverlay(attemptedTab) and hideDayClosedOverlay()
-     in app.js control visibility.
-     ============================================================== -->
-<div id="day-closed-overlay">
-  <div style="font-size:64px;margin-bottom:16px;">🔒</div>
-  <div style="font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px;">
-    Day Not Open
-  </div>
-  <div style="font-size:15px;color:var(--muted);margin-bottom:28px;line-height:1.6;"
-       id="day-closed-msg">
-    Please open the business day to access this section.
-  </div>
-  <button onclick="showPage('operations')"
-          style="padding:16px 32px;background:var(--accent);color:white;border:none;
-                 border-radius:var(--r);font-size:16px;font-weight:800;
-                 cursor:pointer;font-family:var(--sans);">
-    📅 Go to Day
-  </button>
-</div>
 
 
 <!-- ==============================================================
