@@ -2667,7 +2667,7 @@ function showImagePickerSheet(opts) {
         try {
           const rough = await compressImageFile(file, 960, 0.82);
           const dataUrl = await compressImageForStorage(rough, opts.photoPreset || 'item');
-          if (opts.onPick) opts.onPick(dataUrl);
+          if (opts.onPick) opts.onPick(dataUrl, { fileName: file.name || '' });
         } catch (err) {
           toast('Could not load image', 'err');
         }
@@ -2717,6 +2717,55 @@ function triggerAddPhotoUpload() {
 // ===== WISHLIST PHOTO =====
 let _wishFormPhotoData = null;
 
+/** e.g. "YS5981-1 36-42.jpg" → { shoeCode: "YS5981-1", itemName: "YS5981-1 36-42" } */
+function parseWishPhotoFileName(fileName) {
+  if (!fileName || typeof fileName !== 'string') return null;
+  const base = fileName.trim().replace(/\.(jpe?g|png|gif|webp|heic|heif|bmp|avif)$/i, '').trim();
+  if (!base) return null;
+
+  const itemName = base;
+  const sizeRangeRe = /\d+\s*[-–—]\s*\d+/;
+  const normCode = s => String(s || '').trim().toUpperCase();
+
+  // "CODE-1 36-42" or "YS5981 36-42" (space before size range)
+  const spaced = base.match(/^(.+?)\s+(\d+\s*[-–—]\s*\d+)\s*$/);
+  if (spaced && sizeRangeRe.test(spaced[2])) {
+    const shoeCode = normCode(spaced[1]);
+    if (shoeCode) return { itemName, shoeCode };
+  }
+
+  // "YS5981-1-36-42" or "YS5981-36-42" (hyphen before size range at end)
+  const hyphenated = base.match(/^(.+?)[\s\-]+(\d+\s*[-–—]\s*\d+)\s*$/);
+  if (hyphenated) {
+    const shoeCode = normCode(hyphenated[1].replace(/[\s\-]+$/, ''));
+    if (shoeCode) return { itemName, shoeCode };
+  }
+
+  // Code-only filename (allows CODE-1 suffix)
+  const codeOnly = base.match(/^([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)/);
+  return {
+    itemName,
+    shoeCode: codeOnly ? normCode(codeOnly[1]) : ''
+  };
+}
+
+function applyWishPhotoFileName(fileName) {
+  const parsed = parseWishPhotoFileName(fileName);
+  if (!parsed) return false;
+  const nameEl = document.getElementById('wish-name');
+  const codeEl = document.getElementById('wish-code');
+  if (nameEl) nameEl.value = parsed.itemName;
+  if (codeEl && parsed.shoeCode) codeEl.value = parsed.shoeCode;
+  return true;
+}
+
+function handleWishPhotoPicked(dataUrl, meta) {
+  _wishFormPhotoData = dataUrl;
+  updateWishPhotoPreview();
+  const fromFile = meta?.fileName && applyWishPhotoFileName(meta.fileName);
+  toast(fromFile ? 'Photo attached — name & code from filename' : 'Photo attached', 'ok');
+}
+
 function updateWishPhotoPreview() {
   const photoImg = document.getElementById('wish-photo-img');
   const placeholder = document.getElementById('wish-photo-placeholder');
@@ -2738,11 +2787,7 @@ function triggerWishPhotoUpload() {
   showImagePickerSheet({
     title: 'Wishlist photo',
     photoPreset: 'wish',
-    onPick: async dataUrl => {
-      _wishFormPhotoData = dataUrl;
-      updateWishPhotoPreview();
-      toast('Photo attached', 'ok');
-    }
+    onPick: async (dataUrl, meta) => handleWishPhotoPicked(dataUrl, meta)
   });
 }
 window.triggerWishPhotoUpload = triggerWishPhotoUpload;
