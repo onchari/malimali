@@ -2854,7 +2854,14 @@ async function saveItem() {
     if(!code){toast('\u26a0\ufe0f Enter item code','err');return;}
     if (!editIdRaw) {
       const codeMatches = await findCodeMatchesForSave(code);
+<<<<<<< HEAD
+      const existingCode = codeMatches.find(i => i.code === code);
+      // Footwear: same code is OK when adding/updating sizes on an existing shoe SKU
+      const addingShoeSizes = existingCode && isFootwearType(type) && existingCode.isShoe;
+      if (existingCode && !addingShoeSizes) {
+=======
       if (codeMatches.some(i => i.code === code)) {
+>>>>>>> e5edd28096567e933e7388db223404d66f085c14
         showCodeDropdown(codeMatches, code);
         toast('\u26a0\ufe0f Item code already exists — select it from the dropdown', 'err');
         UI.el('f-code')?.focus();
@@ -8796,7 +8803,7 @@ async function saveShoeItems(baseCode, baseName, type) {
 
     await upsertShoeSize({
       itemCode: baseCode, itemId: product.id,
-      size, sizeGroup: _shoeState.group,
+      size, sizeGroup: _shoeState.groupFor(size),
       qty, buyPrice: buy, sellPrice: sell, profit: sell - buy,
       codeSize: baseCode + '_' + size,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
