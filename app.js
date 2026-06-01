@@ -1399,6 +1399,7 @@ function _appendCascadePickButton(wrap, config, depth, parentId, currentId, curr
           rerenderValue = config.valueEl.value;
         }
         config.rerender(rerenderValue, { preservePath: true });
+        onTypeChange();
       }
     });
   });
@@ -1537,7 +1538,9 @@ function renderAddTypeCascade(selectedTypeName, opts) {
     breadcrumbEl: document.getElementById('f-type-breadcrumb'),
     idPrefix: 'f-type',
     locked: hidden.disabled,
-    onChange: () => { if (!(opts && opts.skipTypeChange)) onTypeChange(); }
+    // Do not close over opts.skipTypeChange — config.rerender() reuses this callback after
+    // renderTypeSelect({ skipTypeChange: true }), which would block onTypeChange forever.
+    onChange: () => onTypeChange()
   });
   const selectedName = selectedTypeName != null ? selectedTypeName : (hidden.value || '');
   const cascadeOpts = Object.assign({}, opts || {}, {
@@ -1752,7 +1755,10 @@ function hideRestockView() {
   _unmountRestockPricingSection();
   const flow = document.querySelector('#page-add .add-flow');
   if (flow) {
-    flow.querySelectorAll('.add-card').forEach(card => { card.style.display = ''; });
+    flow.querySelectorAll('.add-card').forEach(card => {
+      if (card.id === 'shoe-size-panel') return;
+      card.style.display = '';
+    });
   }
   const footer = document.getElementById('add-footer');
   const cancelBtn = document.getElementById('restock-cancel-btn');
