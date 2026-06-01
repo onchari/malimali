@@ -620,52 +620,62 @@
   <div class="stock-toolbar">
     <div>
       <div class="stock-title">Wishlist</div>
-      <div class="stock-sub" id="wishlist-sub">Prospective items to stock</div>
+      <div class="stock-sub" id="wishlist-sub">0 items</div>
     </div>
   </div>
 
   <div class="wish-inv-tabs">
-    <button type="button" class="wish-inv-tab wish-inv-tab-add" id="wish-tab-add" onclick="showWishlistSection('add')">ADD</button>
     <button type="button" class="wish-inv-tab active" id="wish-tab-list" onclick="showWishlistSection('list')">List</button>
+    <button type="button" class="wish-inv-tab" id="wish-tab-add" onclick="showWishlistSection('add')">Add</button>
   </div>
 
-  <div id="wishlist-list" class="wish-list-panel" style="padding-bottom:12px;"></div>
+  <div id="wishlist-list" class="wish-list-panel"></div>
 
-  <div id="wishlist-add-panel" class="stock-monitor-form" style="display:none;">
-    <button type="button" onclick="saveWishlistItem()" class="wish-add-submit-primary">ADD</button>
-    <div class="stock-form-grid">
-      <input class="add-input" id="wish-name" type="text" placeholder="Item name *" required>
-      <input class="add-input add-mono" id="wish-code" type="text" placeholder="SHOECODE (optional)">
-    </div>
-    <div class="cat-cascade-field">
-      <div id="wish-type-cascade" class="add-cascade"></div>
-      <select class="cat-pick-hidden-select" id="wish-type" aria-label="Category"></select>
-      <div id="wish-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
-    </div>
-    <div class="stock-form-grid">
-      <input class="add-input add-mono" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="Qty">
-    </div>
-    <div class="stock-form-grid">
-      <input class="add-input" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Est. buy price">
-      <input class="add-input" id="wish-note" type="text" maxlength="160" placeholder="Note optional">
-    </div>
-    <div class="stock-form-grid">
-      <input class="add-input" id="wish-vendor-name" type="text" maxlength="80" placeholder="Vendor (optional)">
-      <input class="add-input add-center" id="wish-vendor-price" type="number" min="0" inputmode="decimal" placeholder="Vendor price">
-    </div>
-    <div class="add-photo-box wish-photo-box">
-      <img id="wish-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
-      <div id="wish-photo-placeholder" class="add-photo-ph" onclick="triggerWishPhotoUpload()">
-        <span class="add-photo-ph-icon">📷</span>
-        <span class="add-photo-ph-text">Tap to add photo</span>
-        <span class="add-photo-ph-hint">e.g. YS5981-1 36-42.jpg or YS5981 36-42.jpg</span>
+  <div id="wishlist-add-panel" class="wish-add-panel" style="display:none;">
+    <button type="button" class="wish-add-back" onclick="showWishlistSection('list')">← List</button>
+
+    <div class="wish-add-card">
+      <div class="wish-add-photo-section">
+        <div class="add-photo-box wish-photo-box">
+          <img id="wish-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
+          <div id="wish-photo-placeholder" class="add-photo-ph" onclick="triggerWishPhotoUpload()">
+            <span class="add-photo-ph-icon">📷</span>
+            <span class="add-photo-ph-text">Add photo</span>
+          </div>
+          <button type="button" id="wish-photo-remove" onclick="removeWishFormPhoto(event)" class="add-photo-remove" style="display:none;">✕</button>
+        </div>
+        <button type="button" class="wish-paste-btn" onclick="startWishlistScreenshotImport()">Paste image</button>
       </div>
-      <button type="button" id="wish-photo-remove" onclick="removeWishFormPhoto(event)" class="add-photo-remove" style="display:none;">✕ Remove</button>
+
+      <input class="add-input" id="wish-name" type="text" placeholder="Name *" required aria-label="Name">
+
+      <div class="wish-field-row wish-field-row-2">
+        <input class="add-input" id="wish-vendor-name" type="text" maxlength="80" placeholder="Vendor" aria-label="Vendor">
+        <input class="add-input add-center add-mono" id="wish-vendor-price" type="number" min="0" inputmode="decimal" placeholder="Price" aria-label="Price">
+      </div>
+
+      <button type="button" class="wish-add-more-toggle" id="wish-add-more-toggle" onclick="toggleWishAddMore()" aria-expanded="false">
+        More options
+      </button>
+
+      <div id="wish-add-more" class="wish-add-more" hidden>
+        <input class="add-input add-mono" id="wish-code" type="text" placeholder="Code" aria-label="Code">
+        <div class="cat-cascade-field wish-cascade-field">
+          <div id="wish-type-cascade" class="add-cascade"></div>
+          <select class="cat-pick-hidden-select" id="wish-type" aria-label="Category"></select>
+          <div id="wish-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
+        </div>
+        <div class="wish-field-row wish-field-row-2">
+          <input class="add-input add-mono add-center" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="Qty" aria-label="Quantity">
+          <input class="add-input add-center" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="BP est." aria-label="Buy price">
+        </div>
+        <input class="add-input" id="wish-note" type="text" maxlength="160" placeholder="Note" aria-label="Note">
+      </div>
     </div>
-    <button type="button" class="wish-screenshot-btn" onclick="startWishlistScreenshotImport()">
-      📋 Screenshot from another app
-    </button>
-    <button type="button" class="wish-back-list-btn" onclick="showWishlistSection('list')">← List</button>
+
+    <footer class="wish-add-footer">
+      <button type="button" class="wish-save-btn" onclick="saveWishlistItem()">Save to wishlist</button>
+    </footer>
   </div>
 </div>
 
@@ -705,8 +715,8 @@
 
   <header class="add-hero">
     <div class="add-hero-text">
-      <h1 class="add-hero-title" id="form-mode-label">New item</h1>
-      <p class="add-hero-sub" id="add-form-sub">Category → details → stock → save</p>
+      <h1 class="add-hero-title" id="form-mode-label" hidden></h1>
+      <p class="add-hero-sub" id="add-form-sub" hidden></p>
     </div>
     <button type="button" id="cancel-edit-btn" class="add-cancel-btn" onclick="cancelEdit()" style="display:none;">Cancel</button>
   </header>
@@ -732,7 +742,6 @@
   <!-- Step 1: Category -->
   <section class="add-card" aria-labelledby="add-step-cat">
     <h2 class="add-card-title" id="add-step-cat"><span class="add-step-badge">1</span> Category</h2>
-    <p class="add-card-hint">Tap to choose category, then sub-categories if shown.</p>
     <input type="hidden" id="f-type" value="">
     <div id="f-type-cascade" class="add-cascade"></div>
     <div id="f-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
@@ -740,11 +749,11 @@
 
   <!-- Step 2: Item details -->
   <section class="add-card" aria-labelledby="add-step-item">
-    <h2 class="add-card-title" id="add-step-item"><span class="add-step-badge">2</span> Item details</h2>
+    <h2 class="add-card-title" id="add-step-item"><span class="add-step-badge">2</span> Item</h2>
 
     <div class="add-field">
       <input class="add-input add-mono" id="f-code" type="text"
-             placeholder="Item code * (e.g. SH001)"
+             placeholder="Code *"
              aria-label="Item code"
              autocomplete="off" spellcheck="false"
              style="text-transform:uppercase;"
@@ -753,20 +762,20 @@
 
     <div class="add-field" id="code-match-field">
       <select class="add-select add-mono" id="code-match-select" disabled aria-label="Existing code match">
-        <option value="">Match existing code…</option>
+        <option value="">Match code…</option>
       </select>
     </div>
 
     <div class="add-field">
       <input class="add-input" id="f-name" type="text"
-             placeholder="Display name (optional)"
+             placeholder="Name"
              aria-label="Display name"
              autocomplete="off" spellcheck="false">
     </div>
 
     <div class="add-field" id="f-size-field">
       <input class="add-input" id="f-size" type="text"
-             placeholder="Size / variant (e.g. 42, Large, N/A)"
+             placeholder="Size"
              aria-label="Size or variant"
              autocomplete="off" spellcheck="false">
     </div>
@@ -774,14 +783,13 @@
 
   <!-- Shoe sizes (footwear categories) -->
   <div id="shoe-size-panel" class="add-card add-card-shoe">
-    <h2 class="add-card-title"><span class="add-step-badge">3</span> Shoe sizes</h2>
-    <p class="add-card-hint" style="margin:0 0 10px;">Tap sizes on each card, then fill qty &amp; prices.</p>
+    <h2 class="add-card-title"><span class="add-step-badge">3</span> Sizes</h2>
     <div class="sg-row sg-row-full">
         <div class="sg-card" id="sg-card-S" data-group="S">
           <div class="sg-card-head">
             <span class="sg-ltr">S</span>
             <span class="sg-range" id="sg-range-S">20–28</span>
-            <span class="sg-name">Children</span>
+            <span class="sg-name" aria-hidden="true">Children</span>
           </div>
           <div class="sg-card-sizes" id="sg-card-sizes-S"></div>
         </div>
@@ -789,7 +797,7 @@
           <div class="sg-card-head">
             <span class="sg-ltr">M</span>
             <span class="sg-range" id="sg-range-M">29–36</span>
-            <span class="sg-name">Teens</span>
+            <span class="sg-name" aria-hidden="true">Teens</span>
           </div>
           <div class="sg-card-sizes" id="sg-card-sizes-M"></div>
         </div>
@@ -797,7 +805,7 @@
           <div class="sg-card-head">
             <span class="sg-ltr">L</span>
             <span class="sg-range" id="sg-range-L">37–45</span>
-            <span class="sg-name">Adults</span>
+            <span class="sg-name" aria-hidden="true">Adults</span>
           </div>
           <div class="sg-card-sizes" id="sg-card-sizes-L"></div>
         </div>
@@ -811,12 +819,11 @@
       <div class="add-section add-section-inset shoe-pricing-panel" style="padding-bottom:10px;">
         <div id="shoe-stock-summary" class="shoe-stock-summary">
           <div class="shoe-stock-summary-top">
-            <span class="shoe-stock-lbl">Selected</span>
             <div id="shoe-selected-summary" class="shoe-selected-chips"></div>
           </div>
           <div class="shoe-stock-metrics">
             <div class="shoe-metric">
-              <span class="shoe-metric-lbl">Total qty</span>
+              <span class="shoe-metric-lbl">Qty</span>
               <strong id="shoe-metric-qty" class="shoe-metric-val">0</strong>
             </div>
             <div class="shoe-metric">
@@ -841,17 +848,17 @@
           <div id="shoe-shared-wrap">
             <div class="shoe-form-grid">
               <div class="shoe-form-field">
-                <label for="shoe-shared-qty">Qty / size</label>
+                <label for="shoe-shared-qty">Qty</label>
                 <input class="add-input add-center" id="shoe-shared-qty"
                        type="number" min="0" inputmode="numeric" placeholder="0" required>
               </div>
               <div class="shoe-form-field">
-                <label for="shoe-shared-buy">BP (buy)</label>
+                <label for="shoe-shared-buy">BP</label>
                 <input class="add-input add-center" id="shoe-shared-buy"
                        type="number" min="0" inputmode="decimal" placeholder="0" required>
               </div>
               <div class="shoe-form-field">
-                <label for="shoe-shared-sell">SP (sell)</label>
+                <label for="shoe-shared-sell">SP</label>
                 <input class="add-input add-center" id="shoe-shared-sell"
                        type="number" min="0" inputmode="decimal" placeholder="0" required>
               </div>
@@ -861,12 +868,8 @@
 
         <!-- ── Per-size mode ────────────────────────────────── -->
         <div id="shoe-per-size-wrap" style="display:none;">
-          <div class="shoe-info-bar" style="background:#fef3c7;border-color:#fcd34d;">
-            <i class="fa-solid fa-sliders" style="color:#92400e;"></i>
-            Enter qty &amp; price for each size individually
-          </div>
           <div class="shoe-row-hdr" id="shoe-row-hdr">
-            <span>Size</span><span>Qty</span><span>Buy</span><span>Sell</span>
+            <span>Sz</span><span>Qty</span><span>BP</span><span>SP</span>
           </div>
           <div id="shoe-rows"></div>
         </div>
@@ -877,7 +880,7 @@
 
   <!-- Step 3: Stock & pricing (standard items) -->
   <section id="std-pricing-section" class="add-card">
-    <h2 class="add-card-title"><span class="add-step-badge">3</span> Stock &amp; pricing</h2>
+    <h2 class="add-card-title"><span class="add-step-badge">3</span> Stock</h2>
     <div class="add-section add-section-inset">
 
       <!-- Qty · Buy · Sell in one row -->
@@ -890,14 +893,14 @@
         </div>
         <div class="add-field">
           <input class="add-input add-center" id="f-buy" type="number"
-                 placeholder="Buy (KES) *" min="0" inputmode="decimal"
+                 placeholder="BP *" min="0" inputmode="decimal"
                  aria-label="Buy price"
                  oninput="updateProfitPreview()">
           <span id="bp-cur" style="display:none;">KES</span>
         </div>
         <div class="add-field">
           <input class="add-input add-center" id="f-sell" type="number"
-                 placeholder="Sell (KES) *" min="0" inputmode="decimal"
+                 placeholder="SP *" min="0" inputmode="decimal"
                  aria-label="Sell price"
                  oninput="updateProfitPreview()">
           <span id="sp-cur" style="display:none;">KES</span>
@@ -907,7 +910,7 @@
       <!-- Profit preview pill -->
       <div class="add-profit-pill" id="profit-preview" style="display:none;">
         <div class="app-pill-row">
-          <span class="app-pill-label">Profit / item</span>
+          <span class="app-pill-label">Profit</span>
           <span class="app-pill-val" id="pp-profit"></span>
         </div>
         <div class="app-pill-row">
@@ -915,7 +918,7 @@
           <span class="app-pill-val" id="pp-margin"></span>
         </div>
         <div class="app-pill-row" id="pp-total-row" style="display:none;">
-          <span class="app-pill-label">Total profit</span>
+          <span class="app-pill-label">Total</span>
           <span class="app-pill-val" id="pp-total"></span>
         </div>
         <span id="pp-buy" style="display:none;"></span>
@@ -928,14 +931,12 @@
 
   <!-- Step 4: Photo -->
   <section class="add-card add-card-photo">
-    <h2 class="add-card-title"><span class="add-step-badge">4</span> Photo <span class="add-hint">optional</span></h2>
-    <p class="add-card-hint" style="margin:0 0 8px;">Drag to pan · pinch or double-tap to view full screen</p>
+    <h2 class="add-card-title"><span class="add-step-badge">4</span> Photo</h2>
     <div class="add-photo-box" id="add-photo-preview">
       <img id="add-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
       <div id="add-photo-placeholder" class="add-photo-ph" onclick="triggerAddPhotoUpload()">
         <span class="add-photo-ph-icon">📷</span>
-        <span class="add-photo-ph-text">Add a photo</span>
-        <span class="add-photo-ph-hint">Tap — camera, gallery, or screenshot</span>
+        <span class="add-photo-ph-text">Photo</span>
       </div>
       <button type="button" id="add-photo-remove" onclick="removeAddPhoto(event)" class="add-photo-remove" style="display:none;">Remove</button>
     </div>
@@ -945,7 +946,7 @@
 
   <footer class="add-footer" id="add-footer">
     <button type="button" class="add-save-btn" id="save-btn" onclick="saveItem()">
-      <i class="fa-solid fa-check"></i> Add to inventory
+      <i class="fa-solid fa-check"></i> Save
     </button>
     <button type="button" class="add-footer-cancel" id="restock-cancel-btn" onclick="cancelEdit()" hidden>Cancel</button>
   </footer>
@@ -1630,25 +1631,22 @@
     </div>
 
     <div class="wish-detail-body">
-      <div id="wd-name" class="wish-detail-name"></div>
-      <div id="wd-code" class="wish-detail-code"></div>
-      <div id="wd-meta" class="wish-detail-meta"></div>
-      <div id="wd-note" class="wish-detail-note" style="display:none;"></div>
+      <h2 id="wd-name" class="wish-detail-name"></h2>
+      <div id="wd-chips" class="wish-detail-chips"></div>
+      <p id="wd-note" class="wish-detail-note" style="display:none;"></p>
 
       <section class="wish-vendor-section" aria-label="Vendor prices">
-        <h3 class="wish-vendor-heading">Vendors</h3>
+        <div class="wish-detail-section-label">Prices</div>
         <div id="wd-vendor-list"></div>
       </section>
     </div>
 
-    <div class="wish-detail-actions">
+    <footer class="wish-detail-footer">
       <button type="button" class="wish-detail-btn stock" onclick="wishlistDetailStock()">
-        <i class="fa-solid fa-boxes-stacked"></i> Stock it
+        <i class="fa-solid fa-boxes-stacked"></i> Add to stock
       </button>
-      <button type="button" class="wish-detail-btn delete" onclick="wishlistDetailDelete()">
-        <i class="fa-solid fa-trash"></i> Remove
-      </button>
-    </div>
+      <button type="button" class="wish-detail-btn delete" onclick="wishlistDetailDelete()">Remove</button>
+    </footer>
   </div>
 </div>
 
@@ -1690,7 +1688,7 @@
         <div id="sh-photo-pan" class="photo-viewport" style="display:none;width:100%;height:100%;overflow:hidden;touch-action:none;position:absolute;inset:0;z-index:1;">
           <img id="sh-photo-img" src="" alt="" class="photo-pan-img" style="user-select:none;-webkit-user-drag:none;">
         </div>
-        <p class="photo-pan-hint" id="sh-photo-pan-hint" style="display:none;">Drag to pan · double-tap for full screen</p>
+        <p class="photo-pan-hint" id="sh-photo-pan-hint" style="display:none;">Pan · 2× full</p>
         <div id="sh-photo-fallback" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:64px;">
           <span id="sh-icon"></span>
         </div>
