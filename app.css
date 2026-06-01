@@ -2443,41 +2443,55 @@ body.photo-lightbox-open { overflow: hidden; }
 /* ================================================================
    SHOE SYSTEM CSS
    ================================================================ */
-.sg-row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; align-items:stretch; }
+.sg-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .sg-card {
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  min-width:0;
-  padding:8px 6px 10px;
-  border:1.5px solid var(--border);
-  border-radius:var(--r-lg);
-  background:var(--surface2);
-  box-sizing:border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface2);
+  box-sizing: border-box;
 }
 .sg-card-active { background:#f0fdf4;border-color:#86efac; }
-.sg-card-head { display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center; }
+.sg-card-head {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+  width: 52px;
+}
 .sg-ltr  { font-size:18px;font-weight:800;color:var(--text);line-height:1; }
 .sg-card-active .sg-ltr { color:var(--green); }
 .sg-range{ font-size:9px;font-weight:700;font-family:var(--mono);color:var(--muted); }
 .sg-name { font-size:8px;text-transform:uppercase;letter-spacing:.35px;color:var(--muted); }
 .sg-card-sizes {
-  display:flex;
-  flex-direction:row;
-  flex-wrap:nowrap;
-  gap:4px;
-  overflow-x:auto;
-  -webkit-overflow-scrolling:touch;
-  padding:2px 0 4px;
-  width:100%;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
 }
 .sg-card-sizes .sz-btn {
-  flex:0 0 auto;
-  min-width:30px;
-  width:auto;
-  min-height:32px;
-  padding:0 6px;
-  font-size:11px;
+  flex: 0 0 auto;
+  min-width: 34px;
+  width: auto;
+  min-height: 34px;
+  padding: 0 8px;
+  font-size: 12px;
 }
 #sz-grid,
 .sz-grid-unified {
