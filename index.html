@@ -635,42 +635,85 @@
     <button type="button" class="wish-add-back" onclick="showWishlistSection('list')">← List</button>
 
     <div class="wish-add-card">
-      <div class="wish-add-photo-section">
-        <div class="add-photo-box wish-photo-box">
-          <img id="wish-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
-          <div id="wish-photo-placeholder" class="add-photo-ph" onclick="triggerWishPhotoUpload()">
-            <span class="add-photo-ph-icon">📷</span>
-            <span class="add-photo-ph-text">Add photo</span>
+      <section class="wish-add-block wish-add-block-photo" aria-labelledby="wish-add-hd-photo">
+        <h3 class="wish-add-block-hd" id="wish-add-hd-photo">Photo</h3>
+        <div class="wish-add-photo-wrap">
+          <div class="add-photo-box wish-photo-box">
+            <img id="wish-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
+            <div id="wish-photo-placeholder" class="add-photo-ph" onclick="triggerWishPhotoUpload()">
+              <span class="add-photo-ph-icon">📷</span>
+              <span class="add-photo-ph-text">Tap to add</span>
+            </div>
+            <button type="button" id="wish-photo-remove" onclick="removeWishFormPhoto(event)" class="add-photo-remove" style="display:none;">✕</button>
           </div>
-          <button type="button" id="wish-photo-remove" onclick="removeWishFormPhoto(event)" class="add-photo-remove" style="display:none;">✕</button>
+          <button type="button" class="wish-paste-btn" onclick="startWishlistScreenshotImport()">
+            <span class="wish-paste-btn-icon" aria-hidden="true">📋</span>
+            <span>Paste image</span>
+          </button>
         </div>
-        <button type="button" class="wish-paste-btn" onclick="startWishlistScreenshotImport()">Paste image</button>
-      </div>
+      </section>
 
-      <input class="add-input" id="wish-name" type="text" placeholder="Name *" required aria-label="Name">
+      <section class="wish-add-block" aria-labelledby="wish-add-hd-item">
+        <h3 class="wish-add-block-hd" id="wish-add-hd-item">Item</h3>
+        <div class="wish-add-field">
+          <label class="add-label" for="wish-name">Name <span class="add-required">*</span></label>
+          <input class="add-input" id="wish-name" type="text" placeholder="e.g. YS5981 runner" required>
+        </div>
+      </section>
 
-      <div class="wish-field-row wish-field-row-2">
-        <input class="add-input" id="wish-vendor-name" type="text" maxlength="80" placeholder="Vendor" aria-label="Vendor">
-        <input class="add-input add-center add-mono" id="wish-vendor-price" type="number" min="0" inputmode="decimal" placeholder="Price" aria-label="Price">
-      </div>
+      <section class="wish-add-block" aria-labelledby="wish-add-hd-vendor">
+        <h3 class="wish-add-block-hd" id="wish-add-hd-vendor">Vendor quote</h3>
+        <div class="wish-add-vendor-grid">
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-vendor-name">Vendor</label>
+            <input class="add-input" id="wish-vendor-name" type="text" maxlength="80" placeholder="Shop name">
+          </div>
+          <div class="wish-add-field wish-add-field-price">
+            <label class="add-label" for="wish-vendor-price">Price</label>
+            <div class="wish-price-input-wrap">
+              <span class="wish-price-prefix" aria-hidden="true">K</span>
+              <input class="add-input add-mono add-center" id="wish-vendor-price" type="number" min="0" inputmode="decimal" placeholder="0">
+            </div>
+          </div>
+        </div>
+      </section>
 
-      <button type="button" class="wish-add-more-toggle" id="wish-add-more-toggle" onclick="toggleWishAddMore()" aria-expanded="false">
-        More options
+      <button type="button" class="wish-add-more-toggle" id="wish-add-more-toggle" onclick="toggleWishAddMore()" aria-expanded="false" aria-controls="wish-add-more">
+        <span class="wish-add-more-toggle-text">More options</span>
+        <span class="wish-add-more-chevron" aria-hidden="true"></span>
       </button>
 
-      <div id="wish-add-more" class="wish-add-more" hidden>
-        <input class="add-input add-mono" id="wish-code" type="text" placeholder="Code" aria-label="Code">
-        <div class="cat-cascade-field wish-cascade-field">
-          <div id="wish-type-cascade" class="add-cascade"></div>
-          <select class="cat-pick-hidden-select" id="wish-type" aria-label="Category"></select>
-          <div id="wish-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
+      <section id="wish-add-more" class="wish-add-more" hidden aria-label="More options">
+        <div class="wish-add-field">
+          <label class="add-label" for="wish-code">Code</label>
+          <input class="add-input add-mono" id="wish-code" type="text" placeholder="YS5981">
         </div>
-        <div class="wish-field-row wish-field-row-2">
-          <input class="add-input add-mono add-center" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="Qty" aria-label="Quantity">
-          <input class="add-input add-center" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="BP est." aria-label="Buy price">
+        <div class="wish-add-field wish-cascade-field">
+          <span class="add-label">Category</span>
+          <div class="cat-cascade-field">
+            <div id="wish-type-cascade" class="add-cascade"></div>
+            <input type="hidden" id="wish-type" value="" aria-label="Category">
+            <div id="wish-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
+          </div>
         </div>
-        <input class="add-input" id="wish-note" type="text" maxlength="160" placeholder="Note" aria-label="Note">
-      </div>
+        <div class="wish-add-vendor-grid">
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-qty">Qty</label>
+            <input class="add-input add-mono add-center" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="1">
+          </div>
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-cost">BP est.</label>
+            <div class="wish-price-input-wrap">
+              <span class="wish-price-prefix" aria-hidden="true">K</span>
+              <input class="add-input add-mono add-center" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="0">
+            </div>
+          </div>
+        </div>
+        <div class="wish-add-field">
+          <label class="add-label" for="wish-note">Note</label>
+          <input class="add-input" id="wish-note" type="text" maxlength="160" placeholder="Optional">
+        </div>
+      </section>
     </div>
 
     <footer class="wish-add-footer">
@@ -1594,7 +1637,7 @@
       </div>
       <div class="cat-cascade-field">
         <div id="off-type-cascade" class="add-cascade"></div>
-        <select class="cat-pick-hidden-select" id="off-type" aria-label="Category"></select>
+        <input type="hidden" id="off-type" value="" aria-label="Category">
         <div id="off-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
       </div>
       <div class="stock-form-grid">
@@ -1632,20 +1675,48 @@
 
     <div class="wish-detail-body">
       <h2 id="wd-name" class="wish-detail-name"></h2>
-      <div id="wd-chips" class="wish-detail-chips"></div>
-      <p id="wd-note" class="wish-detail-note" style="display:none;"></p>
 
-      <section class="wish-vendor-section" aria-label="Vendor prices">
-        <div class="wish-detail-section-label">Prices</div>
+      <section class="wish-detail-block" aria-labelledby="wd-hd-item">
+        <h3 class="wish-detail-section-label" id="wd-hd-item">Item details</h3>
+        <dl id="wd-item-details" class="wish-detail-dl"></dl>
+      </section>
+
+      <section class="wish-detail-block" aria-labelledby="wd-hd-vendors">
+        <h3 class="wish-detail-section-label" id="wd-hd-vendors">Vendors</h3>
         <div id="wd-vendor-list"></div>
+      </section>
+
+      <section class="wish-detail-block wish-detail-add-vendor" aria-labelledby="wd-hd-add-vendor">
+        <h3 class="wish-detail-section-label" id="wd-hd-add-vendor">Add vendor</h3>
+        <div class="wish-detail-vendor-form">
+          <div class="wish-detail-field">
+            <label class="add-label" for="wd-vendor-name">Vendor name</label>
+            <input class="add-input" id="wd-vendor-name" type="text" maxlength="80" placeholder="Shop name" autocomplete="off">
+          </div>
+          <div class="wish-detail-field wish-detail-field-price">
+            <label class="add-label" for="wd-vendor-price">Amount</label>
+            <div class="wish-price-input-wrap">
+              <span class="wish-price-prefix" aria-hidden="true">K</span>
+              <input class="add-input add-mono add-center" id="wd-vendor-price" type="number" min="0" inputmode="decimal" placeholder="0" autocomplete="off">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="wish-detail-block" aria-labelledby="wd-hd-note">
+        <h3 class="wish-detail-section-label" id="wd-hd-note">Note</h3>
+        <textarea class="wish-detail-note-input" id="wd-note-input" rows="3" maxlength="160" placeholder="Optional note"></textarea>
       </section>
     </div>
 
     <footer class="wish-detail-footer">
-      <button type="button" class="wish-detail-btn stock" onclick="wishlistDetailStock()">
-        <i class="fa-solid fa-boxes-stacked"></i> Add to stock
-      </button>
-      <button type="button" class="wish-detail-btn delete" onclick="wishlistDetailDelete()">Remove</button>
+      <button type="button" class="wish-detail-btn save" onclick="saveWishlistDetail()">Save</button>
+      <div class="wish-detail-footer-row">
+        <button type="button" class="wish-detail-btn stock" onclick="wishlistDetailStock()">
+          <i class="fa-solid fa-boxes-stacked"></i> Stock
+        </button>
+        <button type="button" class="wish-detail-btn delete" onclick="wishlistDetailDelete()">Remove</button>
+      </div>
     </footer>
   </div>
 </div>

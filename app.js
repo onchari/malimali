@@ -1377,7 +1377,36 @@ function _syncCascadeValueEl(config, rec) {
     if (el) el.value = '';
     return;
   }
-  el.value = config.valueMode === 'id' ? String(rec.id) : rec.name;
+  const val = config.valueMode === 'id' ? String(rec.id) : rec.name;
+  if (el.tagName === 'SELECT') {
+    let opt = Array.from(el.options).find(o => o.value === val);
+    if (!opt) {
+      opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = val;
+      el.appendChild(opt);
+    }
+    el.value = val;
+  } else {
+    el.value = val;
+  }
+}
+
+/** Committed category from cascade (hidden field or completed path). */
+function getCascadeCommittedValue(idPrefix, opts) {
+  const requireLeaf = opts?.requireLeaf !== false;
+  const valueMode = opts?.valueMode || 'name';
+  const valueEl = document.getElementById(idPrefix);
+  const wrap = document.getElementById(idPrefix + '-cascade');
+  const direct = (valueEl?.value || '').trim();
+  if (direct) return direct;
+  if (!wrap) return '';
+  const pathIds = _getCascadePathFromWrap(wrap);
+  if (!pathIds.length) return '';
+  const deepest = getTypeById(pathIds[pathIds.length - 1]);
+  if (!deepest) return '';
+  if (requireLeaf && _categoryHasActiveChildren(deepest.id)) return '';
+  return valueMode === 'id' ? String(deepest.id) : deepest.name;
 }
 
 function _resolveCascadePathIds(config, selectedValue, preservePath) {
@@ -2934,15 +2963,46 @@ function renderWishShoeOverlay(wish) {
 function buildWishVendorDetailHtml(quotes) {
   const sorted = sortWishVendorQuotes(quotes);
   if (!sorted.length) {
-    return '<p class="wish-vendor-empty">No prices yet</p>';
+    return '<p class="wish-vendor-empty">No vendor prices yet — add one below, then Save</p>';
   }
-  return '<div class="wd-price-table">' + sorted.map((q, i) => {
+  let html =
+    '<div class="wd-vendor-table">' +
+    '<div class="wd-vendor-row wd-vendor-row-hd"><span>Vendor</span><span>Amount</span></div>';
+  sorted.forEach((q, i) => {
     const best = i === 0;
-    return '<div class="wd-price-row' + (best ? ' wd-price-row-best' : '') + '">' +
-      '<span class="wd-price-vendor">' + escapeHtml(q.vendor) + '</span>' +
-      '<span class="wd-price-amt">' + fmt(q.price) + '</span>' +
-    '</div>';
-  }).join('') + '</div>';
+    html +=
+      '<div class="wd-vendor-row' + (best ? ' wd-vendor-row-best' : '') + '">' +
+        '<span class="wd-vendor-name">' + escapeHtml(q.vendor) + '</span>' +
+        '<span class="wd-vendor-amt">' + fmt(q.price) +
+          (best ? '<span class="wd-best-tag">Best</span>' : '') +
+        '</span>' +
+      '</div>';
+  });
+  return html + '</div>';
+}
+
+function renderWishDetailItemInfo(wish) {
+  const el = document.getElementById('wd-item-details');
+  if (!el) return;
+  const range = parseWishShoeSizeRange(wish.name || '') || parseWishShoeSizeRange(wish.code || '');
+  const rows = [
+    { label: 'Name', value: wish.name },
+    { label: 'Code', value: wish.code },
+    { label: 'Category', value: wish.type },
+    { label: 'Qty', value: wish.qty > 0 ? wish.qty + ' pcs' : '' },
+    { label: 'BP est.', value: wish.estimatedCost > 0 ? fmt(wish.estimatedCost) : '' },
+    { label: 'Sizes', value: range ? range.label : '' }
+  ];
+  const html = rows
+    .filter(r => r.value)
+    .map(r =>
+      '<div class="wish-detail-dl-row">' +
+        '<dt>' + escapeHtml(r.label) + '</dt>' +
+        '<dd>' + escapeHtml(String(r.value)) + '</dd>' +
+      '</div>'
+    )
+    .join('');
+  el.innerHTML = html || '<p class="wish-vendor-empty">No details</p>';
 }
 
 function buildWishListCardHtml(row, wishRec) {
@@ -2983,18 +3043,11 @@ function buildWishListCardHtml(row, wishRec) {
   '</article>';
 }
 
-function renderWishDetailChips(wish) {
-  const el = document.getElementById('wd-chips');
-  if (!el) return;
-  const chips = [];
-  if (wish.code) chips.push('<span class="wish-chip wish-chip-code">' + escapeHtml(wish.code) + '</span>');
-  if (wish.type) chips.push('<span class="wish-chip">' + escapeHtml(wish.type) + '</span>');
-  if (wish.qty > 0) chips.push('<span class="wish-chip">' + wish.qty + ' pcs</span>');
-  if (wish.estimatedCost) chips.push('<span class="wish-chip">BP ' + fmt(wish.estimatedCost) + '</span>');
-  const range = parseWishShoeSizeRange(wish.name || '') || parseWishShoeSizeRange(wish.code || '');
-  if (range) chips.push('<span class="wish-chip wish-chip-range">' + escapeHtml(range.label) + '</span>');
-  el.innerHTML = chips.length ? chips.join('') : '';
-  el.style.display = chips.length ? '' : 'none';
+function clearWishDetailVendorForm() {
+  ['wd-vendor-name', 'wd-vendor-price'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
 }
 
 function renderWishVendorSection(wish) {
@@ -3026,23 +3079,62 @@ async function openWishlistDetail(wishId) {
     if (photoEmpty) photoEmpty.style.display = 'flex';
   }
   const nameEl = document.getElementById('wd-name');
-  const noteEl = document.getElementById('wd-note');
+  const noteInput = document.getElementById('wd-note-input');
   if (nameEl) nameEl.textContent = wish.name || wish.code || 'Item';
-  renderWishDetailChips(wish);
+  renderWishDetailItemInfo(wish);
   renderWishShoeOverlay(wish);
-  if (noteEl) {
-    if (wish.note) {
-      noteEl.textContent = wish.note;
-      noteEl.style.display = 'block';
-    } else {
-      noteEl.textContent = '';
-      noteEl.style.display = 'none';
-    }
-  }
+  if (noteInput) noteInput.value = wish.note || '';
+  clearWishDetailVendorForm();
   renderWishVendorSection(wish);
   if (sheet) sheet.classList.add('open');
 }
 window.openWishlistDetail = openWishlistDetail;
+
+async function saveWishlistDetail() {
+  const id = _currentWishDetailId;
+  if (!id) return;
+  const wish = await dbGet('wishlist', id);
+  if (!wish) {
+    toast('Wishlist item not found', 'err');
+    return;
+  }
+  if (!Array.isArray(wish.vendorQuotes)) wish.vendorQuotes = [];
+
+  const noteInput = document.getElementById('wd-note-input');
+  wish.note = noteInput ? String(noteInput.value || '').trim() : '';
+
+  const vendorName = Input.text('wd-vendor-name').trim();
+  const vendorPriceRaw = Input.money('wd-vendor-price');
+  if (vendorName || vendorPriceRaw > 0) {
+    if (!vendorName) return Validate.fail('Enter vendor name', 'wd-vendor-name');
+    if (!Validate.moneyRequired(vendorPriceRaw, 'wd-vendor-price', 'Amount')) return;
+    const key = vendorName.toLowerCase();
+    const existing = wish.vendorQuotes.find(q => String(q.vendor || '').trim().toLowerCase() === key);
+    const now = new Date().toISOString();
+    if (existing) {
+      existing.vendor = vendorName;
+      existing.price = vendorPriceRaw;
+      existing.updatedAt = now;
+    } else {
+      wish.vendorQuotes.push({
+        id: 'vq_' + Date.now(),
+        vendor: vendorName,
+        price: vendorPriceRaw,
+        updatedAt: now
+      });
+    }
+    clearWishDetailVendorForm();
+  }
+
+  await dbPut('wishlist', wish);
+  scheduleSync();
+  renderWishDetailItemInfo(wish);
+  renderWishVendorSection(wish);
+  await renderWishlistPage();
+  await renderStockMonitorSummary();
+  toast('Saved', 'ok');
+}
+window.saveWishlistDetail = saveWishlistDetail;
 
 function closeWishlistDetail() {
   const sheet = document.getElementById('wishlist-detail-sheet');
@@ -3881,7 +3973,9 @@ function toggleWishAddMore(forceOpen) {
   const open = typeof forceOpen === 'boolean' ? forceOpen : panel.hidden;
   panel.hidden = !open;
   btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  btn.textContent = open ? 'Less' : 'More options';
+  btn.classList.toggle('is-open', open);
+  const label = btn.querySelector('.wish-add-more-toggle-text');
+  if (label) label.textContent = open ? 'Hide options' : 'More options';
 }
 window.toggleWishAddMore = toggleWishAddMore;
 
@@ -3922,7 +4016,7 @@ async function renderWishlistPage() {
 async function saveWishlistItem() {
   const name = Input.text('wish-name');
   const code = Input.text('wish-code').toUpperCase();
-  const type = document.getElementById('wish-type')?.value || '';
+  const type = getCascadeCommittedValue('wish-type', { valueMode: 'name', requireLeaf: true });
   const qtyRaw = Input.int('wish-qty');
   const costRaw = Input.money('wish-cost');
   const note = Input.text('wish-note');
@@ -5093,14 +5187,22 @@ function closeOffStockSale() {
 async function confirmOffStockSale() {
   const name = Input.text('off-name');
   const code = sanitiseCode(Input.text('off-code'));
-  const type = document.getElementById('off-type')?.value || '';
+  const type = getCascadeCommittedValue('off-type', { valueMode: 'name', requireLeaf: true });
   const size = Input.text('off-size');
   const qty = Input.int('off-qty');
   const buyPrice = Input.money('off-buy');
   const sellPrice = Input.money('off-sell');
   const paymentMethod = 'cash';
   if (!name && !code) return Validate.fail('Enter item name or code', 'off-name');
-  if (!type) return Validate.fail('Select a category', 'off-type');
+  if (!type) {
+    const wrap = document.getElementById('off-type-cascade');
+    const pathIds = wrap ? _getCascadePathFromWrap(wrap) : [];
+    const deepest = pathIds.length ? getTypeById(pathIds[pathIds.length - 1]) : null;
+    if (deepest && _categoryHasActiveChildren(deepest.id)) {
+      return Validate.fail('Pick a sub-category', 'off-type');
+    }
+    return Validate.fail('Select a category', 'off-type');
+  }
   if (!Validate.restockQty(qty, 'off-qty')) return;
   if (!Validate.moneyOptional(buyPrice, 'off-buy', 'Buy price')) return;
   if (!Validate.moneyRequired(sellPrice, 'off-sell', 'Sale price')) return;
