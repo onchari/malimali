@@ -1915,8 +1915,73 @@ body {
 .card-row-value { font-size:16px; font-weight:800; font-family:var(--mono); }
 .profit-header { font-size:11px; font-family:var(--mono); color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
 .profit-divider { height:1px; background:var(--border); margin:8px 0; }
-.add-photo-box { width:100%; height:180px; border-radius:var(--r); background:var(--surface2); border:2px dashed var(--border); display:flex; align-items:center; justify-content:center; position:relative; overflow:hidden; margin-bottom:10px; cursor:pointer; }
+.add-photo-box { width:100%; height:180px; border-radius:var(--r); background:var(--surface2); border:2px dashed var(--border); display:flex; align-items:center; justify-content:center; position:relative; overflow:hidden; margin-bottom:10px; }
+.add-photo-box .add-photo-ph { cursor:pointer; }
 .add-photo-img { width:100%; height:100%; object-fit:cover; border-radius:var(--r); }
+.photo-viewport {
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+}
+.photo-viewport:active { cursor: grabbing; }
+.photo-pan-img {
+  pointer-events: auto;
+  touch-action: none;
+}
+.photo-pan-hint {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.92);
+  background: rgba(0,0,0,0.45);
+  padding: 3px 10px;
+  border-radius: 20px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.photo-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: rgba(0,0,0,0.92);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: stretch;
+}
+.photo-lightbox[hidden] { display: none !important; }
+body.photo-lightbox-open { overflow: hidden; }
+.photo-lightbox-close {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+.photo-lightbox-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+}
+.wish-detail-photo-wrap.photo-viewport {
+  touch-action: none;
+  cursor: grab;
+}
 .add-photo-placeholder { text-align:center; color:#94a3b8; }
 .add-photo-icon { font-size:36px; margin-bottom:8px; }
 .add-photo-text { font-size:14px; font-weight:600; color:#64748b; }

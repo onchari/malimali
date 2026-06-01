@@ -2690,6 +2690,8 @@ function triggerAddPhotoUpload() {
       if (photoImg) { photoImg.src = _addFormPhotoData; photoImg.style.display = 'block'; }
       if (placeholder) placeholder.style.display = 'none';
       if (removeBtn) removeBtn.style.display = 'block';
+      const pv = _photoViewerRegistry.get('add');
+      if (pv) requestAnimationFrame(() => pv.reset());
       toast('Photo ready', 'ok');
     }
   });
@@ -2706,6 +2708,8 @@ function updateWishPhotoPreview() {
     if (photoImg) { photoImg.src = _wishFormPhotoData; photoImg.style.display = 'block'; }
     if (placeholder) placeholder.style.display = 'none';
     if (removeBtn) removeBtn.style.display = 'block';
+    const pv = _photoViewerRegistry.get('wish');
+    if (pv) requestAnimationFrame(() => pv.reset());
   } else {
     if (photoImg) { photoImg.src = ''; photoImg.style.display = 'none'; }
     if (placeholder) placeholder.style.display = 'flex';
@@ -2761,6 +2765,8 @@ function applyAddFormPhotoPreview(dataUrl) {
   if (photoImg) { photoImg.src = dataUrl; photoImg.style.display = 'block'; }
   if (placeholder) placeholder.style.display = 'none';
   if (removeBtn) removeBtn.style.display = 'block';
+  const pv = _photoViewerRegistry.get('add');
+  if (pv) requestAnimationFrame(() => pv.reset());
 }
 
 function clearAddFormPhoto() {
@@ -2801,6 +2807,8 @@ async function openWishlistDetail(wishId) {
     photoImg.src = photo;
     photoImg.style.display = 'block';
     if (photoEmpty) photoEmpty.style.display = 'none';
+    const pv = _photoViewerRegistry.get('wishDetail');
+    if (pv) requestAnimationFrame(() => pv.reset());
   } else {
     if (photoImg) { photoImg.src = ''; photoImg.style.display = 'none'; }
     if (photoEmpty) photoEmpty.style.display = 'flex';
@@ -4069,7 +4077,9 @@ function triggerSheetPhotoUpload(event) {
       if (photoImg && saved) { photoImg.src = saved; }
       if (panWrap) panWrap.style.display = 'block';
       if (fallback) fallback.style.display = 'none';
-      if (typeof window._resetPhotoPan === 'function') window._resetPhotoPan();
+      if (typeof window._resetPhotoPan === 'function') {
+        requestAnimationFrame(() => window._resetPhotoPan());
+      }
       const btn = document.getElementById('sh-photo-btn');
       if (btn) btn.textContent = '📷 Photo';
       renderList();
@@ -4094,17 +4104,21 @@ async function openSheet(id) {
   const photoImg = document.getElementById('sh-photo-img');
   const photoFallback = document.getElementById('sh-photo-fallback');
   const photoPan = document.getElementById('sh-photo-pan') || document.getElementById('sh-photo-area-inner');
+  const panHint = document.getElementById('sh-photo-pan-hint');
   if (photo) {
     photoImg.src = photo;
     if (photoPan) { const panEl=document.getElementById('sh-photo-pan'); if(panEl) panEl.style.display='block'; }
+    if (panHint) panHint.style.display = 'block';
     photoFallback.style.display = 'none';
   } else {
     if (photoPan) photoPan.style.display = 'none';
+    if (panHint) panHint.style.display = 'none';
     photoFallback.style.display = 'flex';
     photoFallback.style.background = t.color || 'var(--surface2)';
   }
-  // Reset pan/zoom every time sheet opens
-  if (typeof window._resetPhotoPan === 'function') window._resetPhotoPan();
+  if (typeof window._resetPhotoPan === 'function') {
+    requestAnimationFrame(() => window._resetPhotoPan());
+  }
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   set('sh-photo-btn', photo ? '📷 Change' : '📷 Add Photo');
@@ -7288,12 +7302,265 @@ function initCleanNumericInputs() {
   });
 }
 
+// ===== PHOTO VIEWER — pan, pinch-zoom, double-tap fullscreen =====
+const _photoViewerRegistry = new Map();
+
+function ensurePhotoLightbox() {
+  let lb = document.getElementById('photo-lightbox');
+  if (lb) return lb;
+  lb = document.createElement('div');
+  lb.id = 'photo-lightbox';
+  lb.className = 'photo-lightbox';
+  lb.hidden = true;
+  lb.innerHTML =
+    '<button type="button" class="photo-lightbox-close" aria-label="Close">✕</button>' +
+    '<div class="photo-lightbox-viewport" id="photo-lightbox-viewport">' +
+    '<img id="photo-lightbox-img" class="photo-pan-img" alt="">' +
+    '</div>';
+  lb.querySelector('.photo-lightbox-close').addEventListener('click', closePhotoLightbox);
+  lb.addEventListener('click', e => { if (e.target === lb) closePhotoLightbox(); });
+  document.body.appendChild(lb);
+  attachPhotoViewer(
+    document.getElementById('photo-lightbox-viewport'),
+    document.getElementById('photo-lightbox-img'),
+    { key: 'lightbox', allowFullscreen: false }
+  );
+  return lb;
+}
+
+function openPhotoLightbox(src) {
+  if (!src) return;
+  const lb = ensurePhotoLightbox();
+  const img = document.getElementById('photo-lightbox-img');
+  if (!img) return;
+  img.src = src;
+  lb.hidden = false;
+  document.body.classList.add('photo-lightbox-open');
+  const viewer = _photoViewerRegistry.get('lightbox');
+  if (viewer) requestAnimationFrame(() => viewer.reset());
+}
+window.openPhotoLightbox = openPhotoLightbox;
+
+function closePhotoLightbox() {
+  const lb = document.getElementById('photo-lightbox');
+  if (!lb) return;
+  lb.hidden = true;
+  document.body.classList.remove('photo-lightbox-open');
+}
+window.closePhotoLightbox = closePhotoLightbox;
+
+function attachPhotoViewer(viewport, img, options) {
+  if (!viewport || !img) return null;
+  const key = (options && options.key) || viewport.id || ('pv' + _photoViewerRegistry.size);
+  if (_photoViewerRegistry.has(key)) return _photoViewerRegistry.get(key);
+
+  const allowFullscreen = !options || options.allowFullscreen !== false;
+  const isActive = (options && options.isActive) || (() => !!img.src && img.style.display !== 'none');
+
+  viewport.classList.add('photo-viewport');
+  img.classList.add('photo-pan-img');
+
+  const state = {
+    scale: 1, tx: 0, ty: 0, minScale: 1, maxScale: 5,
+    pointers: new Map(),
+    dragStart: null,
+    moved: false,
+    lastTap: 0, lastTapX: 0, lastTapY: 0
+  };
+
+  function metrics() {
+    const r = viewport.getBoundingClientRect();
+    const iw = img.naturalWidth || 1;
+    const ih = img.naturalHeight || 1;
+    const cover = Math.max(r.width / iw, r.height / ih);
+    return { vw: r.width, vh: r.height, iw, ih, cover };
+  }
+
+  function clampPan() {
+    const { vw, vh, iw, ih } = metrics();
+    const sw = iw * state.scale;
+    const sh = ih * state.scale;
+    const maxX = Math.max(0, (sw - vw) / 2);
+    const maxY = Math.max(0, (sh - vh) / 2);
+    state.tx = Math.min(maxX, Math.max(-maxX, state.tx));
+    state.ty = Math.min(maxY, Math.max(-maxY, state.ty));
+  }
+
+  function applyTransform() {
+    const { cover } = metrics();
+    state.minScale = cover;
+    if (state.scale < state.minScale) state.scale = state.minScale;
+    if (state.scale > state.maxScale) state.scale = state.maxScale;
+    clampPan();
+    img.style.transform =
+      'translate(calc(-50% + ' + state.tx + 'px), calc(-50% + ' + state.ty + 'px)) scale(' + state.scale + ')';
+  }
+
+  function layoutImage() {
+    const { iw, ih } = metrics();
+    img.style.position = 'absolute';
+    img.style.left = '50%';
+    img.style.top = '50%';
+    img.style.width = iw + 'px';
+    img.style.height = ih + 'px';
+    img.style.maxWidth = 'none';
+    img.style.maxHeight = 'none';
+    img.style.objectFit = 'none';
+    img.style.transformOrigin = 'center center';
+    img.style.userSelect = 'none';
+    img.style.webkitUserDrag = 'none';
+  }
+
+  function reset() {
+    if (!isActive()) return;
+    const { cover } = metrics();
+    state.scale = cover;
+    state.tx = 0;
+    state.ty = 0;
+    layoutImage();
+    applyTransform();
+  }
+
+  function pointerDist() {
+    const pts = [...state.pointers.values()];
+    if (pts.length < 2) return 0;
+    const dx = pts[0].x - pts[1].x;
+    const dy = pts[0].y - pts[1].y;
+    return Math.hypot(dx, dy);
+  }
+
+  function onPointerDown(e) {
+    if (!isActive()) return;
+    if (e.target.closest('.add-photo-remove, .photo-lightbox-close, #sh-photo-btn')) return;
+    viewport.setPointerCapture(e.pointerId);
+    state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    state.moved = false;
+    if (state.pointers.size === 1) {
+      state.dragStart = { x: e.clientX, y: e.clientY, tx: state.tx, ty: state.ty };
+    } else if (state.pointers.size === 2) {
+      state.pinchStartDist = pointerDist();
+      state.pinchStartScale = state.scale;
+    }
+  }
+
+  function onPointerMove(e) {
+    if (!state.pointers.has(e.pointerId)) return;
+    state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (state.pointers.size >= 2 && state.pinchStartDist > 0) {
+      const dist = pointerDist();
+      if (dist > 0) {
+        state.scale = state.pinchStartScale * (dist / state.pinchStartDist);
+        applyTransform();
+        state.moved = true;
+      }
+      return;
+    }
+    if (state.pointers.size === 1 && state.dragStart) {
+      const dx = e.clientX - state.dragStart.x;
+      const dy = e.clientY - state.dragStart.y;
+      if (Math.abs(dx) + Math.abs(dy) > 4) state.moved = true;
+      state.tx = state.dragStart.tx + dx;
+      state.ty = state.dragStart.ty + dy;
+      applyTransform();
+    }
+  }
+
+  function onPointerUp(e) {
+    if (!state.pointers.has(e.pointerId)) return;
+    state.pointers.delete(e.pointerId);
+    try { viewport.releasePointerCapture(e.pointerId); } catch (_) { /* intentionally ignored */ }
+
+    if (state.pointers.size === 0) {
+      if (!state.moved && allowFullscreen) {
+        const now = Date.now();
+        const dx = e.clientX - state.lastTapX;
+        const dy = e.clientY - state.lastTapY;
+        if (now - state.lastTap < 380 && dx * dx + dy * dy < 900) {
+          openPhotoLightbox(img.src);
+          state.lastTap = 0;
+        } else {
+          state.lastTap = now;
+          state.lastTapX = e.clientX;
+          state.lastTapY = e.clientY;
+        }
+      }
+      state.dragStart = null;
+      state.pinchStartDist = 0;
+    } else if (state.pointers.size === 1) {
+      state.dragStart = {
+        x: [...state.pointers.values()][0].x,
+        y: [...state.pointers.values()][0].y,
+        tx: state.tx,
+        ty: state.ty
+      };
+    }
+  }
+
+  viewport.addEventListener('pointerdown', onPointerDown);
+  viewport.addEventListener('pointermove', onPointerMove);
+  viewport.addEventListener('pointerup', onPointerUp);
+  viewport.addEventListener('pointercancel', onPointerUp);
+  img.addEventListener('dblclick', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (allowFullscreen && isActive()) openPhotoLightbox(img.src);
+  });
+  img.addEventListener('load', () => requestAnimationFrame(reset));
+
+  const viewer = { reset, key };
+  _photoViewerRegistry.set(key, viewer);
+  if (key === 'detail') window._resetPhotoPan = reset;
+  return viewer;
+}
+
+function initPhotoViewers() {
+  attachPhotoViewer(
+    document.getElementById('sh-photo-pan'),
+    document.getElementById('sh-photo-img'),
+    {
+      key: 'detail',
+      isActive: () => {
+        const pan = document.getElementById('sh-photo-pan');
+        return pan && pan.style.display !== 'none' && !!document.getElementById('sh-photo-img')?.src;
+      }
+    }
+  );
+  attachPhotoViewer(
+    document.getElementById('add-photo-preview'),
+    document.getElementById('add-photo-img'),
+    {
+      key: 'add',
+      isActive: () => !!_addFormPhotoData && document.getElementById('add-photo-img')?.style.display !== 'none'
+    }
+  );
+  attachPhotoViewer(
+    document.querySelector('.wish-photo-box'),
+    document.getElementById('wish-photo-img'),
+    {
+      key: 'wish',
+      isActive: () => !!_wishFormPhotoData && document.getElementById('wish-photo-img')?.style.display !== 'none'
+    }
+  );
+  attachPhotoViewer(
+    document.getElementById('wd-photo-wrap'),
+    document.getElementById('wd-photo-img'),
+    {
+      key: 'wishDetail',
+      isActive: () => document.getElementById('wd-photo-img')?.style.display !== 'none'
+    }
+  );
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   setLoginReady(!!_appDbReady);
   initCleanNumericInputs();
   initWishlistScreenshotWatch();
+  initPhotoViewers();
   const ps = document.getElementById('profile-sheet');
   if (ps) ps.addEventListener('click', e => { if (e.target === ps) closeProfileSheet(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closePhotoLightbox();
+  });
 });
 
 // ===== AUTH / LOGIN =====
