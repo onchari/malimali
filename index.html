@@ -775,31 +775,38 @@
   <!-- Shoe sizes (footwear categories) -->
   <div id="shoe-size-panel" class="add-card add-card-shoe">
     <h2 class="add-card-title"><span class="add-step-badge">3</span> Shoe sizes</h2>
-    <p class="add-card-hint" style="margin:0 0 10px;">Tap S / M / L, then pick sizes. Qty &amp; prices below apply to all selected sizes.</p>
+    <p class="add-card-hint" style="margin:0 0 10px;">Tap sizes on each card, then fill qty &amp; prices.</p>
     <div class="add-section add-section-inset">
       <div class="sg-row">
-        <button type="button" class="sg-btn" id="sg-btn-S" onclick="selectSizeGroup('S')">
-          <span class="sg-ltr">S</span>
-          <span class="sg-range" id="sg-range-S">20–28</span>
-          <span class="sg-name">Children</span>
-        </button>
-        <button type="button" class="sg-btn" id="sg-btn-M" onclick="selectSizeGroup('M')">
-          <span class="sg-ltr">M</span>
-          <span class="sg-range" id="sg-range-M">29–36</span>
-          <span class="sg-name">Teens</span>
-        </button>
-        <button type="button" class="sg-btn" id="sg-btn-L" onclick="selectSizeGroup('L')">
-          <span class="sg-ltr">L</span>
-          <span class="sg-range" id="sg-range-L">37–45</span>
-          <span class="sg-name">Adults</span>
-        </button>
+        <div class="sg-card" id="sg-card-S" data-group="S">
+          <div class="sg-card-head">
+            <span class="sg-ltr">S</span>
+            <span class="sg-range" id="sg-range-S">20–28</span>
+            <span class="sg-name">Children</span>
+          </div>
+          <div class="sg-card-sizes" id="sg-card-sizes-S"></div>
+        </div>
+        <div class="sg-card" id="sg-card-M" data-group="M">
+          <div class="sg-card-head">
+            <span class="sg-ltr">M</span>
+            <span class="sg-range" id="sg-range-M">29–36</span>
+            <span class="sg-name">Teens</span>
+          </div>
+          <div class="sg-card-sizes" id="sg-card-sizes-M"></div>
+        </div>
+        <div class="sg-card" id="sg-card-L" data-group="L">
+          <div class="sg-card-head">
+            <span class="sg-ltr">L</span>
+            <span class="sg-range" id="sg-range-L">37–45</span>
+            <span class="sg-name">Adults</span>
+          </div>
+          <div class="sg-card-sizes" id="sg-card-sizes-L"></div>
+        </div>
       </div>
     </div>
 
-    <div id="shoe-sizes-grid">
-      <div class="add-section add-section-inset" style="padding-bottom:10px;">
-        <div id="sz-grid" class="sz-grid-unified"></div>
-      </div>
+    <div id="shoe-sizes-grid" hidden aria-hidden="true">
+      <div id="sz-grid"></div>
     </div>
 
     <div id="shoe-rows-wrap">
@@ -825,41 +832,34 @@
           </div>
         </div>
 
-        <!-- ── Mode toggle tabs ─────────────────────────────── -->
         <div class="shoe-mode-tabs">
           <button type="button" id="mode-tab-shared" class="shoe-mode-tab active"
-                  onclick="setShoeMode('shared')">
-            📋 All Sizes
-          </button>
+                  onclick="setShoeMode('shared')">All sizes</button>
           <button type="button" id="mode-tab-persize" class="shoe-mode-tab"
-                  onclick="setShoeMode('persize')">
-            🎯 Per Size
-          </button>
+                  onclick="setShoeMode('persize')">Per size</button>
         </div>
 
-        <!-- ── Shared mode (default) ────────────────────────── -->
-        <div id="shoe-shared-wrap">
-          <div class="shoe-price-labels add-row-3">
-            <span>Qty / size</span><span>BP</span><span>SP</span>
-          </div>
-          <div class="add-row-3">
-            <div class="add-field">
-              <input class="add-input add-center" id="shoe-shared-qty"
-                     type="number" min="0" inputmode="numeric" placeholder="0"
-                     aria-label="Quantity per size">
-            </div>
-            <div class="add-field">
-              <input class="add-input add-center" id="shoe-shared-buy"
-                     type="number" min="0" inputmode="decimal" placeholder="0"
-                     aria-label="Buy price">
-            </div>
-            <div class="add-field">
-              <input class="add-input add-center" id="shoe-shared-sell"
-                     type="number" min="0" inputmode="decimal" placeholder="0"
-                     aria-label="Sell price">
+        <form id="shoe-stock-form" class="shoe-stock-form" onsubmit="return false;">
+          <div id="shoe-shared-wrap">
+            <div class="shoe-form-grid">
+              <div class="shoe-form-field">
+                <label for="shoe-shared-qty">Qty / size</label>
+                <input class="add-input add-center" id="shoe-shared-qty"
+                       type="number" min="0" inputmode="numeric" placeholder="0" required>
+              </div>
+              <div class="shoe-form-field">
+                <label for="shoe-shared-buy">BP (buy)</label>
+                <input class="add-input add-center" id="shoe-shared-buy"
+                       type="number" min="0" inputmode="decimal" placeholder="0" required>
+              </div>
+              <div class="shoe-form-field">
+                <label for="shoe-shared-sell">SP (sell)</label>
+                <input class="add-input add-center" id="shoe-shared-sell"
+                       type="number" min="0" inputmode="decimal" placeholder="0" required>
+              </div>
             </div>
           </div>
-        </div>
+        </form>
 
         <!-- ── Per-size mode ────────────────────────────────── -->
         <div id="shoe-per-size-wrap" style="display:none;">

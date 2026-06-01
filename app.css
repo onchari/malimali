@@ -2444,12 +2444,41 @@ body.photo-lightbox-open { overflow: hidden; }
    SHOE SYSTEM CSS
    ================================================================ */
 .sg-row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; align-items:stretch; }
-.sg-btn { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:88px;padding:12px 6px 10px;border:1.5px solid var(--border);border-radius:var(--r-lg);background:var(--surface2);cursor:pointer;font-family:var(--sans);transition:all .12s;width:100%;box-sizing:border-box; }
-.sg-btn.sg-active { background:#EAF3DE;border-color:var(--green); }
-.sg-ltr  { font-size:22px;font-weight:800;color:var(--text);line-height:1; }
-.sg-btn.sg-active .sg-ltr { color:var(--green); }
-.sg-range{ font-size:10px;font-weight:700;font-family:var(--mono);color:var(--muted); }
-.sg-name { font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted); }
+.sg-card {
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  min-width:0;
+  padding:8px 6px 10px;
+  border:1.5px solid var(--border);
+  border-radius:var(--r-lg);
+  background:var(--surface2);
+  box-sizing:border-box;
+}
+.sg-card-active { background:#f0fdf4;border-color:#86efac; }
+.sg-card-head { display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center; }
+.sg-ltr  { font-size:18px;font-weight:800;color:var(--text);line-height:1; }
+.sg-card-active .sg-ltr { color:var(--green); }
+.sg-range{ font-size:9px;font-weight:700;font-family:var(--mono);color:var(--muted); }
+.sg-name { font-size:8px;text-transform:uppercase;letter-spacing:.35px;color:var(--muted); }
+.sg-card-sizes {
+  display:flex;
+  flex-direction:row;
+  flex-wrap:nowrap;
+  gap:4px;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  padding:2px 0 4px;
+  width:100%;
+}
+.sg-card-sizes .sz-btn {
+  flex:0 0 auto;
+  min-width:30px;
+  width:auto;
+  min-height:32px;
+  padding:0 6px;
+  font-size:11px;
+}
 #sz-grid,
 .sz-grid-unified {
   display: grid;
@@ -2521,20 +2550,44 @@ body.photo-lightbox-open { overflow: hidden; }
 }
 .shoe-selected-chips {
   flex: 1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   gap: 4px;
   min-height: 28px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
+.shoe-stock-form { margin-top: 4px; }
+.shoe-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.shoe-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.shoe-form-field label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+  color: var(--muted);
+}
+.shoe-form-field .add-input { width: 100%; box-sizing: border-box; }
 .shoe-selected-chips-empty {
-  grid-column: 1 / -1;
   font-size: 11px;
   color: var(--muted);
   padding: 6px 4px;
+  white-space: nowrap;
 }
 .shoe-selected-chip {
+  flex: 0 0 auto;
   text-align: center;
-  padding: 5px 2px;
+  padding: 5px 8px;
   border-radius: 6px;
   background: #EAF3DE;
   border: 1px solid #86efac;

@@ -530,15 +530,15 @@ function showShoePricingPanel() {
   if (sharedWrap && !_shoeState.perSizeMode) sharedWrap.style.display = 'block';
 }
 
-/** Footwear add: S/M/L cards only until tapped; qty/prices always visible. */
+/** Footwear add: horizontal sizes on S/M/L cards; qty/prices form always visible. */
 function prepareShoeSizePickerUI() {
   const grid = document.getElementById('sz-grid');
   if (grid) grid.innerHTML = '';
   _shoeState.shownGroups.clear();
   const szGrid = document.getElementById('shoe-sizes-grid');
-  if (szGrid) szGrid.style.display = 'none';
+  if (szGrid) { szGrid.hidden = true; szGrid.style.display = 'none'; }
+  renderAllShoeGroupCards();
   showShoePricingPanel();
-  renderShoeGroupButtons();
 }
 
 function revealShoeSizePickerUI() {
@@ -3397,13 +3397,8 @@ async function preloadShoeSizesForAdd(code) {
 
   const groupsNeeded = new Set();
   records.forEach(sz => groupsNeeded.add(sz.sizeGroup || _shoeState.groupFor(sz.size)));
-  groupsNeeded.forEach(g => ensureSizeGroupOpen(g));
-
   records.forEach(sz => _shoeState.sizes.add(sz.size));
-  document.querySelectorAll('.sz-btn').forEach(b => {
-    const n = parseInt(b.textContent, 10);
-    if (Number.isFinite(n)) b.classList.toggle('sz-active', _shoeState.sizes.has(n));
-  });
+  renderAllShoeGroupCards();
 
   const szWrap = UI.el('shoe-rows-wrap');
   if (szWrap) szWrap.style.display = _shoeState.sizes.size > 0 ? 'block' : 'none';
@@ -9156,60 +9151,50 @@ function _histSaleRow(s, mode) {
 }
 window.renderHistoryPage = renderHistoryPage;
 
-function ensureSizeGroupOpen(g) {
-  if (_shoeState.shownGroups.has(g)) return;
+function renderAllShoeGroupCards() {
   const groups = getShoeGroups();
-  if (!groups[g]) return;
-  const { min, max } = groups[g];
-  const sizes = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-  const grid = UI.el('sz-grid');
-  if (!grid) return;
-
-  _shoeState.group = g;
-  _shoeState.shownGroups.add(g);
-
-  const block = document.createElement('div');
-  block.id = 'sz-group-block-' + g;
-  block.className = 'sz-group-block sz-group-block-' + g;
-
-  const label = document.createElement('div');
-  label.className = 'sz-group-divider';
-  label.innerHTML = '<span class="sz-group-tag sz-group-' + g + '" style="cursor:pointer;">' +
-    (g === 'S' ? 'Small / Children' : g === 'M' ? 'Medium / Teens' : 'Large / Adults') +
-    ' (' + min + '–' + max + ') ✕</span>';
-  label.onclick = () => deselectSizeGroup(g);
-  block.appendChild(label);
-
-  const row = document.createElement('div');
-  row.className = 'sz-group-sizes';
-  sizes.forEach(s => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'sz-btn' + (_shoeState.sizes.has(s) ? ' sz-active' : '');
-    btn.id = 'sz-' + s;
-    btn.textContent = s;
-    btn.onclick = () => toggleShoeSize(s);
-    row.appendChild(btn);
+  ['S', 'M', 'L'].forEach(g => {
+    const container = document.getElementById('sg-card-sizes-' + g);
+    const card = document.getElementById('sg-card-' + g);
+    const rng = document.getElementById('sg-range-' + g);
+    if (!container) return;
+    if (!groups[g]) {
+      container.innerHTML = '';
+      if (card) card.classList.remove('sg-card-active');
+      return;
+    }
+    const { min, max } = groups[g];
+    if (rng) {
+      const lbl = groups[g].label ? groups[g].label + ' · ' : '';
+      rng.textContent = lbl + min + '–' + max;
+    }
+    container.innerHTML = '';
+    for (let s = min; s <= max; s++) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sz-btn' + (_shoeState.sizes.has(s) ? ' sz-active' : '');
+      btn.id = 'sz-' + s;
+      btn.textContent = String(s);
+      btn.onclick = () => toggleShoeSize(s);
+      container.appendChild(btn);
+    }
+    const anySelected = _getGroupSizes(g).some(sz => _shoeState.sizes.has(sz));
+    if (card) card.classList.toggle('sg-card-active', anySelected);
+    if (anySelected) _shoeState.shownGroups.add(g);
+    else _shoeState.shownGroups.delete(g);
   });
-  block.appendChild(row);
-  grid.appendChild(block);
-
-  const szGrid = UI.el('shoe-sizes-grid');
-  if (szGrid) szGrid.style.display = 'block';
 }
 
 function selectSizeGroup(g) {
-  if (!getShoeGroups()[g] || !UI.el('sz-grid')) return;
-  if (!_shoeState.shownGroups.has(g)) {
-    ensureSizeGroupOpen(g);
-  } else {
-    deselectSizeGroup(g);
-    return;
-  }
-
-  renderShoeGroupButtons();
+  const sizes = _getGroupSizes(g);
+  if (!sizes.length) return;
+  const allOn = sizes.every(s => _shoeState.sizes.has(s));
+  sizes.forEach(s => {
+    if (allOn) _shoeState.sizes.delete(s);
+    else _shoeState.sizes.add(s);
+  });
+  renderAllShoeGroupCards();
   showShoePricingPanel();
-  // Rebuild per-size rows if in per-size mode
   if (_shoeState.perSizeMode) renderShoeRows();
   updateShoeCollectiveSummary();
 }
@@ -9445,19 +9430,11 @@ async function saveShoeItems(baseCode, baseName, type) {
 window.saveShoeItems = saveShoeItems;
 
 function deselectSizeGroup(g) {
-  const groups = getShoeGroups();
-  if (!groups[g]) return;
-  const { min, max } = groups[g];
-  for (let s = min; s <= max; s++) _shoeState.sizes.delete(s);
-  const block = document.getElementById('sz-group-block-' + g);
-  if (block) block.remove();
+  _getGroupSizes(g).forEach(s => _shoeState.sizes.delete(s));
+  if (_shoeState.group === g) _shoeState.group = null;
   _shoeState.shownGroups.delete(g);
-  if (_shoeState.group === g) _shoeState.group      = null;
-  const grid   = UI.el('sz-grid');
-  const szGrid = UI.el('shoe-sizes-grid');
-  if (szGrid && grid && grid.children.length === 0) szGrid.style.display = 'none';
+  renderAllShoeGroupCards();
   showShoePricingPanel();
-  renderShoeGroupButtons();
   renderShoeSummary();
   renderShoeRows();
   updateShoeCollectiveSummary();
@@ -9467,11 +9444,7 @@ window.deselectSizeGroup = deselectSizeGroup;
 function toggleShoeSize(s) {
   if (_shoeState.sizes.has(s)) _shoeState.sizes.delete(s); else _shoeState.sizes.add(s);
 
-  // Update button appearance
-  document.querySelectorAll('.sz-btn').forEach(b => {
-    b.classList.toggle('sz-active', _shoeState.sizes.has(parseInt(b.textContent)));
-  });
-
+  renderAllShoeGroupCards();
   showShoePricingPanel();
 
   // If switching to persize and rows already rendered, rebuild them
@@ -9608,16 +9581,7 @@ function _getGroupSizes(g) {
   return Array.from({ length: max - min + 1 }, (_, i) => min + i);
 }
 function renderShoeGroupButtons() {
-  const groups = getShoeGroups();
-  ['S','M','L'].forEach(g => {
-    const btn = document.getElementById('sg-btn-' + g);
-    const rng = document.getElementById('sg-range-' + g);
-    if (btn) btn.classList.toggle('sg-active', _shoeState.shownGroups.has(g));
-    if (rng && groups[g]) {
-      const lbl = groups[g].label ? groups[g].label + ' · ' : '';
-      rng.textContent = lbl + groups[g].min + '–' + groups[g].max;
-    }
-  });
+  renderAllShoeGroupCards();
 }
 function renderShoeRows() {
   const rows = document.getElementById('shoe-rows');
