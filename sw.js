@@ -1,10 +1,10 @@
 ﻿// ===== MANDELA GENERALS SERVICE WORKER v14 =====
 // Strategy:
-//   App files  → Network-first (always try fresh, fallback to cache offline)
-//   Firebase SDK → Cache-first (static SDK, rarely changes)
-//   Firestore API → Network-only (never cache live data)
+//   App files   to  Network-first (always try fresh, fallback to cache offline)
+//   Firebase SDK  to  Cache-first (static SDK, rarely changes)
+//   Firestore API  to  Network-only (never cache live data)
 
-const CACHE_NAME = 'mandela-v20260606-upgrade-steps';   // bump this on every deploy
+const CACHE_NAME = 'mandela-v20260606-english-ui';   // bump this on every deploy
 const FIREBASE_CACHE = 'firebase-sdk-v1';
 
 const APP_FILES = [
@@ -34,7 +34,7 @@ self.addEventListener('install', e => {
       )
     ])
   );
-  // Activate immediately — don't wait for old SW to stop
+  // Activate immediately - don't wait for old SW to stop
   self.skipWaiting();
 });
 
@@ -60,7 +60,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = e.request.url;
 
-  // 1. Firestore / Firebase auth API — always network, never cache
+  // 1. Firestore / Firebase auth API - always network, never cache
   if (
     url.includes('firestore.googleapis.com') ||
     url.includes('firebase.googleapis.com') ||
@@ -70,7 +70,7 @@ self.addEventListener('fetch', e => {
     return; // pass through
   }
 
-  // 2. Firebase SDK scripts — cache-first (they never change)
+  // 2. Firebase SDK scripts - cache-first (they never change)
   if (url.includes('gstatic.com/firebasejs')) {
     e.respondWith(
       caches.match(e.request).then(cached => {
@@ -84,14 +84,14 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // 3. App files — NETWORK-FIRST
+  // 3. App files - NETWORK-FIRST
   //    Try the network first so updates are always seen immediately.
   //    Fall back to cache only when offline.
   if (e.request.method === 'GET') {
     e.respondWith(
       fetch(e.request)
         .then(res => {
-          // Got a fresh response — update the cache and return it
+          // Got a fresh response - update the cache and return it
           if (res && res.status === 200) {
             const clone = res.clone();
             caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
@@ -99,7 +99,7 @@ self.addEventListener('fetch', e => {
           return res;
         })
         .catch(() => {
-          // Network failed (offline) — serve from cache
+          // Network failed (offline) - serve from cache
           return caches.match(e.request).then(cached => {
             if (cached) return cached;
             // Last resort: return cached index.html for navigation

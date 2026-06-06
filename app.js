@@ -1,5 +1,5 @@
 // ===================================================================
-// DATABASE SCHEMA  v11 —  Mandela General Stores
+// DATABASE SCHEMA  v11 -  Mandela General Stores
 // ===================================================================
 let db;
 const DB_NAME = 'InventoryApp';
@@ -33,8 +33,8 @@ function initDB() {
     // Normalized fields:
     //   buyPrice  (was: buy / defaultBuy)
     //   sellPrice (was: sell / defaultSell)
-    //   variant   (was: size — only for non-shoe items)
-    //   isShoe    — true → sizes stored in shoe_sizes
+    //   variant   (was: size - only for non-shoe items)
+    //   isShoe    - true to sizes stored in shoe_sizes
     if (!d.objectStoreNames.contains('items')) {
       const s = d.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
       s.createIndex('idx_code',     'code',    { unique: true  });
@@ -44,7 +44,7 @@ function initDB() {
     }
 
     // ── shoe_sizes ─────────────────────────────────────────────────
-    // One record per item_code + size. FK: itemCode → items.code
+    // One record per item_code + size. FK: itemCode to items.code
     if (!d.objectStoreNames.contains('shoe_sizes')) {
       const ss = d.createObjectStore('shoe_sizes', { keyPath: 'id', autoIncrement: true });
       ss.createIndex('idx_item_code', 'itemCode', { unique: false });
@@ -111,7 +111,7 @@ function initDB() {
 
   req.onerror = e => {
     console.error('[DB] Open error:', e.target.error);
-    toast('Database error — try refreshing', 'err');
+    toast('Database error - try refreshing', 'err');
     setLoginReady(true);
   };
 
@@ -132,13 +132,13 @@ function initDB() {
       }
     }).catch(err => {
       console.error('[DB] Bootstrap error:', err);
-      toast('Database setup failed — refresh the page', 'err');
+      toast('Database setup failed - refresh the page', 'err');
       setLoginReady(true);
     });
   };
 }
 
-// Migrate old field names → normalized v9 names
+// Migrate old field names to normalized v9 names
 // ── IndexedDB helpers ─────────────────────────────────────────────
 function _dbReady(rej) {
   if (!db) { const e = new Error('Database not ready'); if (rej) rej(e); return false; } return true;
@@ -200,15 +200,15 @@ function dbDelete(store, id) {
 // ===================================================================
 // CODING STANDARDS APPLIED
 //
-// 1. Class: DB           — IndexedDB abstraction (DRY, SRP)
-// 2. Class: UI           — DOM access layer (DRY, encapsulation)
-// 3. Class: ShoeState    — shoe form state (SRP, encapsulation)
-// 4. Class: SavingOverlay— progress UI (SRP, reusability)
-// 5. DRY: refreshUI()   — single refresh chain replaces repeated blocks
-// 6. CONST: STORES, CSS  — no magic strings
+// 1. Class: DB           - IndexedDB abstraction (DRY, SRP)
+// 2. Class: UI           - DOM access layer (DRY, encapsulation)
+// 3. Class: ShoeState    - shoe form state (SRP, encapsulation)
+// 4. Class: SavingOverlay- progress UI (SRP, reusability)
+// 5. DRY: refreshUI()   - single refresh chain replaces repeated blocks
+// 6. CONST: STORES, CSS  - no magic strings
 // ===================================================================
 
-// ── Standard 6: Named constants — no magic strings ─────────────────
+// ── Standard 6: Named constants - no magic strings ─────────────────
 const STORES = Object.freeze({
   ITEMS:    'items',
   SALES:    'sales',
@@ -231,7 +231,7 @@ const CSS = Object.freeze({
   SG_ACTIVE:'sg-active',
 });
 
-// ── Standard 1: DB class — wraps IndexedDB, single place for DB access
+// ── Standard 1: DB class - wraps IndexedDB, single place for DB access
 class DB {
   static all(store)       { return dbAll(store); }
   static get(store, id)   { return dbGet(store, id); }
@@ -265,7 +265,7 @@ class DB {
   }
 }
 
-// ── Standard 2: UI class — all DOM access in one place ─────────────
+// ── Standard 2: UI class - all DOM access in one place ─────────────
 class UI {
   // Get element (cached per session, cleared on page transition)
   static el(id) {
@@ -314,7 +314,7 @@ class UI {
     return el ? el.value.trim() : '';
   }
 
-  // Bulk set text — { elementId: value, ... }
+  // Bulk set text - { elementId: value,... }
   static setMany(map) {
     Object.entries(map).forEach(([id, val]) => this.setText(id, val));
   }
@@ -330,7 +330,7 @@ class UI {
 }
 
 
-// ── Core shoe helpers — defined early so all functions can use them ─
+// ── Core shoe helpers - defined early so all functions can use them ─
 function _legacyFootwearName(typeName) {
   if (!typeName) return false;
   const n = typeName.toLowerCase();
@@ -423,7 +423,7 @@ function collectCategoryDescendantIds(parentId) {
 function populateCategoryParentSelect(selectEl) {
   if (!selectEl) return;
   const cur = selectEl.value;
-  let html = '<option value="">Parent category…</option>';
+  let html = '<option value="">Parent category...</option>';
   walkCategoryTree((rec, depth) => {
     const indent = depth ? '\u2003'.repeat(depth) + '\u21b3 ' : '';
     html += '<option value="' + rec.id + '">' + indent + escapeHtml((rec.emoji || '📦') + ' ' + rec.name) + '</option>';
@@ -634,7 +634,7 @@ const Validate = {
     setTimeout(() => { el.style.borderColor = ''; }, 2000);
   },
   fail(msg, fieldId) {
-    toast('⚠️ ' + msg, 'err');
+    toast('Warning: ' + msg, 'err');
     if (fieldId) this._shake(fieldId);
     return false;
   },
@@ -653,7 +653,7 @@ const Validate = {
     if (qty > 999999) return this.fail('Quantity exceeds maximum (999,999)', qtyFieldId);
     return true;
   },
-  // Qty rules for restock (adding to existing — 0 not allowed)
+  // Qty rules for restock (adding to existing - 0 not allowed)
   restockQty(qty, qtyFieldId) {
     if (!qty || isNaN(qty) || qty <= 0) return this.fail('Enter a quantity to add (must be at least 1)', qtyFieldId);
     if (qty > 999999) return this.fail('Quantity exceeds maximum (999,999)', qtyFieldId);
@@ -662,7 +662,7 @@ const Validate = {
   // Stock available check for selling
   stock(wantQty, inStock, itemName) {
     if (inStock <= 0) return this.fail((itemName || 'Item') + ' is out of stock', null);
-    if (wantQty > inStock) return this.fail('Only ' + inStock + ' in stock — cannot sell ' + wantQty, null);
+    if (wantQty > inStock) return this.fail('Only ' + inStock + ' in stock - cannot sell ' + wantQty, null);
     if (wantQty <= 0) return this.fail('Quantity to sell must be at least 1', null);
     return true;
   },
@@ -690,7 +690,7 @@ const Validate = {
     return true;
   },
 
-  /** Optional money — empty allowed, must be >= 0 if entered */
+  /** Optional money - empty allowed, must be >= 0 if entered */
   moneyOptional(value, fieldId, label) {
     if (value === null) return true;
     if (!Number.isFinite(value)) return this.fail('Enter a valid number', fieldId);
@@ -699,12 +699,12 @@ const Validate = {
     return true;
   },
 
-  /** Opening day — at least one pocket entered; empty ≠ zero */
+  /** Opening day - at least one pocket entered; empty ≠ zero */
   dayOpening(cash, till, mpesa) {
     const vals = [cash, till, mpesa];
     const ids = ['op-cash', 'op-till', 'op-mpesa'];
     if (vals.every(v => v === null)) {
-      return this.fail('Enter opening balances — type 0 if a pocket is empty', 'op-cash');
+      return this.fail('Enter opening balances - type 0 if a pocket is empty', 'op-cash');
     }
     for (let i = 0; i < vals.length; i++) {
       if (vals[i] === null) continue;
@@ -714,12 +714,12 @@ const Validate = {
     return true;
   },
 
-  /** Closing physical count — cash/till/mpesa required (not all blank) */
+  /** Closing physical count - cash/till/mpesa required (not all blank) */
   dayClosingPhysical(cash, till, mpesa) {
     const vals = [cash, till, mpesa];
     const ids = ['cl-cash', 'cl-till', 'cl-mpesa'];
     if (vals.every(v => v === null)) {
-      return this.fail('Enter closing cash, till, or M-Pesa — type 0 if empty', 'cl-cash');
+      return this.fail('Enter closing cash, till, or M-Pesa - type 0 if empty', 'cl-cash');
     }
     for (let i = 0; i < vals.length; i++) {
       if (vals[i] === null) continue;
@@ -739,7 +739,7 @@ const Validate = {
     return true;
   },
 
-  /** Integer qty optional (empty → null) */
+  /** Integer qty optional (empty to null) */
   intOptional(value, fieldId, label) {
     if (value === null) return true;
     if (!Number.isFinite(value)) return this.fail('Enter a valid whole number', fieldId);
@@ -748,7 +748,7 @@ const Validate = {
   },
 };
 
-/** Unified input parsing — empty field is null, not zero */
+/** Unified input parsing - empty field is null, not zero */
 const Input = {
   el(id) { return document.getElementById(id); },
   raw(id) {
@@ -805,7 +805,7 @@ function _warnFinanceClosingMismatch(finTotals, closing, tolerance) {
   return lines;
 }
 
-// ── Standard 3: ShoeState class — encapsulates all shoe form state ──
+// ── Standard 3: ShoeState class - encapsulates all shoe form state ──
 class ShoeState {
   constructor() {
     this.reset();
@@ -854,7 +854,7 @@ class ShoeState {
   }
 }
 
-// ── Standard 4: SavingOverlay class — progress UI ──────────────────
+// ── Standard 4: SavingOverlay class - progress UI ──────────────────
 class SavingOverlay {
   constructor() {
     this._timer      = null;
@@ -863,7 +863,7 @@ class SavingOverlay {
     this._targetBtn  = null;
   }
 
-  show(label = 'Saving…', targetBtn = null) {
+  show(label = 'Saving...', targetBtn = null) {
     const overlay = UI.el('saving-overlay');
     const arc     = UI.el('saving-arc');
     const lbl     = UI.el('saving-label');
@@ -905,7 +905,7 @@ class SavingOverlay {
 const _overlay   = new SavingOverlay();
 const _shoeState = new ShoeState();
 
-// ── Standard 5: DRY — single UI refresh chain ──────────────────────
+// ── Standard 5: DRY - single UI refresh chain ──────────────────────
 // Replaces 15+ repeated blocks of:
 //   allItems = await dbAll('items');
 //   await enrichShoeItems(allItems);
@@ -924,7 +924,7 @@ async function refreshUI(opts = {}) {
 
 async function migrateData() {
   // ── v9 migrations ────────────────────────────────────────────────
-  // Runs on every startup; idempotent — safe to run multiple times.
+  // Runs on every startup; idempotent - safe to run multiple times.
   let fixed = 0;
 
   try {
@@ -935,27 +935,27 @@ async function migrateData() {
     for (const item of items) {
       let changed = false;
 
-      // Migrate buy → buyPrice
+      // Migrate buy to buyPrice
       if (item.buy != null && item.buyPrice == null) {
         item.buyPrice = item.buy;
         changed = true;
       }
-      // Migrate defaultBuy → buyPrice (shoes)
+      // Migrate defaultBuy to buyPrice (shoes)
       if (item.defaultBuy != null && item.buyPrice == null) {
         item.buyPrice = item.defaultBuy;
         changed = true;
       }
-      // Migrate sell → sellPrice
+      // Migrate sell to sellPrice
       if (item.sell != null && item.sellPrice == null) {
         item.sellPrice = item.sell;
         changed = true;
       }
-      // Migrate defaultSell → sellPrice (shoes)
+      // Migrate defaultSell to sellPrice (shoes)
       if (item.defaultSell != null && item.sellPrice == null) {
         item.sellPrice = item.defaultSell;
         changed = true;
       }
-      // Migrate size → variant (avoid confusion with shoe sizes)
+      // Migrate size to variant (avoid confusion with shoe sizes)
       if (item.size != null && item.variant == null) {
         item.variant = item.size;
         changed = true;
@@ -1013,7 +1013,7 @@ async function migrateData() {
     let sFixed = 0;
     for (const s of sales) {
       let changed = false;
-      // Normalize business_date → businessDate
+      // Normalize business_date to businessDate
       if (s.business_date && !s.businessDate) {
         s.businessDate = s.business_date;
         delete s.business_date;
@@ -1039,13 +1039,13 @@ async function migrateData() {
     let bdFixed = 0;
     for (const bd of bdays) {
       let changed = false;
-      // business_date → businessDate
+      // business_date to businessDate
       if (bd.business_date && !bd.businessDate) {
         bd.businessDate = bd.business_date;
-        // Keep business_date for backward-compat index — it still has that index
+        // Keep business_date for backward-compat index - it still has that index
         changed = true;
       }
-      // opened_at → openedAt
+      // opened_at to openedAt
       if (bd.opened_at && !bd.openedAt) { bd.openedAt = bd.opened_at; changed = true; }
       if (bd.closed_at && !bd.closedAt) { bd.closedAt = bd.closed_at; changed = true; }
       if (bd.reopened_count != null && bd.reopenedCount == null) {
@@ -1067,7 +1067,7 @@ async function migrateData() {
     }
     console.log(`[MIGRATE v9] finances: ${fFixed} updated`);
 
-    console.log('[MIGRATE v9] Complete ✅');
+    console.log('[MIGRATE v9] Complete');
   } catch(e) {
     console.warn('[MIGRATE v9] Error:', e.message);
   }
@@ -1274,7 +1274,7 @@ function showPage(id) {
 const _origShowPage = showPage;
 showPage = function(id) {
   if (currentUser && !userCanAccessNav(id, currentUser)) {
-    toast('⛔ Access denied', 'err');
+    toast('Access denied', 'err');
     return;
   }
   if (currentUser) localStorage.setItem(KEY_LAST_PAGE, navAccessKey(id));
@@ -1321,12 +1321,12 @@ async function loadTypes() {
   try {
   types = await dbAll('types');
   if (types.length === 0) {
-    for (const t of DEFAULT_TYPES) await dbAdd('types', { ...t });
+    for (const t of DEFAULT_TYPES) await dbAdd('types', {...t });
     types = await dbAll('types');
   }
   await normalizeTypeRecords();
   if (!types.some(t => isFootwearType(t.name))) {
-    await dbAdd('types', { ...DEFAULT_TYPES[0] });
+    await dbAdd('types', {...DEFAULT_TYPES[0] });
     types = await dbAll('types');
     await normalizeTypeRecords();
   }
@@ -1434,10 +1434,10 @@ function _updateCascadeBreadcrumb(config, pathIds, committed) {
   const pathRecs = pathIds.map(id => getTypeById(id)).filter(Boolean);
   if (committed && pathRecs.length) {
     breadcrumb.hidden = false;
-    breadcrumb.textContent = pathRecs.map(t => (t.emoji || '📦') + ' ' + t.name).join(' › ');
+    breadcrumb.textContent = pathRecs.map(t => (t.emoji || '📦') + ' ' + t.name).join(' > ');
   } else if (pathRecs.length) {
     breadcrumb.hidden = false;
-    breadcrumb.textContent = pathRecs.map(t => (t.emoji || '📦') + ' ' + t.name).join(' › ') + ' › …';
+    breadcrumb.textContent = pathRecs.map(t => (t.emoji || '📦') + ' ' + t.name).join(' > ') + ' >...';
   } else {
     breadcrumb.hidden = true;
     breadcrumb.textContent = '';
@@ -1454,8 +1454,8 @@ function _catPickBtnHtml(placeholder, selected) {
 }
 
 function _appendCascadePickButton(wrap, config, depth, parentId, currentId, currentRec) {
-  const ph0 = config.placeholder || 'Choose category…';
-  const phN = config.placeholderSub || 'Choose sub-category…';
+  const ph0 = config.placeholder || 'Choose category...';
+  const phN = config.placeholderSub || 'Choose sub-category...';
   const placeholder = depth === 0 ? ph0 : phN;
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -1577,8 +1577,8 @@ function _makeCascadeConfig(base) {
     requireLeaf: base.requireLeaf !== false,
     breadcrumbEl: base.breadcrumbEl || document.getElementById(idPrefix + '-breadcrumb'),
     idPrefix,
-    placeholder: base.placeholder || 'Choose category…',
-    placeholderSub: base.placeholderSub || 'Choose sub-category…',
+    placeholder: base.placeholder || 'Choose category...',
+    placeholderSub: base.placeholderSub || 'Choose sub-category...',
     locked: !!base.locked,
     onChange: base.onChange || null,
     rerender(selectedValue, opts) {
@@ -1601,7 +1601,7 @@ function mountCategoryCascadeField(opts) {
   opts.valueEl.classList.add('cat-pick-hidden-select');
   opts.valueEl.setAttribute('tabindex', '-1');
   opts.valueEl.setAttribute('aria-hidden', 'true');
-  const config = _makeCascadeConfig({ ...opts, wrap, idPrefix });
+  const config = _makeCascadeConfig({...opts, wrap, idPrefix });
   renderCategoryCascade(config, opts.valueEl.value || '', { skipChange: true });
   return config;
 }
@@ -1614,7 +1614,7 @@ function mountWishTypeCascade() {
     idPrefix: 'wish-type',
     valueMode: 'name',
     requireLeaf: true,
-    placeholder: 'Category…'
+    placeholder: 'Category...'
   });
 }
 
@@ -1626,7 +1626,7 @@ function mountOffTypeCascade() {
     idPrefix: 'off-type',
     valueMode: 'name',
     requireLeaf: true,
-    placeholder: 'Category…'
+    placeholder: 'Category...'
   });
 }
 
@@ -1638,7 +1638,7 @@ function mountNewSubParentCascade() {
     idPrefix: 'new-sub-parent',
     valueMode: 'id',
     requireLeaf: false,
-    placeholder: 'Parent category…'
+    placeholder: 'Parent category...'
   });
 }
 
@@ -1653,7 +1653,7 @@ function renderAddTypeCascade(selectedTypeName, opts) {
     breadcrumbEl: document.getElementById('f-type-breadcrumb'),
     idPrefix: 'f-type',
     locked: hidden.disabled,
-    // Do not close over opts.skipTypeChange — config.rerender() reuses this callback after
+    // Do not close over opts.skipTypeChange - config.rerender() reuses this callback after
     // renderTypeSelect({ skipTypeChange: true }), which would block onTypeChange forever.
     onChange: () => onTypeChange()
   });
@@ -1711,7 +1711,7 @@ function openCategoryPicker(opts) {
       '</div>' +
       '<div class="cat-picker-search-wrap">' +
         '<i class="fa-solid fa-magnifying-glass cat-picker-search-icon"></i>' +
-        '<input type="search" class="cat-picker-search" placeholder="Search categories…" autocomplete="off" spellcheck="false">' +
+        '<input type="search" class="cat-picker-search" placeholder="Search categories..." autocomplete="off" spellcheck="false">' +
       '</div>' +
       '<div class="cat-picker-list">' + renderList('') + '</div>' +
       (opts.allowClear ? '<button type="button" class="cat-picker-clear">Clear selection</button>' : '') +
@@ -1815,7 +1815,7 @@ function showRestockView(meta) {
 
   const setCell = (id, val) => {
     const el = document.getElementById(id);
-    if (el) el.textContent = (val != null && val !== '') ? val : '—';
+    if (el) el.textContent = (val != null && val !== '') ? val : '-';
   };
   setCell('rs-code', meta.code);
   setCell('rs-name', meta.name);
@@ -1827,20 +1827,20 @@ function showRestockView(meta) {
   const stockEl = document.getElementById('rs-stock');
   if (stockEl) {
     const stock = meta.stock != null ? meta.stock : null;
-    stockEl.textContent = stock != null ? (stock + (meta.stockUnit || '')) : '—';
+    stockEl.textContent = stock != null ? (stock + (meta.stockUnit || '')) : '-';
     stockEl.classList.toggle('rs-stock-out', stock === 0);
     stockEl.classList.toggle('rs-stock-ok', stock != null && stock > 0);
   }
-  setCell('rs-buy', meta.buy != null ? fmt(meta.buy) : '—');
-  setCell('rs-sell', meta.sell != null ? fmt(meta.sell) : '—');
+  setCell('rs-buy', meta.buy != null ? fmt(meta.buy) : '-');
+  setCell('rs-sell', meta.sell != null ? fmt(meta.sell) : '-');
 
   setRestockBanner(false);
   const ml = UI.el('form-mode-label');
   if (ml) {
     ml.hidden = false;
-    ml.textContent = meta.size != null ? 'Restock · Size ' + meta.size : 'Restock';
+    ml.textContent = meta.size != null ? 'Restock - Size ' + meta.size : 'Restock';
   }
-  setAddFormSubtitle(meta.code ? meta.code + (meta.name ? ' · ' + meta.name : '') : '');
+  setAddFormSubtitle(meta.code ? meta.code + (meta.name ? ' - ' + meta.name : '') : '');
 
   const sizeLabel = meta.size != null ? String(meta.size) : '';
   setSaveBtnLabel(sizeLabel ? 'RESTOCK (' + sizeLabel + ')' : 'RESTOCK', 'fa-boxes-stacked');
@@ -1994,14 +1994,14 @@ async function renderCategorySettings() {
               (subCount ? ' <span class="cat-subcount">' + subCount + ' nested</span>' : '') +
             '</div>' +
             '<div class="cat-meta">' + (active ? 'Active in dropdowns' : 'Hidden from dropdowns') +
-              (footwear ? ' · Size-grid mode' : '') + '</div>' +
+              (footwear ? ' - Size-grid mode' : '') + '</div>' +
           '</div>' +
           '<div class="cat-toggles">' +
             '<button type="button" class="cat-toggle' + (active ? ' on' : '') + '" onclick="toggleCategoryActive(' + t.id + ')" title="Show in dropdowns">' +
               (active ? 'ON' : 'OFF') + '</button>' +
             '<button type="button" class="cat-toggle foot' + (footwear ? ' on' : '') + '" onclick="toggleCategoryFootwear(' + t.id + ')" title="Use shoe size grid">' +
-              '👟</button>' +
-            '<button type="button" class="type-del" onclick="deleteType(' + t.id + ')">✕</button>' +
+              'Sizes</button>' +
+            '<button type="button" class="type-del" onclick="deleteType(' + t.id + ')">X</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -2029,7 +2029,7 @@ function renderShoeGroupSettings() {
     const lbl = (cfg && cfg.label) || labels[g];
     return '<div class="sg-setting-row">' +
       '<div class="sg-setting-fields">' +
-        '<input id="sg-label-' + g + '" type="text" class="type-input" placeholder="' + g + ' — display name" value="' + escapeHtml(lbl) + '" style="flex:1;min-width:0;" aria-label="' + g + ' display name">' +
+        '<input id="sg-label-' + g + '" type="text" class="type-input" placeholder="' + g + ' - display name" value="' + escapeHtml(lbl) + '" style="flex:1;min-width:0;" aria-label="' + g + ' display name">' +
         '<input id="sg-min-' + g + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Min size" value="' + (cfg?.min ?? '') + '" aria-label="' + g + ' minimum size">' +
         '<span style="color:var(--muted);">–</span>' +
         '<input id="sg-max-' + g + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Max size" value="' + (cfg?.max ?? '') + '" aria-label="' + g + ' maximum size">' +
@@ -2138,11 +2138,11 @@ async function deleteType(id) {
   const typeObj = getTypeById(id);
   const descIds = collectCategoryDescendantIds(id);
   const descRecords = descIds.map(did => getTypeById(did)).filter(Boolean);
-  const namesToCheck = [typeObj?.name, ...descRecords.map(t => t.name)].filter(Boolean);
+  const namesToCheck = [typeObj?.name,...descRecords.map(t => t.name)].filter(Boolean);
   const inUse = allItems.filter(i => namesToCheck.includes(i.type)).length;
   let msg = 'Delete "' + (typeObj ? typeObj.name : 'this category') + '"?';
   if (descIds.length) msg += '\n\nAlso deletes ' + descIds.length + ' nested sub-categor' + (descIds.length === 1 ? 'y' : 'ies') + '.';
-  if (inUse > 0) msg += '\n\n' + inUse + ' item(s) still use these names — they will keep the label.';
+  if (inUse > 0) msg += '\n\n' + inUse + ' item(s) still use these names - they will keep the label.';
   if (!confirm(msg)) return;
   for (const did of descIds) await dbDelete('types', did);
   await dbDelete('types', id);
@@ -2342,7 +2342,7 @@ async function setItemPhoto(itemId, dataUrl) {
       localStorage.setItem('item_photo_' + itemId, compressed);
       _photoCache.set(_photoKey('item', itemId), compressed);
     } catch (_) {
-      toast('Storage full — photo not saved', 'err');
+      toast('Storage full - photo not saved', 'err');
     }
   }
 }
@@ -2374,7 +2374,7 @@ async function setWishPhoto(wishId, dataUrl) {
       localStorage.setItem('wish_photo_' + wishId, compressed);
       _photoCache.set(_photoKey('wish', wishId), compressed);
     } catch (_) {
-      toast('Storage full — photo not saved', 'err');
+      toast('Storage full - photo not saved', 'err');
     }
   }
 }
@@ -2454,7 +2454,7 @@ function _updateClipboardWaitOverlay(state) {
   const text = el.querySelector('.clipboard-wait-text');
   if (state === 'ready') {
     if (importBtn) importBtn.classList.add('pulse');
-    if (text) text.textContent = 'You\'re back — tap Import now to attach the screenshot.';
+    if (text) text.textContent = 'You\'re back - tap Import now to attach the screenshot.';
   } else if (state === 'waiting') {
     if (importBtn) importBtn.classList.remove('pulse');
     if (text) text.innerHTML = 'Open another app, take your screenshot, tap <strong>Done</strong> or <strong>Complete</strong>, then switch back here.';
@@ -2472,11 +2472,11 @@ function _showClipboardWaitOverlay() {
   el.className = 'clipboard-wait-overlay';
   el.innerHTML =
     '<div class="clipboard-wait-card">' +
-      '<div class="clipboard-wait-icon">📋</div>' +
+      '<div class="clipboard-wait-icon"><i class="fa-solid fa-paste"></i></div>' +
       '<div class="clipboard-wait-title">Waiting for screenshot</div>' +
       '<p class="clipboard-wait-text">Open another app, take your screenshot, tap <strong>Done</strong> or <strong>Complete</strong>, then switch back here.</p>' +
       '<button type="button" class="clipboard-wait-import" id="clipboard-wait-import-btn">Import now</button>' +
-      '<button type="button" class="clipboard-wait-gallery" id="clipboard-wait-gallery-btn">🖼️ Pick from gallery instead</button>' +
+      '<button type="button" class="clipboard-wait-gallery" id="clipboard-wait-gallery-btn">Pick from gallery instead</button>' +
       '<button type="button" class="clipboard-wait-cancel" id="clipboard-wait-cancel-btn">Cancel</button>' +
     '</div>';
   el.querySelector('#clipboard-wait-cancel-btn').addEventListener('click', () => {
@@ -2530,13 +2530,13 @@ async function pasteImageFromClipboard(options) {
         if (e.name === 'NotAllowedError') {
           toast('Tap Import now to allow clipboard access', 'err');
         } else {
-          toast('Could not read clipboard — tap Import now or use Gallery', 'err');
+          toast('Could not read clipboard - tap Import now or use Gallery', 'err');
         }
       }
       return null;
     }
   } else if (!silent) {
-    toast('Clipboard not supported — use Gallery and pick your screenshot', 'err');
+    toast('Clipboard not supported - use Gallery and pick your screenshot', 'err');
   }
 
   if (!silent) toast('No image in clipboard yet', 'err');
@@ -2576,7 +2576,7 @@ function startClipboardScreenshotImport(opts) {
         return true;
       }
       if (fromUserTap) {
-        toast('No screenshot in clipboard — try Gallery or take the screenshot again', 'err');
+        toast('No screenshot in clipboard - try Gallery or take the screenshot again', 'err');
       }
       return false;
     } finally {
@@ -2692,9 +2692,9 @@ function showImagePickerSheet(opts) {
     '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:20px 18px 32px;" onclick="event.stopPropagation()">' +
       '<div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px;text-align:center;">' + escapeHtml(title) + '</div>' +
       '<div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:14px;line-height:1.4;">Take a photo, pick from gallery, or screenshot in another app and return here to import.</div>' +
-      '<button type="button" data-src="camera" style="' + btnStyle + 'background:var(--accent);color:white;">📸 Take photo</button>' +
-      '<button type="button" data-src="gallery" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">🖼️ Choose from gallery</button>' +
-      '<button type="button" data-src="clipboard" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">📋 Screenshot from another app</button>' +
+      '<button type="button" data-src="camera" style="' + btnStyle + 'background:var(--accent);color:white;">Take photo</button>' +
+      '<button type="button" data-src="gallery" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">Choose from gallery</button>' +
+      '<button type="button" data-src="clipboard" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">Screenshot from another app</button>' +
       '<button type="button" data-src="cancel" style="width:100%;padding:12px;background:transparent;color:var(--muted);border:none;font-size:14px;cursor:pointer;font-family:var(--sans);">Cancel</button>' +
     '</div>';
   sheet.querySelectorAll('button[data-src]').forEach(btn => {
@@ -2767,25 +2767,25 @@ function triggerAddPhotoUpload() {
 // ===== WISHLIST PHOTO =====
 let _wishFormPhotoData = null;
 
-/** e.g. "YS5981-1 36-42.jpg" → { shoeCode: "YS5981-1", itemName: "YS5981-1 36-42" } */
+/** e.g. "YS5981-1 36-42.jpg" to { shoeCode: "YS5981-1", itemName: "YS5981-1 36-42" } */
 function parseWishPhotoFileName(fileName) {
   if (!fileName || typeof fileName !== 'string') return null;
   const base = fileName.trim().replace(/\.(jpe?g|png|gif|webp|heic|heif|bmp|avif)$/i, '').trim();
   if (!base) return null;
 
   const itemName = base;
-  const sizeRangeRe = /\d+\s*[-–—]\s*\d+/;
+  const sizeRangeRe = /\d+\s*[-–-]\s*\d+/;
   const normCode = s => String(s || '').trim().toUpperCase();
 
   // "CODE-1 36-42" or "YS5981 36-42" (space before size range)
-  const spaced = base.match(/^(.+?)\s+(\d+\s*[-–—]\s*\d+)\s*$/);
+  const spaced = base.match(/^(.+?)\s+(\d+\s*[-–-]\s*\d+)\s*$/);
   if (spaced && sizeRangeRe.test(spaced[2])) {
     const shoeCode = normCode(spaced[1]);
     if (shoeCode) return { itemName, shoeCode };
   }
 
   // "YS5981-1-36-42" or "YS5981-36-42" (hyphen before size range at end)
-  const hyphenated = base.match(/^(.+?)[\s\-]+(\d+\s*[-–—]\s*\d+)\s*$/);
+  const hyphenated = base.match(/^(.+?)[\s\-]+(\d+\s*[-–-]\s*\d+)\s*$/);
   if (hyphenated) {
     const shoeCode = normCode(hyphenated[1].replace(/[\s\-]+$/, ''));
     if (shoeCode) return { itemName, shoeCode };
@@ -2816,7 +2816,7 @@ function handleWishPhotoPicked(dataUrl, meta) {
   _wishFormPhotoData = dataUrl;
   updateWishPhotoPreview();
   const fromFile = meta?.fileName && applyWishPhotoFileName(meta.fileName);
-  toast(fromFile ? 'Photo — name from filename' : 'Photo attached', 'ok');
+  toast(fromFile ? 'Photo - name from filename' : 'Photo attached', 'ok');
 }
 
 function updateWishPhotoPreview() {
@@ -2928,10 +2928,10 @@ function getCheapestWishVendorQuote(quotes) {
   return sorted.length ? sorted[0] : null;
 }
 
-/** Parse "… 36-42" from wish name → size numbers for grid. */
+/** Parse "... 36-42" from wish name to size numbers for grid. */
 function parseWishShoeSizeRange(text) {
   const s = String(text || '');
-  const m = s.match(/(\d+)\s*[-–—]\s*(\d+)\s*$/);
+  const m = s.match(/(\d+)\s*[-–-]\s*(\d+)\s*$/);
   if (!m) return null;
   const min = parseInt(m[1], 10);
   const max = parseInt(m[2], 10);
@@ -2963,7 +2963,7 @@ function renderWishShoeOverlay(wish) {
 function buildWishVendorDetailHtml(quotes) {
   const sorted = sortWishVendorQuotes(quotes);
   if (!sorted.length) {
-    return '<p class="wish-vendor-empty">No vendor prices yet — add one below, then Save</p>';
+    return '<p class="wish-vendor-empty">No vendor prices yet - add one below, then Save</p>';
   }
   let html =
     '<div class="wd-vendor-table">' +
@@ -3009,7 +3009,7 @@ function buildWishListCardHtml(row, wishRec) {
   const photo = getWishPhoto(row.wishId);
   const thumb = photo
     ? '<img src="' + photo + '" alt="" class="wish-card-thumb">'
-    : '<div class="wish-card-thumb wish-card-thumb-empty">📷</div>';
+    : '<div class="wish-card-thumb wish-card-thumb-empty"><i class="fa-solid fa-camera"></i></div>';
 
   const quotes = normalizeWishVendorQuotes(wishRec || { vendorQuotes: [] });
   const cheapest = getCheapestWishVendorQuote(quotes);
@@ -3024,7 +3024,7 @@ function buildWishListCardHtml(row, wishRec) {
         (moreCount > 0 ? '<div class="wish-card-price-more">+' + moreCount + ' more</div>' : '') +
       '</div>';
   } else {
-    priceHtml = '<div class="wish-card-price wish-card-price-empty"><span>—</span></div>';
+    priceHtml = '<div class="wish-card-price wish-card-price-empty"><span>-</span></div>';
   }
 
   const chips = [];
@@ -3163,13 +3163,13 @@ window.wishlistDetailDelete = wishlistDetailDelete;
 
 // ===== SAVE ITEM =====
 async function saveItem() {
-  _overlay.show('Saving…');
+  _overlay.show('Saving...');
   try {
     // Use hidden input; fall back to JS variable if input got cleared unexpectedly
     const editIdRaw = UI.el('edit-id')?.value || (_editingItemId ? String(_editingItemId) : '');
 
     // SHOE SIZE EDIT
-    // SHOE SIZE RESTOCK — adds qty to existing, never replaces
+    // SHOE SIZE RESTOCK - adds qty to existing, never replaces
     if (editIdRaw && editIdRaw.startsWith('shoe_restock_')) {
       const parts = editIdRaw.replace('shoe_restock_','').split('_');
       const itemId = parseInt(parts[0]); const size = parseInt(parts[1]);
@@ -3178,14 +3178,14 @@ async function saveItem() {
       const sizeRec = allSz.find(s => s.size === size);
       if (!sizeRec) { toast('Size record not found', 'err'); return; }
       const addQty = parseInt(UI.el('f-qty')?.value);
-      if (isNaN(addQty) || addQty <= 0) { toast('\u26a0\ufe0f Enter quantity to add', 'err'); return; }
+      if (isNaN(addQty) || addQty <= 0) { toast('Warning: Enter quantity to add', 'err'); return; }
       const buy = parseFloat(UI.el('f-buy')?.value);
       const sell = parseFloat(UI.el('f-sell')?.value);
       const nextBuy = !isNaN(buy) ? buy : (sizeRec.buyPrice || item?.buyPrice || item?.buy || 0);
       const nextSell = !isNaN(sell) ? sell : (sizeRec.sellPrice || item?.sellPrice || item?.sell || 0);
       if (!Validate.price(nextBuy, nextSell, 'f-buy', 'f-sell')) return;
       const newQty = (sizeRec.qty || 0) + addQty;
-      if (newQty > 999999) { toast('\u26a0\ufe0f Exceeds max 999,999', 'err'); return; }
+      if (newQty > 999999) { toast('Warning: Exceeds max 999,999', 'err'); return; }
       sizeRec.qty = newQty;
       sizeRec.buyPrice = nextBuy;
       sizeRec.sellPrice = nextSell;
@@ -3214,7 +3214,7 @@ async function saveItem() {
       clearForm();
       allItems = await dbAll('items'); await enrichShoeItems(allItems);
       renderList(); renderDashboard(); updateHeader(); scheduleSync();
-      toast('\U0001f4e6 Size ' + size + ': +' + addQty + ' → ' + newQty, 'ok');
+      toast('\U0001f4e6 Size ' + size + ': +' + addQty + ' to ' + newQty, 'ok');
       showPage('list'); return;
     }
 
@@ -3247,27 +3247,27 @@ async function saveItem() {
       clearForm();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
       renderList();renderDashboard();updateHeader();scheduleSync();
-      toast('\u2705 Size '+size+' updated \u00b7 '+qty+' pcs \u00b7 '+fmt(sell),'ok');
+      toast('Size '+size+' updated - '+qty+' pcs - '+fmt(sell),'ok');
       showPage('list');return;
     }
 
     // RESTOCK MODE
     if(editIdRaw&&editIdRaw.startsWith('restock_')){
       const existing=await dbGet('items',parseInt(editIdRaw.replace('restock_','')));
-      if(!existing){toast('\u26a0\ufe0f Item not found','err');exitRestockMode();return;}
+      if(!existing){toast('Warning: Item not found','err');exitRestockMode();return;}
       const qtyEl=UI.el('f-qty');
       const addQty=parseInt(qtyEl?qtyEl.value.trim():'0');
-      if(!addQty||addQty<=0){toast('\u26a0\ufe0f Enter quantity to add','err');if(qtyEl)qtyEl.focus();return;}
-      if(addQty>CODE_MAX_QTY&&!confirm('Adding '+addQty+' units — confirm?'))return;
+      if(!addQty||addQty<=0){toast('Warning: Enter quantity to add','err');if(qtyEl)qtyEl.focus();return;}
+      if(addQty>CODE_MAX_QTY&&!confirm('Adding '+addQty+' units - confirm?'))return;
       const newQty=existing.qty+addQty;
-      if(newQty>999999){toast('\u26a0\ufe0f Exceeds max 999,999','err');return;}
+      if(newQty>999999){toast('Warning: Exceeds max 999,999','err');return;}
       existing.qty=newQty;existing.updatedAt=new Date().toISOString();
       await dbPut('items',existing);fbSyncItem(existing);
       await recordStockInvestment(existing, addQty * (existing.buyPrice || existing.buy || 0), addQty, 'Restock');
       allItems=await dbAll('items');await enrichShoeItems(allItems);
       renderList();renderDashboard();updateHeader();scheduleSync();
       exitRestockMode();
-      toast('\U0001f4e6 '+existing.code+': +'+addQty+' → '+newQty,'ok');return;
+      toast('\U0001f4e6 '+existing.code+': +'+addQty+' to '+newQty,'ok');return;
     }
 
     // COMMON FIELDS
@@ -3280,7 +3280,7 @@ async function saveItem() {
       if (firstCat) firstCat.focus();
       return;
     }
-    if(!code){toast('\u26a0\ufe0f Enter item code','err');return;}
+    if(!code){toast('Warning: Enter item code','err');return;}
     if (!editIdRaw) {
       const codeMatches = await findCodeMatchesForSave(code);
       const existingCode = codeMatches.find(i => i.code === code);
@@ -3288,7 +3288,7 @@ async function saveItem() {
       const addingShoeSizes = existingCode && isFootwearType(type) && existingCode.isShoe;
       if (existingCode && !addingShoeSizes) {
         showCodeDropdown(codeMatches, code);
-        toast('\u26a0\ufe0f Item code already exists — select it from the dropdown', 'err');
+        toast('Warning: Item code already exists - select it from the dropdown', 'err');
         UI.el('f-code')?.focus();
         return;
       }
@@ -3309,7 +3309,7 @@ async function saveItem() {
       renderList();renderDashboard();updateHeader();scheduleSync();
       await renderWishlistPage();
       await renderStockMonitorSummary();
-      toast('\u2705 '+savedCount+' shoe size(s) saved!','ok');return;
+      toast(''+savedCount+' shoe size(s) saved!','ok');return;
     }
 
     // STANDARD ADD / EDIT
@@ -3327,14 +3327,14 @@ async function saveItem() {
       // Edit: qty can be 0 (stock may be legitimately depleted via sales)
       if (qty < 0) return Validate.fail('Quantity cannot be negative', 'f-qty');
     }
-    if (qty > CODE_MAX_QTY && !confirm('Adding ' + qty + ' units — confirm?')) return;
+    if (qty > CODE_MAX_QTY && !confirm('Adding ' + qty + ' units - confirm?')) return;
     if (!Validate.price(buy, sell, 'f-buy', 'f-sell')) return;
     const profit=sell-buy;
     const item={type,code,name,variant:size,buyPrice:buy,sellPrice:sell,profit,qty,createdAt:new Date().toISOString()};
 
     if(editIdRaw){
       const resolvedId = parseInt(editIdRaw);
-      if (!resolvedId || isNaN(resolvedId)) { toast('⚠️ Cannot save: item ID missing', 'err'); return; }
+      if (!resolvedId || isNaN(resolvedId)) { toast('Warning: Cannot save: item ID missing', 'err'); return; }
       const original=await dbGet('items', resolvedId);
       // Merge: start from original to preserve all fields (isShoe, photo refs, etc)
       // then overwrite only what the form controls
@@ -3357,7 +3357,7 @@ async function saveItem() {
       clearForm();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
       renderList();renderDashboard();updateHeader();scheduleSync();
-      toast('\u2705 Item updated!','ok');showPage('list');
+      toast('Item updated!','ok');showPage('list');
     }else{
       const newId=await dbAdd('items',item);item.id=newId;
       if (_addFormPhotoData) await setItemPhoto(newId, _addFormPhotoData);
@@ -3378,9 +3378,9 @@ async function saveItem() {
 
   }catch(err){
     if(err.name==='ConstraintError'){
-      toast('\u26a0\ufe0f Code already exists — select from dropdown to restock','err');
+      toast('Warning: Code already exists - select from dropdown to restock','err');
     }else{
-      toast('\u26a0\ufe0f Save failed: '+(err.message||'Unknown error'),'err');
+      toast('Warning: Save failed: '+(err.message||'Unknown error'),'err');
       console.error('[SAVE]',err);
     }
   }finally{
@@ -3440,7 +3440,7 @@ function clearForm() {
 let _codeDropdownActive = false;
 let _editOriginItemId   = null;
 let _editingItemId      = null;  // tracks current edit ID reliably (backup to hidden input)
-let _lastAddFormType    = '';    // last f-type value — avoid wiping shoe sizes on tab switch
+let _lastAddFormType    = '';    // last f-type value - avoid wiping shoe sizes on tab switch
 let _addFormWasFootwear = false;
 let _preloadShoeCode    = '';
 let _selectedShoeSize   = null;
@@ -3468,7 +3468,7 @@ async function findCodeMatchesForSave(code) {
     !startsWith.includes(i) &&
     !contains.includes(i)
   );
-  return [...exact, ...startsWith, ...contains, ...nameMatch].slice(0, 10);
+  return [...exact,...startsWith,...contains,...nameMatch].slice(0, 10);
 }
 
 async function onCodeInput() {
@@ -3478,7 +3478,7 @@ async function onCodeInput() {
   if (!clean) { clearCodeMatchSelect(); hideCodeDropdown(); return; }
   const source = (allItems && allItems.length) ? allItems : await dbAll('items');
 
-  // De-duplicate by code then search: exact → startsWith → contains
+  // De-duplicate by code then search: exact to startsWith to contains
   const seen = new Set();
   const unique = [];
   for (const item of source) {
@@ -3490,7 +3490,7 @@ async function onCodeInput() {
   const startsWith = unique.filter(i => i.code !== clean && i.code.startsWith(clean));
   const contains   = unique.filter(i => i.code !== clean && !i.code.startsWith(clean) && i.code.includes(clean));
   const nameMatch  = unique.filter(i => !seen.has('NAME_'+i.code) && i.name && i.name.toUpperCase().includes(clean) && !exact.includes(i) && !startsWith.includes(i) && !contains.includes(i));
-  const matches    = [...exact, ...startsWith, ...contains, ...nameMatch].slice(0, 10);
+  const matches    = [...exact,...startsWith,...contains,...nameMatch].slice(0, 10);
 
   if (!matches.length) { clearCodeMatchSelect('No match'); hideCodeDropdown(); return; }
   showCodeDropdown(matches, clean);
@@ -3535,7 +3535,7 @@ function showCodeDropdown(items, typedCode) {
     select.disabled = !items.length;
     select.style.opacity = items.length ? '1' : '0.55';
     select.style.cursor = items.length ? 'pointer' : 'not-allowed';
-    select.innerHTML = '<option value="">Match existing code…</option>' +
+    select.innerHTML = '<option value="">Match existing code...</option>' +
       items.map(item => '<option value="' + item.id + '">' + escapeHtml(item.code) + '</option>').join('');
     hideCodeDropdown();
     return;
@@ -3563,7 +3563,7 @@ function hideCodeDropdown() {
   if (dd) dd.style.display = 'none';
 }
 
-function clearCodeMatchSelect(label = 'Match existing code…') {
+function clearCodeMatchSelect(label = 'Match existing code...') {
   const select = document.getElementById('code-match-select');
   if (!select) return;
   select.innerHTML = '<option value="">' + escapeHtml(label) + '</option>';
@@ -3582,7 +3582,7 @@ function selectExistingItemFromDropdown(value) {
 async function selectExistingItem(itemId) {
   try {
     const item = await dbGet('items', itemId);
-    if (!item) { toast('⚠️ Item not found', 'err'); hideCodeDropdown(); return; }
+    if (!item) { toast('Warning: Item not found', 'err'); hideCodeDropdown(); return; }
     hideCodeDropdown();
 
     // If on the Add page: open the item's detail sheet directly
@@ -3650,8 +3650,8 @@ async function renderList() {
   if (!filtered.length) {
     list.style.border = 'none';
     list.innerHTML = `<div class="empty">
-      <div class="e-icon">${allItems.length ? '🔍' : '📦'}</div>
-      <p>${allItems.length ? 'No items match your search.' : 'No items yet.\nTap ➕ Add Item to get started.'}</p>
+      <div class="e-icon"><i class="fa-solid fa-${allItems.length ? 'magnifying-glass' : 'box'}"></i></div>
+      <p>${allItems.length ? 'No items match your search.' : 'No items yet.\nTap Add Item to get started.'}</p>
     </div>`;
     renderStockMonitorSummary();
     return;
@@ -3680,13 +3680,13 @@ async function renderList() {
     const t = getTypeObj(item.type);
 
     if (item.isShoe) {
-      // ── SHOE ITEM — one card per SIZE ─────────────────────────────
+      // ── SHOE ITEM - one card per SIZE ─────────────────────────────
       const sizes = allSizes
         .filter(s => s.itemCode === item.code)
         .sort((a, b) => a.size - b.size);
 
       if (!sizes.length) {
-        // Shoe parent with no sizes yet — show placeholder
+        // Shoe parent with no sizes yet - show placeholder
         cards.push(`
           <div class="item-card item-card-shoe-header" onclick="openSheet(${item.id})">
             <div class="item-top">
@@ -3724,8 +3724,8 @@ async function renderList() {
             </div>
             <span class="shoe-group-name">${escapeHtml(item.name||'')}</span>
             <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;">
-              <span>📦 ${groupTotalPcs} pcs</span><span>🛒 ${groupSoldPcs} sold</span>
-              <span>💸 ${fmt(groupBuyCost)}</span><span style="color:var(--accent2);">💰 ${fmt(_grpRevenue)}</span>
+              <span>${groupTotalPcs} pcs</span><span>Sold ${groupSoldPcs} sold</span>
+              <span>${fmt(groupBuyCost)}</span><span style="color:var(--accent2);">${fmt(_grpRevenue)}</span>
             </div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
@@ -3744,11 +3744,11 @@ async function renderList() {
           const isOut      = sz.qty<=0;
           const isLow      = !isOut&&sz.qty<=LOW_STOCK_LEVEL;
           const stockColor = isOut?'tag-red':isLow?'tag-amber':'tag-green';
-          const stockLabel = isOut?'✕ Out':sz.qty+' pcs';
+          const stockLabel = isOut?'Out':sz.qty+' pcs';
           const soldQty    = salesBySize[item.code+'_'+sz.size]||0;
           cards.push(`
             <div class="item-card shoe-size-row${isOut?' shoe-out-card':''}" onclick="openShoeSizeCard('${escapeHtml(item.code)}',${sz.size})">
-              ${isOut?'<div class="out-of-stock-overlay"><span>⛔ OUT OF STOCK · RESTOCK</span></div>':''}
+              ${isOut?'<div class="out-of-stock-overlay"><span>OUT OF STOCK - RESTOCK</span></div>':''}
               <div class="item-top">
                 <div class="shoe-size-badge ${isOut?'out':isLow?'low':''}">${sz.size}</div>
                 <div class="item-body">
@@ -3770,20 +3770,20 @@ async function renderList() {
       }
 
     } else {
-      // ── STANDARD ITEM — single card ───────────────────────────────
+      // ── STANDARD ITEM - single card ───────────────────────────────
       const stockColor = item.qty === 0 ? 'tag-red' : item.qty <= LOW_STOCK_LEVEL ? 'tag-amber' : 'tag-green';
-      const stockLabel = item.qty === 0 ? '✕ Out'   : item.qty + ' pcs';
+      const stockLabel = item.qty === 0 ? 'Out'   : item.qty + ' pcs';
       const soldQty    = (salesByItem[item.id] || {}).qty || 0;
       const sellPrice  = item.sellPrice || item.sell || 0;
       const buyPrice   = item.buyPrice  || item.buy  || 0;
 
       cards.push(`
         <div class="item-card${item.qty<=0?' shoe-out-card':''}" onclick="openSheet(${item.id})">
-          ${item.qty<=0 ? '<div class="out-of-stock-overlay"><span>⛔ OUT OF STOCK · RESTOCK</span></div>' : ''}
+          ${item.qty<=0 ? '<div class="out-of-stock-overlay"><span>OUT OF STOCK - RESTOCK</span></div>' : ''}
           <div class="item-top">
             <div class="item-icon" style="background:${t.color||'var(--surface2)'};">${t.emoji}</div>
             <div class="item-body">
-              <div class="item-code">${escapeHtml(item.code)}${(item.variant||item.size)?' · '+escapeHtml(item.variant||item.size):''}</div>
+              <div class="item-code">${escapeHtml(item.code)}${(item.variant||item.size)?' - '+escapeHtml(item.variant||item.size):''}</div>
               <div class="item-name">${escapeHtml(item.name||'')}</div>
               <div class="item-tags">
                 <span class="tag tag-cyan">${escapeHtml(item.type)}</span>
@@ -3923,9 +3923,9 @@ async function renderStockMonitor() {
       '<div class="stock-monitor-body">' +
         '<div class="stock-monitor-name">' + escapeHtml(row.name) + '</div>' +
         '<div class="stock-monitor-meta">' +
-          escapeHtml(row.code || 'No code') + (row.type ? ' · ' + escapeHtml(row.type) : '') +
-          (row.qty ? ' · target ' + row.qty : '') +
-          (row.buyPrice ? ' · ' + fmt(row.buyPrice) : '') +
+          escapeHtml(row.code || 'No code') + (row.type ? ' - ' + escapeHtml(row.type) : '') +
+          (row.qty ? ' - target ' + row.qty : '') +
+          (row.buyPrice ? ' - ' + fmt(row.buyPrice) : '') +
         '</div>' +
         '<div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;">' + status +
           (row.size ? '<span class="tag tag-gray">Size ' + escapeHtml(row.size) + '</span>' : '') +
@@ -4158,12 +4158,12 @@ async function openShoeSizeCard(itemCode, size) {
   const inner = document.getElementById('shoe-size-action-inner');
   inner.innerHTML = `
     <div class="sheet-handle"></div>
-    <button type="button" class="detail-sheet-close" onclick="closeShoeSizeActions()" aria-label="Close">✕</button>
+    <button type="button" class="detail-sheet-close" onclick="closeShoeSizeActions()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
     <div class="detail-sheet-hero">
       <div class="shoe-size-badge ${isOut ? 'out' : isLow ? 'low' : ''}" style="width:56px;height:56px;font-size:24px;">${size}</div>
       <div class="detail-sheet-hero-text">
         <div class="detail-sheet-title">${escapeHtml(item.name || item.code)}</div>
-        <div class="detail-sheet-sub">${escapeHtml(item.code)} · Size ${size} · ${groupLbl}</div>
+        <div class="detail-sheet-sub">${escapeHtml(item.code)} - Size ${size} - ${groupLbl}</div>
         <div class="detail-sheet-stock" style="color:${stockCol};">${stockLbl}</div>
       </div>
     </div>
@@ -4182,8 +4182,8 @@ async function openShoeSizeCard(itemCode, size) {
       </button>
     </div>
     <div class="detail-sell-wrap">
-      ${!isOut ? `<button type="button" class="detail-sell-btn" onclick="closeShoeSizeActions();closeSheet();openSellShoeModal(${item.id},${size})">💰 SELL — Size ${size}</button>` :
-        `<div class="detail-sell-muted">Out of stock — restock first</div>`}
+      ${!isOut ? `<button type="button" class="detail-sell-btn" onclick="closeShoeSizeActions();closeSheet();openSellShoeModal(${item.id},${size})">SELL - Size ${size}</button>` :
+        `<div class="detail-sell-muted">Out of stock - restock first</div>`}
     </div>
     <div style="padding:0 12px 16px;text-align:center;">
       <button type="button" class="detail-link-btn" onclick="closeShoeSizeActions();openShoeSizeEdit(${item.id},${size})">Edit prices</button>
@@ -4339,7 +4339,7 @@ async function confirmBulkShoeRestock() {
       const { doc, setDoc } = await waitForFbImports();
       for (const rec of changed) {
         if (!rec.fbId) { rec.fbId = 'sz_' + rec.codeSize; await dbPut('shoe_sizes', rec); }
-        await setDoc(fbDoc('shoe_sizes', rec.fbId), sanitiseForFirestore({ ...rec }));
+        await setDoc(fbDoc('shoe_sizes', rec.fbId), sanitiseForFirestore({...rec }));
       }
     } catch(e) { console.warn('[SYNC] bulk shoe restock:', e.message); }
   }
@@ -4362,13 +4362,13 @@ function openSellFromSheet() {
     if (!item) { toast('Item not found', 'err'); return; }
     if (item.isShoe) {
       if (!_selectedShoeSize) {
-        toast('⚠️ Select a size first from the detail sheet', 'err');
+        toast('Warning: Select a size first from the detail sheet', 'err');
         setTimeout(() => openSheet(id), 150);
         return;
       }
       openSellShoeModal(id, _selectedShoeSize);
     } else {
-      if (item.qty <= 0) { toast('⚠️ Out of stock', 'err'); return; }
+      if (item.qty <= 0) { toast('Warning: Out of stock', 'err'); return; }
       openSellModal(id);
     }
   }, 120);
@@ -4393,7 +4393,7 @@ function triggerSheetPhotoUpload(event) {
         requestAnimationFrame(() => window._resetPhotoPan());
       }
       const btn = document.getElementById('sh-photo-btn');
-      if (btn) btn.textContent = '📷 Photo';
+      if (btn) btn.textContent = 'Photo';
       renderList();
       toast('Photo saved', 'ok');
     }
@@ -4433,20 +4433,20 @@ async function openSheet(id) {
   }
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('sh-photo-btn', photo ? '📷 Change' : '📷 Add Photo');
+  set('sh-photo-btn', photo ? 'Change photo' : 'Add photo');
   set('sh-icon', t.emoji);
   set('sh-name', item.name);
-  set('sh-code', item.code + (item.size ? ' · ' + item.size : ''));
+  set('sh-code', item.code + (item.size ? ' - ' + item.size : ''));
   set('sh-type', item.type);
   const tbadge = document.getElementById('sh-type-badge'); if (tbadge) tbadge.textContent = t.emoji + ' ' + item.type;
-  set('sh-size', item.size || '—');
+  set('sh-size', item.size || '-');
   set('sh-buy', fmt(item.buy));
   set('sh-sell', fmt(item.sell));
   set('sh-profit', fmt(item.profit));
   set('sh-qty', item.qty + ' pcs');
-  set('sh-code-large', item.code + (item.size ? ' · ' + item.size : ''));
+  set('sh-code-large', item.code + (item.size ? ' - ' + item.size : ''));
 
-  // ── SHOE ITEMS — load fresh sizes, show size grid ─────────────
+  // ── SHOE ITEMS - load fresh sizes, show size grid ─────────────
   const priceCols = document.getElementById('sh-price-cols');
   if (priceCols) priceCols.style.display = 'grid';
   const sizeSec   = document.getElementById('sh-shoe-sizes');
@@ -4532,7 +4532,7 @@ async function deleteItem() {
   const allSales = await dbAll('sales');
   const itemSales = allSales.filter(s => s.itemId === currentDetailId || s.itemCode === toDelete.code);
   let msg = 'Delete "' + (toDelete.name || toDelete.code) + '"?';
-  if (itemSales.length > 0) msg += '\n\n⚠️ This item has ' + itemSales.length + ' sale record(s). The sales history will remain but the item cannot be restocked.';
+  if (itemSales.length > 0) msg += '\n\nWarning: This item has ' + itemSales.length + ' sale record(s). The sales history will remain but the item cannot be restocked.';
   if (!confirm(msg)) return;
   if (toDelete.isShoe) {
     const sizes = await getShoeSizes(toDelete.code);
@@ -4567,7 +4567,7 @@ async function editItem() {
 
   if (item.isShoe) {
     const size = _selectedShoeSize;
-    if (!size) { toast('⚠️ Select a size first before editing', 'err'); setTimeout(()=>openSheet(item.id),100); return; }
+    if (!size) { toast('Warning: Select a size first before editing', 'err'); setTimeout(()=>openSheet(item.id),100); return; }
     const sizes = await getShoeSizes(item.code);
     const sizeRec = sizes.find(s => s.size === size);
     if (!sizeRec) { toast('Size record not found', 'err'); return; }
@@ -4594,7 +4594,7 @@ async function editItem() {
     if (sizeField)  sizeField.style.display  = 'block';
     setSaveBtnLabel('Save size ' + size);
     const _ml1 = UI.el('form-mode-label');
-    if (_ml1) { _ml1.hidden = false; _ml1.textContent = '✏️ Edit · ' + item.code + ' Size ' + size; }
+    if (_ml1) { _ml1.hidden = false; _ml1.textContent = 'Edit - ' + item.code + ' Size ' + size; }
     UI.el('cancel-edit-btn').style.display = 'block';
     _editOriginItemId = item.id;
     updateProfitPreview();
@@ -4612,7 +4612,7 @@ async function editItem() {
   UI.el('f-qty').value   = item.qty   ?? '';
   UI.el('f-buy').value   = item.buyPrice  || item.buy  || '';  // normalized field name
   UI.el('f-sell').value  = item.sellPrice || item.sell || '';  // normalized field name
-  // Lock code and type — identifying fields
+  // Lock code and type - identifying fields
   ['f-code'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.disabled=true; el.style.opacity='0.45'; el.style.cursor='not-allowed'; }
@@ -4620,7 +4620,7 @@ async function editItem() {
   setAddTypeLocked(true);
   setSaveBtnLabel('Save changes');
   const _ml2 = UI.el('form-mode-label');
-  if (_ml2) { _ml2.hidden = false; _ml2.textContent = '✏️ Edit · ' + (item.name || item.code); }
+  if (_ml2) { _ml2.hidden = false; _ml2.textContent = 'Edit - ' + (item.name || item.code); }
   UI.el('cancel-edit-btn').style.display = 'block';
   _editOriginItemId = item.id;
   onTypeChange();
@@ -4755,7 +4755,7 @@ async function _renderDashSummary(ctx) {
   const headlineParts = [];
   if (totalItems === 0) headlineParts.push('Add your first items to start tracking stock and sales.');
   else {
-    if (dayOpen && _dashPeriod === 'today') headlineParts.push('Day is open — record sales as they happen.');
+    if (dayOpen && _dashPeriod === 'today') headlineParts.push('Day is open - record sales as they happen.');
     else if (dayLabel) headlineParts.push(dayLabel + '.');
     if (totalSalesCount > 0) headlineParts.push(periodLbl + ': ' + fmtN(totalSalesCount) + ' sales, ' + fmt(totalRevenue) + ' revenue.');
     if (alertCount > 0) headlineParts.push(alertCount + ' stock alert' + (alertCount !== 1 ? 's' : '') + ' need attention.');
@@ -4764,39 +4764,39 @@ async function _renderDashSummary(ctx) {
   setEl('d-summary-headline', headlineParts.join(' '));
 
   const cards = [];
-  cards.push(_dashSumCard('📦', fmtN(totalItems) + ' SKUs', 'Inventory', fmtN(totalQty) + ' pcs · retail ' + fmt(stockRetail), null, 'stock'));
-  cards.push(_dashSumCard('💰', fmt(totalRevenue), periodLbl + ' revenue', trendNote || (fmt(totalProfitEarned) + ' profit · ' + margin.toFixed(1) + '% margin'), totalProfitEarned >= 0 ? 'var(--green)' : 'var(--red)'));
-  cards.push(_dashSumCard('🛒', fmtN(totalSalesCount), 'Sales · ' + fmtN(totalPiecesSold) + ' pcs', totalSalesCount ? 'Avg ' + fmt(totalRevenue / totalSalesCount) + ' per sale' : 'No sales in period'));
+  cards.push(_dashSumCard('', fmtN(totalItems) + ' SKUs', 'Inventory', fmtN(totalQty) + ' pcs - retail ' + fmt(stockRetail), null, 'stock'));
+  cards.push(_dashSumCard('', fmt(totalRevenue), periodLbl + ' revenue', trendNote || (fmt(totalProfitEarned) + ' profit - ' + margin.toFixed(1) + '% margin'), totalProfitEarned >= 0 ? 'var(--green)' : 'var(--red)'));
+  cards.push(_dashSumCard('', fmtN(totalSalesCount), 'Sales - ' + fmtN(totalPiecesSold) + ' pcs', totalSalesCount ? 'Avg ' + fmt(totalRevenue / totalSalesCount) + ' per sale' : 'No sales in period'));
   cards.push(_dashSumCard(
-    dayOpen ? '🟢' : (activeDay ? '🔒' : '⏸️'),
-    dayOpen ? 'Open' : (activeDay ? activeDay.status : '—'),
+    dayOpen ? 'Open' : (activeDay ? 'Locked' : 'Paused'),
+    dayOpen ? 'Open' : (activeDay ? activeDay.status : '-'),
     'Business day',
     _dashPeriod === 'today' && todayDashSales.length
-      ? fmtN(todayDashSales.length) + ' sales · ' + fmt(todayDashProf) + ' profit today'
+      ? fmtN(todayDashSales.length) + ' sales - ' + fmt(todayDashProf) + ' profit today'
       : (money ? 'Pool ' + fmt(money.businessPool) : dayLabel)
   ));
   if (wishCount > 0) {
     cards.push(_dashSumCard(
-      '📋',
+      ''
       fmtN(wishCount),
       'Wishlist',
-      wishCount + ' item' + (wishCount !== 1 ? 's' : '') + ' to stock — tap to open',
+      wishCount + ' item' + (wishCount !== 1 ? 's' : '') + ' to stock - tap to open',
       'var(--accent)',
       'wishlist'
     ));
   }
   if (alertCount > 0) {
     cards.push(_dashSumCard(
-      '⚠️',
+      ''
       fmtN(alertCount) + ' alerts',
       'Needs attention',
-      (outStk.length ? outStk.length + ' out · ' : '') + (lowStk.length ? lowStk.length + ' low' : ''),
+      (outStk.length ? outStk.length + ' out - ' : '') + (lowStk.length ? lowStk.length + ' low' : ''),
       'var(--amber)',
       'stock'
     ));
   }
   if (money && (money.businessPool || money.salesProfit)) {
-    cards.push(_dashSumCard('💼', fmt(money.businessPool), 'Business pool', 'Profit ' + fmt(money.salesProfit) + ' · cost out ' + fmt(money.salesCostOut), money.businessPool >= 0 ? 'var(--accent2)' : 'var(--red)'));
+    cards.push(_dashSumCard('', fmt(money.businessPool), 'Business pool', 'Profit ' + fmt(money.salesProfit) + ' - cost out ' + fmt(money.salesCostOut), money.businessPool >= 0 ? 'var(--accent2)' : 'var(--red)'));
   }
 
   const cardsEl = document.getElementById('d-summary-cards');
@@ -4921,8 +4921,8 @@ async function renderDashboard() {
   if (alertEl) {
     let html = '';
     const alertStyle = 'cursor:pointer;border-radius:var(--r);padding:10px 12px;margin-bottom:6px;font-size:12px;font-weight:600;';
-    if (outStk.length) html += `<div role="button" tabindex="0" onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}" style="background:var(--red-light);border:1px solid rgba(192,57,43,0.25);color:var(--red);${alertStyle}">⚠️ <strong>${outStk.length}</strong> out of stock — tap to view stock</div>`;
-    if (lowStk.length) html += `<div role="button" tabindex="0" onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}" style="background:var(--amber-light);border:1px solid #f5d9a0;color:var(--amber);${alertStyle}">📉 <strong>${lowStk.length}</strong> running low — tap to view stock</div>`;
+    if (outStk.length) html += `<div role="button" tabindex="0" onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}" style="background:var(--red-light);border:1px solid rgba(192,57,43,0.25);color:var(--red);${alertStyle}"><strong>${outStk.length}</strong> out of stock - tap to view stock</div>`;
+    if (lowStk.length) html += `<div role="button" tabindex="0" onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}" style="background:var(--amber-light);border:1px solid #f5d9a0;color:var(--amber);${alertStyle}"><strong>${lowStk.length}</strong> running low - tap to view stock</div>`;
     alertEl.innerHTML = html;
   }
 
@@ -4944,7 +4944,7 @@ async function renderDashboard() {
             <span style="font-size:16px;">${t.emoji}</span>
             <div style="flex:1;min-width:0;">
               <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name||item.code)}</div>
-              <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${escapeHtml(item.code)} · ${fmtN(item.qty)} pcs · buy ${fmt(buy)}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${escapeHtml(item.code)} - ${fmtN(item.qty)} pcs - buy ${fmt(buy)}</div>
             </div>
             <div style="text-align:right;flex-shrink:0;">
               <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(val)}</div>
@@ -4960,7 +4960,7 @@ async function renderDashboard() {
   }
 }
 
-// renderSummary removed — content merged into renderDashboard
+// renderSummary removed - content merged into renderDashboard
 function renderSummary() { renderDashboard(); }
 
 // ===== HEADER =====
@@ -5059,7 +5059,7 @@ async function _legacySearchSell() {
     (i.size || '').toLowerCase().includes(q)
   );
   if (!matched.length) {
-    results.innerHTML = '<div class="empty" style="padding:24px 0;"><div class="e-icon" style="font-size:36px;">🔍</div><p>No items found</p></div>';
+    results.innerHTML = '<div class="empty" style="padding:24px 0;"><div class="e-icon" style="font-size:36px;"><i class="fa-solid fa-magnifying-glass"></i></div><p>No items found</p></div>';
     return;
   }
   results.innerHTML = matched.map(item => {
@@ -5071,19 +5071,19 @@ async function _legacySearchSell() {
       <div class="item-top">
         <div class="item-icon" style="background:${t.color||'var(--surface2)'};">${t.emoji}</div>
         <div class="item-body">
-          <div class="item-code">${item.code}${item.size ? ' · ' + item.size : ''}</div>
+          <div class="item-code">${item.code}${item.size ? ' - ' + item.size : ''}</div>
           <div class="item-name">${item.name || ''}</div>
           <div class="item-tags">
             <span class="tag tag-cyan">${item.type}</span>
             <span class="tag" style="background:${outOfStock?'var(--red-light)':item.qty<=3?'var(--amber-light)':'var(--green-light)'};color:${stockColor};">
-              ${outOfStock ? '✕ Out of stock' : item.qty + ' pcs'}
+              ${outOfStock ? 'Out of stock' : item.qty + ' pcs'}
             </span>
           </div>
         </div>
         <div class="item-right">
           <div style="font-size:18px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(item.sell)}</div>
           <div style="font-size:11px;color:var(--green);font-family:var(--mono);margin-top:3px;">+${fmt(item.profit)} profit</div>
-          ${!outOfStock ? '<div style="margin-top:8px;background:var(--accent);color:white;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;text-align:center;">💸 Sell</div>' : ''}
+          ${!outOfStock ? '<div style="margin-top:8px;background:var(--accent);color:white;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;text-align:center;">Sell</div>' : ''}
         </div>
       </div>
     </div>`;
@@ -5251,15 +5251,15 @@ async function confirmOffStockSale() {
   try { renderDashboard(); } catch(_) { /* intentionally ignored */ }
   try { if (activeDay) updateDayLiveStats(); } catch(_) { /* intentionally ignored */ }
   scheduleSync();
-  toast('Sale recorded · monitor marked NOT ACCOUNTED', 'ok');
+  toast('Sale recorded - monitor marked NOT ACCOUNTED', 'ok');
 }
 
 async function openSellModal(itemId) {
   try {
   const item = await dbGet('items', itemId);
-  if (!item) { toast('⚠️ Item not found', 'err'); return; }
+  if (!item) { toast('Warning: Item not found', 'err'); return; }
   if (item.qty <= 0) {
-    toast('⚠️ ' + (item.name || item.code) + ' is out of stock — restock first', 'err');
+    toast('Warning: ' + (item.name || item.code) + ' is out of stock - restock first', 'err');
     return;
   }
   currentSellItemId = itemId;
@@ -5267,7 +5267,7 @@ async function openSellModal(itemId) {
   document.getElementById('sm-icon').textContent = t.emoji;
   document.getElementById('sm-icon').style.background = t.color || 'var(--surface2)';
   document.getElementById('sm-name').textContent = item.name;
-  document.getElementById('sm-meta').textContent = item.code + (item.size ? ' · ' + item.size : '');
+  document.getElementById('sm-meta').textContent = item.code + (item.size ? ' - ' + item.size : '');
   document.getElementById('sm-stock').textContent = item.qty;
   const _itemSell = item.sellPrice || item.sell || 0;
   const _itemBuy  = item.buyPrice  || item.buy  || 0;
@@ -5344,7 +5344,7 @@ function adjSellQty(d) {
   const inp = document.getElementById('sm-qty');
   let v = (parseInt(inp.value) || 0) + d;
   const max = parseInt(inp.max) || 9999;
-  if (v > max) { toast('⚠️ Only ' + max + ' in stock', 'err'); v = max; }
+  if (v > max) { toast('Warning: Only ' + max + ' in stock', 'err'); v = max; }
   inp.value = Math.max(0, v);
   updateSellModal();
 }
@@ -5354,7 +5354,7 @@ async function confirmSale() {
 
   // Gray out confirm button + show progress overlay
   const _confirmBtn = document.getElementById('confirm-sale-btn');
-  _overlay.show('Processing Sale…', _confirmBtn);
+  _overlay.show('Processing Sale...', _confirmBtn);
 
   try {
 
@@ -5367,7 +5367,7 @@ async function confirmSale() {
   const qty       = parseInt(qtyEl?.value || '0');
   const actualRaw = parseFloat(actualEl?.value || '');
 
-  // ── Prices — use normalized sellPrice/buyPrice ─────────────────
+  // ── Prices - use normalized sellPrice/buyPrice ─────────────────
   const sellPrice = _isShoeSale && _sellShoeSize
     ? (_sellShoeSize.sellPrice || item.sellPrice || item.sell || 0)
     : (item.sellPrice || item.sell || 0);
@@ -5444,7 +5444,7 @@ async function confirmSale() {
   fbSyncItem(item);
   fbSyncSale(sale);
 
-  // Sales are the source of truth for revenue — no duplicate finance row.
+  // Sales are the source of truth for revenue - no duplicate finance row.
 
   // ── Close all overlays ─────────────────────────────────────────
   closeSellModal();       // sell modal
@@ -5476,11 +5476,11 @@ async function confirmSale() {
     }
   } catch(_) { /* intentionally ignored */ }
 
-  toast('✅ ' + fmt(revenue) + ' · Profit: ' + fmt(profit), 'ok');
+  toast('' + fmt(revenue) + ' - Profit: ' + fmt(profit), 'ok');
 
   } catch(err) {
     console.error('[confirmSale]', err);
-    toast('⚠️ Sale failed: ' + (err.message || 'Unknown error'), 'err');
+    toast('Warning: Sale failed: ' + (err.message || 'Unknown error'), 'err');
   } finally {
     _overlay.hide();
   }
@@ -5513,13 +5513,13 @@ function addNotif(msg){const l=document.getElementById('notif-list');if(!l)retur
 function closePastSessionSheet(){const s=document.getElementById('past-session-sheet');if(s)s.classList.remove('open');}
 
 // ═══════════════════════════════════════════════════════════════
-// FACTORY RESET — clears ALL local data and Firebase
+// FACTORY RESET - clears ALL local data and Firebase
 // Only accessible to Super User in Settings
 // ═══════════════════════════════════════════════════════════════
-// ── Full database rebuild — wipes all data and starts fresh ────────
+// ── Full database rebuild - wipes all data and starts fresh ────────
 async function resetAndRebuildDB() {
   const msg =
-    '⚠️ FULL DATABASE RESET\n\n' +
+    'FULL DATABASE RESET\n\n' +
     'This will:\n' +
     '• Delete ALL items, sales, finances, shoe sizes\n' +
     '• Delete ALL business day records\n' +
@@ -5532,7 +5532,7 @@ async function resetAndRebuildDB() {
   if (input !== 'RESET') { toast('Reset cancelled', ''); return; }
 
   try {
-    toast('🗑️ Rebuilding database…', '');
+    toast('Rebuilding database...', '');
 
     // 1. Clear all IndexedDB data stores
     await DB.clearAll([
@@ -5581,11 +5581,11 @@ async function resetAndRebuildDB() {
     updateHeader();
     try { updateLowStockBadge(); } catch(_) { /* intentionally ignored */ }
 
-    toast('✅ Database rebuilt clean — fresh start!', 'ok');
+    toast('Database rebuilt clean - fresh start!', 'ok');
     console.log('[DB] Rebuild complete v' + DB_VER);
 
   } catch(e) {
-    toast('❌ Rebuild failed: ' + e.message, 'err');
+    toast('Error: Rebuild failed: ' + e.message, 'err');
     console.error('[DB]', e);
   }
 }
@@ -5593,7 +5593,7 @@ window.resetAndRebuildDB = resetAndRebuildDB;
 
 async function resetAllData() {
   const confirmed = confirm(
-    '⚠️ RESET ALL DATA\n\n' +
+    'RESET ALL DATA\n\n' +
     'This will permanently delete:\n' +
     '• All inventory items\n' +
     '• All sales records\n' +
@@ -5605,10 +5605,10 @@ async function resetAllData() {
   if (!confirmed) return;
 
   try {
-    toast('🗑️ Clearing database…', '');
+    toast('Clearing database...', '');
 
     // ── 1. Clear IndexedDB using store.clear() ────────────────────
-    // This is atomic and reliable — clears entire store in one op
+    // This is atomic and reliable - clears entire store in one op
     const stores = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances', 'wishlist', 'photos'];
     await new Promise((resolve, reject) => {
       const tx = db.transaction(
@@ -5646,7 +5646,7 @@ async function resetAllData() {
         console.log('[RESET] Firebase cleared');
       } catch(e) {
         console.warn('[RESET] Firebase partial:', e.message);
-        toast('⚠️ Firebase may not be fully cleared: ' + e.message, 'err');
+        toast('Warning: Firebase may not be fully cleared: ' + e.message, 'err');
       }
     }
 
@@ -5673,11 +5673,11 @@ async function resetAllData() {
     try { renderSellPage(); } catch(e) {}
     try { updateLowStockBadge(); } catch(e) {}
 
-    toast('✅ All data cleared — fresh start!', 'ok');
+    toast('All data cleared - fresh start!', 'ok');
     console.log('[RESET] Complete');
 
   } catch(e) {
-    toast('❌ Reset failed: ' + e.message, 'err');
+    toast('Error: Reset failed: ' + e.message, 'err');
     console.error('[RESET] Error:', e);
   }
 }
@@ -5752,29 +5752,29 @@ async function _deleteFirebaseCollections(cols) {
 async function clearLocalData(skipConfirm = false) {
   if (!skipConfirm && !confirm('Clear ALL data stored on this device?\n\nCloud data is not affected. Login and settings are kept.')) return;
   try {
-    toast('Clearing local data…', '');
+    toast('Clearing local data...', '');
     await _clearIndexedDbStores();
     _clearAllDayReconKeys();
     window._financeCoherenceCleaned = false;
     await _refreshAppAfterDataChange();
-    toast('✅ Local data cleared', 'ok');
+    toast('Local data cleared', 'ok');
   } catch (e) {
-    toast('❌ Failed: ' + e.message, 'err');
+    toast('Error: Failed: ' + e.message, 'err');
   }
 }
 
 async function clearCloudData(skipConfirm = false) {
   if (!skipConfirm && !confirm('Delete ALL data in Firebase cloud?\n\nLocal data on this device is not affected. Other devices will lose cloud copies.')) return;
   if (!fbReady || !fbDb) {
-    toast('Connect to Firebase first (Settings → Reconnect)', 'err');
+    toast('Connect to Firebase first (Settings to Reconnect)', 'err');
     return;
   }
   try {
-    toast('Clearing cloud data…', '');
+    toast('Clearing cloud data...', '');
     await _deleteFirebaseCollections(_FB_COLLECTIONS);
-    toast('✅ Cloud data cleared', 'ok');
+    toast('Cloud data cleared', 'ok');
   } catch (e) {
-    toast('❌ Failed: ' + e.message, 'err');
+    toast('Error: Failed: ' + e.message, 'err');
   }
 }
 
@@ -5793,7 +5793,7 @@ async function clearAppCacheAndReload() {
     if (swRegistration) {
       try { await swRegistration.update(); } catch(_) {}
     }
-    toast('Reloading…', '');
+    toast('Reloading...', '');
     setTimeout(() => window.location.reload(), 400);
   } catch (e) {
     window.location.reload();
@@ -5820,10 +5820,10 @@ function setFbStatus(status) {
   const envLabel = FIREBASE_ENVIRONMENTS[getFirebaseEnv()]?.label || '';
   const labels = {
     off: 'Not connected',
-    connecting: 'Connecting to Firebase…',
-    on:  '✅ Connected (' + envLabel + ') · Last sync ' + now,
-    error: '❌ Sync error — tap Reconnect in Settings',
-    syncing: '⏳ Syncing…'
+    connecting: 'Connecting to Firebase...',
+    on:  'Connected (' + envLabel + ') - Last sync ' + now,
+    error: 'Sync error - tap Reconnect in Settings',
+    syncing: 'Syncing...'
   };
   if (dot) { dot.style.background = colors[status]; dot.style.boxShadow = status==='on' ? '0 0 6px var(--green)' : 'none'; }
   if (txt) txt.textContent = labels[status];
@@ -5835,7 +5835,7 @@ function setFbStatus(status) {
   const barTime = document.getElementById('sync-bar-time');
   if (!bar) return;
   const barColors = { off:'#888', connecting:'#f59e0b', on:'#4ade80', error:'#f87171', syncing:'#60a5fa' };
-  const barLabels = { off:'Offline', connecting:'Connecting…', on:'Live', error:'Sync Error', syncing:'Syncing…' };
+  const barLabels = { off:'Offline', connecting:'Connecting...', on:'Live', error:'Sync Error', syncing:'Syncing...' };
   bar.style.display = 'flex';
   if (barDot) barDot.style.background = barColors[status] || '#888';
   if (barTxt) barTxt.textContent = barLabels[status] || status;
@@ -5911,14 +5911,14 @@ function updateFirebaseEnvUI() {
   const projectEl = document.getElementById('fb-env-project');
   if (projectEl) {
     projectEl.textContent = cfg.collectionPrefix
-      ? cfg.projectId + ' · ' + cfg.collectionPrefix + '*'
+      ? cfg.projectId + ' - ' + cfg.collectionPrefix + '*'
       : cfg.projectId;
   }
   const prefixEl = document.getElementById('fb-env-prefix');
   if (prefixEl) {
     prefixEl.textContent = cfg.collectionPrefix
-      ? 'Collections: ' + cfg.collectionPrefix + 'items, ' + cfg.collectionPrefix + 'sales, …'
-      : 'Collections: items, sales, …';
+      ? 'Collections: ' + cfg.collectionPrefix + 'items, ' + cfg.collectionPrefix + 'sales,...'
+      : 'Collections: items, sales,...';
   }
   document.getElementById('fb-env-prod')?.classList.toggle('active', env === 'production');
   document.getElementById('fb-env-dev')?.classList.toggle('active', env === 'development');
@@ -5981,7 +5981,7 @@ async function initFirebase() {
       const byCode = Object.fromEntries(localItems.filter(i=>i.code).map(i=>[i.code,i]));
       let changed = false;
       for (const c of changes) {
-        const data = { ...c.doc.data(), fbId: c.doc.id };
+        const data = {...c.doc.data(), fbId: c.doc.id };
         delete data.id;
         if (c.type === 'removed') {
           const loc = byFbId[c.doc.id];
@@ -6009,7 +6009,7 @@ async function initFirebase() {
       const localSales = await dbAll('sales');
       const byFbId = Object.fromEntries(localSales.filter(s=>s.fbId).map(s=>[s.fbId,s]));
       for (const c of changes) {
-        const data = { ...c.doc.data(), fbId: c.doc.id };
+        const data = {...c.doc.data(), fbId: c.doc.id };
         delete data.id;
         if (c.type === 'removed') {
           const loc = byFbId[c.doc.id];
@@ -6033,7 +6033,7 @@ async function initFirebase() {
       const byFbId = Object.fromEntries(localFin.filter(f => f.fbId).map(f => [f.fbId, f]));
       let changed = false;
       for (const c of changes) {
-        const data = { ...c.doc.data(), fbId: c.doc.id };
+        const data = {...c.doc.data(), fbId: c.doc.id };
         delete data.id;
         if (c.type === 'removed') {
           const loc = byFbId[c.doc.id];
@@ -6062,7 +6062,7 @@ async function initFirebase() {
         const byFbId = Object.fromEntries(localWish.filter(w => w.fbId).map(w => [w.fbId, w]));
         let changed = false;
         for (const c of changes) {
-          const data = { ...c.doc.data(), fbId: c.doc.id };
+          const data = {...c.doc.data(), fbId: c.doc.id };
           delete data.id;
           if (c.type === 'removed') {
             const loc = byFbId[c.doc.id];
@@ -6090,7 +6090,7 @@ async function initFirebase() {
       const byCS = Object.fromEntries(localSizes.filter(s => s.codeSize).map(s => [s.codeSize, s]));
       let changed = false;
       for (const c of changes) {
-        const data = { ...c.doc.data(), fbId: c.doc.id };
+        const data = {...c.doc.data(), fbId: c.doc.id };
         delete data.id;
         if (c.type === 'removed') {
           const loc = byFbId[c.doc.id];
@@ -6121,7 +6121,7 @@ async function initFirebase() {
       const byDate = Object.fromEntries(localBd.map(b => [(b.businessDate || b.business_date), b]));
       let changed = false;
       for (const c of changes) {
-        const data = { ...c.doc.data(), fbId: c.doc.id };
+        const data = {...c.doc.data(), fbId: c.doc.id };
         delete data.id;
         const dateKey = data.businessDate || data.business_date;
         if (c.type === 'removed') {
@@ -6144,7 +6144,7 @@ async function initFirebase() {
     }, err => { console.error('[FB] business_days listener:', err.message); });
 
     setFbStatus('on');
-    toast('☁️ Firebase connected (' + getFirebaseEnvConfig().label + ')', 'ok');
+    toast('Firebase connected (' + getFirebaseEnvConfig().label + ')', 'ok');
     await pullFromFirebase(true);
     await normalizeSyncIds();
     await forcePushToFirebase(true);
@@ -6173,7 +6173,7 @@ function waitForFbImports() {
 
 async function saveFirebaseConfig() {
   try {
-  // Config is hardcoded — just reconnect
+  // Config is hardcoded - just reconnect
   if (fbUnsub) { fbUnsub(); fbUnsub = null; }
   fbApp = null; fbDb = null; fbReady = false;
   await initFirebase();
@@ -6265,7 +6265,7 @@ async function fbSyncItem(item) {
   try {
     const { doc, setDoc } = await waitForFbImports();
     await ensureItemFbId(item);
-    const data = sanitiseForFirestore({ ...item, updatedAt: new Date().toISOString() });
+    const data = sanitiseForFirestore({...item, updatedAt: new Date().toISOString() });
     _localWriting = true;
     await setDoc(fbDoc('items', item.fbId), data);
     // Reset write lock after Firestore echo window
@@ -6289,7 +6289,7 @@ async function fbSyncSale(sale) {
       sale.fbId = stableSaleFbId(sale);
       if (sale.id) await dbPut('sales', sale);
     }
-    const data = sanitiseForFirestore({ ...sale });
+    const data = sanitiseForFirestore({...sale });
     _localWriting = true;
     await setDoc(fbDoc('sales', sale.fbId), data);
     setTimeout(() => { _localWriting = false; }, 2000);
@@ -6408,7 +6408,7 @@ async function fbDeleteFinanceEntry(entry) {
     const snap = await getDocs(fbCol('finances'));
     const deletes = [];
     for (const d of snap.docs) {
-      const remote = { ...d.data(), fbId: d.id };
+      const remote = {...d.data(), fbId: d.id };
       if (d.id === entry.fbId || _financeRecordsMatch(entry, remote)) {
         deletes.push(deleteDoc(fbDoc('finances', d.id)));
       }
@@ -6428,7 +6428,7 @@ async function fbDeleteSale(sale) {
     const snap = await getDocs(fbCol('sales'));
     const deletes = [];
     for (const d of snap.docs) {
-      const remote = { ...d.data(), fbId: d.id };
+      const remote = {...d.data(), fbId: d.id };
       if (d.id === sale.fbId || _salesMatch(sale, remote)) {
         deletes.push(deleteDoc(fbDoc('sales', d.id)));
       }
@@ -6442,7 +6442,7 @@ async function fbDeleteSale(sale) {
 }
 
 async function forcePushToFirebase(silent = false) {
-  if (!fbReady || !fbDb) { if (!silent) toast('⚠️ Connect Firebase first', 'err'); return; }
+  if (!fbReady || !fbDb) { if (!silent) toast('Warning: Connect Firebase first', 'err'); return; }
   if (!silent) setFbStatus('syncing');
   _localWriting = true;
   const items = await dbAll('items');
@@ -6454,7 +6454,7 @@ async function forcePushToFirebase(silent = false) {
 
     for (const item of items) {
       await ensureItemFbId(item);
-      batch.set(fbDoc('items', item.fbId), sanitiseForFirestore({ ...item, updatedAt: new Date().toISOString() }));
+      batch.set(fbDoc('items', item.fbId), sanitiseForFirestore({...item, updatedAt: new Date().toISOString() }));
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
@@ -6464,7 +6464,7 @@ async function forcePushToFirebase(silent = false) {
         sale.fbId = stableSaleFbId(sale);
         await dbPut('sales', sale);
       }
-      batch.set(fbDoc('sales', sale.fbId), sanitiseForFirestore({ ...sale }));
+      batch.set(fbDoc('sales', sale.fbId), sanitiseForFirestore({...sale }));
       count++;
       if (count % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); count = 0; }
     }
@@ -6515,7 +6515,7 @@ async function forcePushToFirebase(silent = false) {
 
     if (count > 0) await batch.commit();
     setFbStatus('on');
-    if (!silent) toast('⬆️ Synced ' + items.length + ' items · ' + sales.length + ' sales · ' + shoeSizes.length + ' sizes', 'ok');
+    if (!silent) toast('Synced ' + items.length + ' items - ' + sales.length + ' sales - ' + shoeSizes.length + ' sizes', 'ok');
   } catch(e) {
     setFbStatus('error');
     if (!silent) toast('Sync error: ' + e.message, 'err');
@@ -6527,7 +6527,7 @@ async function forcePushToFirebase(silent = false) {
 
 async function pullFromFirebase(silent = false) {
   if (!fbReady || !fbDb) {
-    if (!silent) toast('⚠️ Not connected to Firebase', 'err');
+    if (!silent) toast('Warning: Not connected to Firebase', 'err');
     console.warn('[SYNC] pullFromFirebase called but not ready. fbReady=', fbReady, 'fbDb=', !!fbDb);
     return;
   }
@@ -6547,7 +6547,7 @@ async function pullFromFirebase(silent = false) {
     const itemsByCode = Object.fromEntries(localItems.filter(i=>i.code).map(i=>[i.code,i]));
     let itemsAdded = 0, itemsUpdated = 0;
     for (const d of itemSnap.docs) {
-      const data = { ...d.data(), fbId: d.id };
+      const data = {...d.data(), fbId: d.id };
       delete data.id;
       const existing = itemsByFbId[d.id] || itemsByCode[data.code];
       if (existing) {
@@ -6560,13 +6560,13 @@ async function pullFromFirebase(silent = false) {
     }
     console.log('[SYNC] Items: added=' + itemsAdded + ' updated=' + itemsUpdated);
 
-    // Pull sales — batch local load
+    // Pull sales - batch local load
     const saleSnap = await getDocs(fbCol('sales'));
     const localSales = await dbAll('sales');
     const salesByFbId = Object.fromEntries(localSales.filter(s=>s.fbId).map(s=>[s.fbId,s]));
     let salesAdded = 0, salesUpdated = 0;
     for (const d of saleSnap.docs) {
-      const data = { ...d.data(), fbId: d.id };
+      const data = {...d.data(), fbId: d.id };
       delete data.id;
       if (_isDeletedSaleRemote(d.id, data)) {
         deleteDoc(fbDoc('sales', d.id)).catch(() => {});
@@ -6590,7 +6590,7 @@ async function pullFromFirebase(silent = false) {
       const szByFbId = Object.fromEntries(localSizes.filter(s=>s.fbId).map(s=>[s.fbId,s]));
       const szByCS   = Object.fromEntries(localSizes.filter(s=>s.codeSize).map(s=>[s.codeSize,s]));
       for (const d of szSnap.docs) {
-        const data = { ...d.data(), fbId: d.id }; delete data.id;
+        const data = {...d.data(), fbId: d.id }; delete data.id;
         const ex = szByFbId[d.id] || szByCS[data.codeSize];
         if (ex) { data.id = ex.id; await dbPut('shoe_sizes', data); }
         else    { try { await dbAdd('shoe_sizes', data); } catch(_) { /* intentionally ignored */ } }
@@ -6603,7 +6603,7 @@ async function pullFromFirebase(silent = false) {
       const localFin = await dbAll('finances');
       const finByFbId = Object.fromEntries(localFin.filter(f=>f.fbId).map(f=>[f.fbId,f]));
       for (const d of finSnap.docs) {
-        const data = { ...d.data(), fbId: d.id }; delete data.id;
+        const data = {...d.data(), fbId: d.id }; delete data.id;
         if (_isDeletedFinanceRemote(d.id, data)) {
           deleteDoc(fbDoc('finances', d.id)).catch(() => {});
           continue;
@@ -6621,7 +6621,7 @@ async function pullFromFirebase(silent = false) {
         const localWish = await dbAll('wishlist');
         const wishByFbId = Object.fromEntries(localWish.filter(w=>w.fbId).map(w=>[w.fbId,w]));
         for (const d of wishSnap.docs) {
-          const data = { ...d.data(), fbId: d.id }; delete data.id;
+          const data = {...d.data(), fbId: d.id }; delete data.id;
           const ex = wishByFbId[d.id];
           if (ex) { data.id = ex.id; await dbPut('wishlist', data); }
           else    { try { await dbAdd('wishlist', data); } catch(_) { /* intentionally ignored */ } }
@@ -6636,7 +6636,7 @@ async function pullFromFirebase(silent = false) {
       const bdByFbId = Object.fromEntries(localBd.filter(b => b.fbId).map(b => [b.fbId, b]));
       const bdByDate = Object.fromEntries(localBd.map(b => [(b.businessDate || b.business_date), b]));
       for (const d of bdSnap.docs) {
-        const data = { ...d.data(), fbId: d.id };
+        const data = {...d.data(), fbId: d.id };
         delete data.id;
         const dateKey = data.businessDate || data.business_date;
         const ex = bdByFbId[d.id] || (dateKey ? bdByDate[dateKey] : null);
@@ -6649,7 +6649,7 @@ async function pullFromFirebase(silent = false) {
     try { renderSellPage(); } catch(_) { /* intentionally ignored */ }
     setFbStatus('on');
 
-    const msg = '⬇️ ' + itemSnap.size + ' items, ' + saleSnap.size + ' sales from Firebase';
+    const msg = 'Pulled ' + itemSnap.size + ' items, ' + saleSnap.size + ' sales from Firebase';
     if (!silent) toast(msg, 'ok');
     else if (itemSnap.size > 0) toast(msg, 'ok');
     console.log('[SYNC] Pull complete:', msg);
@@ -6678,7 +6678,7 @@ function disconnectFirebase() {
 }
 
 async function reconnectFirebase() {
-  toast('Reconnecting…', '');
+  toast('Reconnecting...', '');
   await initFirebase();
 }
 
@@ -6693,7 +6693,7 @@ async function runSyncDebug() {
 
   log.textContent = '';
   addLog('Starting sync debug...');
-  addLog('Environment: ' + getFirebaseEnvConfig().label + ' (' + fbColName('items') + ', …)');
+  addLog('Environment: ' + getFirebaseEnvConfig().label + ' (' + fbColName('items') + ',...)');
   addLog('fbReady=' + fbReady + ' fbDb=' + !!fbDb + ' online=' + navigator.onLine);
 
   const localItems = await dbAll('items');
@@ -6702,10 +6702,10 @@ async function runSyncDebug() {
   addLog('Items with fbId: ' + localItems.filter(i => i.fbId).length);
 
   if (!fbReady || !fbDb) {
-    addLog('❌ Firebase not connected! Reconnecting...');
+    addLog('Error: Firebase not connected! Reconnecting...');
     await initFirebase();
-    if (!fbReady) { addLog('❌ Reconnect failed'); return; }
-    addLog('✅ Reconnected');
+    if (!fbReady) { addLog('Error: Reconnect failed'); return; }
+    addLog('Reconnected');
   }
 
   try {
@@ -6715,19 +6715,19 @@ async function runSyncDebug() {
     addLog('Firebase items: ' + snap.size);
 
     if (snap.size === 0 && localItems.length > 0) {
-      addLog('⚠️ Firebase empty but local has ' + localItems.length + ' items');
+      addLog('Firebase empty but local has ' + localItems.length + ' items');
       addLog('Pushing all local items now...');
       await forcePushToFirebase(false);
-      addLog('✅ Push complete');
+      addLog('Push complete');
     } else if (snap.size > 0) {
       addLog('Pulling ' + snap.size + ' items from Firebase...');
       await pullFromFirebase(false);
-      addLog('✅ Pull complete. Local now: ' + (await dbAll('items')).length);
+      addLog('Pull complete. Local now: ' + (await dbAll('items')).length);
     } else {
       addLog('Both empty. Add items and push.');
     }
   } catch(e) {
-    addLog('❌ Error: ' + e.message);
+    addLog('Error: Error: ' + e.message);
     console.error('[DEBUG]', e);
   }
 }
@@ -6736,7 +6736,7 @@ async function runSyncDebug() {
 
 
 // ===================================================================
-// Day status is tracked in Operations → Day (reports/reconciliation only).
+// Day status is tracked in Operations to Day (reports/reconciliation only).
 // It does not lock tabs, sheets, sales, or inventory actions.
 // ===================================================================
 
@@ -6747,7 +6747,7 @@ function clearDayTabLocks() {
 }
 
 // ===================================================================
-// BUSINESS DAY MANAGEMENT (Operations tab — tracking & reconciliation)
+// BUSINESS DAY MANAGEMENT (Operations tab - tracking & reconciliation)
 // ===================================================================
 
 let activeDay = null;
@@ -6756,7 +6756,7 @@ let _warned1145 = null; // date string of the last 11:45 PM warning shown
 
 // ── DATE / TIME HELPERS ──────────────────────────────────────────────
 function todayDateStr() {
-  // Use local date, not UTC — important for UTC+3 (Nairobi) where
+  // Use local date, not UTC - important for UTC+3 (Nairobi) where
   // new Date().toISOString() returns UTC which drifts 3 hours behind local time
   const d = new Date();
   const y = d.getFullYear();
@@ -6773,7 +6773,7 @@ function fmtFullDate(dateStr) {
   });
 }
 
-// Legacy helpers — day state no longer gates the rest of the app
+// Legacy helpers - day state no longer gates the rest of the app
 function isDayOpen() { return true; }
 function requireOpenDay() { return true; }
 
@@ -6836,12 +6836,12 @@ async function openDay() {
   if (!bday) bday = await createDayRecord(today);
 
   if (bday.status === 'OPEN')   { toast('Day is already open!', 'err'); return; }
-  if (bday.status === 'LOCKED') { toast('🔒 This day is archived.', 'err'); return; }
+  if (bday.status === 'LOCKED') { toast('This day is archived.', 'err'); return; }
 
   const isReopen = bday.status === 'CLOSED' && !!bday.opened_at;
 
   if (!bday.opened_at) {
-    // First open of the day — snapshot opening stock value
+    // First open of the day - snapshot opening stock value
     const items = await dbAll('items');
     bday.openingStockCost   = items.reduce((s, i) => s + i.buy * i.qty, 0);
     bday.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
@@ -6858,7 +6858,7 @@ async function openDay() {
   updateDayBanner();
   updateDayLiveStats();
   renderDaySessionsList();
-  toast(isReopen ? '🔓 Day reopened! Continue recording.' : '🌅 Business day opened!', 'ok');
+  toast(isReopen ? 'Day reopened. Continue recording.' : 'Business day opened.', 'ok');
 }
 
 // ── CLOSE DAY ────────────────────────────────────────────────────────
@@ -6872,7 +6872,7 @@ async function closeDay() {
   const profit    = daySales.reduce((s, x) => s + x.profit, 0);
   const itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
   // Note: tracks NEW items added today (by createdAt).
-  // Restocks to existing items are not separately tracked — a future
+  // Restocks to existing items are not separately tracked - a future
   // 'stock_events' log store would capture this properly.
   const todayStart = today + 'T00:00:00';
   const items     = await dbAll('items');
@@ -6886,7 +6886,7 @@ async function closeDay() {
   // Populate summary sheet
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('ds-date',       fmtFullDate((activeDay.businessDate || activeDay.business_date)));
-  set('ds-time-range', openT + ' → ' + nowT);
+  set('ds-time-range', openT + ' to ' + nowT);
   set('ds-revenue',    fmt(revenue));
   set('ds-profit',     fmt(profit));
   set('ds-margin',     margin + '%');
@@ -6910,13 +6910,13 @@ async function closeDay() {
   // Verdict
   const verdictEl = document.getElementById('ds-verdict');
   if (verdictEl) {
-    let verdict = '😴 Quiet day. ' + daySales.length + ' sales.';
+    let verdict = 'Quiet day. ' + daySales.length + ' sales.';
     let vBg = 'var(--surface2)', vColor = 'var(--muted)';
     if (daySales.length > 0) {
       const m = parseFloat(margin);
-      if (m >= 30) { verdict = '🔥 Excellent! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
-      else if (m >= 15) { verdict = '✅ Good day! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
-      else { verdict = '👍 Decent. ' + margin + '% margin.'; vBg = 'var(--amber-light)'; vColor = 'var(--amber)'; }
+      if (m >= 30) { verdict = 'Excellent! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
+      else if (m >= 15) { verdict = 'Good day! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
+      else { verdict = 'Decent. ' + margin + '% margin.'; vBg = 'var(--amber-light)'; vColor = 'var(--amber)'; }
     }
     verdictEl.style.cssText = 'background:' + vBg + ';color:' + vColor + ';border:1px solid ' + vColor + ';border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;';
     verdictEl.innerHTML = '<div style="font-size:16px;font-weight:800;">' + verdict + '</div>';
@@ -6929,7 +6929,7 @@ async function closeDay() {
   // Show confirm button, hide pause button
   const confirmBtn = document.getElementById('ds-confirm-btn');
   const pauseBtn   = document.getElementById('ds-pause-btn');
-  if (confirmBtn) { confirmBtn.style.display = 'block'; confirmBtn.textContent = '🌙 Confirm Close Day'; }
+  if (confirmBtn) { confirmBtn.style.display = 'block'; confirmBtn.textContent = 'Confirm Close Day'; }
   if (pauseBtn)   pauseBtn.style.display = 'none';
 
   document.getElementById('day-summary-sheet').classList.add('open');
@@ -6963,13 +6963,13 @@ async function confirmCloseDay() {
   updateDayBanner();
   renderDaySessionsList();
   renderDashboard();
-  toast('🌙 Day closed. You can reopen it from Operations → Day anytime.', 'ok');
+  toast('Day closed. You can reopen it from Operations to Day anytime.', 'ok');
   scheduleSync();
 }
 
 // cancelCloseDay: handled by day reconciliation flow below
 
-// ── BANNER LIVE CLOCK — refresh duration display every minute ────────
+// ── BANNER LIVE CLOCK - refresh duration display every minute ────────
 let _bannerClockTimer = null;
 function startBannerClock() {
   if (_bannerClockTimer) clearInterval(_bannerClockTimer);
@@ -7047,7 +7047,7 @@ async function voidSale(saleId) {
   if (activeDay) updateDayLiveStats();
   try { renderFinancePage(); } catch(_) { /* intentionally ignored */ }
   scheduleSync();
-  toast('↩️ Sale voided · stock restored', 'ok');
+  toast('Sale voided - stock restored', 'ok');
   } catch(e) { console.error("[voidSale]", e); toast("Error: " + e.message, "err"); }
 }
 
@@ -7077,45 +7077,45 @@ function updateDayBanner() {
     const mins = opened_at ? Math.floor((Date.now() - new Date(opened_at)) / 60000) : 0;
     const dur  = mins < 60 ? mins + 'm' : Math.floor(mins/60) + 'h ' + (mins%60) + 'm';
     banner.style.cssText = 'background:var(--green-light);border:2px solid #a8d8b5;border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
-    icon.textContent  = '🌅';
+    icon.textContent  = 'Open';
     badge.textContent = 'OPEN';
     badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:#dcfce7;color:#16a34a;';
     title.textContent = 'Business Day Open';
     title.style.color = 'var(--green)';
     sub.textContent   = 'Opened ' + fmtTime(opened_at)
-      + ' · ' + dur + ' running'
-      + (reopened_count > 0 ? ' · Reopened ' + reopened_count + 'x' : '');
+      + ' - ' + dur + ' running'
+      + (reopened_count > 0 ? ' - Reopened ' + reopened_count + 'x' : '');
     if (actionArea) actionArea.innerHTML = '';  // Day tab handles its own buttons now
     clearDayTabLocks();
     updateDayLiveStats();
   } else if (status === 'CLOSED') {
     banner.style.cssText = 'background:#fef3c7;border:2px solid #f5d9a0;border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
-    icon.textContent  = '🌙';
+    icon.textContent  = 'Closed';
     badge.textContent = 'CLOSED';
     badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:#fef3c7;color:#92400e;';
     title.textContent = 'Business Day Closed';
     title.style.color = '#d97706';
     sub.textContent   = closed_at
-      ? 'Closed at ' + fmtTime(closed_at) + (auto_closed ? ' · auto' : '') + (reopened_count > 0 ? ' · Opened ' + (reopened_count + 1) + 'x today' : '') + ' · Tap to reopen'
-      : 'Tap Open Day to begin — ' + fmtFullDate(todayDateStr());
+      ? 'Closed at ' + fmtTime(closed_at) + (auto_closed ? ' - auto' : '') + (reopened_count > 0 ? ' - Opened ' + (reopened_count + 1) + 'x today' : '') + ' - Tap to reopen'
+      : 'Tap Open Day to begin - ' + fmtFullDate(todayDateStr());
     if (actionArea) actionArea.innerHTML = '';
     clearDayTabLocks();
     updateDayLiveStats();
   } else if (status === 'LOCKED') {
     banner.style.cssText = 'background:var(--surface2);border:2px solid var(--border);border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
-    icon.textContent  = '🔒';
+    icon.textContent  = 'Locked';
     badge.textContent = 'LOCKED';
     badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:var(--surface2);color:var(--muted);';
     title.textContent = 'Archived Day';
     title.style.color = 'var(--muted)';
-    sub.textContent   = fmtFullDate((activeDay.businessDate || activeDay.business_date)) + ' — archived';
+    sub.textContent   = fmtFullDate((activeDay.businessDate || activeDay.business_date)) + ' - archived';
     if (actionArea) actionArea.innerHTML = '';
     clearDayTabLocks();
     updateDayLiveStats();
   }
 }
 
-// ── LIVE STATS — full cash flow summary ─────────────────────────────
+// ── LIVE STATS - full cash flow summary ─────────────────────────────
 async function updateDayLiveStats() {
   if (!activeDay) return;
   const today  = activeDay.businessDate || activeDay.business_date || todayDateStr();
@@ -7200,10 +7200,10 @@ async function updateDayLiveStats() {
   if (sl) {
     // Merge sales and finance entries into one timeline
     const txns = [
-      ...daySales.map(s => ({
+     ...daySales.map(s => ({
         time:  s.date || s.createdAt,
         type:  'sale',
-        label: (s.itemName||s.itemCode||'Sale') + (s.itemSize ? ' ·'+s.itemSize : ''),
+        label: (s.itemName||s.itemCode||'Sale') + (s.itemSize ? '  - '+s.itemSize : ''),
         sub:   (s.qty||1) + ' pc' + ((s.qty||1)!==1?'s':''),
         amt:   s.revenue||0,
         color: 'var(--green)',
@@ -7211,13 +7211,13 @@ async function updateDayLiveStats() {
         id:    s.id,
         canVoid: true,
       })),
-      ...dayFins.map(e => {
+     ...dayFins.map(e => {
         const isMinus = e.type==='expense'||e.type==='withdrawal'||e.type==='stock_purchase';
-        const icons = {injection:'💉',investment:'💵',stock_purchase:'🛍️',expense:'💸',withdrawal:'🏧',other:'📝'};
+        const icons = {injection:'Inject',investment:'Invest',stock_purchase:'Stock',expense:'Expense',withdrawal:'Withdraw',other:'Other'};
         return {
           time:  e.date ? e.date+'T12:00:00' : e.createdAt,
           type:  'finance',
-          label: icons[e.type]||'📝' + ' ' + (e.description||e.type),
+          label: icons[e.type]||'Other' + ' ' + (e.description||e.type),
           sub:   e.type.replace('_',' '),
           amt:   e.amount||0,
           color: isMinus ? 'var(--red)' : 'var(--green)',
@@ -7235,7 +7235,7 @@ async function updateDayLiveStats() {
         `<div class="day-txn-row">
           <div style="flex:1;min-width:0;">
             <div class="day-txn-label">${escapeHtml(t.label)}</div>
-            <div class="day-txn-sub">${t.time ? fmtTime(t.time) : ''} · ${t.sub}</div>
+            <div class="day-txn-sub">${t.time ? fmtTime(t.time) : ''} - ${t.sub}</div>
           </div>
           <div class="day-txn-amt" style="color:${t.color};">${t.sign}${fmt(t.amt)}</div>
           ${t.canVoid && isDayOpen() ? `<button onclick="voidSale(${t.id})" style="font-size:9px;padding:3px 8px;background:var(--red-light);color:var(--red);border:1px solid var(--red);border-radius:4px;cursor:pointer;font-weight:700;flex-shrink:0;">Void</button>` : ''}
@@ -7269,9 +7269,9 @@ async function renderDaySessionsList() {
       '<div>' +
         '<div style="font-size:14px;font-weight:800;color:var(--text);">' + fmtFullDate(s.business_date) + '</div>' +
         '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">' +
-          (s.opened_at ? fmtTime(s.opened_at) : '—') + ' → ' +
+          (s.opened_at ? fmtTime(s.opened_at) : '-') + ' to ' +
           (s.closed_at ? fmtTime(s.closed_at) : 'auto') +
-          (s.reopened_count > 0 ? ' · Reopened ' + s.reopened_count + 'x' : '') +
+          (s.reopened_count > 0 ? ' - Reopened ' + s.reopened_count + 'x' : '') +
         '</div>' +
       '</div>' +
       (locked
@@ -7316,7 +7316,7 @@ function updateDetailRestockBtnLabel() {
   if (!btn) return;
   const sizeEl = document.getElementById('sh-size');
   const sizeText = sizeEl ? (sizeEl.textContent || '').trim() : '';
-  const hasSize = sizeText && sizeText !== '—';
+  const hasSize = sizeText && sizeText !== '-';
   btn.textContent = hasSize ? 'RESTOCK (' + sizeText + ')' : 'RESTOCK';
 }
 
@@ -7331,7 +7331,7 @@ async function confirmRestock() {
     if (buyRaw !== null && buyRaw < 0) return Validate.fail('Invalid buy price', 'restock-buy');
     if (sellRaw !== null && sellRaw < 0) return Validate.fail('Invalid sell price', 'restock-sell');
     const item = await dbGet('items', currentDetailId);
-    if (!item) { toast('⚠️ Item not found', 'err'); return; }
+    if (!item) { toast('Warning: Item not found', 'err'); return; }
     if (item.isShoe) {
       toast('Restock a shoe size from the size list', 'err');
       return;
@@ -7361,10 +7361,10 @@ async function confirmRestock() {
     await enrichShoeItems(allItems);
     renderList(); renderDashboard(); updateHeader();
     updateLowStockBadge();
-    toast('✅ Added ' + qty + ' pcs to ' + (item.name || item.code), 'ok');
+    toast('Added ' + qty + ' pcs to ' + (item.name || item.code), 'ok');
   } catch(e) {
     console.error('[confirmRestock]', e);
-    toast('⚠️ Restock failed: ' + e.message, 'err');
+    toast('Warning: Restock failed: ' + e.message, 'err');
   } finally {
     if (restockBtn) { restockBtn.disabled = false; restockBtn.style.opacity = ''; }
   }
@@ -7488,7 +7488,7 @@ if ('serviceWorker' in navigator) {
     // Update progress bars (both banner + settings card)
     ['update-progress-bar','upd-progress-bar'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.width='100%';});
     ['update-progress-pct','upd-progress-pct'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='100%';});
-    ['update-progress-label','upd-progress-label'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='Reloading…';});
+    ['update-progress-label','upd-progress-label'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='Reloading...';});
     // Show success state in banner
     const btnArea = document.getElementById('upd-btn-area');
     const progressWrap = document.getElementById('upd-progress-wrap');
@@ -7523,34 +7523,34 @@ function getInstallSteps() {
   const browser = detectBrowser();
   const steps = {
     samsung: [
-      '1️⃣  Tap the <strong>⋮ menu</strong> at the top right',
-      '2️⃣  Tap <strong>"Add page to"</strong> → <strong>"Home screen"</strong>',
-      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+      '1. Tap the <strong>⋮ menu</strong> at the top right',
+      '2. Tap <strong>"Add page to"</strong> to <strong>"Home screen"</strong>',
+      '3. Tap <strong>Add</strong> - done!'
     ],
     firefox: [
-      '1️⃣  Tap the <strong>⋮ menu</strong> at the top right',
-      '2️⃣  Tap <strong>"Install"</strong> or <strong>"Add to Home Screen"</strong>',
-      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+      '1. Tap the <strong>⋮ menu</strong> at the top right',
+      '2. Tap <strong>"Install"</strong> or <strong>"Add to Home Screen"</strong>',
+      '3. Tap <strong>Add</strong> - done!'
     ],
     safari: [
-      '1️⃣  Tap the <strong>Share button ↑</strong> at the bottom',
-      '2️⃣  Scroll down → tap <strong>"Add to Home Screen"</strong>',
-      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+      '1. Tap the <strong>Share button ↑</strong> at the bottom',
+      '2. Scroll down to tap <strong>"Add to Home Screen"</strong>',
+      '3. Tap <strong>Add</strong> - done!'
     ],
     chrome: [
-      '1️⃣  Tap the <strong>⋮ menu</strong> at the top right',
-      '2️⃣  Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong>',
-      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+      '1. Tap the <strong>⋮ menu</strong> at the top right',
+      '2. Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong>',
+      '3. Tap <strong>Add</strong> - done!'
     ],
     edge: [
-      '1️⃣  Tap the <strong>... menu</strong> at the bottom',
-      '2️⃣  Tap <strong>"Add to phone"</strong>',
-      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+      '1. Tap the <strong>... menu</strong> at the bottom',
+      '2. Tap <strong>"Add to phone"</strong>',
+      '3. Tap <strong>Add</strong> - done!'
     ],
     other: [
-      '1️⃣  Open your <strong>browser menu</strong>',
-      '2️⃣  Look for <strong>"Add to Home Screen"</strong>',
-      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+      '1. Open your <strong>browser menu</strong>',
+      '2. Look for <strong>"Add to Home Screen"</strong>',
+      '3. Tap <strong>Add</strong> - done!'
     ]
   };
   return steps[browser] || steps.other;
@@ -7566,7 +7566,7 @@ window.addEventListener('beforeinstallprompt', e => {
 
 window.addEventListener('appinstalled', () => {
   hideInstallBanner();
-  toast('✅ App installed on home screen!', 'ok');
+  toast('App installed on home screen!', 'ok');
   deferredInstallPrompt = null;
 });
 
@@ -7649,7 +7649,7 @@ function showUserProfile() {
   closeUserMenu();
   if (!currentUser) return;
   const roleColors = { super: '#92400e', user: '#1d4ed8', clerk: 'var(--green)' };
-  const roleLabels = { super: '🟡 Super User — Full Access', user: '🔵 User — Standard Access', clerk: '🟢 Clerk — Limited Access' };
+  const roleLabels = { super: 'Super User - Full Access', user: 'User - Standard Access', clerk: 'Clerk - Limited Access' };
   const tabLabels = { dash: 'Dashboard', inventory: 'Inventory', list: 'Stock', wishlist: 'Wishlist', add: 'Add Item', sell: 'Sale', operations: 'Operations', settings: 'Settings' };
   document.getElementById('profile-name').textContent = currentUser.name;
   document.getElementById('profile-username').textContent = currentUser.username;
@@ -7705,7 +7705,7 @@ function initCleanNumericInputs() {
   });
 }
 
-// ===== PHOTO VIEWER — pan, pinch-zoom, double-tap fullscreen =====
+// ===== PHOTO VIEWER - pan, pinch-zoom, double-tap fullscreen =====
 const _photoViewerRegistry = new Map();
 
 function ensurePhotoLightbox() {
@@ -7716,7 +7716,7 @@ function ensurePhotoLightbox() {
   lb.className = 'photo-lightbox';
   lb.hidden = true;
   lb.innerHTML =
-    '<button type="button" class="photo-lightbox-close" aria-label="Close">✕</button>' +
+    '<button type="button" class="photo-lightbox-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>' +
     '<div class="photo-lightbox-viewport" id="photo-lightbox-viewport">' +
     '<img id="photo-lightbox-img" class="photo-pan-img" alt="">' +
     '</div>';
@@ -8080,7 +8080,7 @@ function setLoginReady(ready) {
   } else {
     if (!btn.dataset.loadingLabel) btn.dataset.loadingLabel = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Loading app…';
+    btn.textContent = 'Loading app...';
   }
 }
 
@@ -8132,7 +8132,7 @@ function applyRoleRestrictions(user) {
 
   const header = document.querySelector('.header-title');
   if (header) {
-    header.textContent = user.role === 'clerk' ? 'Add Stock — Mandela' : 'Mandela General Stores';
+    header.textContent = user.role === 'clerk' ? 'Add Stock - Mandela' : 'Mandela General Stores';
   }
   if (user.role === 'clerk' && user.tabs.includes('inventory')) {
     _activeInventoryTab = 'add';
@@ -8198,13 +8198,13 @@ async function attemptLogin() {
   } catch (e) {
     currentUser = null;
     localStorage.removeItem(KEY_SESSION);
-    toast('App still loading — try again in a moment', 'err');
+    toast('App still loading - try again in a moment', 'err');
     return;
   }
 
   finishAuthUI(user);
   _origShowPage(resolveLandingPage(user, localStorage.getItem(KEY_LAST_PAGE)));
-  toast('Welcome, ' + user.name + '! 👋', 'ok');
+  toast('Welcome, ' + user.name + '!', 'ok');
 }
 
 function checkSession() {
@@ -8218,7 +8218,7 @@ function checkSession() {
     // Support both old format {username, pin} and new format {username, ts}
     const username = data.username;
     const ts       = data.ts || 0;
-    const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days — never expire on normal use
+    const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days - never expire on normal use
     const expired  = ts > 0 && (Date.now() - ts) > SESSION_TTL;
     const user     = USERS.find(u => u.username === username);
 
@@ -8245,7 +8245,7 @@ function checkSession() {
 
 window.addEventListener('unhandledrejection',e=>{
   console.error('[UNHANDLED]',e.reason);
-  if(e.reason&&e.reason.message&&e.reason.message.includes('Database'))toast('⚠️ '+e.reason.message,'err');
+  if(e.reason&&e.reason.message&&e.reason.message.includes('Database'))toast('Warning: '+e.reason.message,'err');
 });
 
 // ── APP UPDATE SYSTEM ─────────────────────────────────────────────
@@ -8307,7 +8307,7 @@ function _showUpdateBanner() {
   if (progress)   progress.style.display   = 'none';
   if (success)    success.style.display    = 'none';
   if (btnArea)    btnArea.style.display    = 'flex';
-  if (installBtn) { installBtn.disabled = false; installBtn.style.opacity = '1'; installBtn.textContent = '⬇️ Install Update Now'; }
+  if (installBtn) { installBtn.disabled = false; installBtn.style.opacity = '1'; installBtn.textContent = 'Install update now'; }
   if (laterBtn)   laterBtn.style.display  = 'block';
   // Show banner
   banner.style.display = 'flex';
@@ -8318,7 +8318,7 @@ function dismissAppUpdate() {
   if (banner) banner.style.display = 'none';
   _updateBannerDismissed = true;
   // Keep the dot on settings tab so they can still find it
-  toast('Update ready — tap Settings to install when ready', '');
+  toast('Update ready - tap Settings to install when ready', '');
 }
 
 function applyAppUpdate() {
@@ -8337,11 +8337,11 @@ function applyAppUpdate() {
 
   // Animated progress steps
   const steps = [
-    { pct:15,  lbl:'Downloading update…',     delay:0   },
-    { pct:35,  lbl:'Verifying files…',         delay:400 },
-    { pct:55,  lbl:'Installing…',              delay:700 },
-    { pct:75,  lbl:'Clearing old cache…',      delay:1100},
-    { pct:90,  lbl:'Finalising…',              delay:1500},
+    { pct:15,  lbl:'Downloading update...',     delay:0   },
+    { pct:35,  lbl:'Verifying files...',         delay:400 },
+    { pct:55,  lbl:'Installing...',              delay:700 },
+    { pct:75,  lbl:'Clearing old cache...',      delay:1100},
+    { pct:90,  lbl:'Finalising...',              delay:1500},
   ];
   steps.forEach(({pct, lbl, delay}) => {
     setTimeout(() => {
@@ -8353,7 +8353,7 @@ function applyAppUpdate() {
 
   // Trigger the actual SW skip-waiting
   _pendingWorker.postMessage({ type: 'SKIP_WAITING' });
-  // controllerchange will fire → reloads page; we also update settings card
+  // controllerchange will fire to reloads page; we also update settings card
   _showUpdateState('installing');
 }
 
@@ -8462,7 +8462,7 @@ async function reconcileFinances() {
   _showFinReconcile(false);
   renderFinancePage();
   renderDashboard();
-  toast('✅ Finances reconciled — removed ' + removed + ' duplicate row(s)', 'ok');
+  toast('Finances reconciled - removed ' + removed + ' duplicate row(s)', 'ok');
 }
 window.reconcileFinances = reconcileFinances;
 
@@ -8541,13 +8541,13 @@ renderFinancePage = async function() {
     isSaleRow: true
   }));
   const financeRows = money.finances.filter(e => ['injection','stock_purchase','expense','withdrawal'].includes(e.type));
-  let listEntries = [...financeRows, ...saleRows];
+  let listEntries = [...financeRows,...saleRows];
   if (_finFilter === 'investment') listEntries = listEntries.filter(e => e.type === 'injection' || e.type === 'stock_purchase');
   if (_finFilter === 'expense') listEntries = listEntries.filter(e => e.type === 'expense' || e.type === 'withdrawal' || e.type === 'sale_out');
   listEntries.sort((a,b)=>new Date(b.date||b.createdAt||0)-new Date(a.date||a.createdAt||0));
   const summaryLine = document.getElementById('fin-summary-line');
   if (summaryLine) {
-    summaryLine.textContent = 'Pool ' + fmt(money.businessPool) + ' · Cash in ' + fmt(money.cashToBusiness) + ' · Stock added ' + fmt(money.stockAdded) + ' · Profit ' + fmt(money.salesProfit);
+    summaryLine.textContent = 'Pool ' + fmt(money.businessPool) + ' - Cash in ' + fmt(money.cashToBusiness) + ' - Stock added ' + fmt(money.stockAdded) + ' - Profit ' + fmt(money.salesProfit);
   }
   renderFinList(listEntries);
   if (!window._finReconcileUnlocked) _showFinReconcile(false);
@@ -8573,14 +8573,14 @@ renderFinList = function(entries) {
     const c = cfgMap[e.type] || cfgMap.expense;
     const ds = e.date || (e.createdAt||'').split('T')[0];
     const fd = ds ? new Date(ds+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '-';
-    const grp = groupLabel(e) + ' · ' + fd;
+    const grp = groupLabel(e) + ' - ' + fd;
     const header = grp !== lastGroup ? '<div style="background:var(--surface2);padding:7px 12px;font-size:10px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">' + grp + '</div>' : '';
     lastGroup = grp;
     const delBtn = (!e.isSaleRow && currentUser&&currentUser.role==='super')
       ? '<button onclick="deleteFinanceEntry('+e.id+')" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;flex-shrink:0;">x</button>'
       : '';
     const sub = e.type === 'sale_out'
-      ? 'Cost: ' + fmt(e.amount || 0) + ' · Profit: ' + fmt(e.profit || 0)
+      ? 'Cost: ' + fmt(e.amount || 0) + ' - Profit: ' + fmt(e.profit || 0)
       : c.label;
     return header + '<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface);border-bottom:1px solid var(--border);">' +
       '<span style="font-size:13px;font-weight:900;min-width:24px;text-align:center;color:'+c.color+';">'+c.icon+'</span>' +
@@ -8608,7 +8608,7 @@ saveFinanceEntry = async function() {
   if (desc.length > 200) return Validate.fail('Description too long (max 200 characters)', 'fin-desc');
   const dateCheck = Validate.financeDate(date, 'fin-date');
   if (dateCheck === false) return;
-  if (dateCheck === 'future' && !confirm('Date is in the future — are you sure?')) return;
+  if (dateCheck === 'future' && !confirm('Date is in the future - are you sure?')) return;
   const entry = { type, amount, description: desc, category: cat, date, createdAt: new Date().toISOString(), createdBy: currentUser ? currentUser.username : 'system' };
   entry.id = await dbAdd('finances', entry);
   if (fbReady && fbDb) {
@@ -8674,13 +8674,13 @@ function _renderSizeGroupFilter() {
 
 
 // ═══════════════════════════════════════════════════════════
-// DAY RECONCILIATION — FLOW CONTROLLER
+// DAY RECONCILIATION - FLOW CONTROLLER
 // Steps keyed by date in localStorage:
-//   no data        → step: open  (show Open Day btn)
-//   opened_only    → step: opening_form (show opening balances form)
-//   opening_locked → step: close_btn (show Close Day btn)
-//   closing_form   → step: closing_form (show closing form)
-//   reconciled     → step: reconciled (insights only)
+//   no data        to step: open  (show Open Day btn)
+//   opened_only    to step: opening_form (show opening balances form)
+//   opening_locked to step: close_btn (show Close Day btn)
+//   closing_form   to step: closing_form (show closing form)
+//   reconciled     to step: reconciled (insights only)
 // ═══════════════════════════════════════════════════════════
 
 const DAY_RECON_KEY = date => 'mgs_recon_' + date;
@@ -8714,7 +8714,7 @@ window.openDay = openDay;
 function initCloseDay() {
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
   const data  = _getDayRecon(today) || {};
-  _saveDayRecon(today, { ...data, step: 'closing_form' });
+  _saveDayRecon(today, {...data, step: 'closing_form' });
   renderDayState();
 }
 window.initCloseDay = initCloseDay;
@@ -8723,7 +8723,7 @@ window.initCloseDay = initCloseDay;
 function cancelCloseDay() {
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
   const data  = _getDayRecon(today) || {};
-  _saveDayRecon(today, { ...data, step: 'opening_locked' });
+  _saveDayRecon(today, {...data, step: 'opening_locked' });
   renderDayState();
 }
 window.cancelCloseDay = cancelCloseDay;
@@ -8753,13 +8753,13 @@ function _renderOpeningSummary(data) {
   const el = document.getElementById('day-opening-summary');
   if (!el || !data || !data.opening) return;
   const o   = data.opening;
-  const f   = v => v ? fmt(v) : '—';
+  const f   = v => v ? fmt(v) : '-';
   const t   = new Date(data.lockedAt||0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   el.innerHTML =
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">' +
-      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);">'+f(o.cash)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">💵 Cash</div></div>' +
-      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);">'+f(o.till)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">🏧 Till</div></div>' +
-      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);color:#6366f1;">'+f(o.mpesa)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">📱 M-Pesa</div></div>' +
+      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);">'+f(o.cash)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Cash</div></div>' +
+      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);">'+f(o.till)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Till</div></div>' +
+      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);color:#6366f1;">'+f(o.mpesa)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">M-Pesa</div></div>' +
     '</div>' +
     '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #a8d8b5;padding-top:8px;">' +
       '<span style="font-size:10px;color:var(--muted);">Locked '+t+'</span>' +
@@ -8791,7 +8791,7 @@ function _renderReconcileInsights(data, today) {
   const isOk = absV <= 5;
   const isWn = !isOk && absV <= 300;
   const vc   = isOk ? 'var(--green)' : isWn ? '#d97706' : 'var(--red)';
-  const vi   = isOk ? '✅' : an.variance > 0 ? '⬆️' : '⬇️';
+  const vi   = isOk ? 'OK' : an.variance > 0 ? 'Up' : 'Down';
   const vl   = isOk ? 'Balanced'
              : an.variance > 0 ? '+'+fmt(an.variance)+' surplus'
              : fmt(absV)+' short';
@@ -8801,7 +8801,7 @@ function _renderReconcileInsights(data, today) {
   const pocketRow = (icon, lbl, opening, expected, physical) => {
     const v   = physical - expected;
     const cls = clf(v);
-    const vs  = Math.abs(v) <= 5 ? '✅' : v > 0 ? '⬆️ +'+fmt(v) : '⬇️ -'+fmt(Math.abs(v));
+    const vs  = Math.abs(v) <= 5 ? 'OK' : v > 0 ? 'Up +'+fmt(v) : 'Down -'+fmt(Math.abs(v));
     const vc2 = Math.abs(v) <= 5 ? 'var(--green)' : v > 0 ? '#d97706' : 'var(--red)';
     return '<div class="'+cls+'" style="padding:10px 12px;border-bottom:1px solid var(--border);">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">' +
@@ -8831,32 +8831,32 @@ function _renderReconcileInsights(data, today) {
   // ── Insights ──────────────────────────────────────────
   const ins = [];
   if (isOk) {
-    ins.push({i:'🎯',c:'rc-ok',  t:'Perfect — every shilling accounted for!'});
+    ins.push({i:'',c:'rc-ok',  t:'Perfect - every shilling accounted for!'});
   } else if (an.variance > 0) {
-    ins.push({i:'⬆️',c:'rc-warn',t:'Surplus of '+fmt(an.variance)+'. More cash than expected. Check for unrecorded injection, or a deposit not captured.'});
+    ins.push({i:'',c:'rc-warn',t:'Surplus of '+fmt(an.variance)+'. More cash than expected. Check for unrecorded injection, or a deposit not captured.'});
   } else {
-    ins.push({i:'⬇️',c:'rc-bad', t:'Short by '+fmt(absV)+'. Less cash than expected. Check for unrecorded expense, undeclared withdrawal, or theft.'});
+    ins.push({i:'',c:'rc-bad', t:'Short by '+fmt(absV)+'. Less cash than expected. Check for unrecorded expense, undeclared withdrawal, or theft.'});
   }
   if (Math.abs(an.cashVar)  > 50 && Math.abs(an.mpesaVar) <= 50)
-    ins.push({i:'💵',c:clf(an.cashVar),  t:'Cash discrepancy ('+fmt(Math.abs(an.cashVar))+'). M-Pesa is balanced — issue is in physical cash.'});
+    ins.push({i:'',c:clf(an.cashVar),  t:'Cash discrepancy ('+fmt(Math.abs(an.cashVar))+'). M-Pesa is balanced - issue is in physical cash.'});
   if (Math.abs(an.mpesaVar) > 50 && Math.abs(an.cashVar)  <= 50)
-    ins.push({i:'📱',c:clf(an.mpesaVar), t:'M-Pesa discrepancy ('+fmt(Math.abs(an.mpesaVar))+'). Cash is balanced — check M-Pesa statement.'});
+    ins.push({i:'',c:clf(an.mpesaVar), t:'M-Pesa discrepancy ('+fmt(Math.abs(an.mpesaVar))+'). Cash is balanced - check M-Pesa statement.'});
   if (Math.abs(an.cashVar)  > 50 && Math.abs(an.mpesaVar) > 50)
-    ins.push({i:'⚠️',c:'rc-bad',         t:'Both Cash and M-Pesa are off. Recount everything carefully.'});
+    ins.push({i:'',c:'rc-bad',         t:'Both Cash and M-Pesa are off. Recount everything carefully.'});
   if (cl.expenses > 0 && sy.sysTotalRev > 0 && cl.expenses > sy.sysTotalRev * 0.35)
-    ins.push({i:'💸',c:'rc-warn',t:'Expenses ('+fmt(cl.expenses)+') are '+((cl.expenses/sy.sysTotalRev)*100).toFixed(0)+'% of revenue — high for today.'});
+    ins.push({i:'',c:'rc-warn',t:'Expenses ('+fmt(cl.expenses)+') are '+((cl.expenses/sy.sysTotalRev)*100).toFixed(0)+'% of revenue - high for today.'});
   if (sy.margin < 10 && sy.sysTotalRev > 0)
-    ins.push({i:'📉',c:'rc-warn',t:'Low margin: '+sy.margin.toFixed(1)+'%. Review prices or costs.'});
+    ins.push({i:'',c:'rc-warn',t:'Low margin: '+sy.margin.toFixed(1)+'%. Review prices or costs.'});
   else if (sy.margin >= 30 && sy.sysTotalRev > 0)
-    ins.push({i:'🎉',c:'rc-ok', t:'Great margin: '+sy.margin.toFixed(1)+'%!'});
+    ins.push({i:'',c:'rc-ok', t:'Great margin: '+sy.margin.toFixed(1)+'%!'});
   if (an.netMove < 0)
-    ins.push({i:'🚨',c:'rc-bad',t:'Net movement is negative ('+fmt(an.netMove)+'). Business paid out more than it earned today.'});
+    ins.push({i:'',c:'rc-bad',t:'Net movement is negative ('+fmt(an.netMove)+'). Business paid out more than it earned today.'});
   if (sy.salesCount === 0)
-    ins.push({i:'😴',c:'rc-warn',t:'No sales recorded today.'});
+    ins.push({i:'',c:'rc-warn',t:'No sales recorded today.'});
 
   el.innerHTML =
     // ── Sales summary ──────────────────────────────────
-    '<div class="day-section-label">📊 Today Summary</div>' +
+    '<div class="day-section-label">Today Summary</div>' +
     '<div style="border:1.5px solid #a8d8b5;border-radius:var(--r-lg);overflow:hidden;margin-bottom:8px;">' +
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;text-align:center;background:var(--surface);">' +
         '<div style="padding:10px 4px;border-right:1px solid var(--border);"><div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--green);">'+sy.salesCount+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Sales</div></div>' +
@@ -8864,9 +8864,9 @@ function _renderReconcileInsights(data, today) {
         '<div style="padding:10px 4px;border-right:1px solid var(--border);"><div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--green);">'+fmt(sy.sysTotalProf)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Profit</div></div>' +
         '<div style="padding:10px 4px;"><div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--accent);">'+sy.margin.toFixed(1)+'%</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Margin</div></div>' +
       '</div>' +
-      (cl.injected > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>💉 Injected</span><span style="font-weight:800;color:var(--green);">+'+fmt(cl.injected)+'</span></div>' : '') +
-      (cl.expenses  > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>💸 Expenses</span><span style="font-weight:800;color:var(--red);">-'+fmt(cl.expenses)+'</span></div>' : '') +
-      (cl.withdrawn > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>🏧 Withdrawn</span><span style="font-weight:800;color:#d97706;">-'+fmt(cl.withdrawn)+'</span></div>' : '') +
+      (cl.injected > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>Injected</span><span style="font-weight:800;color:var(--green);">+'+fmt(cl.injected)+'</span></div>' : '') +
+      (cl.expenses  > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>Expenses</span><span style="font-weight:800;color:var(--red);">-'+fmt(cl.expenses)+'</span></div>' : '') +
+      (cl.withdrawn > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>Withdrawn</span><span style="font-weight:800;color:#d97706;">-'+fmt(cl.withdrawn)+'</span></div>' : '') +
       '<div style="display:flex;justify-content:space-between;padding:9px 12px;border-top:1px solid #a8d8b5;background:#f0faf4;font-size:12px;font-weight:800;">' +
         '<span style="color:var(--green);">Net Movement</span>' +
         '<span style="font-family:var(--mono);color:'+(an.netMove>=0?'var(--green)':'var(--red)')+';">'+(an.netMove>=0?'+':'')+fmt(an.netMove)+'</span>' +
@@ -8874,7 +8874,7 @@ function _renderReconcileInsights(data, today) {
     '</div>' +
 
     // ── The two money totals ────────────────────────────
-    '<div class="day-section-label">⚖️ Day Money Check</div>' +
+    '<div class="day-section-label">Day Money Check</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
       '<div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;">' +
         '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Should Have</div>' +
@@ -8900,14 +8900,14 @@ function _renderReconcileInsights(data, today) {
     '</div>' +
 
     // ── Per-pocket detail ───────────────────────────────
-    '<div class="day-section-label">🔍 Pocket Detail</div>' +
+    '<div class="day-section-label">Pocket Detail</div>' +
     '<div style="border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;margin-bottom:8px;">' +
-      pocketRow('💵', 'Cash (Hand + Till)', (o.cash||0)+(o.till||0), an.expCash,  an.physCash) +
-      pocketRow('📱', 'M-Pesa Float',        o.mpesa||0,              an.expMpesa, an.physMpesa) +
+      pocketRow('', 'Cash (Hand + Till)', (o.cash||0)+(o.till||0), an.expCash,  an.physCash) +
+      pocketRow('', 'M-Pesa Float',        o.mpesa||0,              an.expMpesa, an.physMpesa) +
     '</div>' +
 
     // ── Insights ─────────────────────────────────────────
-    '<div class="day-section-label">💡 Insights</div>' +
+    '<div class="day-section-label">Insights</div>' +
     ins.map(i=>'<div class="'+i.c+'" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:var(--r);margin-bottom:5px;font-size:12px;font-weight:600;line-height:1.4;"><span style="font-size:16px;flex-shrink:0;">'+i.i+'</span><span>'+i.t+'</span></div>').join('') +
     '<div style="text-align:center;font-size:10px;color:var(--muted);padding:6px 0;">Reconciled at '+new Date(data.reconciledAt||0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'</div>';
 }
@@ -8951,7 +8951,7 @@ renderDayState = function() {
   const iconEl = document.getElementById('day-banner-icon');
   if (titleEl) titleEl.textContent = fmtFullDate(today);
   if (subEl) subEl.textContent = today;
-  if (iconEl) iconEl.textContent = '📅';
+  if (iconEl) iconEl.textContent = '';
 
   const data = _getDayRecon(today);
   const isOpen = activeDay && activeDay.status === 'OPEN';
@@ -9126,13 +9126,13 @@ dayStartOver = async function() {
     clearDayTabLocks();
   }
   _clearClosingInputsOnly();
-  toast('Closing cleared — redo end-of-day', '');
+  toast('Closing cleared - redo end-of-day', '');
   renderDayState();
   renderFinancePage();
 };
 window.dayStartOver = dayStartOver;
 
-// Midnight auto-close removed — day status is for Operations reporting only.
+// Midnight auto-close removed - day status is for Operations reporting only.
 
 
 // ═══════════════════════════════════════════════════════════
@@ -9160,7 +9160,7 @@ function scheduleSync() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// WINDOW EXPORTS — all onclick= handlers
+// WINDOW EXPORTS - all onclick= handlers
 // ═══════════════════════════════════════════════════════════
 window.addType = addType;
 window.adjSellQty = adjSellQty;
@@ -9270,7 +9270,7 @@ async function renderHistoryPage() {
   UI.setText('hist-today-profit',  fmt(todayProf));
   UI.setText('hist-today-sales',   todaySales.length);
 
-  // Today — profit tile colour
+  // Today - profit tile colour
   const profEl = document.getElementById('hist-today-profit');
   if (profEl) profEl.style.color = todayProf >= 0 ? 'var(--green)' : 'var(--red)';
 
@@ -9369,7 +9369,7 @@ async function renderHistoryPage() {
 function _histSaleRow(s, mode) {
   const profColor = (s.profit||0) >= 0 ? 'var(--green)' : 'var(--red)';
   const profSign  = (s.profit||0) >= 0 ? '+' : '';
-  const title = `${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize ? ' · ' + (mode === 'full' ? 'Size ' : 'Sz ') + escapeHtml(s.itemSize) : ''}`;
+  const title = `${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize ? ' - ' + (mode === 'full' ? 'Size ' : 'Sz ') + escapeHtml(s.itemSize) : ''}`;
   const unitPrice = fmt(s.actualPrice||s.sellPrice||0);
   const revenue = fmt(s.revenue||0);
   const profit = `${profSign}${fmt(s.profit||0)}`;
@@ -9381,16 +9381,16 @@ function _histSaleRow(s, mode) {
             ${title}
           </div>
           <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--accent2);margin-top:2px;">${revenue}</div>
-          <div style="font-size:11px;color:var(--muted);">${s.qty} x ${unitPrice} · ${fmtTime(s.date)}</div>
+          <div style="font-size:11px;color:var(--muted);">${s.qty} x ${unitPrice} - ${fmtTime(s.date)}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
           <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:800;">Profit</div>
           <div style="font-size:12px;font-weight:800;font-family:var(--mono);color:${profColor};">${profit}</div>
         </div>
-        ${s.id ? `<button type="button" onclick="deleteSale(${s.id})" title="Delete sale" style="background:var(--red-light);border:none;color:var(--red);border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px;flex-shrink:0;margin-left:6px;">🗑</button>` : ''}
+        ${s.id ? `<button type="button" onclick="deleteSale(${s.id})" title="Delete sale" style="background:var(--red-light);border:none;color:var(--red);border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px;flex-shrink:0;margin-left:6px;">Del</button>` : ''}
       </div>`;
   }
-  // compact — used in past records
+  // compact - used in past records
   return `
     <div class="hist-sale-row" style="border-top:1px solid var(--border);">
       <div style="flex:1;min-width:0;">
@@ -9398,7 +9398,7 @@ function _histSaleRow(s, mode) {
           ${title}
         </div>
         <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent2);margin-top:1px;">${revenue}</div>
-        <div style="font-size:10px;color:var(--muted);">${s.qty} x ${unitPrice} · ${fmtTime(s.date)}</div>
+        <div style="font-size:10px;color:var(--muted);">${s.qty} x ${unitPrice} - ${fmtTime(s.date)}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;">
         <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:800;">Profit</div>
@@ -9422,7 +9422,7 @@ function renderAllShoeGroupCards() {
     }
     const { min, max } = groups[g];
     if (rng) {
-      const lbl = groups[g].label ? groups[g].label + ' · ' : '';
+      const lbl = groups[g].label ? groups[g].label + ' - ' : '';
       rng.textContent = lbl + min + '–' + max;
     }
     container.innerHTML = '';
@@ -9506,8 +9506,8 @@ function updateShoeCollectiveSummary() {
   const n = sorted.length;
   if (!n) {
     qtyEl.textContent = '0';
-    bpEl.textContent = '—';
-    spEl.textContent = '—';
+    bpEl.textContent = '-';
+    spEl.textContent = '-';
     bpEl.classList.remove('accent');
     spEl.classList.remove('accent');
     return;
@@ -9519,8 +9519,8 @@ function updateShoeCollectiveSummary() {
     const sp = parseFloat(UI.el('shoe-shared-sell')?.value || '0') || 0;
     const totalQty = qPer * n;
     qtyEl.textContent = String(totalQty);
-    bpEl.textContent = bp > 0 ? fmt(bp) : '—';
-    spEl.textContent = sp > 0 ? fmt(sp) : '—';
+    bpEl.textContent = bp > 0 ? fmt(bp) : '-';
+    spEl.textContent = sp > 0 ? fmt(sp) : '-';
     bpEl.classList.toggle('accent', bp > 0);
     spEl.classList.toggle('accent', sp > 0);
     return;
@@ -9548,8 +9548,8 @@ function updateShoeCollectiveSummary() {
     bpEl.classList.add('accent');
     spEl.classList.add('accent');
   } else {
-    bpEl.textContent = '—';
-    spEl.textContent = '—';
+    bpEl.textContent = '-';
+    spEl.textContent = '-';
     bpEl.classList.remove('accent');
     spEl.classList.remove('accent');
   }
@@ -9563,8 +9563,8 @@ async function upsertShoeSize(record, opts) {
   if (existing) {
     const incomingQty = record.qty || 0;
     const updated = {
-      ...existing,
-      ...record,
+     ...existing,
+     ...record,
       qty: addQty ? (existing.qty || 0) + incomingQty : incomingQty,
       id: existing.id
     };
@@ -9578,10 +9578,10 @@ async function upsertShoeSize(record, opts) {
       return record;
     } catch(e) {
       if (e.name === 'ConstraintError') {
-        // Unique codeSize violation — find and update existing
+        // Unique codeSize violation - find and update existing
         const byCS = all.find(s => s.codeSize === record.codeSize);
         if (byCS) {
-          const updated = { ...byCS, ...record, id: byCS.id };
+          const updated = {...byCS,...record, id: byCS.id };
           await dbPut('shoe_sizes', updated);
           return updated;
         }
@@ -9592,7 +9592,7 @@ async function upsertShoeSize(record, opts) {
 }
 
 async function saveShoeItems(baseCode, baseName, type) {
-  if (_shoeState.sizes.size === 0) { toast('⚠️ Select at least one size', 'err'); return false; }
+  if (_shoeState.sizes.size === 0) { toast('Warning: Select at least one size', 'err'); return false; }
 
   if (!_shoeState.group) {
     const firstSize = [..._shoeState.sizes][0];
@@ -9604,10 +9604,10 @@ async function saveShoeItems(baseCode, baseName, type) {
     sharedQty  = parseInt(UI.el('shoe-shared-qty')?.value  || '0') || 0;
     sharedBuy  = parseFloat(UI.el('shoe-shared-buy')?.value  || '0') || 0;
     sharedSell = parseFloat(UI.el('shoe-shared-sell')?.value || '0') || 0;
-    if (sharedQty  <= 0) { toast('⚠️ Enter quantity per size (must be > 0)', 'err'); return false; }
-    if (sharedBuy  <= 0) { toast('⚠️ Enter buying price',  'err'); return false; }
-    if (sharedSell <= 0) { toast('⚠️ Enter selling price', 'err'); return false; }
-    if (sharedSell < sharedBuy) { toast('⚠️ Sell price cannot be less than buy price', 'err'); return false; }
+    if (sharedQty  <= 0) { toast('Warning: Enter quantity per size (must be > 0)', 'err'); return false; }
+    if (sharedBuy  <= 0) { toast('Warning: Enter buying price',  'err'); return false; }
+    if (sharedSell <= 0) { toast('Warning: Enter selling price', 'err'); return false; }
+    if (sharedSell < sharedBuy) { toast('Warning: Sell price cannot be less than buy price', 'err'); return false; }
   }
 
   const sorted  = _shoeState.sortedSizes;
@@ -9658,8 +9658,8 @@ async function saveShoeItems(baseCode, baseName, type) {
     stockQty += qty;
   }
 
-  if (perSizeErrors.length) toast('⚠️ Skipped: ' + perSizeErrors.join(' · '), 'err');
-  if (saved === 0) { toast('⚠️ No sizes saved — fill all required fields', 'err'); return false; }
+  if (perSizeErrors.length) toast('Warning: Skipped: ' + perSizeErrors.join(' - '), 'err');
+  if (saved === 0) { toast('Warning: No sizes saved - fill all required fields', 'err'); return false; }
 
   const allSz = await getShoeSizes(baseCode);
   product.qty = allSz.reduce((t, s) => t + s.qty, 0);
@@ -9770,7 +9770,7 @@ async function openShoeSizeEdit(itemId, size) {
     setAddTypeLocked(true);
     setSaveBtnLabel('Save size ' + size);
     const _ml3 = UI.el('form-mode-label');
-    if (_ml3) { _ml3.hidden = false; _ml3.textContent = '✏️ Edit Size ' + size + ' — ' + item.code; }
+    if (_ml3) { _ml3.hidden = false; _ml3.textContent = 'Edit size ' + size + ' - ' + item.code; }
     UI.el('cancel-edit-btn').style.display = 'block';
     updateProfitPreview();
   }, 100);
@@ -9791,7 +9791,7 @@ async function openSellShoeModal(itemId, size) {
   const el = id => document.getElementById(id);
   if (el('sm-icon'))  { el('sm-icon').textContent = t.emoji; el('sm-icon').style.background = t.color || 'var(--surface2)'; }
   if (el('sm-name'))  el('sm-name').textContent  = item.name + ' (Size ' + size + ')';
-  if (el('sm-meta'))  el('sm-meta').textContent  = item.code + ' · Size ' + size;
+  if (el('sm-meta'))  el('sm-meta').textContent  = item.code + ' - Size ' + size;
   if (el('sm-stock')) el('sm-stock').textContent = sizeRec.qty;
   if (el('sm-sell'))  el('sm-sell').textContent  = fmt(sizeRec.sellPrice || item.sellPrice || 0);
   if (el('sm-cur'))   el('sm-cur').textContent   = currency;
@@ -9861,7 +9861,7 @@ function renderShoeSummary() {
   if (!el) return;
   const sorted = _shoeState.sortedSizes;
   if (!sorted.length) {
-    el.innerHTML = '<span class="shoe-selected-chips-empty">—</span>';
+    el.innerHTML = '<span class="shoe-selected-chips-empty">-</span>';
   } else {
     el.innerHTML = sorted.map(s => {
       const g = (_shoeState.groupFor(s) || 's').toLowerCase();
