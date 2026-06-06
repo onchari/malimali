@@ -1,11 +1,11 @@
-// ===================================================================
-// DATABASE SCHEMA  v11 —  Mandela General Stores
+﻿// ===================================================================
+// DATABASE SCHEMA  v11 â€”  Mandela General Stores
 // ===================================================================
 let db;
 const DB_NAME = 'InventoryApp';
 const DB_VER  = 11;
 
-// ── APP CONSTANTS ─────────────────────────────────────────────────────
+// â”€â”€ APP CONSTANTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const KEY_SESSION      = 'mg_session';
 const KEY_LAST_PAGE    = 'mg_last_page';
 const KEY_FIREBASE_ENV = 'mg_firebase_env';
@@ -28,13 +28,13 @@ function initDB() {
     const d   = e.target.result;
     const old = e.oldVersion;
 
-    // ── items ──────────────────────────────────────────────────────
+    // â”€â”€ items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // One record per product SKU.
     // Normalized fields:
     //   buyPrice  (was: buy / defaultBuy)
     //   sellPrice (was: sell / defaultSell)
-    //   variant   (was: size — only for non-shoe items)
-    //   isShoe    — true → sizes stored in shoe_sizes
+    //   variant   (was: size â€” only for non-shoe items)
+    //   isShoe    â€” true â†’ sizes stored in shoe_sizes
     if (!d.objectStoreNames.contains('items')) {
       const s = d.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
       s.createIndex('idx_code',     'code',    { unique: true  });
@@ -43,8 +43,8 @@ function initDB() {
       s.createIndex('idx_is_shoe',  'isShoe',  { unique: false });
     }
 
-    // ── shoe_sizes ─────────────────────────────────────────────────
-    // One record per item_code + size. FK: itemCode → items.code
+    // â”€â”€ shoe_sizes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // One record per item_code + size. FK: itemCode â†’ items.code
     if (!d.objectStoreNames.contains('shoe_sizes')) {
       const ss = d.createObjectStore('shoe_sizes', { keyPath: 'id', autoIncrement: true });
       ss.createIndex('idx_item_code', 'itemCode', { unique: false });
@@ -53,7 +53,7 @@ function initDB() {
       ss.createIndex('idx_fbid',      'fbId',     { unique: false });
     }
 
-    // ── sales ──────────────────────────────────────────────────────
+    // â”€â”€ sales â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // One record per transaction line.
     // businessDate (normalized, was: business_date in old records)
     if (!d.objectStoreNames.contains('sales')) {
@@ -67,7 +67,7 @@ function initDB() {
       sa.createIndex('idx_fbid',          'fbId',         { unique: false });
     }
 
-    // ── finances ───────────────────────────────────────────────────
+    // â”€â”€ finances â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Money flow: investments, expenses, withdrawals
     if (!d.objectStoreNames.contains('finances')) {
       const fi = d.createObjectStore('finances', { keyPath: 'id', autoIncrement: true });
@@ -77,7 +77,7 @@ function initDB() {
       fi.createIndex('idx_fbid',       'fbId',      { unique: false });
     }
 
-    // ── business_days ──────────────────────────────────────────────
+    // â”€â”€ business_days â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Daily session records. All fields camelCase.
     if (!d.objectStoreNames.contains('business_days')) {
       const bd = d.createObjectStore('business_days', { keyPath: 'id', autoIncrement: true });
@@ -86,7 +86,7 @@ function initDB() {
       bd.createIndex('idx_fbid',          'fbId',         { unique: false });
     }
 
-    // ── types ──────────────────────────────────────────────────────
+    // â”€â”€ types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (!d.objectStoreNames.contains('types')) {
       d.createObjectStore('types', { keyPath: 'id', autoIncrement: true });
     }
@@ -111,7 +111,7 @@ function initDB() {
 
   req.onerror = e => {
     console.error('[DB] Open error:', e.target.error);
-    toast('Database error — try refreshing', 'err');
+    toast('Database error â€” try refreshing', 'err');
     setLoginReady(true);
   };
 
@@ -132,14 +132,14 @@ function initDB() {
       }
     }).catch(err => {
       console.error('[DB] Bootstrap error:', err);
-      toast('Database setup failed — refresh the page', 'err');
+      toast('Database setup failed â€” refresh the page', 'err');
       setLoginReady(true);
     });
   };
 }
 
-// Migrate old field names → normalized v9 names
-// ── IndexedDB helpers ─────────────────────────────────────────────
+// Migrate old field names â†’ normalized v9 names
+// â”€â”€ IndexedDB helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function _dbReady(rej) {
   if (!db) { const e = new Error('Database not ready'); if (rej) rej(e); return false; } return true;
 }
@@ -200,15 +200,15 @@ function dbDelete(store, id) {
 // ===================================================================
 // CODING STANDARDS APPLIED
 //
-// 1. Class: DB           — IndexedDB abstraction (DRY, SRP)
-// 2. Class: UI           — DOM access layer (DRY, encapsulation)
-// 3. Class: ShoeState    — shoe form state (SRP, encapsulation)
-// 4. Class: SavingOverlay— progress UI (SRP, reusability)
-// 5. DRY: refreshUI()   — single refresh chain replaces repeated blocks
-// 6. CONST: STORES, CSS  — no magic strings
+// 1. Class: DB           â€” IndexedDB abstraction (DRY, SRP)
+// 2. Class: UI           â€” DOM access layer (DRY, encapsulation)
+// 3. Class: ShoeState    â€” shoe form state (SRP, encapsulation)
+// 4. Class: SavingOverlayâ€” progress UI (SRP, reusability)
+// 5. DRY: refreshUI()   â€” single refresh chain replaces repeated blocks
+// 6. CONST: STORES, CSS  â€” no magic strings
 // ===================================================================
 
-// ── Standard 6: Named constants — no magic strings ─────────────────
+// â”€â”€ Standard 6: Named constants â€” no magic strings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const STORES = Object.freeze({
   ITEMS:    'items',
   SALES:    'sales',
@@ -231,7 +231,7 @@ const CSS = Object.freeze({
   SG_ACTIVE:'sg-active',
 });
 
-// ── Standard 1: DB class — wraps IndexedDB, single place for DB access
+// â”€â”€ Standard 1: DB class â€” wraps IndexedDB, single place for DB access
 class DB {
   static all(store)       { return dbAll(store); }
   static get(store, id)   { return dbGet(store, id); }
@@ -265,7 +265,7 @@ class DB {
   }
 }
 
-// ── Standard 2: UI class — all DOM access in one place ─────────────
+// â”€â”€ Standard 2: UI class â€” all DOM access in one place â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class UI {
   // Get element (cached per session, cleared on page transition)
   static el(id) {
@@ -314,7 +314,7 @@ class UI {
     return el ? el.value.trim() : '';
   }
 
-  // Bulk set text — { elementId: value, ... }
+  // Bulk set text â€” { elementId: value, ... }
   static setMany(map) {
     Object.entries(map).forEach(([id, val]) => this.setText(id, val));
   }
@@ -330,7 +330,7 @@ class UI {
 }
 
 
-// ── Core shoe helpers — defined early so all functions can use them ─
+// â”€â”€ Core shoe helpers â€” defined early so all functions can use them â”€
 function _legacyFootwearName(typeName) {
   if (!typeName) return false;
   const n = typeName.toLowerCase();
@@ -423,10 +423,10 @@ function collectCategoryDescendantIds(parentId) {
 function populateCategoryParentSelect(selectEl) {
   if (!selectEl) return;
   const cur = selectEl.value;
-  let html = '<option value="">Parent category…</option>';
+  let html = '<option value="">Parent categoryâ€¦</option>';
   walkCategoryTree((rec, depth) => {
     const indent = depth ? '\u2003'.repeat(depth) + '\u21b3 ' : '';
-    html += '<option value="' + rec.id + '">' + indent + escapeHtml((rec.emoji || '📦') + ' ' + rec.name) + '</option>';
+    html += '<option value="' + rec.id + '">' + indent + escapeHtml((rec.emoji || 'ðŸ“¦') + ' ' + rec.name) + '</option>';
   });
   selectEl.innerHTML = html;
   if (cur) selectEl.value = cur;
@@ -482,7 +482,7 @@ function _addTypeBreadcrumbIndicatesFootwear() {
   const el = document.getElementById('f-type-breadcrumb');
   if (!el || el.hidden) return false;
   const t = (el.textContent || '').toLowerCase();
-  return /\bfootwear\b/.test(t) || t.includes('👟');
+  return /\bfootwear\b/.test(t) || t.includes('ðŸ‘Ÿ');
 }
 
 /** Keep cascade wrap in sync so footwear mode survives rerenders. */
@@ -611,9 +611,9 @@ async function enrichShoeItems(items) {
 }
 
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // VALIDATION HELPERS
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const Validate = {
   // Highlight a field red and focus it
   _shake(id) {
@@ -634,7 +634,7 @@ const Validate = {
     setTimeout(() => { el.style.borderColor = ''; }, 2000);
   },
   fail(msg, fieldId) {
-    toast('⚠️ ' + msg, 'err');
+    toast('âš ï¸ ' + msg, 'err');
     if (fieldId) this._shake(fieldId);
     return false;
   },
@@ -653,7 +653,7 @@ const Validate = {
     if (qty > 999999) return this.fail('Quantity exceeds maximum (999,999)', qtyFieldId);
     return true;
   },
-  // Qty rules for restock (adding to existing — 0 not allowed)
+  // Qty rules for restock (adding to existing â€” 0 not allowed)
   restockQty(qty, qtyFieldId) {
     if (!qty || isNaN(qty) || qty <= 0) return this.fail('Enter a quantity to add (must be at least 1)', qtyFieldId);
     if (qty > 999999) return this.fail('Quantity exceeds maximum (999,999)', qtyFieldId);
@@ -662,7 +662,7 @@ const Validate = {
   // Stock available check for selling
   stock(wantQty, inStock, itemName) {
     if (inStock <= 0) return this.fail((itemName || 'Item') + ' is out of stock', null);
-    if (wantQty > inStock) return this.fail('Only ' + inStock + ' in stock — cannot sell ' + wantQty, null);
+    if (wantQty > inStock) return this.fail('Only ' + inStock + ' in stock â€” cannot sell ' + wantQty, null);
     if (wantQty <= 0) return this.fail('Quantity to sell must be at least 1', null);
     return true;
   },
@@ -690,7 +690,7 @@ const Validate = {
     return true;
   },
 
-  /** Optional money — empty allowed, must be >= 0 if entered */
+  /** Optional money â€” empty allowed, must be >= 0 if entered */
   moneyOptional(value, fieldId, label) {
     if (value === null) return true;
     if (!Number.isFinite(value)) return this.fail('Enter a valid number', fieldId);
@@ -699,12 +699,12 @@ const Validate = {
     return true;
   },
 
-  /** Opening day — at least one pocket entered; empty ≠ zero */
+  /** Opening day â€” at least one pocket entered; empty â‰  zero */
   dayOpening(cash, till, mpesa) {
     const vals = [cash, till, mpesa];
     const ids = ['op-cash', 'op-till', 'op-mpesa'];
     if (vals.every(v => v === null)) {
-      return this.fail('Enter opening balances — type 0 if a pocket is empty', 'op-cash');
+      return this.fail('Enter opening balances â€” type 0 if a pocket is empty', 'op-cash');
     }
     for (let i = 0; i < vals.length; i++) {
       if (vals[i] === null) continue;
@@ -714,12 +714,12 @@ const Validate = {
     return true;
   },
 
-  /** Closing physical count — cash/till/mpesa required (not all blank) */
+  /** Closing physical count â€” cash/till/mpesa required (not all blank) */
   dayClosingPhysical(cash, till, mpesa) {
     const vals = [cash, till, mpesa];
     const ids = ['cl-cash', 'cl-till', 'cl-mpesa'];
     if (vals.every(v => v === null)) {
-      return this.fail('Enter closing cash, till, or M-Pesa — type 0 if empty', 'cl-cash');
+      return this.fail('Enter closing cash, till, or M-Pesa â€” type 0 if empty', 'cl-cash');
     }
     for (let i = 0; i < vals.length; i++) {
       if (vals[i] === null) continue;
@@ -739,7 +739,7 @@ const Validate = {
     return true;
   },
 
-  /** Integer qty optional (empty → null) */
+  /** Integer qty optional (empty â†’ null) */
   intOptional(value, fieldId, label) {
     if (value === null) return true;
     if (!Number.isFinite(value)) return this.fail('Enter a valid whole number', fieldId);
@@ -748,7 +748,7 @@ const Validate = {
   },
 };
 
-/** Unified input parsing — empty field is null, not zero */
+/** Unified input parsing â€” empty field is null, not zero */
 const Input = {
   el(id) { return document.getElementById(id); },
   raw(id) {
@@ -805,7 +805,7 @@ function _warnFinanceClosingMismatch(finTotals, closing, tolerance) {
   return lines;
 }
 
-// ── Standard 3: ShoeState class — encapsulates all shoe form state ──
+// â”€â”€ Standard 3: ShoeState class â€” encapsulates all shoe form state â”€â”€
 class ShoeState {
   constructor() {
     this.reset();
@@ -854,7 +854,7 @@ class ShoeState {
   }
 }
 
-// ── Standard 4: SavingOverlay class — progress UI ──────────────────
+// â”€â”€ Standard 4: SavingOverlay class â€” progress UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class SavingOverlay {
   constructor() {
     this._timer      = null;
@@ -863,7 +863,7 @@ class SavingOverlay {
     this._targetBtn  = null;
   }
 
-  show(label = 'Saving…', targetBtn = null) {
+  show(label = 'Savingâ€¦', targetBtn = null) {
     const overlay = UI.el('saving-overlay');
     const arc     = UI.el('saving-arc');
     const lbl     = UI.el('saving-label');
@@ -901,11 +901,11 @@ class SavingOverlay {
   }
 }
 
-// ── Singleton instances ─────────────────────────────────────────────
+// â”€â”€ Singleton instances â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const _overlay   = new SavingOverlay();
 const _shoeState = new ShoeState();
 
-// ── Standard 5: DRY — single UI refresh chain ──────────────────────
+// â”€â”€ Standard 5: DRY â€” single UI refresh chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Replaces 15+ repeated blocks of:
 //   allItems = await dbAll('items');
 //   await enrichShoeItems(allItems);
@@ -923,39 +923,39 @@ async function refreshUI(opts = {}) {
 
 
 async function migrateData() {
-  // ── v9 migrations ────────────────────────────────────────────────
-  // Runs on every startup; idempotent — safe to run multiple times.
+  // â”€â”€ v9 migrations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Runs on every startup; idempotent â€” safe to run multiple times.
   let fixed = 0;
 
   try {
-    // ── 1. items: unify buy/sell fields ────────────────────────────
+    // â”€â”€ 1. items: unify buy/sell fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Old: { buy, sell } for standard; { defaultBuy, defaultSell } for shoes
     // New: { buyPrice, sellPrice } for ALL items (unified)
     const items = await dbAll('items');
     for (const item of items) {
       let changed = false;
 
-      // Migrate buy → buyPrice
+      // Migrate buy â†’ buyPrice
       if (item.buy != null && item.buyPrice == null) {
         item.buyPrice = item.buy;
         changed = true;
       }
-      // Migrate defaultBuy → buyPrice (shoes)
+      // Migrate defaultBuy â†’ buyPrice (shoes)
       if (item.defaultBuy != null && item.buyPrice == null) {
         item.buyPrice = item.defaultBuy;
         changed = true;
       }
-      // Migrate sell → sellPrice
+      // Migrate sell â†’ sellPrice
       if (item.sell != null && item.sellPrice == null) {
         item.sellPrice = item.sell;
         changed = true;
       }
-      // Migrate defaultSell → sellPrice (shoes)
+      // Migrate defaultSell â†’ sellPrice (shoes)
       if (item.defaultSell != null && item.sellPrice == null) {
         item.sellPrice = item.defaultSell;
         changed = true;
       }
-      // Migrate size → variant (avoid confusion with shoe sizes)
+      // Migrate size â†’ variant (avoid confusion with shoe sizes)
       if (item.size != null && item.variant == null) {
         item.variant = item.size;
         changed = true;
@@ -978,7 +978,7 @@ async function migrateData() {
     }
     console.log(`[MIGRATE v9] items: ${fixed} updated`);
 
-    // ── 2. shoe_sizes: ensure all required fields ──────────────────
+    // â”€â”€ 2. shoe_sizes: ensure all required fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const sizes = await dbAll('shoe_sizes');
     let szFixed = 0;
     for (const sz of sizes) {
@@ -1008,12 +1008,12 @@ async function migrateData() {
       if (wFixed) console.log(`[MIGRATE] wishlist vendorQuotes: ${wFixed} initialized`);
     }
 
-    // ── 3. sales: normalize businessDate field ─────────────────────
+    // â”€â”€ 3. sales: normalize businessDate field â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const sales = await dbAll('sales');
     let sFixed = 0;
     for (const s of sales) {
       let changed = false;
-      // Normalize business_date → businessDate
+      // Normalize business_date â†’ businessDate
       if (s.business_date && !s.businessDate) {
         s.businessDate = s.business_date;
         delete s.business_date;
@@ -1034,18 +1034,18 @@ async function migrateData() {
     }
     console.log(`[MIGRATE v9] sales: ${sFixed} updated`);
 
-    // ── 4. business_days: normalize to camelCase ───────────────────
+    // â”€â”€ 4. business_days: normalize to camelCase â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const bdays = await dbAll('business_days');
     let bdFixed = 0;
     for (const bd of bdays) {
       let changed = false;
-      // business_date → businessDate
+      // business_date â†’ businessDate
       if (bd.business_date && !bd.businessDate) {
         bd.businessDate = bd.business_date;
-        // Keep business_date for backward-compat index — it still has that index
+        // Keep business_date for backward-compat index â€” it still has that index
         changed = true;
       }
-      // opened_at → openedAt
+      // opened_at â†’ openedAt
       if (bd.opened_at && !bd.openedAt) { bd.openedAt = bd.opened_at; changed = true; }
       if (bd.closed_at && !bd.closedAt) { bd.closedAt = bd.closed_at; changed = true; }
       if (bd.reopened_count != null && bd.reopenedCount == null) {
@@ -1055,7 +1055,7 @@ async function migrateData() {
     }
     console.log(`[MIGRATE v9] business_days: ${bdFixed} updated`);
 
-    // ── 5. finances: ensure required fields ────────────────────────
+    // â”€â”€ 5. finances: ensure required fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const finances = await dbAll('finances');
     let fFixed = 0;
     for (const f of finances) {
@@ -1067,7 +1067,7 @@ async function migrateData() {
     }
     console.log(`[MIGRATE v9] finances: ${fFixed} updated`);
 
-    console.log('[MIGRATE v9] Complete ✅');
+    console.log('[MIGRATE v9] Complete âœ…');
   } catch(e) {
     console.warn('[MIGRATE v9] Error:', e.message);
   }
@@ -1078,14 +1078,14 @@ async function migrateData() {
 let types = [];
 let allItems = [];
 let activeTypeFilter = 'all';
-let selectedEmoji = '📦';
+let selectedEmoji = 'ðŸ“¦';
 const currency = 'KES';
 let currentDetailId = null;
 
 // ===== HELPERS =====
 function fmtN(n) { return Number(n || 0).toLocaleString(); }
 
-// ── Core utilities ─────────────────────────────────────────────────
+// â”€â”€ Core utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function escapeHtml(s) {
   if (s == null) return '';
   return String(s)
@@ -1113,7 +1113,7 @@ function toast(msg, type = '') {
   clearTimeout(window._toastTimer);
   window._toastTimer = setTimeout(() => { t.className = 'toast'; }, 2800);
 }
-function getTypeObj(name) { return types.find(t => t.name === name) || { name, emoji: '📦', color: '#334155' }; }
+function getTypeObj(name) { return types.find(t => t.name === name) || { name, emoji: 'ðŸ“¦', color: '#334155' }; }
 
 // ===== PAGES =====
 let _operationsMounted = false;
@@ -1274,7 +1274,7 @@ function showPage(id) {
 const _origShowPage = showPage;
 showPage = function(id) {
   if (currentUser && !userCanAccessNav(id, currentUser)) {
-    toast('⛔ Access denied', 'err');
+    toast('â›” Access denied', 'err');
     return;
   }
   if (currentUser) localStorage.setItem(KEY_LAST_PAGE, navAccessKey(id));
@@ -1289,14 +1289,14 @@ window.navigateToStock = navigateToStock;
 
 // ===== TYPES =====
 const DEFAULT_TYPES = [
-  { name: 'Footwear', emoji: '👟', color: '#1e3a5f', active: true, parentId: null, isFootwear: true, sortOrder: 1 },
-  { name: 'Clothes', emoji: '👕', color: '#2d1b4e', active: true, parentId: null, isFootwear: false, sortOrder: 2 },
-  { name: 'Plastics', emoji: '🪣', color: '#1a3a2a', active: true, parentId: null, isFootwear: false, sortOrder: 3 },
-  { name: 'Gas', emoji: '⛽', color: '#1e7a3e', active: true, parentId: null, isFootwear: false, sortOrder: 4 },
-  { name: 'Electronics', emoji: '📱', color: '#1e2a3a', active: true, parentId: null, isFootwear: false, sortOrder: 5 },
-  { name: 'Food', emoji: '🍱', color: '#3a2a1a', active: true, parentId: null, isFootwear: false, sortOrder: 6 },
-  { name: 'Cosmetics', emoji: '💄', color: '#3a1a2a', active: true, parentId: null, isFootwear: false, sortOrder: 7 },
-  { name: 'General', emoji: '📦', color: '#1e293b', active: true, parentId: null, isFootwear: false, sortOrder: 8 },
+  { name: 'Footwear', emoji: 'ðŸ‘Ÿ', color: '#1e3a5f', active: true, parentId: null, isFootwear: true, sortOrder: 1 },
+  { name: 'Clothes', emoji: 'ðŸ‘•', color: '#2d1b4e', active: true, parentId: null, isFootwear: false, sortOrder: 2 },
+  { name: 'Plastics', emoji: 'ðŸª£', color: '#1a3a2a', active: true, parentId: null, isFootwear: false, sortOrder: 3 },
+  { name: 'Gas', emoji: 'â›½', color: '#1e7a3e', active: true, parentId: null, isFootwear: false, sortOrder: 4 },
+  { name: 'Electronics', emoji: 'ðŸ“±', color: '#1e2a3a', active: true, parentId: null, isFootwear: false, sortOrder: 5 },
+  { name: 'Food', emoji: 'ðŸ±', color: '#3a2a1a', active: true, parentId: null, isFootwear: false, sortOrder: 6 },
+  { name: 'Cosmetics', emoji: 'ðŸ’„', color: '#3a1a2a', active: true, parentId: null, isFootwear: false, sortOrder: 7 },
+  { name: 'General', emoji: 'ðŸ“¦', color: '#1e293b', active: true, parentId: null, isFootwear: false, sortOrder: 8 },
 ];
 
 async function normalizeTypeRecords() {
@@ -1434,10 +1434,10 @@ function _updateCascadeBreadcrumb(config, pathIds, committed) {
   const pathRecs = pathIds.map(id => getTypeById(id)).filter(Boolean);
   if (committed && pathRecs.length) {
     breadcrumb.hidden = false;
-    breadcrumb.textContent = pathRecs.map(t => (t.emoji || '📦') + ' ' + t.name).join(' › ');
+    breadcrumb.textContent = pathRecs.map(t => (t.emoji || 'ðŸ“¦') + ' ' + t.name).join(' â€º ');
   } else if (pathRecs.length) {
     breadcrumb.hidden = false;
-    breadcrumb.textContent = pathRecs.map(t => (t.emoji || '📦') + ' ' + t.name).join(' › ') + ' › …';
+    breadcrumb.textContent = pathRecs.map(t => (t.emoji || 'ðŸ“¦') + ' ' + t.name).join(' â€º ') + ' â€º â€¦';
   } else {
     breadcrumb.hidden = true;
     breadcrumb.textContent = '';
@@ -1446,7 +1446,7 @@ function _updateCascadeBreadcrumb(config, pathIds, committed) {
 
 function _catPickBtnHtml(placeholder, selected) {
   if (selected && selected.name) {
-    return '<span class="cat-pick-val">' + (selected.emoji || '📦') + ' ' + escapeHtml(selected.name) + '</span>' +
+    return '<span class="cat-pick-val">' + (selected.emoji || 'ðŸ“¦') + ' ' + escapeHtml(selected.name) + '</span>' +
       '<span class="cat-pick-chevron" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>';
   }
   return '<span class="cat-pick-ph">' + escapeHtml(placeholder) + '</span>' +
@@ -1454,8 +1454,8 @@ function _catPickBtnHtml(placeholder, selected) {
 }
 
 function _appendCascadePickButton(wrap, config, depth, parentId, currentId, currentRec) {
-  const ph0 = config.placeholder || 'Choose category…';
-  const phN = config.placeholderSub || 'Choose sub-category…';
+  const ph0 = config.placeholder || 'Choose categoryâ€¦';
+  const phN = config.placeholderSub || 'Choose sub-categoryâ€¦';
   const placeholder = depth === 0 ? ph0 : phN;
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -1475,7 +1475,7 @@ function _appendCascadePickButton(wrap, config, depth, parentId, currentId, curr
     let subtitle = depth === 0 ? 'Pick the main category' : 'Pick the next level';
     if (parentId) {
       const parentRec = getTypeById(parentId);
-      if (parentRec) subtitle = 'Under: ' + (parentRec.emoji || '📦') + ' ' + parentRec.name;
+      if (parentRec) subtitle = 'Under: ' + (parentRec.emoji || 'ðŸ“¦') + ' ' + parentRec.name;
     }
     openCategoryPicker({
       title: depth === 0 ? 'Choose category' : 'Choose sub-category',
@@ -1483,7 +1483,7 @@ function _appendCascadePickButton(wrap, config, depth, parentId, currentId, curr
       items: children.map(t => ({
         id: String(t.id),
         name: t.name,
-        emoji: t.emoji || '📦',
+        emoji: t.emoji || 'ðŸ“¦',
         hint: _categoryHasActiveChildren(t.id) ? 'Has more sub-categories' : 'Use this category',
         hasChildren: _categoryHasActiveChildren(t.id)
       })),
@@ -1577,8 +1577,8 @@ function _makeCascadeConfig(base) {
     requireLeaf: base.requireLeaf !== false,
     breadcrumbEl: base.breadcrumbEl || document.getElementById(idPrefix + '-breadcrumb'),
     idPrefix,
-    placeholder: base.placeholder || 'Choose category…',
-    placeholderSub: base.placeholderSub || 'Choose sub-category…',
+    placeholder: base.placeholder || 'Choose categoryâ€¦',
+    placeholderSub: base.placeholderSub || 'Choose sub-categoryâ€¦',
     locked: !!base.locked,
     onChange: base.onChange || null,
     rerender(selectedValue, opts) {
@@ -1614,7 +1614,7 @@ function mountWishTypeCascade() {
     idPrefix: 'wish-type',
     valueMode: 'name',
     requireLeaf: true,
-    placeholder: 'Category…'
+    placeholder: 'Categoryâ€¦'
   });
 }
 
@@ -1626,7 +1626,7 @@ function mountOffTypeCascade() {
     idPrefix: 'off-type',
     valueMode: 'name',
     requireLeaf: true,
-    placeholder: 'Category…'
+    placeholder: 'Categoryâ€¦'
   });
 }
 
@@ -1638,7 +1638,7 @@ function mountNewSubParentCascade() {
     idPrefix: 'new-sub-parent',
     valueMode: 'id',
     requireLeaf: false,
-    placeholder: 'Parent category…'
+    placeholder: 'Parent categoryâ€¦'
   });
 }
 
@@ -1653,7 +1653,7 @@ function renderAddTypeCascade(selectedTypeName, opts) {
     breadcrumbEl: document.getElementById('f-type-breadcrumb'),
     idPrefix: 'f-type',
     locked: hidden.disabled,
-    // Do not close over opts.skipTypeChange — config.rerender() reuses this callback after
+    // Do not close over opts.skipTypeChange â€” config.rerender() reuses this callback after
     // renderTypeSelect({ skipTypeChange: true }), which would block onTypeChange forever.
     onChange: () => onTypeChange()
   });
@@ -1692,7 +1692,7 @@ function openCategoryPicker(opts) {
       const pad = depth ? ' style="padding-left:' + (12 + depth * 14) + 'px;"' : '';
       const sel = String(opts.currentId || '') === String(it.id) ? ' selected' : '';
       return '<button type="button" class="cat-picker-item' + sel + '" data-id="' + escapeHtml(String(it.id)) + '"' + pad + '>' +
-        '<span class="cat-picker-emoji">' + (it.emoji || '📦') + '</span>' +
+        '<span class="cat-picker-emoji">' + (it.emoji || 'ðŸ“¦') + '</span>' +
         '<span class="cat-picker-body">' +
           '<span class="cat-picker-name">' + escapeHtml(it.name || '') + '</span>' +
           (it.hint ? '<span class="cat-picker-hint">' + escapeHtml(it.hint) + '</span>' : '') +
@@ -1711,7 +1711,7 @@ function openCategoryPicker(opts) {
       '</div>' +
       '<div class="cat-picker-search-wrap">' +
         '<i class="fa-solid fa-magnifying-glass cat-picker-search-icon"></i>' +
-        '<input type="search" class="cat-picker-search" placeholder="Search categories…" autocomplete="off" spellcheck="false">' +
+        '<input type="search" class="cat-picker-search" placeholder="Search categoriesâ€¦" autocomplete="off" spellcheck="false">' +
       '</div>' +
       '<div class="cat-picker-list">' + renderList('') + '</div>' +
       (opts.allowClear ? '<button type="button" class="cat-picker-clear">Clear selection</button>' : '') +
@@ -1815,32 +1815,32 @@ function showRestockView(meta) {
 
   const setCell = (id, val) => {
     const el = document.getElementById(id);
-    if (el) el.textContent = (val != null && val !== '') ? val : '—';
+    if (el) el.textContent = (val != null && val !== '') ? val : 'â€”';
   };
   setCell('rs-code', meta.code);
   setCell('rs-name', meta.name);
   const typeObj = meta.type ? getTypeObj(meta.type) : null;
-  setCell('rs-category', typeObj ? ((typeObj.emoji || '📦') + ' ' + meta.type) : meta.type);
+  setCell('rs-category', typeObj ? ((typeObj.emoji || 'ðŸ“¦') + ' ' + meta.type) : meta.type);
   const sizeRow = document.getElementById('rs-size-row');
   if (sizeRow) sizeRow.hidden = meta.size == null;
   setCell('rs-size', meta.size != null ? String(meta.size) : '');
   const stockEl = document.getElementById('rs-stock');
   if (stockEl) {
     const stock = meta.stock != null ? meta.stock : null;
-    stockEl.textContent = stock != null ? (stock + (meta.stockUnit || '')) : '—';
+    stockEl.textContent = stock != null ? (stock + (meta.stockUnit || '')) : 'â€”';
     stockEl.classList.toggle('rs-stock-out', stock === 0);
     stockEl.classList.toggle('rs-stock-ok', stock != null && stock > 0);
   }
-  setCell('rs-buy', meta.buy != null ? fmt(meta.buy) : '—');
-  setCell('rs-sell', meta.sell != null ? fmt(meta.sell) : '—');
+  setCell('rs-buy', meta.buy != null ? fmt(meta.buy) : 'â€”');
+  setCell('rs-sell', meta.sell != null ? fmt(meta.sell) : 'â€”');
 
   setRestockBanner(false);
   const ml = UI.el('form-mode-label');
   if (ml) {
     ml.hidden = false;
-    ml.textContent = meta.size != null ? 'Restock · Size ' + meta.size : 'Restock';
+    ml.textContent = meta.size != null ? 'Restock Â· Size ' + meta.size : 'Restock';
   }
-  setAddFormSubtitle(meta.code ? meta.code + (meta.name ? ' · ' + meta.name : '') : '');
+  setAddFormSubtitle(meta.code ? meta.code + (meta.name ? ' Â· ' + meta.name : '') : '');
 
   const sizeLabel = meta.size != null ? String(meta.size) : '';
   setSaveBtnLabel(sizeLabel ? 'RESTOCK (' + sizeLabel + ')' : 'RESTOCK', 'fa-boxes-stacked');
@@ -1948,7 +1948,7 @@ function renderTypeChips() {
   chips.innerHTML = '<span class="chip ' + (activeTypeFilter === 'all' ? 'active' : '') + '" onclick="setTypeFilter(\'all\', this)">All</span>' +
     topActive.map(t =>
       '<span class="chip ' + (activeTypeFilter === t.name ? 'active' : '') + '" onclick="setTypeFilter(\'' + escapeHtml(t.name).replace(/'/g, "\\'") + '\', this)">' +
-      (t.emoji || '📦') + ' ' + escapeHtml(t.name) + '</span>'
+      (t.emoji || 'ðŸ“¦') + ' ' + escapeHtml(t.name) + '</span>'
     ).join('');
 }
 
@@ -1987,21 +1987,21 @@ async function renderCategorySettings() {
       const pad = 12 + Math.min(depth, 12) * 14;
       return '<div class="cat-row' + (depth ? ' cat-sub' : '') + '" data-id="' + t.id + '" style="padding-left:' + pad + 'px;">' +
         '<div class="cat-row-main">' +
-          '<span class="cat-emoji">' + (t.emoji || '📦') + '</span>' +
+          '<span class="cat-emoji">' + (t.emoji || 'ðŸ“¦') + '</span>' +
           '<div class="cat-info">' +
             '<div class="cat-name">' + escapeHtml(t.name) +
               (depth ? ' <span class="cat-subcount">L' + (depth + 1) + '</span>' : '') +
               (subCount ? ' <span class="cat-subcount">' + subCount + ' nested</span>' : '') +
             '</div>' +
             '<div class="cat-meta">' + (active ? 'Active in dropdowns' : 'Hidden from dropdowns') +
-              (footwear ? ' · Size-grid mode' : '') + '</div>' +
+              (footwear ? ' Â· Size-grid mode' : '') + '</div>' +
           '</div>' +
           '<div class="cat-toggles">' +
             '<button type="button" class="cat-toggle' + (active ? ' on' : '') + '" onclick="toggleCategoryActive(' + t.id + ')" title="Show in dropdowns">' +
               (active ? 'ON' : 'OFF') + '</button>' +
             '<button type="button" class="cat-toggle foot' + (footwear ? ' on' : '') + '" onclick="toggleCategoryFootwear(' + t.id + ')" title="Use shoe size grid">' +
-              '👟</button>' +
-            '<button type="button" class="type-del" onclick="deleteType(' + t.id + ')">✕</button>' +
+              'ðŸ‘Ÿ</button>' +
+            '<button type="button" class="type-del" onclick="deleteType(' + t.id + ')">âœ•</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -2029,9 +2029,9 @@ function renderShoeGroupSettings() {
     const lbl = (cfg && cfg.label) || labels[g];
     return '<div class="sg-setting-row">' +
       '<div class="sg-setting-fields">' +
-        '<input id="sg-label-' + g + '" type="text" class="type-input" placeholder="' + g + ' — display name" value="' + escapeHtml(lbl) + '" style="flex:1;min-width:0;" aria-label="' + g + ' display name">' +
+        '<input id="sg-label-' + g + '" type="text" class="type-input" placeholder="' + g + ' â€” display name" value="' + escapeHtml(lbl) + '" style="flex:1;min-width:0;" aria-label="' + g + ' display name">' +
         '<input id="sg-min-' + g + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Min size" value="' + (cfg?.min ?? '') + '" aria-label="' + g + ' minimum size">' +
-        '<span style="color:var(--muted);">–</span>' +
+        '<span style="color:var(--muted);">â€“</span>' +
         '<input id="sg-max-' + g + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Max size" value="' + (cfg?.max ?? '') + '" aria-label="' + g + ' maximum size">' +
       '</div>' +
     '</div>';
@@ -2045,7 +2045,7 @@ async function saveShoeGroupSettings() {
     const max = parseInt(document.getElementById('sg-max-' + g)?.value, 10);
     const label = (document.getElementById('sg-label-' + g)?.value || '').trim();
     if (!Number.isFinite(min) || !Number.isFinite(max) || min > max || min < 1 || max > 60) {
-      toast('Invalid size range for group ' + g + ' (use sizes 1–60)', 'err');
+      toast('Invalid size range for group ' + g + ' (use sizes 1â€“60)', 'err');
       return;
     }
     groups[g] = { min, max };
@@ -2142,7 +2142,7 @@ async function deleteType(id) {
   const inUse = allItems.filter(i => namesToCheck.includes(i.type)).length;
   let msg = 'Delete "' + (typeObj ? typeObj.name : 'this category') + '"?';
   if (descIds.length) msg += '\n\nAlso deletes ' + descIds.length + ' nested sub-categor' + (descIds.length === 1 ? 'y' : 'ies') + '.';
-  if (inUse > 0) msg += '\n\n' + inUse + ' item(s) still use these names — they will keep the label.';
+  if (inUse > 0) msg += '\n\n' + inUse + ' item(s) still use these names â€” they will keep the label.';
   if (!confirm(msg)) return;
   for (const did of descIds) await dbDelete('types', did);
   await dbDelete('types', id);
@@ -2342,7 +2342,7 @@ async function setItemPhoto(itemId, dataUrl) {
       localStorage.setItem('item_photo_' + itemId, compressed);
       _photoCache.set(_photoKey('item', itemId), compressed);
     } catch (_) {
-      toast('Storage full — photo not saved', 'err');
+      toast('Storage full â€” photo not saved', 'err');
     }
   }
 }
@@ -2374,7 +2374,7 @@ async function setWishPhoto(wishId, dataUrl) {
       localStorage.setItem('wish_photo_' + wishId, compressed);
       _photoCache.set(_photoKey('wish', wishId), compressed);
     } catch (_) {
-      toast('Storage full — photo not saved', 'err');
+      toast('Storage full â€” photo not saved', 'err');
     }
   }
 }
@@ -2454,7 +2454,7 @@ function _updateClipboardWaitOverlay(state) {
   const text = el.querySelector('.clipboard-wait-text');
   if (state === 'ready') {
     if (importBtn) importBtn.classList.add('pulse');
-    if (text) text.textContent = 'You\'re back — tap Import now to attach the screenshot.';
+    if (text) text.textContent = 'You\'re back â€” tap Import now to attach the screenshot.';
   } else if (state === 'waiting') {
     if (importBtn) importBtn.classList.remove('pulse');
     if (text) text.innerHTML = 'Open another app, take your screenshot, tap <strong>Done</strong> or <strong>Complete</strong>, then switch back here.';
@@ -2472,11 +2472,11 @@ function _showClipboardWaitOverlay() {
   el.className = 'clipboard-wait-overlay';
   el.innerHTML =
     '<div class="clipboard-wait-card">' +
-      '<div class="clipboard-wait-icon">📋</div>' +
+      '<div class="clipboard-wait-icon">ðŸ“‹</div>' +
       '<div class="clipboard-wait-title">Waiting for screenshot</div>' +
       '<p class="clipboard-wait-text">Open another app, take your screenshot, tap <strong>Done</strong> or <strong>Complete</strong>, then switch back here.</p>' +
       '<button type="button" class="clipboard-wait-import" id="clipboard-wait-import-btn">Import now</button>' +
-      '<button type="button" class="clipboard-wait-gallery" id="clipboard-wait-gallery-btn">🖼️ Pick from gallery instead</button>' +
+      '<button type="button" class="clipboard-wait-gallery" id="clipboard-wait-gallery-btn">ðŸ–¼ï¸ Pick from gallery instead</button>' +
       '<button type="button" class="clipboard-wait-cancel" id="clipboard-wait-cancel-btn">Cancel</button>' +
     '</div>';
   el.querySelector('#clipboard-wait-cancel-btn').addEventListener('click', () => {
@@ -2530,13 +2530,13 @@ async function pasteImageFromClipboard(options) {
         if (e.name === 'NotAllowedError') {
           toast('Tap Import now to allow clipboard access', 'err');
         } else {
-          toast('Could not read clipboard — tap Import now or use Gallery', 'err');
+          toast('Could not read clipboard â€” tap Import now or use Gallery', 'err');
         }
       }
       return null;
     }
   } else if (!silent) {
-    toast('Clipboard not supported — use Gallery and pick your screenshot', 'err');
+    toast('Clipboard not supported â€” use Gallery and pick your screenshot', 'err');
   }
 
   if (!silent) toast('No image in clipboard yet', 'err');
@@ -2576,7 +2576,7 @@ function startClipboardScreenshotImport(opts) {
         return true;
       }
       if (fromUserTap) {
-        toast('No screenshot in clipboard — try Gallery or take the screenshot again', 'err');
+        toast('No screenshot in clipboard â€” try Gallery or take the screenshot again', 'err');
       }
       return false;
     } finally {
@@ -2692,9 +2692,9 @@ function showImagePickerSheet(opts) {
     '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:20px 18px 32px;" onclick="event.stopPropagation()">' +
       '<div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px;text-align:center;">' + escapeHtml(title) + '</div>' +
       '<div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:14px;line-height:1.4;">Take a photo, pick from gallery, or screenshot in another app and return here to import.</div>' +
-      '<button type="button" data-src="camera" style="' + btnStyle + 'background:var(--accent);color:white;">📸 Take photo</button>' +
-      '<button type="button" data-src="gallery" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">🖼️ Choose from gallery</button>' +
-      '<button type="button" data-src="clipboard" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">📋 Screenshot from another app</button>' +
+      '<button type="button" data-src="camera" style="' + btnStyle + 'background:var(--accent);color:white;">ðŸ“¸ Take photo</button>' +
+      '<button type="button" data-src="gallery" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">ðŸ–¼ï¸ Choose from gallery</button>' +
+      '<button type="button" data-src="clipboard" style="' + btnStyle + 'background:var(--surface2);color:var(--text);border:1.5px solid var(--border);">ðŸ“‹ Screenshot from another app</button>' +
       '<button type="button" data-src="cancel" style="width:100%;padding:12px;background:transparent;color:var(--muted);border:none;font-size:14px;cursor:pointer;font-family:var(--sans);">Cancel</button>' +
     '</div>';
   sheet.querySelectorAll('button[data-src]').forEach(btn => {
@@ -2767,25 +2767,25 @@ function triggerAddPhotoUpload() {
 // ===== WISHLIST PHOTO =====
 let _wishFormPhotoData = null;
 
-/** e.g. "YS5981-1 36-42.jpg" → { shoeCode: "YS5981-1", itemName: "YS5981-1 36-42" } */
+/** e.g. "YS5981-1 36-42.jpg" â†’ { shoeCode: "YS5981-1", itemName: "YS5981-1 36-42" } */
 function parseWishPhotoFileName(fileName) {
   if (!fileName || typeof fileName !== 'string') return null;
   const base = fileName.trim().replace(/\.(jpe?g|png|gif|webp|heic|heif|bmp|avif)$/i, '').trim();
   if (!base) return null;
 
   const itemName = base;
-  const sizeRangeRe = /\d+\s*[-–—]\s*\d+/;
+  const sizeRangeRe = /\d+\s*[-â€“â€”]\s*\d+/;
   const normCode = s => String(s || '').trim().toUpperCase();
 
   // "CODE-1 36-42" or "YS5981 36-42" (space before size range)
-  const spaced = base.match(/^(.+?)\s+(\d+\s*[-–—]\s*\d+)\s*$/);
+  const spaced = base.match(/^(.+?)\s+(\d+\s*[-â€“â€”]\s*\d+)\s*$/);
   if (spaced && sizeRangeRe.test(spaced[2])) {
     const shoeCode = normCode(spaced[1]);
     if (shoeCode) return { itemName, shoeCode };
   }
 
   // "YS5981-1-36-42" or "YS5981-36-42" (hyphen before size range at end)
-  const hyphenated = base.match(/^(.+?)[\s\-]+(\d+\s*[-–—]\s*\d+)\s*$/);
+  const hyphenated = base.match(/^(.+?)[\s\-]+(\d+\s*[-â€“â€”]\s*\d+)\s*$/);
   if (hyphenated) {
     const shoeCode = normCode(hyphenated[1].replace(/[\s\-]+$/, ''));
     if (shoeCode) return { itemName, shoeCode };
@@ -2816,7 +2816,7 @@ function handleWishPhotoPicked(dataUrl, meta) {
   _wishFormPhotoData = dataUrl;
   updateWishPhotoPreview();
   const fromFile = meta?.fileName && applyWishPhotoFileName(meta.fileName);
-  toast(fromFile ? 'Photo — name from filename' : 'Photo attached', 'ok');
+  toast(fromFile ? 'Photo â€” name from filename' : 'Photo attached', 'ok');
 }
 
 function updateWishPhotoPreview() {
@@ -2928,17 +2928,17 @@ function getCheapestWishVendorQuote(quotes) {
   return sorted.length ? sorted[0] : null;
 }
 
-/** Parse "… 36-42" from wish name → size numbers for grid. */
+/** Parse "â€¦ 36-42" from wish name â†’ size numbers for grid. */
 function parseWishShoeSizeRange(text) {
   const s = String(text || '');
-  const m = s.match(/(\d+)\s*[-–—]\s*(\d+)\s*$/);
+  const m = s.match(/(\d+)\s*[-â€“â€”]\s*(\d+)\s*$/);
   if (!m) return null;
   const min = parseInt(m[1], 10);
   const max = parseInt(m[2], 10);
   if (!Number.isFinite(min) || !Number.isFinite(max) || min > max || max - min > 40) return null;
   const sizes = [];
   for (let i = min; i <= max; i++) sizes.push(i);
-  return { min, max, label: min + '–' + max, sizes };
+  return { min, max, label: min + 'â€“' + max, sizes };
 }
 
 function buildWishShoeOverlayHtml(wish) {
@@ -2963,7 +2963,7 @@ function renderWishShoeOverlay(wish) {
 function buildWishVendorDetailHtml(quotes) {
   const sorted = sortWishVendorQuotes(quotes);
   if (!sorted.length) {
-    return '<p class="wish-vendor-empty">No vendor prices yet — add one below, then Save</p>';
+    return '<p class="wish-vendor-empty">No vendor prices yet â€” add one below, then Save</p>';
   }
   let html =
     '<div class="wd-vendor-table">' +
@@ -3009,7 +3009,7 @@ function buildWishListCardHtml(row, wishRec) {
   const photo = getWishPhoto(row.wishId);
   const thumb = photo
     ? '<img src="' + photo + '" alt="" class="wish-card-thumb">'
-    : '<div class="wish-card-thumb wish-card-thumb-empty">📷</div>';
+    : '<div class="wish-card-thumb wish-card-thumb-empty">ðŸ“·</div>';
 
   const quotes = normalizeWishVendorQuotes(wishRec || { vendorQuotes: [] });
   const cheapest = getCheapestWishVendorQuote(quotes);
@@ -3024,7 +3024,7 @@ function buildWishListCardHtml(row, wishRec) {
         (moreCount > 0 ? '<div class="wish-card-price-more">+' + moreCount + ' more</div>' : '') +
       '</div>';
   } else {
-    priceHtml = '<div class="wish-card-price wish-card-price-empty"><span>—</span></div>';
+    priceHtml = '<div class="wish-card-price wish-card-price-empty"><span>â€”</span></div>';
   }
 
   const chips = [];
@@ -3163,13 +3163,13 @@ window.wishlistDetailDelete = wishlistDetailDelete;
 
 // ===== SAVE ITEM =====
 async function saveItem() {
-  _overlay.show('Saving…');
+  _overlay.show('Savingâ€¦');
   try {
     // Use hidden input; fall back to JS variable if input got cleared unexpectedly
     const editIdRaw = UI.el('edit-id')?.value || (_editingItemId ? String(_editingItemId) : '');
 
     // SHOE SIZE EDIT
-    // SHOE SIZE RESTOCK — adds qty to existing, never replaces
+    // SHOE SIZE RESTOCK â€” adds qty to existing, never replaces
     if (editIdRaw && editIdRaw.startsWith('shoe_restock_')) {
       const parts = editIdRaw.replace('shoe_restock_','').split('_');
       const itemId = parseInt(parts[0]); const size = parseInt(parts[1]);
@@ -3214,7 +3214,7 @@ async function saveItem() {
       clearForm();
       allItems = await dbAll('items'); await enrichShoeItems(allItems);
       renderList(); renderDashboard(); updateHeader(); scheduleSync();
-      toast('\U0001f4e6 Size ' + size + ': +' + addQty + ' → ' + newQty, 'ok');
+      toast('\U0001f4e6 Size ' + size + ': +' + addQty + ' â†’ ' + newQty, 'ok');
       showPage('list'); return;
     }
 
@@ -3258,7 +3258,7 @@ async function saveItem() {
       const qtyEl=UI.el('f-qty');
       const addQty=parseInt(qtyEl?qtyEl.value.trim():'0');
       if(!addQty||addQty<=0){toast('\u26a0\ufe0f Enter quantity to add','err');if(qtyEl)qtyEl.focus();return;}
-      if(addQty>CODE_MAX_QTY&&!confirm('Adding '+addQty+' units — confirm?'))return;
+      if(addQty>CODE_MAX_QTY&&!confirm('Adding '+addQty+' units â€” confirm?'))return;
       const newQty=existing.qty+addQty;
       if(newQty>999999){toast('\u26a0\ufe0f Exceeds max 999,999','err');return;}
       existing.qty=newQty;existing.updatedAt=new Date().toISOString();
@@ -3267,7 +3267,7 @@ async function saveItem() {
       allItems=await dbAll('items');await enrichShoeItems(allItems);
       renderList();renderDashboard();updateHeader();scheduleSync();
       exitRestockMode();
-      toast('\U0001f4e6 '+existing.code+': +'+addQty+' → '+newQty,'ok');return;
+      toast('\U0001f4e6 '+existing.code+': +'+addQty+' â†’ '+newQty,'ok');return;
     }
 
     // COMMON FIELDS
@@ -3288,7 +3288,7 @@ async function saveItem() {
       const addingShoeSizes = existingCode && isFootwearType(type) && existingCode.isShoe;
       if (existingCode && !addingShoeSizes) {
         showCodeDropdown(codeMatches, code);
-        toast('\u26a0\ufe0f Item code already exists — select it from the dropdown', 'err');
+        toast('\u26a0\ufe0f Item code already exists â€” select it from the dropdown', 'err');
         UI.el('f-code')?.focus();
         return;
       }
@@ -3321,20 +3321,20 @@ async function saveItem() {
     if (!size) return Validate.fail('Enter a size or variant (e.g. N/A, Medium, 42)', 'f-size');
     if (qtyRaw === '' || isNaN(qty)) return Validate.fail('Enter a quantity', 'f-qty');
     if (!editIdRaw) {
-      // New item: qty must be ≥ 1
+      // New item: qty must be â‰¥ 1
       if (!Validate.qty(qty, 'f-qty')) return;
     } else {
       // Edit: qty can be 0 (stock may be legitimately depleted via sales)
       if (qty < 0) return Validate.fail('Quantity cannot be negative', 'f-qty');
     }
-    if (qty > CODE_MAX_QTY && !confirm('Adding ' + qty + ' units — confirm?')) return;
+    if (qty > CODE_MAX_QTY && !confirm('Adding ' + qty + ' units â€” confirm?')) return;
     if (!Validate.price(buy, sell, 'f-buy', 'f-sell')) return;
     const profit=sell-buy;
     const item={type,code,name,variant:size,buyPrice:buy,sellPrice:sell,profit,qty,createdAt:new Date().toISOString()};
 
     if(editIdRaw){
       const resolvedId = parseInt(editIdRaw);
-      if (!resolvedId || isNaN(resolvedId)) { toast('⚠️ Cannot save: item ID missing', 'err'); return; }
+      if (!resolvedId || isNaN(resolvedId)) { toast('âš ï¸ Cannot save: item ID missing', 'err'); return; }
       const original=await dbGet('items', resolvedId);
       // Merge: start from original to preserve all fields (isShoe, photo refs, etc)
       // then overwrite only what the form controls
@@ -3378,7 +3378,7 @@ async function saveItem() {
 
   }catch(err){
     if(err.name==='ConstraintError'){
-      toast('\u26a0\ufe0f Code already exists — select from dropdown to restock','err');
+      toast('\u26a0\ufe0f Code already exists â€” select from dropdown to restock','err');
     }else{
       toast('\u26a0\ufe0f Save failed: '+(err.message||'Unknown error'),'err');
       console.error('[SAVE]',err);
@@ -3440,7 +3440,7 @@ function clearForm() {
 let _codeDropdownActive = false;
 let _editOriginItemId   = null;
 let _editingItemId      = null;  // tracks current edit ID reliably (backup to hidden input)
-let _lastAddFormType    = '';    // last f-type value — avoid wiping shoe sizes on tab switch
+let _lastAddFormType    = '';    // last f-type value â€” avoid wiping shoe sizes on tab switch
 let _addFormWasFootwear = false;
 let _preloadShoeCode    = '';
 let _selectedShoeSize   = null;
@@ -3478,7 +3478,7 @@ async function onCodeInput() {
   if (!clean) { clearCodeMatchSelect(); hideCodeDropdown(); return; }
   const source = (allItems && allItems.length) ? allItems : await dbAll('items');
 
-  // De-duplicate by code then search: exact → startsWith → contains
+  // De-duplicate by code then search: exact â†’ startsWith â†’ contains
   const seen = new Set();
   const unique = [];
   for (const item of source) {
@@ -3535,7 +3535,7 @@ function showCodeDropdown(items, typedCode) {
     select.disabled = !items.length;
     select.style.opacity = items.length ? '1' : '0.55';
     select.style.cursor = items.length ? 'pointer' : 'not-allowed';
-    select.innerHTML = '<option value="">Match existing code…</option>' +
+    select.innerHTML = '<option value="">Match existing codeâ€¦</option>' +
       items.map(item => '<option value="' + item.id + '">' + escapeHtml(item.code) + '</option>').join('');
     hideCodeDropdown();
     return;
@@ -3563,7 +3563,7 @@ function hideCodeDropdown() {
   if (dd) dd.style.display = 'none';
 }
 
-function clearCodeMatchSelect(label = 'Match existing code…') {
+function clearCodeMatchSelect(label = 'Match existing codeâ€¦') {
   const select = document.getElementById('code-match-select');
   if (!select) return;
   select.innerHTML = '<option value="">' + escapeHtml(label) + '</option>';
@@ -3582,7 +3582,7 @@ function selectExistingItemFromDropdown(value) {
 async function selectExistingItem(itemId) {
   try {
     const item = await dbGet('items', itemId);
-    if (!item) { toast('⚠️ Item not found', 'err'); hideCodeDropdown(); return; }
+    if (!item) { toast('âš ï¸ Item not found', 'err'); hideCodeDropdown(); return; }
     hideCodeDropdown();
 
     // If on the Add page: open the item's detail sheet directly
@@ -3650,8 +3650,8 @@ async function renderList() {
   if (!filtered.length) {
     list.style.border = 'none';
     list.innerHTML = `<div class="empty">
-      <div class="e-icon">${allItems.length ? '🔍' : '📦'}</div>
-      <p>${allItems.length ? 'No items match your search.' : 'No items yet.\nTap ➕ Add Item to get started.'}</p>
+      <div class="e-icon">${allItems.length ? 'ðŸ”' : 'ðŸ“¦'}</div>
+      <p>${allItems.length ? 'No items match your search.' : 'No items yet.\nTap âž• Add Item to get started.'}</p>
     </div>`;
     renderStockMonitorSummary();
     return;
@@ -3680,13 +3680,13 @@ async function renderList() {
     const t = getTypeObj(item.type);
 
     if (item.isShoe) {
-      // ── SHOE ITEM — one card per SIZE ─────────────────────────────
+      // â”€â”€ SHOE ITEM â€” one card per SIZE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const sizes = allSizes
         .filter(s => s.itemCode === item.code)
         .sort((a, b) => a.size - b.size);
 
       if (!sizes.length) {
-        // Shoe parent with no sizes yet — show placeholder
+        // Shoe parent with no sizes yet â€” show placeholder
         cards.push(`
           <div class="item-card item-card-shoe-header" onclick="openSheet(${item.id})">
             <div class="item-top">
@@ -3704,7 +3704,7 @@ async function renderList() {
         continue;
       }
 
-      // ── Aggregates for the group header ──────────────────────
+      // â”€â”€ Aggregates for the group header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const groupTotalPcs  = sizes.reduce((s,sz)=>s+(sz.qty||0), 0);
       const groupSoldPcs   = sizes.reduce((s,sz)=>s+(salesBySize[item.code+'_'+sz.size]||0), 0);
       const groupBuyCost   = sizes.reduce((s,sz)=>s+((sz.buyPrice||item.buyPrice||item.buy||0)*(sz.qty||0)), 0);
@@ -3724,13 +3724,13 @@ async function renderList() {
             </div>
             <span class="shoe-group-name">${escapeHtml(item.name||'')}</span>
             <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;">
-              <span>📦 ${groupTotalPcs} pcs</span><span>🛒 ${groupSoldPcs} sold</span>
-              <span>💸 ${fmt(groupBuyCost)}</span><span style="color:var(--accent2);">💰 ${fmt(_grpRevenue)}</span>
+              <span>ðŸ“¦ ${groupTotalPcs} pcs</span><span>ðŸ›’ ${groupSoldPcs} sold</span>
+              <span>ðŸ’¸ ${fmt(groupBuyCost)}</span><span style="color:var(--accent2);">ðŸ’° ${fmt(_grpRevenue)}</span>
             </div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
             <span class="tag tag-cyan" style="font-size:10px;">${escapeHtml(item.type)}</span>
-            <span style="font-size:16px;color:var(--muted);transition:transform .2s;display:inline-block;transform:rotate(${isExpanded?180:0}deg);">▼</span>
+            <span style="font-size:16px;color:var(--muted);transition:transform .2s;display:inline-block;transform:rotate(${isExpanded?180:0}deg);">â–¼</span>
           </div>
         </div>`);
 
@@ -3744,11 +3744,11 @@ async function renderList() {
           const isOut      = sz.qty<=0;
           const isLow      = !isOut&&sz.qty<=LOW_STOCK_LEVEL;
           const stockColor = isOut?'tag-red':isLow?'tag-amber':'tag-green';
-          const stockLabel = isOut?'✕ Out':sz.qty+' pcs';
+          const stockLabel = isOut?'âœ• Out':sz.qty+' pcs';
           const soldQty    = salesBySize[item.code+'_'+sz.size]||0;
           cards.push(`
             <div class="item-card shoe-size-row${isOut?' shoe-out-card':''}" onclick="openShoeSizeCard('${escapeHtml(item.code)}',${sz.size})">
-              ${isOut?'<div class="out-of-stock-overlay"><span>⛔ OUT OF STOCK · RESTOCK</span></div>':''}
+              ${isOut?'<div class="out-of-stock-overlay"><span>â›” OUT OF STOCK Â· RESTOCK</span></div>':''}
               <div class="item-top">
                 <div class="shoe-size-badge ${isOut?'out':isLow?'low':''}">${sz.size}</div>
                 <div class="item-body">
@@ -3770,20 +3770,20 @@ async function renderList() {
       }
 
     } else {
-      // ── STANDARD ITEM — single card ───────────────────────────────
+      // â”€â”€ STANDARD ITEM â€” single card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       const stockColor = item.qty === 0 ? 'tag-red' : item.qty <= LOW_STOCK_LEVEL ? 'tag-amber' : 'tag-green';
-      const stockLabel = item.qty === 0 ? '✕ Out'   : item.qty + ' pcs';
+      const stockLabel = item.qty === 0 ? 'âœ• Out'   : item.qty + ' pcs';
       const soldQty    = (salesByItem[item.id] || {}).qty || 0;
       const sellPrice  = item.sellPrice || item.sell || 0;
       const buyPrice   = item.buyPrice  || item.buy  || 0;
 
       cards.push(`
         <div class="item-card${item.qty<=0?' shoe-out-card':''}" onclick="openSheet(${item.id})">
-          ${item.qty<=0 ? '<div class="out-of-stock-overlay"><span>⛔ OUT OF STOCK · RESTOCK</span></div>' : ''}
+          ${item.qty<=0 ? '<div class="out-of-stock-overlay"><span>â›” OUT OF STOCK Â· RESTOCK</span></div>' : ''}
           <div class="item-top">
             <div class="item-icon" style="background:${t.color||'var(--surface2)'};">${t.emoji}</div>
             <div class="item-body">
-              <div class="item-code">${escapeHtml(item.code)}${(item.variant||item.size)?' · '+escapeHtml(item.variant||item.size):''}</div>
+              <div class="item-code">${escapeHtml(item.code)}${(item.variant||item.size)?' Â· '+escapeHtml(item.variant||item.size):''}</div>
               <div class="item-name">${escapeHtml(item.name||'')}</div>
               <div class="item-tags">
                 <span class="tag tag-cyan">${escapeHtml(item.type)}</span>
@@ -3923,9 +3923,9 @@ async function renderStockMonitor() {
       '<div class="stock-monitor-body">' +
         '<div class="stock-monitor-name">' + escapeHtml(row.name) + '</div>' +
         '<div class="stock-monitor-meta">' +
-          escapeHtml(row.code || 'No code') + (row.type ? ' · ' + escapeHtml(row.type) : '') +
-          (row.qty ? ' · target ' + row.qty : '') +
-          (row.buyPrice ? ' · ' + fmt(row.buyPrice) : '') +
+          escapeHtml(row.code || 'No code') + (row.type ? ' Â· ' + escapeHtml(row.type) : '') +
+          (row.qty ? ' Â· target ' + row.qty : '') +
+          (row.buyPrice ? ' Â· ' + fmt(row.buyPrice) : '') +
         '</div>' +
         '<div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;">' + status +
           (row.size ? '<span class="tag tag-gray">Size ' + escapeHtml(row.size) + '</span>' : '') +
@@ -4158,12 +4158,12 @@ async function openShoeSizeCard(itemCode, size) {
   const inner = document.getElementById('shoe-size-action-inner');
   inner.innerHTML = `
     <div class="sheet-handle"></div>
-    <button type="button" class="detail-sheet-close" onclick="closeShoeSizeActions()" aria-label="Close">✕</button>
+    <button type="button" class="detail-sheet-close" onclick="closeShoeSizeActions()" aria-label="Close">âœ•</button>
     <div class="detail-sheet-hero">
       <div class="shoe-size-badge ${isOut ? 'out' : isLow ? 'low' : ''}" style="width:56px;height:56px;font-size:24px;">${size}</div>
       <div class="detail-sheet-hero-text">
         <div class="detail-sheet-title">${escapeHtml(item.name || item.code)}</div>
-        <div class="detail-sheet-sub">${escapeHtml(item.code)} · Size ${size} · ${groupLbl}</div>
+        <div class="detail-sheet-sub">${escapeHtml(item.code)} Â· Size ${size} Â· ${groupLbl}</div>
         <div class="detail-sheet-stock" style="color:${stockCol};">${stockLbl}</div>
       </div>
     </div>
@@ -4182,8 +4182,8 @@ async function openShoeSizeCard(itemCode, size) {
       </button>
     </div>
     <div class="detail-sell-wrap">
-      ${!isOut ? `<button type="button" class="detail-sell-btn" onclick="closeShoeSizeActions();closeSheet();openSellShoeModal(${item.id},${size})">💰 SELL — Size ${size}</button>` :
-        `<div class="detail-sell-muted">Out of stock — restock first</div>`}
+      ${!isOut ? `<button type="button" class="detail-sell-btn" onclick="closeShoeSizeActions();closeSheet();openSellShoeModal(${item.id},${size})">ðŸ’° SELL â€” Size ${size}</button>` :
+        `<div class="detail-sell-muted">Out of stock â€” restock first</div>`}
     </div>
     <div style="padding:0 12px 16px;text-align:center;">
       <button type="button" class="detail-link-btn" onclick="closeShoeSizeActions();openShoeSizeEdit(${item.id},${size})">Edit prices</button>
@@ -4362,13 +4362,13 @@ function openSellFromSheet() {
     if (!item) { toast('Item not found', 'err'); return; }
     if (item.isShoe) {
       if (!_selectedShoeSize) {
-        toast('⚠️ Select a size first from the detail sheet', 'err');
+        toast('âš ï¸ Select a size first from the detail sheet', 'err');
         setTimeout(() => openSheet(id), 150);
         return;
       }
       openSellShoeModal(id, _selectedShoeSize);
     } else {
-      if (item.qty <= 0) { toast('⚠️ Out of stock', 'err'); return; }
+      if (item.qty <= 0) { toast('âš ï¸ Out of stock', 'err'); return; }
       openSellModal(id);
     }
   }, 120);
@@ -4393,7 +4393,7 @@ function triggerSheetPhotoUpload(event) {
         requestAnimationFrame(() => window._resetPhotoPan());
       }
       const btn = document.getElementById('sh-photo-btn');
-      if (btn) btn.textContent = '📷 Photo';
+      if (btn) btn.textContent = 'ðŸ“· Photo';
       renderList();
       toast('Photo saved', 'ok');
     }
@@ -4433,20 +4433,20 @@ async function openSheet(id) {
   }
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('sh-photo-btn', photo ? '📷 Change' : '📷 Add Photo');
+  set('sh-photo-btn', photo ? 'ðŸ“· Change' : 'ðŸ“· Add Photo');
   set('sh-icon', t.emoji);
   set('sh-name', item.name);
-  set('sh-code', item.code + (item.size ? ' · ' + item.size : ''));
+  set('sh-code', item.code + (item.size ? ' Â· ' + item.size : ''));
   set('sh-type', item.type);
   const tbadge = document.getElementById('sh-type-badge'); if (tbadge) tbadge.textContent = t.emoji + ' ' + item.type;
-  set('sh-size', item.size || '—');
+  set('sh-size', item.size || 'â€”');
   set('sh-buy', fmt(item.buy));
   set('sh-sell', fmt(item.sell));
   set('sh-profit', fmt(item.profit));
   set('sh-qty', item.qty + ' pcs');
-  set('sh-code-large', item.code + (item.size ? ' · ' + item.size : ''));
+  set('sh-code-large', item.code + (item.size ? ' Â· ' + item.size : ''));
 
-  // ── SHOE ITEMS — load fresh sizes, show size grid ─────────────
+  // â”€â”€ SHOE ITEMS â€” load fresh sizes, show size grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const priceCols = document.getElementById('sh-price-cols');
   if (priceCols) priceCols.style.display = 'grid';
   const sizeSec   = document.getElementById('sh-shoe-sizes');
@@ -4532,7 +4532,7 @@ async function deleteItem() {
   const allSales = await dbAll('sales');
   const itemSales = allSales.filter(s => s.itemId === currentDetailId || s.itemCode === toDelete.code);
   let msg = 'Delete "' + (toDelete.name || toDelete.code) + '"?';
-  if (itemSales.length > 0) msg += '\n\n⚠️ This item has ' + itemSales.length + ' sale record(s). The sales history will remain but the item cannot be restocked.';
+  if (itemSales.length > 0) msg += '\n\nâš ï¸ This item has ' + itemSales.length + ' sale record(s). The sales history will remain but the item cannot be restocked.';
   if (!confirm(msg)) return;
   if (toDelete.isShoe) {
     const sizes = await getShoeSizes(toDelete.code);
@@ -4567,7 +4567,7 @@ async function editItem() {
 
   if (item.isShoe) {
     const size = _selectedShoeSize;
-    if (!size) { toast('⚠️ Select a size first before editing', 'err'); setTimeout(()=>openSheet(item.id),100); return; }
+    if (!size) { toast('âš ï¸ Select a size first before editing', 'err'); setTimeout(()=>openSheet(item.id),100); return; }
     const sizes = await getShoeSizes(item.code);
     const sizeRec = sizes.find(s => s.size === size);
     if (!sizeRec) { toast('Size record not found', 'err'); return; }
@@ -4594,14 +4594,14 @@ async function editItem() {
     if (sizeField)  sizeField.style.display  = 'block';
     setSaveBtnLabel('Save size ' + size);
     const _ml1 = UI.el('form-mode-label');
-    if (_ml1) { _ml1.hidden = false; _ml1.textContent = '✏️ Edit · ' + item.code + ' Size ' + size; }
+    if (_ml1) { _ml1.hidden = false; _ml1.textContent = 'âœï¸ Edit Â· ' + item.code + ' Size ' + size; }
     UI.el('cancel-edit-btn').style.display = 'block';
     _editOriginItemId = item.id;
     updateProfitPreview();
     return;
   }
 
-  // ── STANDARD ITEM EDIT ────────────────────────────────────────
+  // â”€â”€ STANDARD ITEM EDIT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   _editingItemId = item.id;   // store reliably in JS variable
   showPage('add');
   UI.el('edit-id').value = item.id;
@@ -4612,7 +4612,7 @@ async function editItem() {
   UI.el('f-qty').value   = item.qty   ?? '';
   UI.el('f-buy').value   = item.buyPrice  || item.buy  || '';  // normalized field name
   UI.el('f-sell').value  = item.sellPrice || item.sell || '';  // normalized field name
-  // Lock code and type — identifying fields
+  // Lock code and type â€” identifying fields
   ['f-code'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.disabled=true; el.style.opacity='0.45'; el.style.cursor='not-allowed'; }
@@ -4620,7 +4620,7 @@ async function editItem() {
   setAddTypeLocked(true);
   setSaveBtnLabel('Save changes');
   const _ml2 = UI.el('form-mode-label');
-  if (_ml2) { _ml2.hidden = false; _ml2.textContent = '✏️ Edit · ' + (item.name || item.code); }
+  if (_ml2) { _ml2.hidden = false; _ml2.textContent = 'âœï¸ Edit Â· ' + (item.name || item.code); }
   UI.el('cancel-edit-btn').style.display = 'block';
   _editOriginItemId = item.id;
   onTypeChange();
@@ -4631,7 +4631,7 @@ async function editItem() {
 }
 
 // ===== DASHBOARD =====
-// ── Dashboard period state ──────────────────────────────────
+// â”€â”€ Dashboard period state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let _dashPeriod = 'today';
 
 function dashSetPeriod(p) {
@@ -4746,7 +4746,7 @@ async function _renderDashSummary(ctx) {
   let trendNote = '';
   if (_dashPeriod !== 'all' && prevRev > 0) {
     const chg = ((totalRevenue - prevRev) / prevRev * 100);
-    trendNote = chg >= 0 ? '↑ ' + chg.toFixed(0) + '% vs prior period' : '↓ ' + Math.abs(chg).toFixed(0) + '% vs prior period';
+    trendNote = chg >= 0 ? 'â†‘ ' + chg.toFixed(0) + '% vs prior period' : 'â†“ ' + Math.abs(chg).toFixed(0) + '% vs prior period';
   } else if (_dashPeriod !== 'all' && totalRevenue > 0 && prevRev === 0) {
     trendNote = 'Up from prior period';
   }
@@ -4755,7 +4755,7 @@ async function _renderDashSummary(ctx) {
   const headlineParts = [];
   if (totalItems === 0) headlineParts.push('Add your first items to start tracking stock and sales.');
   else {
-    if (dayOpen && _dashPeriod === 'today') headlineParts.push('Day is open — record sales as they happen.');
+    if (dayOpen && _dashPeriod === 'today') headlineParts.push('Day is open â€” record sales as they happen.');
     else if (dayLabel) headlineParts.push(dayLabel + '.');
     if (totalSalesCount > 0) headlineParts.push(periodLbl + ': ' + fmtN(totalSalesCount) + ' sales, ' + fmt(totalRevenue) + ' revenue.');
     if (alertCount > 0) headlineParts.push(alertCount + ' stock alert' + (alertCount !== 1 ? 's' : '') + ' need attention.');
@@ -4764,39 +4764,39 @@ async function _renderDashSummary(ctx) {
   setEl('d-summary-headline', headlineParts.join(' '));
 
   const cards = [];
-  cards.push(_dashSumCard('📦', fmtN(totalItems) + ' SKUs', 'Inventory', fmtN(totalQty) + ' pcs · retail ' + fmt(stockRetail), null, 'stock'));
-  cards.push(_dashSumCard('💰', fmt(totalRevenue), periodLbl + ' revenue', trendNote || (fmt(totalProfitEarned) + ' profit · ' + margin.toFixed(1) + '% margin'), totalProfitEarned >= 0 ? 'var(--green)' : 'var(--red)'));
-  cards.push(_dashSumCard('🛒', fmtN(totalSalesCount), 'Sales · ' + fmtN(totalPiecesSold) + ' pcs', totalSalesCount ? 'Avg ' + fmt(totalRevenue / totalSalesCount) + ' per sale' : 'No sales in period'));
+  cards.push(_dashSumCard('ðŸ“¦', fmtN(totalItems) + ' SKUs', 'Inventory', fmtN(totalQty) + ' pcs Â· retail ' + fmt(stockRetail), null, 'stock'));
+  cards.push(_dashSumCard('ðŸ’°', fmt(totalRevenue), periodLbl + ' revenue', trendNote || (fmt(totalProfitEarned) + ' profit Â· ' + margin.toFixed(1) + '% margin'), totalProfitEarned >= 0 ? 'var(--green)' : 'var(--red)'));
+  cards.push(_dashSumCard('ðŸ›’', fmtN(totalSalesCount), 'Sales Â· ' + fmtN(totalPiecesSold) + ' pcs', totalSalesCount ? 'Avg ' + fmt(totalRevenue / totalSalesCount) + ' per sale' : 'No sales in period'));
   cards.push(_dashSumCard(
-    dayOpen ? '🟢' : (activeDay ? '🔒' : '⏸️'),
-    dayOpen ? 'Open' : (activeDay ? activeDay.status : '—'),
+    dayOpen ? 'ðŸŸ¢' : (activeDay ? 'ðŸ”’' : 'â¸ï¸'),
+    dayOpen ? 'Open' : (activeDay ? activeDay.status : 'â€”'),
     'Business day',
     _dashPeriod === 'today' && todayDashSales.length
-      ? fmtN(todayDashSales.length) + ' sales · ' + fmt(todayDashProf) + ' profit today'
+      ? fmtN(todayDashSales.length) + ' sales Â· ' + fmt(todayDashProf) + ' profit today'
       : (money ? 'Pool ' + fmt(money.businessPool) : dayLabel)
   ));
   if (wishCount > 0) {
     cards.push(_dashSumCard(
-      '📋',
+      'ðŸ“‹',
       fmtN(wishCount),
       'Wishlist',
-      wishCount + ' item' + (wishCount !== 1 ? 's' : '') + ' to stock — tap to open',
+      wishCount + ' item' + (wishCount !== 1 ? 's' : '') + ' to stock â€” tap to open',
       'var(--accent)',
       'wishlist'
     ));
   }
   if (alertCount > 0) {
     cards.push(_dashSumCard(
-      '⚠️',
+      'âš ï¸',
       fmtN(alertCount) + ' alerts',
       'Needs attention',
-      (outStk.length ? outStk.length + ' out · ' : '') + (lowStk.length ? lowStk.length + ' low' : ''),
+      (outStk.length ? outStk.length + ' out Â· ' : '') + (lowStk.length ? lowStk.length + ' low' : ''),
       'var(--amber)',
       'stock'
     ));
   }
   if (money && (money.businessPool || money.salesProfit)) {
-    cards.push(_dashSumCard('💼', fmt(money.businessPool), 'Business pool', 'Profit ' + fmt(money.salesProfit) + ' · cost out ' + fmt(money.salesCostOut), money.businessPool >= 0 ? 'var(--accent2)' : 'var(--red)'));
+    cards.push(_dashSumCard('ðŸ’¼', fmt(money.businessPool), 'Business pool', 'Profit ' + fmt(money.salesProfit) + ' Â· cost out ' + fmt(money.salesCostOut), money.businessPool >= 0 ? 'var(--accent2)' : 'var(--red)'));
   }
 
   const cardsEl = document.getElementById('d-summary-cards');
@@ -4855,7 +4855,7 @@ async function renderDashboard() {
   const mEl = document.getElementById('d-margin');
   if (mEl) mEl.style.color = margin >= 20 ? 'var(--green)' : margin >= 10 ? 'var(--amber)' : 'var(--red)';
 
-  // ── Sold vs remaining bar ─────────────────────────────────
+  // â”€â”€ Sold vs remaining bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const barWrap = document.getElementById('d-stock-bar-wrap');
   const totalEver = totalPiecesSold + totalQty;
   if (barWrap && totalEver > 0) {
@@ -4868,7 +4868,7 @@ async function renderDashboard() {
     setEl('d-bar-rem-lbl',  fmtN(totalQty) + ' remaining (' + remPct + '%)');
   } else if (barWrap) { barWrap.style.display = 'none'; }
 
-  // ── Today at a Glance (only show on Today period) ─────────
+  // â”€â”€ Today at a Glance (only show on Today period) â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const todayDashQty   = todayDashSales.reduce((s,x)=>s+(x.qty||0),0);
   const todayDashRecon = typeof _getDayRecon === 'function' ? _getDayRecon(today) : null;
   const todayDashVariance = todayDashRecon?.analysis ? todayDashRecon.analysis.variance : null;
@@ -4892,7 +4892,7 @@ async function renderDashboard() {
     }
   }
 
-  // ── 7-day sparkline ───────────────────────────────────────
+  // â”€â”€ 7-day sparkline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const sparkWrap = document.getElementById('d-sparkline-wrap');
   const sparkEl   = document.getElementById('d-sparkline');
   const sparkLbls = document.getElementById('d-sparkline-labels');
@@ -4916,17 +4916,17 @@ async function renderDashboard() {
     }
   }
 
-  // ── Alerts ────────────────────────────────────────────────
+  // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const alertEl = document.getElementById('d-alerts');
   if (alertEl) {
     let html = '';
     const alertStyle = 'cursor:pointer;border-radius:var(--r);padding:10px 12px;margin-bottom:6px;font-size:12px;font-weight:600;';
-    if (outStk.length) html += `<div role="button" tabindex="0" onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}" style="background:var(--red-light);border:1px solid rgba(192,57,43,0.25);color:var(--red);${alertStyle}">⚠️ <strong>${outStk.length}</strong> out of stock — tap to view stock</div>`;
-    if (lowStk.length) html += `<div role="button" tabindex="0" onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}" style="background:var(--amber-light);border:1px solid #f5d9a0;color:var(--amber);${alertStyle}">📉 <strong>${lowStk.length}</strong> running low — tap to view stock</div>`;
+    if (outStk.length) html += `<div role="button" tabindex="0" onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}" style="background:var(--red-light);border:1px solid rgba(192,57,43,0.25);color:var(--red);${alertStyle}">âš ï¸ <strong>${outStk.length}</strong> out of stock â€” tap to view stock</div>`;
+    if (lowStk.length) html += `<div role="button" tabindex="0" onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}" style="background:var(--amber-light);border:1px solid #f5d9a0;color:var(--amber);${alertStyle}">ðŸ“‰ <strong>${lowStk.length}</strong> running low â€” tap to view stock</div>`;
     alertEl.innerHTML = html;
   }
 
-  // ── Top items by stock value ──────────────────────────────
+  // â”€â”€ Top items by stock value â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const topEl = document.getElementById('d-top-items');
   if (topEl) {
     const sorted = [...allItems].sort((a,b)=>((b.sellPrice||b.sell||0)*b.qty)-((a.sellPrice||a.sell||0)*a.qty)).slice(0,5);
@@ -4944,7 +4944,7 @@ async function renderDashboard() {
             <span style="font-size:16px;">${t.emoji}</span>
             <div style="flex:1;min-width:0;">
               <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name||item.code)}</div>
-              <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${escapeHtml(item.code)} · ${fmtN(item.qty)} pcs · buy ${fmt(buy)}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${escapeHtml(item.code)} Â· ${fmtN(item.qty)} pcs Â· buy ${fmt(buy)}</div>
             </div>
             <div style="text-align:right;flex-shrink:0;">
               <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(val)}</div>
@@ -4960,7 +4960,7 @@ async function renderDashboard() {
   }
 }
 
-// renderSummary removed — content merged into renderDashboard
+// renderSummary removed â€” content merged into renderDashboard
 function renderSummary() { renderDashboard(); }
 
 // ===== HEADER =====
@@ -5059,7 +5059,7 @@ async function _legacySearchSell() {
     (i.size || '').toLowerCase().includes(q)
   );
   if (!matched.length) {
-    results.innerHTML = '<div class="empty" style="padding:24px 0;"><div class="e-icon" style="font-size:36px;">🔍</div><p>No items found</p></div>';
+    results.innerHTML = '<div class="empty" style="padding:24px 0;"><div class="e-icon" style="font-size:36px;">ðŸ”</div><p>No items found</p></div>';
     return;
   }
   results.innerHTML = matched.map(item => {
@@ -5071,19 +5071,19 @@ async function _legacySearchSell() {
       <div class="item-top">
         <div class="item-icon" style="background:${t.color||'var(--surface2)'};">${t.emoji}</div>
         <div class="item-body">
-          <div class="item-code">${item.code}${item.size ? ' · ' + item.size : ''}</div>
+          <div class="item-code">${item.code}${item.size ? ' Â· ' + item.size : ''}</div>
           <div class="item-name">${item.name || ''}</div>
           <div class="item-tags">
             <span class="tag tag-cyan">${item.type}</span>
             <span class="tag" style="background:${outOfStock?'var(--red-light)':item.qty<=3?'var(--amber-light)':'var(--green-light)'};color:${stockColor};">
-              ${outOfStock ? '✕ Out of stock' : item.qty + ' pcs'}
+              ${outOfStock ? 'âœ• Out of stock' : item.qty + ' pcs'}
             </span>
           </div>
         </div>
         <div class="item-right">
           <div style="font-size:18px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(item.sell)}</div>
           <div style="font-size:11px;color:var(--green);font-family:var(--mono);margin-top:3px;">+${fmt(item.profit)} profit</div>
-          ${!outOfStock ? '<div style="margin-top:8px;background:var(--accent);color:white;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;text-align:center;">💸 Sell</div>' : ''}
+          ${!outOfStock ? '<div style="margin-top:8px;background:var(--accent);color:white;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;text-align:center;">ðŸ’¸ Sell</div>' : ''}
         </div>
       </div>
     </div>`;
@@ -5251,15 +5251,15 @@ async function confirmOffStockSale() {
   try { renderDashboard(); } catch(_) { /* intentionally ignored */ }
   try { if (activeDay) updateDayLiveStats(); } catch(_) { /* intentionally ignored */ }
   scheduleSync();
-  toast('Sale recorded · monitor marked NOT ACCOUNTED', 'ok');
+  toast('Sale recorded Â· monitor marked NOT ACCOUNTED', 'ok');
 }
 
 async function openSellModal(itemId) {
   try {
   const item = await dbGet('items', itemId);
-  if (!item) { toast('⚠️ Item not found', 'err'); return; }
+  if (!item) { toast('âš ï¸ Item not found', 'err'); return; }
   if (item.qty <= 0) {
-    toast('⚠️ ' + (item.name || item.code) + ' is out of stock — restock first', 'err');
+    toast('âš ï¸ ' + (item.name || item.code) + ' is out of stock â€” restock first', 'err');
     return;
   }
   currentSellItemId = itemId;
@@ -5267,7 +5267,7 @@ async function openSellModal(itemId) {
   document.getElementById('sm-icon').textContent = t.emoji;
   document.getElementById('sm-icon').style.background = t.color || 'var(--surface2)';
   document.getElementById('sm-name').textContent = item.name;
-  document.getElementById('sm-meta').textContent = item.code + (item.size ? ' · ' + item.size : '');
+  document.getElementById('sm-meta').textContent = item.code + (item.size ? ' Â· ' + item.size : '');
   document.getElementById('sm-stock').textContent = item.qty;
   const _itemSell = item.sellPrice || item.sell || 0;
   const _itemBuy  = item.buyPrice  || item.buy  || 0;
@@ -5344,7 +5344,7 @@ function adjSellQty(d) {
   const inp = document.getElementById('sm-qty');
   let v = (parseInt(inp.value) || 0) + d;
   const max = parseInt(inp.max) || 9999;
-  if (v > max) { toast('⚠️ Only ' + max + ' in stock', 'err'); v = max; }
+  if (v > max) { toast('âš ï¸ Only ' + max + ' in stock', 'err'); v = max; }
   inp.value = Math.max(0, v);
   updateSellModal();
 }
@@ -5354,20 +5354,20 @@ async function confirmSale() {
 
   // Gray out confirm button + show progress overlay
   const _confirmBtn = document.getElementById('confirm-sale-btn');
-  _overlay.show('Processing Sale…', _confirmBtn);
+  _overlay.show('Processing Saleâ€¦', _confirmBtn);
 
   try {
 
   const item = await dbGet('items', currentSellItemId);
   if (!item) { toast('Item not found', 'err'); closeSellModal(); _overlay.hide(); return; }
 
-  // ── Read form values ───────────────────────────────────────────
+  // â”€â”€ Read form values â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const qtyEl     = document.getElementById('sm-qty');
   const actualEl  = document.getElementById('sm-actual');
   const qty       = parseInt(qtyEl?.value || '0');
   const actualRaw = parseFloat(actualEl?.value || '');
 
-  // ── Prices — use normalized sellPrice/buyPrice ─────────────────
+  // â”€â”€ Prices â€” use normalized sellPrice/buyPrice â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const sellPrice = _isShoeSale && _sellShoeSize
     ? (_sellShoeSize.sellPrice || item.sellPrice || item.sell || 0)
     : (item.sellPrice || item.sell || 0);
@@ -5377,7 +5377,7 @@ async function confirmSale() {
 
   const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : sellPrice;
 
-  // ── Validate stock ─────────────────────────────────────────────
+  // â”€â”€ Validate stock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const maxQty = _isShoeSale && _sellShoeSize ? _sellShoeSize.qty : item.qty;
   const itemLabel = item.name || item.code;
   if (!Number.isFinite(qty) || qty <= 0) {
@@ -5392,7 +5392,7 @@ async function confirmSale() {
   }
   if (!Validate.stock(qty, maxQty, itemLabel)) { _overlay.hide(); return; }
 
-  // ── Validate sale price ────────────────────────────────────────
+  // â”€â”€ Validate sale price â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (!Validate.salePrice(priceUsed, buyPrice, sellPrice)) { _overlay.hide(); return; }
 
   const revenue = qty * priceUsed;
@@ -5419,7 +5419,7 @@ async function confirmSale() {
     date:          new Date().toISOString(),
   };
 
-  // ── Deduct stock ───────────────────────────────────────────────
+  // â”€â”€ Deduct stock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (_isShoeSale && _sellShoeSize) {
     _sellShoeSize.qty = Math.max(0, (_sellShoeSize.qty || 0) - qty);
     _sellShoeSize.updatedAt = new Date().toISOString();
@@ -5438,26 +5438,26 @@ async function confirmSale() {
   }
   await dbPut('items', item);
 
-  // ── Record sale ────────────────────────────────────────────────
+  // â”€â”€ Record sale â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const newSaleId = await dbAdd('sales', sale);
   sale.id = newSaleId;
   fbSyncItem(item);
   fbSyncSale(sale);
 
-  // Sales are the source of truth for revenue — no duplicate finance row.
+  // Sales are the source of truth for revenue â€” no duplicate finance row.
 
-  // ── Close all overlays ─────────────────────────────────────────
+  // â”€â”€ Close all overlays â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   closeSellModal();       // sell modal
   closeSheet();           // detail sheet (if open)
   closeShoeSizeActions(); // size action sheet (if open)
 
-  // ── Reset sell search if on sell page ─────────────────────────
+  // â”€â”€ Reset sell search if on sell page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const sellSearch = document.getElementById('sell-search');
   const sellResults = document.getElementById('sell-results');
   if (sellSearch)  sellSearch.value = '';
   if (sellResults) sellResults.innerHTML = '';
 
-  // ── Refresh UI ─────────────────────────────────────────────────
+  // â”€â”€ Refresh UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   allItems = await dbAll('items');
   await enrichShoeItems(allItems);
   renderList();
@@ -5476,11 +5476,11 @@ async function confirmSale() {
     }
   } catch(_) { /* intentionally ignored */ }
 
-  toast('✅ ' + fmt(revenue) + ' · Profit: ' + fmt(profit), 'ok');
+  toast('âœ… ' + fmt(revenue) + ' Â· Profit: ' + fmt(profit), 'ok');
 
   } catch(err) {
     console.error('[confirmSale]', err);
-    toast('⚠️ Sale failed: ' + (err.message || 'Unknown error'), 'err');
+    toast('âš ï¸ Sale failed: ' + (err.message || 'Unknown error'), 'err');
   } finally {
     _overlay.hide();
   }
@@ -5512,19 +5512,19 @@ function clearNotifs(){const l=document.getElementById('notif-list');if(l)l.inne
 function addNotif(msg){const l=document.getElementById('notif-list');if(!l)return;const e=document.createElement('div');e.style.cssText='padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;';e.textContent=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+' '+msg;l.insertBefore(e,l.firstChild);}
 function closePastSessionSheet(){const s=document.getElementById('past-session-sheet');if(s)s.classList.remove('open');}
 
-// ═══════════════════════════════════════════════════════════════
-// FACTORY RESET — clears ALL local data and Firebase
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// FACTORY RESET â€” clears ALL local data and Firebase
 // Only accessible to Super User in Settings
-// ═══════════════════════════════════════════════════════════════
-// ── Full database rebuild — wipes all data and starts fresh ────────
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â”€â”€ Full database rebuild â€” wipes all data and starts fresh â”€â”€â”€â”€â”€â”€â”€â”€
 async function resetAndRebuildDB() {
   const msg =
-    '⚠️ FULL DATABASE RESET\n\n' +
+    'âš ï¸ FULL DATABASE RESET\n\n' +
     'This will:\n' +
-    '• Delete ALL items, sales, finances, shoe sizes\n' +
-    '• Delete ALL business day records\n' +
-    '• Clear Firebase cloud data if connected\n' +
-    '• Recreate the database schema clean (v' + DB_VER + ')\n\n' +
+    'â€¢ Delete ALL items, sales, finances, shoe sizes\n' +
+    'â€¢ Delete ALL business day records\n' +
+    'â€¢ Clear Firebase cloud data if connected\n' +
+    'â€¢ Recreate the database schema clean (v' + DB_VER + ')\n\n' +
     'Your login and preferences are kept.\n' +
     'This CANNOT be undone. Type RESET to confirm:';
 
@@ -5532,7 +5532,7 @@ async function resetAndRebuildDB() {
   if (input !== 'RESET') { toast('Reset cancelled', ''); return; }
 
   try {
-    toast('🗑️ Rebuilding database…', '');
+    toast('ðŸ—‘ï¸ Rebuilding databaseâ€¦', '');
 
     // 1. Clear all IndexedDB data stores
     await DB.clearAll([
@@ -5581,11 +5581,11 @@ async function resetAndRebuildDB() {
     updateHeader();
     try { updateLowStockBadge(); } catch(_) { /* intentionally ignored */ }
 
-    toast('✅ Database rebuilt clean — fresh start!', 'ok');
+    toast('âœ… Database rebuilt clean â€” fresh start!', 'ok');
     console.log('[DB] Rebuild complete v' + DB_VER);
 
   } catch(e) {
-    toast('❌ Rebuild failed: ' + e.message, 'err');
+    toast('âŒ Rebuild failed: ' + e.message, 'err');
     console.error('[DB]', e);
   }
 }
@@ -5593,22 +5593,22 @@ window.resetAndRebuildDB = resetAndRebuildDB;
 
 async function resetAllData() {
   const confirmed = confirm(
-    '⚠️ RESET ALL DATA\n\n' +
+    'âš ï¸ RESET ALL DATA\n\n' +
     'This will permanently delete:\n' +
-    '• All inventory items\n' +
-    '• All sales records\n' +
-    '• All business day records\n' +
-    '• All shoe size records\n\n' +
+    'â€¢ All inventory items\n' +
+    'â€¢ All sales records\n' +
+    'â€¢ All business day records\n' +
+    'â€¢ All shoe size records\n\n' +
     'Firebase will also be cleared if connected.\n\n' +
     'This CANNOT be undone. Proceed?'
   );
   if (!confirmed) return;
 
   try {
-    toast('🗑️ Clearing database…', '');
+    toast('ðŸ—‘ï¸ Clearing databaseâ€¦', '');
 
-    // ── 1. Clear IndexedDB using store.clear() ────────────────────
-    // This is atomic and reliable — clears entire store in one op
+    // â”€â”€ 1. Clear IndexedDB using store.clear() â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // This is atomic and reliable â€” clears entire store in one op
     const stores = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances', 'wishlist', 'photos'];
     await new Promise((resolve, reject) => {
       const tx = db.transaction(
@@ -5625,7 +5625,7 @@ async function resetAllData() {
     });
     console.log('[RESET] IndexedDB cleared');
 
-    // ── 2. Clear Firebase if connected ────────────────────────────
+    // â”€â”€ 2. Clear Firebase if connected â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (fbReady && fbDb) {
       try {
         const { collection, getDocs, deleteDoc, doc, writeBatch } = await waitForFbImports();
@@ -5646,16 +5646,16 @@ async function resetAllData() {
         console.log('[RESET] Firebase cleared');
       } catch(e) {
         console.warn('[RESET] Firebase partial:', e.message);
-        toast('⚠️ Firebase may not be fully cleared: ' + e.message, 'err');
+        toast('âš ï¸ Firebase may not be fully cleared: ' + e.message, 'err');
       }
     }
 
-    // ── 3. Reset in-memory state ──────────────────────────────────
+    // â”€â”€ 3. Reset in-memory state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     allItems = [];
     activeDay = null;
     clearAllPhotoCache();
 
-    // ── 4. Reset localStorage (keep session + preferences) ───────
+    // â”€â”€ 4. Reset localStorage (keep session + preferences) â”€â”€â”€â”€â”€â”€â”€
     const keep = {
       [KEY_SESSION]:      localStorage.getItem(KEY_SESSION),
       [KEY_FIREBASE_ENV]: localStorage.getItem(KEY_FIREBASE_ENV),
@@ -5665,7 +5665,7 @@ async function resetAllData() {
     Object.entries(keep).forEach(([k,v]) => { if (v) localStorage.setItem(k, v); });
     _clearAllDayReconKeys();
 
-    // ── 5. Reload default types + refresh UI ─────────────────────
+    // â”€â”€ 5. Reload default types + refresh UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await loadTypes();
     renderList();
     renderDashboard();
@@ -5673,11 +5673,11 @@ async function resetAllData() {
     try { renderSellPage(); } catch(e) {}
     try { updateLowStockBadge(); } catch(e) {}
 
-    toast('✅ All data cleared — fresh start!', 'ok');
+    toast('âœ… All data cleared â€” fresh start!', 'ok');
     console.log('[RESET] Complete');
 
   } catch(e) {
-    toast('❌ Reset failed: ' + e.message, 'err');
+    toast('âŒ Reset failed: ' + e.message, 'err');
     console.error('[RESET] Error:', e);
   }
 }
@@ -5752,29 +5752,29 @@ async function _deleteFirebaseCollections(cols) {
 async function clearLocalData(skipConfirm = false) {
   if (!skipConfirm && !confirm('Clear ALL data stored on this device?\n\nCloud data is not affected. Login and settings are kept.')) return;
   try {
-    toast('Clearing local data…', '');
+    toast('Clearing local dataâ€¦', '');
     await _clearIndexedDbStores();
     _clearAllDayReconKeys();
     window._financeCoherenceCleaned = false;
     await _refreshAppAfterDataChange();
-    toast('✅ Local data cleared', 'ok');
+    toast('âœ… Local data cleared', 'ok');
   } catch (e) {
-    toast('❌ Failed: ' + e.message, 'err');
+    toast('âŒ Failed: ' + e.message, 'err');
   }
 }
 
 async function clearCloudData(skipConfirm = false) {
   if (!skipConfirm && !confirm('Delete ALL data in Firebase cloud?\n\nLocal data on this device is not affected. Other devices will lose cloud copies.')) return;
   if (!fbReady || !fbDb) {
-    toast('Connect to Firebase first (Settings → Reconnect)', 'err');
+    toast('Connect to Firebase first (Settings â†’ Reconnect)', 'err');
     return;
   }
   try {
-    toast('Clearing cloud data…', '');
+    toast('Clearing cloud dataâ€¦', '');
     await _deleteFirebaseCollections(_FB_COLLECTIONS);
-    toast('✅ Cloud data cleared', 'ok');
+    toast('âœ… Cloud data cleared', 'ok');
   } catch (e) {
-    toast('❌ Failed: ' + e.message, 'err');
+    toast('âŒ Failed: ' + e.message, 'err');
   }
 }
 
@@ -5793,7 +5793,7 @@ async function clearAppCacheAndReload() {
     if (swRegistration) {
       try { await swRegistration.update(); } catch(_) {}
     }
-    toast('Reloading…', '');
+    toast('Reloadingâ€¦', '');
     setTimeout(() => window.location.reload(), 400);
   } catch (e) {
     window.location.reload();
@@ -5820,10 +5820,10 @@ function setFbStatus(status) {
   const envLabel = FIREBASE_ENVIRONMENTS[getFirebaseEnv()]?.label || '';
   const labels = {
     off: 'Not connected',
-    connecting: 'Connecting to Firebase…',
-    on:  '✅ Connected (' + envLabel + ') · Last sync ' + now,
-    error: '❌ Sync error — tap Reconnect in Settings',
-    syncing: '⏳ Syncing…'
+    connecting: 'Connecting to Firebaseâ€¦',
+    on:  'âœ… Connected (' + envLabel + ') Â· Last sync ' + now,
+    error: 'âŒ Sync error â€” tap Reconnect in Settings',
+    syncing: 'â³ Syncingâ€¦'
   };
   if (dot) { dot.style.background = colors[status]; dot.style.boxShadow = status==='on' ? '0 0 6px var(--green)' : 'none'; }
   if (txt) txt.textContent = labels[status];
@@ -5835,7 +5835,7 @@ function setFbStatus(status) {
   const barTime = document.getElementById('sync-bar-time');
   if (!bar) return;
   const barColors = { off:'#888', connecting:'#f59e0b', on:'#4ade80', error:'#f87171', syncing:'#60a5fa' };
-  const barLabels = { off:'Offline', connecting:'Connecting…', on:'Live', error:'Sync Error', syncing:'Syncing…' };
+  const barLabels = { off:'Offline', connecting:'Connectingâ€¦', on:'Live', error:'Sync Error', syncing:'Syncingâ€¦' };
   bar.style.display = 'flex';
   if (barDot) barDot.style.background = barColors[status] || '#888';
   if (barTxt) barTxt.textContent = barLabels[status] || status;
@@ -5911,14 +5911,14 @@ function updateFirebaseEnvUI() {
   const projectEl = document.getElementById('fb-env-project');
   if (projectEl) {
     projectEl.textContent = cfg.collectionPrefix
-      ? cfg.projectId + ' · ' + cfg.collectionPrefix + '*'
+      ? cfg.projectId + ' Â· ' + cfg.collectionPrefix + '*'
       : cfg.projectId;
   }
   const prefixEl = document.getElementById('fb-env-prefix');
   if (prefixEl) {
     prefixEl.textContent = cfg.collectionPrefix
-      ? 'Collections: ' + cfg.collectionPrefix + 'items, ' + cfg.collectionPrefix + 'sales, …'
-      : 'Collections: items, sales, …';
+      ? 'Collections: ' + cfg.collectionPrefix + 'items, ' + cfg.collectionPrefix + 'sales, â€¦'
+      : 'Collections: items, sales, â€¦';
   }
   document.getElementById('fb-env-prod')?.classList.toggle('active', env === 'production');
   document.getElementById('fb-env-dev')?.classList.toggle('active', env === 'development');
@@ -5971,7 +5971,7 @@ async function initFirebase() {
     window._fbUnsubSz = null;
     window._fbUnsubBd = null;
 
-    // ── items listener ───────────────────────────────────────────
+    // â”€â”€ items listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     fbUnsub = onSnapshot(fbCol('items'), async snap => {
       if (_localWriting) return;
       const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
@@ -6001,7 +6001,7 @@ async function initFirebase() {
       }
     }, err => { setFbStatus('error'); console.error('[FB] items listener:', err.message); });
 
-    // ── sales listener ───────────────────────────────────────────
+    // â”€â”€ sales listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     window._fbUnsubSales = onSnapshot(fbCol('sales'), async snap => {
       if (_localWriting) return;
       const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
@@ -6024,7 +6024,7 @@ async function initFirebase() {
       try { renderDashboard(); } catch(_) { /* intentionally ignored */ }
     }, err => { console.error('[FB] sales listener:', err.message); });
 
-    // ── finances listener ────────────────────────────────────────
+    // â”€â”€ finances listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     window._fbUnsubFin = onSnapshot(fbCol('finances'), async snap => {
       if (_localWriting) return;
       const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
@@ -6052,7 +6052,7 @@ async function initFirebase() {
       }
     }, err => { console.error('[FB] finances listener:', err.message); });
 
-    // ── wishlist listener ────────────────────────────────────────
+    // â”€â”€ wishlist listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (db.objectStoreNames.contains('wishlist')) {
       window._fbUnsubWish = onSnapshot(fbCol('wishlist'), async snap => {
         if (_localWriting) return;
@@ -6080,7 +6080,7 @@ async function initFirebase() {
       }, err => { console.error('[FB] wishlist listener:', err.message); });
     }
 
-    // ── shoe_sizes listener ──────────────────────────────────────
+    // â”€â”€ shoe_sizes listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     window._fbUnsubSz = onSnapshot(fbCol('shoe_sizes'), async snap => {
       if (_localWriting) return;
       const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
@@ -6111,7 +6111,7 @@ async function initFirebase() {
       }
     }, err => { console.error('[FB] shoe_sizes listener:', err.message); });
 
-    // ── business_days listener ───────────────────────────────────
+    // â”€â”€ business_days listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     window._fbUnsubBd = onSnapshot(fbCol('business_days'), async snap => {
       if (_localWriting) return;
       const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
@@ -6144,7 +6144,7 @@ async function initFirebase() {
     }, err => { console.error('[FB] business_days listener:', err.message); });
 
     setFbStatus('on');
-    toast('☁️ Firebase connected (' + getFirebaseEnvConfig().label + ')', 'ok');
+    toast('â˜ï¸ Firebase connected (' + getFirebaseEnvConfig().label + ')', 'ok');
     await pullFromFirebase(true);
     await normalizeSyncIds();
     await forcePushToFirebase(true);
@@ -6173,7 +6173,7 @@ function waitForFbImports() {
 
 async function saveFirebaseConfig() {
   try {
-  // Config is hardcoded — just reconnect
+  // Config is hardcoded â€” just reconnect
   if (fbUnsub) { fbUnsub(); fbUnsub = null; }
   fbApp = null; fbDb = null; fbReady = false;
   await initFirebase();
@@ -6442,7 +6442,7 @@ async function fbDeleteSale(sale) {
 }
 
 async function forcePushToFirebase(silent = false) {
-  if (!fbReady || !fbDb) { if (!silent) toast('⚠️ Connect Firebase first', 'err'); return; }
+  if (!fbReady || !fbDb) { if (!silent) toast('âš ï¸ Connect Firebase first', 'err'); return; }
   if (!silent) setFbStatus('syncing');
   _localWriting = true;
   const items = await dbAll('items');
@@ -6515,7 +6515,7 @@ async function forcePushToFirebase(silent = false) {
 
     if (count > 0) await batch.commit();
     setFbStatus('on');
-    if (!silent) toast('⬆️ Synced ' + items.length + ' items · ' + sales.length + ' sales · ' + shoeSizes.length + ' sizes', 'ok');
+    if (!silent) toast('â¬†ï¸ Synced ' + items.length + ' items Â· ' + sales.length + ' sales Â· ' + shoeSizes.length + ' sizes', 'ok');
   } catch(e) {
     setFbStatus('error');
     if (!silent) toast('Sync error: ' + e.message, 'err');
@@ -6527,7 +6527,7 @@ async function forcePushToFirebase(silent = false) {
 
 async function pullFromFirebase(silent = false) {
   if (!fbReady || !fbDb) {
-    if (!silent) toast('⚠️ Not connected to Firebase', 'err');
+    if (!silent) toast('âš ï¸ Not connected to Firebase', 'err');
     console.warn('[SYNC] pullFromFirebase called but not ready. fbReady=', fbReady, 'fbDb=', !!fbDb);
     return;
   }
@@ -6560,7 +6560,7 @@ async function pullFromFirebase(silent = false) {
     }
     console.log('[SYNC] Items: added=' + itemsAdded + ' updated=' + itemsUpdated);
 
-    // Pull sales — batch local load
+    // Pull sales â€” batch local load
     const saleSnap = await getDocs(fbCol('sales'));
     const localSales = await dbAll('sales');
     const salesByFbId = Object.fromEntries(localSales.filter(s=>s.fbId).map(s=>[s.fbId,s]));
@@ -6649,7 +6649,7 @@ async function pullFromFirebase(silent = false) {
     try { renderSellPage(); } catch(_) { /* intentionally ignored */ }
     setFbStatus('on');
 
-    const msg = '⬇️ ' + itemSnap.size + ' items, ' + saleSnap.size + ' sales from Firebase';
+    const msg = 'â¬‡ï¸ ' + itemSnap.size + ' items, ' + saleSnap.size + ' sales from Firebase';
     if (!silent) toast(msg, 'ok');
     else if (itemSnap.size > 0) toast(msg, 'ok');
     console.log('[SYNC] Pull complete:', msg);
@@ -6687,7 +6687,7 @@ async function runSyncDebug() {
 
   log.textContent = '';
   addLog('Starting sync debug...');
-  addLog('Environment: ' + getFirebaseEnvConfig().label + ' (' + fbColName('items') + ', …)');
+  addLog('Environment: ' + getFirebaseEnvConfig().label + ' (' + fbColName('items') + ', â€¦)');
   addLog('fbReady=' + fbReady + ' fbDb=' + !!fbDb + ' online=' + navigator.onLine);
 
   const localItems = await dbAll('items');
@@ -6696,10 +6696,10 @@ async function runSyncDebug() {
   addLog('Items with fbId: ' + localItems.filter(i => i.fbId).length);
 
   if (!fbReady || !fbDb) {
-    addLog('❌ Firebase not connected! Reconnecting...');
+    addLog('âŒ Firebase not connected! Reconnecting...');
     await initFirebase();
-    if (!fbReady) { addLog('❌ Reconnect failed'); return; }
-    addLog('✅ Reconnected');
+    if (!fbReady) { addLog('âŒ Reconnect failed'); return; }
+    addLog('âœ… Reconnected');
   }
 
   try {
@@ -6709,19 +6709,19 @@ async function runSyncDebug() {
     addLog('Firebase items: ' + snap.size);
 
     if (snap.size === 0 && localItems.length > 0) {
-      addLog('⚠️ Firebase empty but local has ' + localItems.length + ' items');
+      addLog('âš ï¸ Firebase empty but local has ' + localItems.length + ' items');
       addLog('Pushing all local items now...');
       await forcePushToFirebase(false);
-      addLog('✅ Push complete');
+      addLog('âœ… Push complete');
     } else if (snap.size > 0) {
       addLog('Pulling ' + snap.size + ' items from Firebase...');
       await pullFromFirebase(false);
-      addLog('✅ Pull complete. Local now: ' + (await dbAll('items')).length);
+      addLog('âœ… Pull complete. Local now: ' + (await dbAll('items')).length);
     } else {
       addLog('Both empty. Add items and push.');
     }
   } catch(e) {
-    addLog('❌ Error: ' + e.message);
+    addLog('âŒ Error: ' + e.message);
     console.error('[DEBUG]', e);
   }
 }
@@ -6730,7 +6730,7 @@ async function runSyncDebug() {
 
 
 // ===================================================================
-// Day status is tracked in Operations → Day (reports/reconciliation only).
+// Day status is tracked in Operations â†’ Day (reports/reconciliation only).
 // It does not lock tabs, sheets, sales, or inventory actions.
 // ===================================================================
 
@@ -6741,16 +6741,16 @@ function clearDayTabLocks() {
 }
 
 // ===================================================================
-// BUSINESS DAY MANAGEMENT (Operations tab — tracking & reconciliation)
+// BUSINESS DAY MANAGEMENT (Operations tab â€” tracking & reconciliation)
 // ===================================================================
 
 let activeDay = null;
 let dayCheckTimer = null;
 let _warned1145 = null; // date string of the last 11:45 PM warning shown
 
-// ── DATE / TIME HELPERS ──────────────────────────────────────────────
+// â”€â”€ DATE / TIME HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function todayDateStr() {
-  // Use local date, not UTC — important for UTC+3 (Nairobi) where
+  // Use local date, not UTC â€” important for UTC+3 (Nairobi) where
   // new Date().toISOString() returns UTC which drifts 3 hours behind local time
   const d = new Date();
   const y = d.getFullYear();
@@ -6767,11 +6767,11 @@ function fmtFullDate(dateStr) {
   });
 }
 
-// Legacy helpers — day state no longer gates the rest of the app
+// Legacy helpers â€” day state no longer gates the rest of the app
 function isDayOpen() { return true; }
 function requireOpenDay() { return true; }
 
-// ── LOAD ACTIVE DAY ON APP START ─────────────────────────────────────
+// â”€â”€ LOAD ACTIVE DAY ON APP START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Called once at startup. Finds or creates today's day record.
 // Also locks any past days that were left OPEN or CLOSED overnight.
 async function loadActiveDay() {
@@ -6798,7 +6798,7 @@ async function refreshDayTab() {
   renderDaySessionsList();
 }
 
-// ── CREATE A NEW DAY RECORD ──────────────────────────────────────────
+// â”€â”€ CREATE A NEW DAY RECORD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function createDayRecord(dateStr) {
   const id = await dbAdd('business_days', {
     businessDate:   dateStr,
@@ -6817,25 +6817,25 @@ async function createDayRecord(dateStr) {
   return await dbGet('business_days', id);
 }
 
-// ── GET BUSINESS DAY ─────────────────────────────────────────────────
+// â”€â”€ GET BUSINESS DAY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function getBusinessDay(dateStr) {
   const all = await dbAll('business_days');
   return all.find(d => (d.businessDate || d.business_date) === dateStr) || null;
 }
 
-// ── OPEN DAY ─────────────────────────────────────────────────────────
+// â”€â”€ OPEN DAY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function openDay() {
   const today = todayDateStr();
   let bday = await getBusinessDay(today);
   if (!bday) bday = await createDayRecord(today);
 
   if (bday.status === 'OPEN')   { toast('Day is already open!', 'err'); return; }
-  if (bday.status === 'LOCKED') { toast('🔒 This day is archived.', 'err'); return; }
+  if (bday.status === 'LOCKED') { toast('ðŸ”’ This day is archived.', 'err'); return; }
 
   const isReopen = bday.status === 'CLOSED' && !!bday.opened_at;
 
   if (!bday.opened_at) {
-    // First open of the day — snapshot opening stock value
+    // First open of the day â€” snapshot opening stock value
     const items = await dbAll('items');
     bday.openingStockCost   = items.reduce((s, i) => s + i.buy * i.qty, 0);
     bday.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
@@ -6852,10 +6852,10 @@ async function openDay() {
   updateDayBanner();
   updateDayLiveStats();
   renderDaySessionsList();
-  toast(isReopen ? '🔓 Day reopened! Continue recording.' : '🌅 Business day opened!', 'ok');
+  toast(isReopen ? 'ðŸ”“ Day reopened! Continue recording.' : 'ðŸŒ… Business day opened!', 'ok');
 }
 
-// ── CLOSE DAY ────────────────────────────────────────────────────────
+// â”€â”€ CLOSE DAY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function closeDay() {
   if (!activeDay || activeDay.status !== 'OPEN') { toast('No open day to close.', 'err'); return; }
 
@@ -6866,7 +6866,7 @@ async function closeDay() {
   const profit    = daySales.reduce((s, x) => s + x.profit, 0);
   const itemsSold = daySales.reduce((s, x) => s + x.qty, 0);
   // Note: tracks NEW items added today (by createdAt).
-  // Restocks to existing items are not separately tracked — a future
+  // Restocks to existing items are not separately tracked â€” a future
   // 'stock_events' log store would capture this properly.
   const todayStart = today + 'T00:00:00';
   const items     = await dbAll('items');
@@ -6880,7 +6880,7 @@ async function closeDay() {
   // Populate summary sheet
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('ds-date',       fmtFullDate((activeDay.businessDate || activeDay.business_date)));
-  set('ds-time-range', openT + ' → ' + nowT);
+  set('ds-time-range', openT + ' â†’ ' + nowT);
   set('ds-revenue',    fmt(revenue));
   set('ds-profit',     fmt(profit));
   set('ds-margin',     margin + '%');
@@ -6904,13 +6904,13 @@ async function closeDay() {
   // Verdict
   const verdictEl = document.getElementById('ds-verdict');
   if (verdictEl) {
-    let verdict = '😴 Quiet day. ' + daySales.length + ' sales.';
+    let verdict = 'ðŸ˜´ Quiet day. ' + daySales.length + ' sales.';
     let vBg = 'var(--surface2)', vColor = 'var(--muted)';
     if (daySales.length > 0) {
       const m = parseFloat(margin);
-      if (m >= 30) { verdict = '🔥 Excellent! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
-      else if (m >= 15) { verdict = '✅ Good day! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
-      else { verdict = '👍 Decent. ' + margin + '% margin.'; vBg = 'var(--amber-light)'; vColor = 'var(--amber)'; }
+      if (m >= 30) { verdict = 'ðŸ”¥ Excellent! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
+      else if (m >= 15) { verdict = 'âœ… Good day! ' + margin + '% margin.'; vBg = 'var(--green-light)'; vColor = 'var(--green)'; }
+      else { verdict = 'ðŸ‘ Decent. ' + margin + '% margin.'; vBg = 'var(--amber-light)'; vColor = 'var(--amber)'; }
     }
     verdictEl.style.cssText = 'background:' + vBg + ';color:' + vColor + ';border:1px solid ' + vColor + ';border-radius:var(--r);padding:14px 16px;margin-bottom:14px;text-align:center;';
     verdictEl.innerHTML = '<div style="font-size:16px;font-weight:800;">' + verdict + '</div>';
@@ -6923,13 +6923,13 @@ async function closeDay() {
   // Show confirm button, hide pause button
   const confirmBtn = document.getElementById('ds-confirm-btn');
   const pauseBtn   = document.getElementById('ds-pause-btn');
-  if (confirmBtn) { confirmBtn.style.display = 'block'; confirmBtn.textContent = '🌙 Confirm Close Day'; }
+  if (confirmBtn) { confirmBtn.style.display = 'block'; confirmBtn.textContent = 'ðŸŒ™ Confirm Close Day'; }
   if (pauseBtn)   pauseBtn.style.display = 'none';
 
   document.getElementById('day-summary-sheet').classList.add('open');
 }
 
-// ── CONFIRM CLOSE ────────────────────────────────────────────────────
+// â”€â”€ CONFIRM CLOSE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function confirmCloseDay() {
   const notes = (document.getElementById('ds-notes') || {}).value || '';
   const now   = new Date();
@@ -6957,13 +6957,13 @@ async function confirmCloseDay() {
   updateDayBanner();
   renderDaySessionsList();
   renderDashboard();
-  toast('🌙 Day closed. You can reopen it from Operations → Day anytime.', 'ok');
+  toast('ðŸŒ™ Day closed. You can reopen it from Operations â†’ Day anytime.', 'ok');
   scheduleSync();
 }
 
 // cancelCloseDay: handled by day reconciliation flow below
 
-// ── BANNER LIVE CLOCK — refresh duration display every minute ────────
+// â”€â”€ BANNER LIVE CLOCK â€” refresh duration display every minute â”€â”€â”€â”€â”€â”€â”€â”€
 let _bannerClockTimer = null;
 function startBannerClock() {
   if (_bannerClockTimer) clearInterval(_bannerClockTimer);
@@ -6972,9 +6972,9 @@ function startBannerClock() {
   }, 60000);
 }
 
-// ── AUTO SCHEDULER ───────────────────────────────────────────────────
+// â”€â”€ AUTO SCHEDULER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Checks every 30s for time-triggered actions
-// ── VOID SALE ─────────────────────────────────────────────────────
+// â”€â”€ VOID SALE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function _deleteLocalRevenueForSale(saleId) {
   const localFin = await dbAll('finances');
   for (const f of localFin) {
@@ -6990,7 +6990,7 @@ async function voidSale(saleId) {
   const _voidMsg = _voidSale
     ? 'Void sale of "' + (_voidSale.itemName || _voidSale.itemCode || 'item') + '"' +
       (_voidSale.itemSize ? ' (Size ' + _voidSale.itemSize + ')' : '') +
-      ' × ' + (_voidSale.qty||1) + ' for ' + fmt(_voidSale.revenue||0) + '?\n\nStock will be restored.'
+      ' Ã— ' + (_voidSale.qty||1) + ' for ' + fmt(_voidSale.revenue||0) + '?\n\nStock will be restored.'
     : 'Void this sale? Stock will be restored.';
   if (!confirm(_voidMsg)) return;
   const sale = await dbGet('sales', saleId);
@@ -7041,7 +7041,7 @@ async function voidSale(saleId) {
   if (activeDay) updateDayLiveStats();
   try { renderFinancePage(); } catch(_) { /* intentionally ignored */ }
   scheduleSync();
-  toast('↩️ Sale voided · stock restored', 'ok');
+  toast('â†©ï¸ Sale voided Â· stock restored', 'ok');
   } catch(e) { console.error("[voidSale]", e); toast("Error: " + e.message, "err"); }
 }
 
@@ -7052,7 +7052,7 @@ async function lockBusinessDay(bday) {
   await dbPut('business_days', bday);
 }
 
-// ── DAY BANNER ───────────────────────────────────────────────────────
+// â”€â”€ DAY BANNER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function updateDayBanner() {
   if (!activeDay) return;
   const { status, opened_at, closed_at, last_opened_at, auto_closed, reopened_count } = activeDay;
@@ -7071,45 +7071,45 @@ function updateDayBanner() {
     const mins = opened_at ? Math.floor((Date.now() - new Date(opened_at)) / 60000) : 0;
     const dur  = mins < 60 ? mins + 'm' : Math.floor(mins/60) + 'h ' + (mins%60) + 'm';
     banner.style.cssText = 'background:var(--green-light);border:2px solid #a8d8b5;border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
-    icon.textContent  = '🌅';
+    icon.textContent  = 'ðŸŒ…';
     badge.textContent = 'OPEN';
     badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:#dcfce7;color:#16a34a;';
     title.textContent = 'Business Day Open';
     title.style.color = 'var(--green)';
     sub.textContent   = 'Opened ' + fmtTime(opened_at)
-      + ' · ' + dur + ' running'
-      + (reopened_count > 0 ? ' · Reopened ' + reopened_count + 'x' : '');
+      + ' Â· ' + dur + ' running'
+      + (reopened_count > 0 ? ' Â· Reopened ' + reopened_count + 'x' : '');
     if (actionArea) actionArea.innerHTML = '';  // Day tab handles its own buttons now
     clearDayTabLocks();
     updateDayLiveStats();
   } else if (status === 'CLOSED') {
     banner.style.cssText = 'background:#fef3c7;border:2px solid #f5d9a0;border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
-    icon.textContent  = '🌙';
+    icon.textContent  = 'ðŸŒ™';
     badge.textContent = 'CLOSED';
     badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:#fef3c7;color:#92400e;';
     title.textContent = 'Business Day Closed';
     title.style.color = '#d97706';
     sub.textContent   = closed_at
-      ? 'Closed at ' + fmtTime(closed_at) + (auto_closed ? ' · auto' : '') + (reopened_count > 0 ? ' · Opened ' + (reopened_count + 1) + 'x today' : '') + ' · Tap to reopen'
-      : 'Tap Open Day to begin — ' + fmtFullDate(todayDateStr());
+      ? 'Closed at ' + fmtTime(closed_at) + (auto_closed ? ' Â· auto' : '') + (reopened_count > 0 ? ' Â· Opened ' + (reopened_count + 1) + 'x today' : '') + ' Â· Tap to reopen'
+      : 'Tap Open Day to begin â€” ' + fmtFullDate(todayDateStr());
     if (actionArea) actionArea.innerHTML = '';
     clearDayTabLocks();
     updateDayLiveStats();
   } else if (status === 'LOCKED') {
     banner.style.cssText = 'background:var(--surface2);border:2px solid var(--border);border-radius:var(--r-lg);padding:20px 18px;margin-bottom:14px;text-align:center;';
-    icon.textContent  = '🔒';
+    icon.textContent  = 'ðŸ”’';
     badge.textContent = 'LOCKED';
     badge.style.cssText = 'display:inline-block;font-size:11px;font-weight:800;font-family:var(--mono);padding:4px 12px;border-radius:20px;margin-bottom:8px;letter-spacing:1px;background:var(--surface2);color:var(--muted);';
     title.textContent = 'Archived Day';
     title.style.color = 'var(--muted)';
-    sub.textContent   = fmtFullDate((activeDay.businessDate || activeDay.business_date)) + ' — archived';
+    sub.textContent   = fmtFullDate((activeDay.businessDate || activeDay.business_date)) + ' â€” archived';
     if (actionArea) actionArea.innerHTML = '';
     clearDayTabLocks();
     updateDayLiveStats();
   }
 }
 
-// ── LIVE STATS — full cash flow summary ─────────────────────────────
+// â”€â”€ LIVE STATS â€” full cash flow summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function updateDayLiveStats() {
   if (!activeDay) return;
   const today  = activeDay.businessDate || activeDay.business_date || todayDateStr();
@@ -7120,7 +7120,7 @@ async function updateDayLiveStats() {
   const daySales = sales.filter(s => (s.businessDate||s.business_date||(s.date||'').split('T')[0]) === today);
   const dayFins  = fins.filter(e  => (e.date||(e.createdAt||'').split('T')[0]) === today);
 
-  // ── Sales split by payment method ──────────────────────────
+  // â”€â”€ Sales split by payment method â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const cashSales  = daySales.filter(s => !s.paymentMethod || s.paymentMethod === 'cash');
   const mpesaSales = daySales.filter(s => s.paymentMethod === 'mpesa');
   const cashRev    = cashSales.reduce((a,s)=>a+(s.revenue||0), 0);
@@ -7130,21 +7130,21 @@ async function updateDayLiveStats() {
   const margin     = totalRev > 0 ? (totalProf/totalRev*100) : 0;
   const salesCount = daySales.length;
 
-  // ── Finance entries today ──────────────────────────────────
+  // â”€â”€ Finance entries today â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const injected   = dayFins.filter(e=>e.type==='injection'||e.type==='investment').reduce((a,e)=>a+(e.amount||0), 0);
   const stockBought= dayFins.filter(e=>e.type==='stock_purchase').reduce((a,e)=>a+(e.amount||0), 0);
   const expenses   = dayFins.filter(e=>e.type==='expense').reduce((a,e)=>a+(e.amount||0), 0);
   const withdrawn  = dayFins.filter(e=>e.type==='withdrawal').reduce((a,e)=>a+(e.amount||0), 0);
 
-  // ── Cash position ──────────────────────────────────────────
-  // Cash at hand = cash sales + cash injections − withdrawals − cash expenses − stock bought with cash
+  // â”€â”€ Cash position â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Cash at hand = cash sales + cash injections âˆ’ withdrawals âˆ’ cash expenses âˆ’ stock bought with cash
   const cashAtHand = cashRev + injected - withdrawn - expenses - stockBought;
   const mpesaBal   = mpesaRev;
   const netFlow    = totalRev + injected - withdrawn - expenses - stockBought;
   const totalIn    = cashRev + mpesaRev + injected;
   const totalOut   = stockBought + expenses + withdrawn;
 
-  // ── Populate UI ────────────────────────────────────────────
+  // â”€â”€ Populate UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   const setColor = (id, c) => { const el = document.getElementById(id); if (el) el.style.color = c; };
 
@@ -7189,7 +7189,7 @@ async function updateDayLiveStats() {
   set('day-margin-pct',  margin.toFixed(1) + '%');
   setColor('day-margin-pct', margin >= 20 ? 'var(--green)' : margin >= 10 ? '#d97706' : 'var(--red)');
 
-  // ── Sales + Finance transactions list ─────────────────────
+  // â”€â”€ Sales + Finance transactions list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const sl = document.getElementById('day-sales-list');
   if (sl) {
     // Merge sales and finance entries into one timeline
@@ -7197,7 +7197,7 @@ async function updateDayLiveStats() {
       ...daySales.map(s => ({
         time:  s.date || s.createdAt,
         type:  'sale',
-        label: (s.itemName||s.itemCode||'Sale') + (s.itemSize ? ' ·'+s.itemSize : ''),
+        label: (s.itemName||s.itemCode||'Sale') + (s.itemSize ? ' Â·'+s.itemSize : ''),
         sub:   (s.qty||1) + ' pc' + ((s.qty||1)!==1?'s':''),
         amt:   s.revenue||0,
         color: 'var(--green)',
@@ -7207,11 +7207,11 @@ async function updateDayLiveStats() {
       })),
       ...dayFins.map(e => {
         const isMinus = e.type==='expense'||e.type==='withdrawal'||e.type==='stock_purchase';
-        const icons = {injection:'💉',investment:'💵',stock_purchase:'🛍️',expense:'💸',withdrawal:'🏧',other:'📝'};
+        const icons = {injection:'ðŸ’‰',investment:'ðŸ’µ',stock_purchase:'ðŸ›ï¸',expense:'ðŸ’¸',withdrawal:'ðŸ§',other:'ðŸ“'};
         return {
           time:  e.date ? e.date+'T12:00:00' : e.createdAt,
           type:  'finance',
-          label: icons[e.type]||'📝' + ' ' + (e.description||e.type),
+          label: icons[e.type]||'ðŸ“' + ' ' + (e.description||e.type),
           sub:   e.type.replace('_',' '),
           amt:   e.amount||0,
           color: isMinus ? 'var(--red)' : 'var(--green)',
@@ -7229,7 +7229,7 @@ async function updateDayLiveStats() {
         `<div class="day-txn-row">
           <div style="flex:1;min-width:0;">
             <div class="day-txn-label">${escapeHtml(t.label)}</div>
-            <div class="day-txn-sub">${t.time ? fmtTime(t.time) : ''} · ${t.sub}</div>
+            <div class="day-txn-sub">${t.time ? fmtTime(t.time) : ''} Â· ${t.sub}</div>
           </div>
           <div class="day-txn-amt" style="color:${t.color};">${t.sign}${fmt(t.amt)}</div>
           ${t.canVoid && isDayOpen() ? `<button onclick="voidSale(${t.id})" style="font-size:9px;padding:3px 8px;background:var(--red-light);color:var(--red);border:1px solid var(--red);border-radius:4px;cursor:pointer;font-weight:700;flex-shrink:0;">Void</button>` : ''}
@@ -7239,7 +7239,7 @@ async function updateDayLiveStats() {
   }
 }
 
-// ── PAST SESSIONS LIST ────────────────────────────────────────────────
+// â”€â”€ PAST SESSIONS LIST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function renderDaySessionsList() {
   const all = await dbAll('business_days');
   const today = todayDateStr();
@@ -7263,9 +7263,9 @@ async function renderDaySessionsList() {
       '<div>' +
         '<div style="font-size:14px;font-weight:800;color:var(--text);">' + fmtFullDate(s.business_date) + '</div>' +
         '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">' +
-          (s.opened_at ? fmtTime(s.opened_at) : '—') + ' → ' +
+          (s.opened_at ? fmtTime(s.opened_at) : 'â€”') + ' â†’ ' +
           (s.closed_at ? fmtTime(s.closed_at) : 'auto') +
-          (s.reopened_count > 0 ? ' · Reopened ' + s.reopened_count + 'x' : '') +
+          (s.reopened_count > 0 ? ' Â· Reopened ' + s.reopened_count + 'x' : '') +
         '</div>' +
       '</div>' +
       (locked
@@ -7282,9 +7282,9 @@ async function renderDaySessionsList() {
       '</div>';
   }).join('');
 }
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // RESTOCK
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function toggleRestock() {
   const panel = document.getElementById('restock-panel');
   if (!panel) return;
@@ -7310,7 +7310,7 @@ function updateDetailRestockBtnLabel() {
   if (!btn) return;
   const sizeEl = document.getElementById('sh-size');
   const sizeText = sizeEl ? (sizeEl.textContent || '').trim() : '';
-  const hasSize = sizeText && sizeText !== '—';
+  const hasSize = sizeText && sizeText !== 'â€”';
   btn.textContent = hasSize ? 'RESTOCK (' + sizeText + ')' : 'RESTOCK';
 }
 
@@ -7325,7 +7325,7 @@ async function confirmRestock() {
     if (buyRaw !== null && buyRaw < 0) return Validate.fail('Invalid buy price', 'restock-buy');
     if (sellRaw !== null && sellRaw < 0) return Validate.fail('Invalid sell price', 'restock-sell');
     const item = await dbGet('items', currentDetailId);
-    if (!item) { toast('⚠️ Item not found', 'err'); return; }
+    if (!item) { toast('âš ï¸ Item not found', 'err'); return; }
     if (item.isShoe) {
       toast('Restock a shoe size from the size list', 'err');
       return;
@@ -7355,18 +7355,18 @@ async function confirmRestock() {
     await enrichShoeItems(allItems);
     renderList(); renderDashboard(); updateHeader();
     updateLowStockBadge();
-    toast('✅ Added ' + qty + ' pcs to ' + (item.name || item.code), 'ok');
+    toast('âœ… Added ' + qty + ' pcs to ' + (item.name || item.code), 'ok');
   } catch(e) {
     console.error('[confirmRestock]', e);
-    toast('⚠️ Restock failed: ' + e.message, 'err');
+    toast('âš ï¸ Restock failed: ' + e.message, 'err');
   } finally {
     if (restockBtn) { restockBtn.disabled = false; restockBtn.style.opacity = ''; }
   }
 }
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // LOW STOCK BADGE IN HEADER
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function updateLowStockBadge() {
   try {
   const items = await dbAll('items');
@@ -7375,9 +7375,9 @@ async function updateLowStockBadge() {
   } catch(e) { console.error("[updateLowStockBadge]", e); toast("Error: " + e.message, "err"); }
 }
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // DELETE SALE
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function deleteSale(saleId) {
   try {
   if (!confirm('Delete this sale record? Stock will NOT be restored.')) return;
@@ -7402,9 +7402,9 @@ async function deleteSale(saleId) {
   } catch(e) { console.error("[deleteSale]", e); toast("Error: " + e.message, "err"); }
 }
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // SALES EXPORT BY DATE FILTER
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function filterSalesByPeriod(sales, period) {
   const now = new Date();
@@ -7422,9 +7422,9 @@ function filterSalesByPeriod(sales, period) {
   });
 }
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // DAY REPORT EXPORT
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 
 // ===== CLOSE SHEET ON BACKDROP =====
@@ -7482,7 +7482,7 @@ if ('serviceWorker' in navigator) {
     // Update progress bars (both banner + settings card)
     ['update-progress-bar','upd-progress-bar'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.width='100%';});
     ['update-progress-pct','upd-progress-pct'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='100%';});
-    ['update-progress-label','upd-progress-label'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='Reloading…';});
+    ['update-progress-label','upd-progress-label'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='Reloadingâ€¦';});
     // Show success state in banner
     const btnArea = document.getElementById('upd-btn-area');
     const progressWrap = document.getElementById('upd-progress-wrap');
@@ -7501,7 +7501,7 @@ window.addEventListener('offline', () => {
   }
 });
 
-// ── INSTALL PROMPT (Add to Home Screen) ─────────────────────────────────
+// â”€â”€ INSTALL PROMPT (Add to Home Screen) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function detectBrowser() {
   const ua = navigator.userAgent.toLowerCase();
@@ -7517,34 +7517,34 @@ function getInstallSteps() {
   const browser = detectBrowser();
   const steps = {
     samsung: [
-      '1️⃣  Tap the <strong>⋮ menu</strong> at the top right',
-      '2️⃣  Tap <strong>"Add page to"</strong> → <strong>"Home screen"</strong>',
-      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+      '1ï¸âƒ£  Tap the <strong>â‹® menu</strong> at the top right',
+      '2ï¸âƒ£  Tap <strong>"Add page to"</strong> â†’ <strong>"Home screen"</strong>',
+      '3ï¸âƒ£  Tap <strong>Add</strong> â€” done! âœ…'
     ],
     firefox: [
-      '1️⃣  Tap the <strong>⋮ menu</strong> at the top right',
-      '2️⃣  Tap <strong>"Install"</strong> or <strong>"Add to Home Screen"</strong>',
-      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+      '1ï¸âƒ£  Tap the <strong>â‹® menu</strong> at the top right',
+      '2ï¸âƒ£  Tap <strong>"Install"</strong> or <strong>"Add to Home Screen"</strong>',
+      '3ï¸âƒ£  Tap <strong>Add</strong> â€” done! âœ…'
     ],
     safari: [
-      '1️⃣  Tap the <strong>Share button ↑</strong> at the bottom',
-      '2️⃣  Scroll down → tap <strong>"Add to Home Screen"</strong>',
-      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+      '1ï¸âƒ£  Tap the <strong>Share button â†‘</strong> at the bottom',
+      '2ï¸âƒ£  Scroll down â†’ tap <strong>"Add to Home Screen"</strong>',
+      '3ï¸âƒ£  Tap <strong>Add</strong> â€” done! âœ…'
     ],
     chrome: [
-      '1️⃣  Tap the <strong>⋮ menu</strong> at the top right',
-      '2️⃣  Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong>',
-      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+      '1ï¸âƒ£  Tap the <strong>â‹® menu</strong> at the top right',
+      '2ï¸âƒ£  Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong>',
+      '3ï¸âƒ£  Tap <strong>Add</strong> â€” done! âœ…'
     ],
     edge: [
-      '1️⃣  Tap the <strong>... menu</strong> at the bottom',
-      '2️⃣  Tap <strong>"Add to phone"</strong>',
-      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+      '1ï¸âƒ£  Tap the <strong>... menu</strong> at the bottom',
+      '2ï¸âƒ£  Tap <strong>"Add to phone"</strong>',
+      '3ï¸âƒ£  Tap <strong>Add</strong> â€” done! âœ…'
     ],
     other: [
-      '1️⃣  Open your <strong>browser menu</strong>',
-      '2️⃣  Look for <strong>"Add to Home Screen"</strong>',
-      '3️⃣  Tap <strong>Add</strong> — done! ✅'
+      '1ï¸âƒ£  Open your <strong>browser menu</strong>',
+      '2ï¸âƒ£  Look for <strong>"Add to Home Screen"</strong>',
+      '3ï¸âƒ£  Tap <strong>Add</strong> â€” done! âœ…'
     ]
   };
   return steps[browser] || steps.other;
@@ -7560,7 +7560,7 @@ window.addEventListener('beforeinstallprompt', e => {
 
 window.addEventListener('appinstalled', () => {
   hideInstallBanner();
-  toast('✅ App installed on home screen!', 'ok');
+  toast('âœ… App installed on home screen!', 'ok');
   deferredInstallPrompt = null;
 });
 
@@ -7643,7 +7643,7 @@ function showUserProfile() {
   closeUserMenu();
   if (!currentUser) return;
   const roleColors = { super: '#92400e', user: '#1d4ed8', clerk: 'var(--green)' };
-  const roleLabels = { super: '🟡 Super User — Full Access', user: '🔵 User — Standard Access', clerk: '🟢 Clerk — Limited Access' };
+  const roleLabels = { super: 'ðŸŸ¡ Super User â€” Full Access', user: 'ðŸ”µ User â€” Standard Access', clerk: 'ðŸŸ¢ Clerk â€” Limited Access' };
   const tabLabels = { dash: 'Dashboard', inventory: 'Inventory', list: 'Stock', wishlist: 'Wishlist', add: 'Add Item', sell: 'Sale', operations: 'Operations', settings: 'Settings' };
   document.getElementById('profile-name').textContent = currentUser.name;
   document.getElementById('profile-username').textContent = currentUser.username;
@@ -7699,7 +7699,7 @@ function initCleanNumericInputs() {
   });
 }
 
-// ===== PHOTO VIEWER — pan, pinch-zoom, double-tap fullscreen =====
+// ===== PHOTO VIEWER â€” pan, pinch-zoom, double-tap fullscreen =====
 const _photoViewerRegistry = new Map();
 
 function ensurePhotoLightbox() {
@@ -7710,7 +7710,7 @@ function ensurePhotoLightbox() {
   lb.className = 'photo-lightbox';
   lb.hidden = true;
   lb.innerHTML =
-    '<button type="button" class="photo-lightbox-close" aria-label="Close">✕</button>' +
+    '<button type="button" class="photo-lightbox-close" aria-label="Close">âœ•</button>' +
     '<div class="photo-lightbox-viewport" id="photo-lightbox-viewport">' +
     '<img id="photo-lightbox-img" class="photo-pan-img" alt="">' +
     '</div>';
@@ -8074,7 +8074,7 @@ function setLoginReady(ready) {
   } else {
     if (!btn.dataset.loadingLabel) btn.dataset.loadingLabel = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Loading app…';
+    btn.textContent = 'Loading appâ€¦';
   }
 }
 
@@ -8126,7 +8126,7 @@ function applyRoleRestrictions(user) {
 
   const header = document.querySelector('.header-title');
   if (header) {
-    header.textContent = user.role === 'clerk' ? 'Add Stock — Mandela' : 'Mandela General Stores';
+    header.textContent = user.role === 'clerk' ? 'Add Stock â€” Mandela' : 'Mandela General Stores';
   }
   if (user.role === 'clerk' && user.tabs.includes('inventory')) {
     _activeInventoryTab = 'add';
@@ -8192,13 +8192,13 @@ async function attemptLogin() {
   } catch (e) {
     currentUser = null;
     localStorage.removeItem(KEY_SESSION);
-    toast('App still loading — try again in a moment', 'err');
+    toast('App still loading â€” try again in a moment', 'err');
     return;
   }
 
   finishAuthUI(user);
   _origShowPage(resolveLandingPage(user, localStorage.getItem(KEY_LAST_PAGE)));
-  toast('Welcome, ' + user.name + '! 👋', 'ok');
+  toast('Welcome, ' + user.name + '! ðŸ‘‹', 'ok');
 }
 
 function checkSession() {
@@ -8212,7 +8212,7 @@ function checkSession() {
     // Support both old format {username, pin} and new format {username, ts}
     const username = data.username;
     const ts       = data.ts || 0;
-    const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days — never expire on normal use
+    const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days â€” never expire on normal use
     const expired  = ts > 0 && (Date.now() - ts) > SESSION_TTL;
     const user     = USERS.find(u => u.username === username);
 
@@ -8239,10 +8239,10 @@ function checkSession() {
 
 window.addEventListener('unhandledrejection',e=>{
   console.error('[UNHANDLED]',e.reason);
-  if(e.reason&&e.reason.message&&e.reason.message.includes('Database'))toast('⚠️ '+e.reason.message,'err');
+  if(e.reason&&e.reason.message&&e.reason.message.includes('Database'))toast('âš ï¸ '+e.reason.message,'err');
 });
 
-// ── APP UPDATE SYSTEM ─────────────────────────────────────────────
+// â”€â”€ APP UPDATE SYSTEM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let _pendingWorker = null;
 let _updateBannerDismissed = false;
 
@@ -8270,7 +8270,7 @@ function _showUpdateBanner() {
   if (progress)   progress.style.display   = 'none';
   if (success)    success.style.display    = 'none';
   if (btnArea)    btnArea.style.display    = 'flex';
-  if (installBtn) { installBtn.disabled = false; installBtn.style.opacity = '1'; installBtn.textContent = '⬇️ Install Update Now'; }
+  if (installBtn) { installBtn.disabled = false; installBtn.style.opacity = '1'; installBtn.textContent = 'â¬‡ï¸ Install Update Now'; }
   if (laterBtn)   laterBtn.style.display  = 'block';
   // Show banner
   banner.style.display = 'flex';
@@ -8281,7 +8281,7 @@ function dismissAppUpdate() {
   if (banner) banner.style.display = 'none';
   _updateBannerDismissed = true;
   // Keep the dot on settings tab so they can still find it
-  toast('Update ready — tap Settings to install when ready', '');
+  toast('Update ready â€” tap Settings to install when ready', '');
 }
 
 function applyAppUpdate() {
@@ -8300,11 +8300,11 @@ function applyAppUpdate() {
 
   // Animated progress steps
   const steps = [
-    { pct:15,  lbl:'Downloading update…',     delay:0   },
-    { pct:35,  lbl:'Verifying files…',         delay:400 },
-    { pct:55,  lbl:'Installing…',              delay:700 },
-    { pct:75,  lbl:'Clearing old cache…',      delay:1100},
-    { pct:90,  lbl:'Finalising…',              delay:1500},
+    { pct:15,  lbl:'Downloading updateâ€¦',     delay:0   },
+    { pct:35,  lbl:'Verifying filesâ€¦',         delay:400 },
+    { pct:55,  lbl:'Installingâ€¦',              delay:700 },
+    { pct:75,  lbl:'Clearing old cacheâ€¦',      delay:1100},
+    { pct:90,  lbl:'Finalisingâ€¦',              delay:1500},
   ];
   steps.forEach(({pct, lbl, delay}) => {
     setTimeout(() => {
@@ -8316,7 +8316,7 @@ function applyAppUpdate() {
 
   // Trigger the actual SW skip-waiting
   _pendingWorker.postMessage({ type: 'SKIP_WAITING' });
-  // controllerchange will fire → reloads page; we also update settings card
+  // controllerchange will fire â†’ reloads page; we also update settings card
   _showUpdateState('installing');
 }
 
@@ -8374,7 +8374,7 @@ function updateFinTypeColor() {
 }
 
 
-// ── Shoe group expand/collapse ────────────────────────────────────
+// â”€â”€ Shoe group expand/collapse â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function _cleanupFinanceCoherence(force) {
   if (!force && window._financeCoherenceCleaned) return;
   window._financeCoherenceCleaned = true;
@@ -8425,7 +8425,7 @@ async function reconcileFinances() {
   _showFinReconcile(false);
   renderFinancePage();
   renderDashboard();
-  toast('✅ Finances reconciled — removed ' + removed + ' duplicate row(s)', 'ok');
+  toast('âœ… Finances reconciled â€” removed ' + removed + ' duplicate row(s)', 'ok');
 }
 window.reconcileFinances = reconcileFinances;
 
@@ -8510,7 +8510,7 @@ renderFinancePage = async function() {
   listEntries.sort((a,b)=>new Date(b.date||b.createdAt||0)-new Date(a.date||a.createdAt||0));
   const summaryLine = document.getElementById('fin-summary-line');
   if (summaryLine) {
-    summaryLine.textContent = 'Pool ' + fmt(money.businessPool) + ' · Cash in ' + fmt(money.cashToBusiness) + ' · Stock added ' + fmt(money.stockAdded) + ' · Profit ' + fmt(money.salesProfit);
+    summaryLine.textContent = 'Pool ' + fmt(money.businessPool) + ' Â· Cash in ' + fmt(money.cashToBusiness) + ' Â· Stock added ' + fmt(money.stockAdded) + ' Â· Profit ' + fmt(money.salesProfit);
   }
   renderFinList(listEntries);
   if (!window._finReconcileUnlocked) _showFinReconcile(false);
@@ -8536,14 +8536,14 @@ renderFinList = function(entries) {
     const c = cfgMap[e.type] || cfgMap.expense;
     const ds = e.date || (e.createdAt||'').split('T')[0];
     const fd = ds ? new Date(ds+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '-';
-    const grp = groupLabel(e) + ' · ' + fd;
+    const grp = groupLabel(e) + ' Â· ' + fd;
     const header = grp !== lastGroup ? '<div style="background:var(--surface2);padding:7px 12px;font-size:10px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">' + grp + '</div>' : '';
     lastGroup = grp;
     const delBtn = (!e.isSaleRow && currentUser&&currentUser.role==='super')
       ? '<button onclick="deleteFinanceEntry('+e.id+')" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;flex-shrink:0;">x</button>'
       : '';
     const sub = e.type === 'sale_out'
-      ? 'Cost: ' + fmt(e.amount || 0) + ' · Profit: ' + fmt(e.profit || 0)
+      ? 'Cost: ' + fmt(e.amount || 0) + ' Â· Profit: ' + fmt(e.profit || 0)
       : c.label;
     return header + '<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface);border-bottom:1px solid var(--border);">' +
       '<span style="font-size:13px;font-weight:900;min-width:24px;text-align:center;color:'+c.color+';">'+c.icon+'</span>' +
@@ -8571,7 +8571,7 @@ saveFinanceEntry = async function() {
   if (desc.length > 200) return Validate.fail('Description too long (max 200 characters)', 'fin-desc');
   const dateCheck = Validate.financeDate(date, 'fin-date');
   if (dateCheck === false) return;
-  if (dateCheck === 'future' && !confirm('Date is in the future — are you sure?')) return;
+  if (dateCheck === 'future' && !confirm('Date is in the future â€” are you sure?')) return;
   const entry = { type, amount, description: desc, category: cat, date, createdAt: new Date().toISOString(), createdBy: currentUser ? currentUser.username : 'system' };
   entry.id = await dbAdd('finances', entry);
   if (fbReady && fbDb) {
@@ -8636,15 +8636,15 @@ function _renderSizeGroupFilter() {
 }
 
 
-// ═══════════════════════════════════════════════════════════
-// DAY RECONCILIATION — FLOW CONTROLLER
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// DAY RECONCILIATION â€” FLOW CONTROLLER
 // Steps keyed by date in localStorage:
-//   no data        → step: open  (show Open Day btn)
-//   opened_only    → step: opening_form (show opening balances form)
-//   opening_locked → step: close_btn (show Close Day btn)
-//   closing_form   → step: closing_form (show closing form)
-//   reconciled     → step: reconciled (insights only)
-// ═══════════════════════════════════════════════════════════
+//   no data        â†’ step: open  (show Open Day btn)
+//   opened_only    â†’ step: opening_form (show opening balances form)
+//   opening_locked â†’ step: close_btn (show Close Day btn)
+//   closing_form   â†’ step: closing_form (show closing form)
+//   reconciled     â†’ step: reconciled (insights only)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 const DAY_RECON_KEY = date => 'mgs_recon_' + date;
 
@@ -8659,7 +8659,7 @@ function _clearDayRecon(date) {
   try { localStorage.removeItem(DAY_RECON_KEY(date)); } catch(e) {}
 }
 
-// ── openDay: existing logic + advance to opening form ────────────
+// â”€â”€ openDay: existing logic + advance to opening form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Wrap the existing openDay to also advance the state
 const _origOpenDay = openDay;
 openDay = async function() {
@@ -8673,7 +8673,7 @@ openDay = async function() {
 };
 window.openDay = openDay;
 
-// ── initCloseDay: show closing form ─────────────────────────────
+// â”€â”€ initCloseDay: show closing form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function initCloseDay() {
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
   const data  = _getDayRecon(today) || {};
@@ -8682,7 +8682,7 @@ function initCloseDay() {
 }
 window.initCloseDay = initCloseDay;
 
-// ── cancelCloseDay (from closing form Cancel btn) ────────────────
+// â”€â”€ cancelCloseDay (from closing form Cancel btn) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function cancelCloseDay() {
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
   const data  = _getDayRecon(today) || {};
@@ -8691,7 +8691,7 @@ function cancelCloseDay() {
 }
 window.cancelCloseDay = cancelCloseDay;
 
-// ── Internal: close the business day record ──────────────────────
+// â”€â”€ Internal: close the business day record â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function _doCloseDay() {
   if (!activeDay) return;
   const now      = new Date();
@@ -8711,18 +8711,18 @@ async function _doCloseDay() {
   renderDashboard();
 }
 
-// ── Render locked opening summary ───────────────────────────────
+// â”€â”€ Render locked opening summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function _renderOpeningSummary(data) {
   const el = document.getElementById('day-opening-summary');
   if (!el || !data || !data.opening) return;
   const o   = data.opening;
-  const f   = v => v ? fmt(v) : '—';
+  const f   = v => v ? fmt(v) : 'â€”';
   const t   = new Date(data.lockedAt||0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   el.innerHTML =
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">' +
-      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);">'+f(o.cash)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">💵 Cash</div></div>' +
-      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);">'+f(o.till)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">🏧 Till</div></div>' +
-      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);color:#6366f1;">'+f(o.mpesa)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">📱 M-Pesa</div></div>' +
+      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);">'+f(o.cash)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">ðŸ’µ Cash</div></div>' +
+      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);">'+f(o.till)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">ðŸ§ Till</div></div>' +
+      '<div style="text-align:center;"><div style="font-size:15px;font-weight:900;font-family:var(--mono);color:#6366f1;">'+f(o.mpesa)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">ðŸ“± M-Pesa</div></div>' +
     '</div>' +
     '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #a8d8b5;padding-top:8px;">' +
       '<span style="font-size:10px;color:var(--muted);">Locked '+t+'</span>' +
@@ -8730,7 +8730,7 @@ function _renderOpeningSummary(data) {
     '</div>';
 }
 
-// ── Render reconcile insights ────────────────────────────────────
+// â”€â”€ Render reconcile insights â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function _renderReconcileInsights(data, today) {
   const el = document.getElementById('day-reconcile-insights');
   if (!el || !data || !data.closing) return;
@@ -8754,17 +8754,17 @@ function _renderReconcileInsights(data, today) {
   const isOk = absV <= 5;
   const isWn = !isOk && absV <= 300;
   const vc   = isOk ? 'var(--green)' : isWn ? '#d97706' : 'var(--red)';
-  const vi   = isOk ? '✅' : an.variance > 0 ? '⬆️' : '⬇️';
+  const vi   = isOk ? 'âœ…' : an.variance > 0 ? 'â¬†ï¸' : 'â¬‡ï¸';
   const vl   = isOk ? 'Balanced'
              : an.variance > 0 ? '+'+fmt(an.variance)+' surplus'
              : fmt(absV)+' short';
   const clf  = v => Math.abs(v) <= 5 ? 'rc-ok' : Math.abs(v) <= 300 ? 'rc-warn' : 'rc-bad';
 
-  // ── Per-pocket row ─────────────────────────────────────
+  // â”€â”€ Per-pocket row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const pocketRow = (icon, lbl, opening, expected, physical) => {
     const v   = physical - expected;
     const cls = clf(v);
-    const vs  = Math.abs(v) <= 5 ? '✅' : v > 0 ? '⬆️ +'+fmt(v) : '⬇️ -'+fmt(Math.abs(v));
+    const vs  = Math.abs(v) <= 5 ? 'âœ…' : v > 0 ? 'â¬†ï¸ +'+fmt(v) : 'â¬‡ï¸ -'+fmt(Math.abs(v));
     const vc2 = Math.abs(v) <= 5 ? 'var(--green)' : v > 0 ? '#d97706' : 'var(--red)';
     return '<div class="'+cls+'" style="padding:10px 12px;border-bottom:1px solid var(--border);">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">' +
@@ -8791,35 +8791,35 @@ function _renderReconcileInsights(data, today) {
     '</div>';
   };
 
-  // ── Insights ──────────────────────────────────────────
+  // â”€â”€ Insights â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const ins = [];
   if (isOk) {
-    ins.push({i:'🎯',c:'rc-ok',  t:'Perfect — every shilling accounted for!'});
+    ins.push({i:'ðŸŽ¯',c:'rc-ok',  t:'Perfect â€” every shilling accounted for!'});
   } else if (an.variance > 0) {
-    ins.push({i:'⬆️',c:'rc-warn',t:'Surplus of '+fmt(an.variance)+'. More cash than expected. Check for unrecorded injection, or a deposit not captured.'});
+    ins.push({i:'â¬†ï¸',c:'rc-warn',t:'Surplus of '+fmt(an.variance)+'. More cash than expected. Check for unrecorded injection, or a deposit not captured.'});
   } else {
-    ins.push({i:'⬇️',c:'rc-bad', t:'Short by '+fmt(absV)+'. Less cash than expected. Check for unrecorded expense, undeclared withdrawal, or theft.'});
+    ins.push({i:'â¬‡ï¸',c:'rc-bad', t:'Short by '+fmt(absV)+'. Less cash than expected. Check for unrecorded expense, undeclared withdrawal, or theft.'});
   }
   if (Math.abs(an.cashVar)  > 50 && Math.abs(an.mpesaVar) <= 50)
-    ins.push({i:'💵',c:clf(an.cashVar),  t:'Cash discrepancy ('+fmt(Math.abs(an.cashVar))+'). M-Pesa is balanced — issue is in physical cash.'});
+    ins.push({i:'ðŸ’µ',c:clf(an.cashVar),  t:'Cash discrepancy ('+fmt(Math.abs(an.cashVar))+'). M-Pesa is balanced â€” issue is in physical cash.'});
   if (Math.abs(an.mpesaVar) > 50 && Math.abs(an.cashVar)  <= 50)
-    ins.push({i:'📱',c:clf(an.mpesaVar), t:'M-Pesa discrepancy ('+fmt(Math.abs(an.mpesaVar))+'). Cash is balanced — check M-Pesa statement.'});
+    ins.push({i:'ðŸ“±',c:clf(an.mpesaVar), t:'M-Pesa discrepancy ('+fmt(Math.abs(an.mpesaVar))+'). Cash is balanced â€” check M-Pesa statement.'});
   if (Math.abs(an.cashVar)  > 50 && Math.abs(an.mpesaVar) > 50)
-    ins.push({i:'⚠️',c:'rc-bad',         t:'Both Cash and M-Pesa are off. Recount everything carefully.'});
+    ins.push({i:'âš ï¸',c:'rc-bad',         t:'Both Cash and M-Pesa are off. Recount everything carefully.'});
   if (cl.expenses > 0 && sy.sysTotalRev > 0 && cl.expenses > sy.sysTotalRev * 0.35)
-    ins.push({i:'💸',c:'rc-warn',t:'Expenses ('+fmt(cl.expenses)+') are '+((cl.expenses/sy.sysTotalRev)*100).toFixed(0)+'% of revenue — high for today.'});
+    ins.push({i:'ðŸ’¸',c:'rc-warn',t:'Expenses ('+fmt(cl.expenses)+') are '+((cl.expenses/sy.sysTotalRev)*100).toFixed(0)+'% of revenue â€” high for today.'});
   if (sy.margin < 10 && sy.sysTotalRev > 0)
-    ins.push({i:'📉',c:'rc-warn',t:'Low margin: '+sy.margin.toFixed(1)+'%. Review prices or costs.'});
+    ins.push({i:'ðŸ“‰',c:'rc-warn',t:'Low margin: '+sy.margin.toFixed(1)+'%. Review prices or costs.'});
   else if (sy.margin >= 30 && sy.sysTotalRev > 0)
-    ins.push({i:'🎉',c:'rc-ok', t:'Great margin: '+sy.margin.toFixed(1)+'%!'});
+    ins.push({i:'ðŸŽ‰',c:'rc-ok', t:'Great margin: '+sy.margin.toFixed(1)+'%!'});
   if (an.netMove < 0)
-    ins.push({i:'🚨',c:'rc-bad',t:'Net movement is negative ('+fmt(an.netMove)+'). Business paid out more than it earned today.'});
+    ins.push({i:'ðŸš¨',c:'rc-bad',t:'Net movement is negative ('+fmt(an.netMove)+'). Business paid out more than it earned today.'});
   if (sy.salesCount === 0)
-    ins.push({i:'😴',c:'rc-warn',t:'No sales recorded today.'});
+    ins.push({i:'ðŸ˜´',c:'rc-warn',t:'No sales recorded today.'});
 
   el.innerHTML =
-    // ── Sales summary ──────────────────────────────────
-    '<div class="day-section-label">📊 Today Summary</div>' +
+    // â”€â”€ Sales summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    '<div class="day-section-label">ðŸ“Š Today Summary</div>' +
     '<div style="border:1.5px solid #a8d8b5;border-radius:var(--r-lg);overflow:hidden;margin-bottom:8px;">' +
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;text-align:center;background:var(--surface);">' +
         '<div style="padding:10px 4px;border-right:1px solid var(--border);"><div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--green);">'+sy.salesCount+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Sales</div></div>' +
@@ -8827,25 +8827,25 @@ function _renderReconcileInsights(data, today) {
         '<div style="padding:10px 4px;border-right:1px solid var(--border);"><div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--green);">'+fmt(sy.sysTotalProf)+'</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Profit</div></div>' +
         '<div style="padding:10px 4px;"><div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--accent);">'+sy.margin.toFixed(1)+'%</div><div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:2px;">Margin</div></div>' +
       '</div>' +
-      (cl.injected > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>💉 Injected</span><span style="font-weight:800;color:var(--green);">+'+fmt(cl.injected)+'</span></div>' : '') +
-      (cl.expenses  > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>💸 Expenses</span><span style="font-weight:800;color:var(--red);">-'+fmt(cl.expenses)+'</span></div>' : '') +
-      (cl.withdrawn > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>🏧 Withdrawn</span><span style="font-weight:800;color:#d97706;">-'+fmt(cl.withdrawn)+'</span></div>' : '') +
+      (cl.injected > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>ðŸ’‰ Injected</span><span style="font-weight:800;color:var(--green);">+'+fmt(cl.injected)+'</span></div>' : '') +
+      (cl.expenses  > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>ðŸ’¸ Expenses</span><span style="font-weight:800;color:var(--red);">-'+fmt(cl.expenses)+'</span></div>' : '') +
+      (cl.withdrawn > 0 ? '<div style="display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;background:var(--surface);"><span>ðŸ§ Withdrawn</span><span style="font-weight:800;color:#d97706;">-'+fmt(cl.withdrawn)+'</span></div>' : '') +
       '<div style="display:flex;justify-content:space-between;padding:9px 12px;border-top:1px solid #a8d8b5;background:#f0faf4;font-size:12px;font-weight:800;">' +
         '<span style="color:var(--green);">Net Movement</span>' +
         '<span style="font-family:var(--mono);color:'+(an.netMove>=0?'var(--green)':'var(--red)')+';">'+(an.netMove>=0?'+':'')+fmt(an.netMove)+'</span>' +
       '</div>' +
     '</div>' +
 
-    // ── The two money totals ────────────────────────────
-    '<div class="day-section-label">⚖️ Day Money Check</div>' +
+    // â”€â”€ The two money totals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    '<div class="day-section-label">âš–ï¸ Day Money Check</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
       '<div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;">' +
         '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Should Have</div>' +
         '<div style="font-size:10px;color:var(--muted);line-height:2;margin-bottom:8px;">' +
           'Opening: <b>'+fmt(an.opTotal)+'</b><br>+ Sales: <b>'+fmt(sy.sysTotalRev)+'</b>' +
           (cl.injected>0?'<br>+ Injected: <b>'+fmt(cl.injected)+'</b>':'') +
-          (cl.expenses>0?'<br>− Expenses: <b>'+fmt(cl.expenses)+'</b>':'') +
-          (cl.withdrawn>0?'<br>− Withdrawn: <b>'+fmt(cl.withdrawn)+'</b>':'') +
+          (cl.expenses>0?'<br>âˆ’ Expenses: <b>'+fmt(cl.expenses)+'</b>':'') +
+          (cl.withdrawn>0?'<br>âˆ’ Withdrawn: <b>'+fmt(cl.withdrawn)+'</b>':'') +
         '</div>' +
         '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--accent);border-top:1px solid var(--border);padding-top:8px;">'+fmt(an.correctDay)+'</div>' +
       '</div>' +
@@ -8862,20 +8862,20 @@ function _renderReconcileInsights(data, today) {
       '<span style="font-size:20px;font-weight:900;font-family:var(--mono);color:'+vc+';">'+vi+' '+vl+'</span>' +
     '</div>' +
 
-    // ── Per-pocket detail ───────────────────────────────
-    '<div class="day-section-label">🔍 Pocket Detail</div>' +
+    // â”€â”€ Per-pocket detail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    '<div class="day-section-label">ðŸ” Pocket Detail</div>' +
     '<div style="border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;margin-bottom:8px;">' +
-      pocketRow('💵', 'Cash (Hand + Till)', (o.cash||0)+(o.till||0), an.expCash,  an.physCash) +
-      pocketRow('📱', 'M-Pesa Float',        o.mpesa||0,              an.expMpesa, an.physMpesa) +
+      pocketRow('ðŸ’µ', 'Cash (Hand + Till)', (o.cash||0)+(o.till||0), an.expCash,  an.physCash) +
+      pocketRow('ðŸ“±', 'M-Pesa Float',        o.mpesa||0,              an.expMpesa, an.physMpesa) +
     '</div>' +
 
-    // ── Insights ─────────────────────────────────────────
-    '<div class="day-section-label">💡 Insights</div>' +
+    // â”€â”€ Insights â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    '<div class="day-section-label">ðŸ’¡ Insights</div>' +
     ins.map(i=>'<div class="'+i.c+'" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:var(--r);margin-bottom:5px;font-size:12px;font-weight:600;line-height:1.4;"><span style="font-size:16px;flex-shrink:0;">'+i.i+'</span><span>'+i.t+'</span></div>').join('') +
     '<div style="text-align:center;font-size:10px;color:var(--muted);padding:6px 0;">Reconciled at '+new Date(data.reconciledAt||0).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'</div>';
 }
 
-// ── Auto-close at 11:59 PM ───────────────────────────────────────
+// â”€â”€ Auto-close at 11:59 PM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function _clearClosingInputsOnly() {
   ['cl-injected','cl-cash','cl-till','cl-mpesa','cl-expenses','cl-withdrawn']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -8914,7 +8914,7 @@ renderDayState = function() {
   const iconEl = document.getElementById('day-banner-icon');
   if (titleEl) titleEl.textContent = fmtFullDate(today);
   if (subEl) subEl.textContent = today;
-  if (iconEl) iconEl.textContent = '📅';
+  if (iconEl) iconEl.textContent = 'ðŸ“…';
 
   const data = _getDayRecon(today);
   const isOpen = activeDay && activeDay.status === 'OPEN';
@@ -9089,23 +9089,23 @@ dayStartOver = async function() {
     clearDayTabLocks();
   }
   _clearClosingInputsOnly();
-  toast('Closing cleared — redo end-of-day', '');
+  toast('Closing cleared â€” redo end-of-day', '');
   renderDayState();
   renderFinancePage();
 };
 window.dayStartOver = dayStartOver;
 
-// Midnight auto-close removed — day status is for Operations reporting only.
+// Midnight auto-close removed â€” day status is for Operations reporting only.
 
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // INITIALISATION
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 initDB();
 updateFirebaseEnvUI();
 setTimeout(initFirebase, 800);
 
-// ── Debounced sync (pull remote, then push local) ───────────
+// â”€â”€ Debounced sync (pull remote, then push local) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let _autoSyncTimer = null;
 let _syncRunning = false;
 function scheduleSync() {
@@ -9122,9 +9122,9 @@ function scheduleSync() {
   }, 2000);
 }
 
-// ═══════════════════════════════════════════════════════════
-// WINDOW EXPORTS — all onclick= handlers
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// WINDOW EXPORTS â€” all onclick= handlers
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 window.addType = addType;
 window.adjSellQty = adjSellQty;
 window.applyAppUpdate = applyAppUpdate;
@@ -9223,7 +9223,7 @@ async function renderHistoryPage() {
 
   const allSales = await dbAll('sales');
 
-  // ── Today ──────────────────────────────────────────────────
+  // â”€â”€ Today â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const todaySales = allSales.filter(s => (s.businessDate || s.date?.slice(0,10)) === today);
   const todayRev   = todaySales.reduce((s,x) => s + (x.revenue||0), 0);
   const todayProf  = todaySales.reduce((s,x) => s + (x.profit||0),  0);
@@ -9232,7 +9232,7 @@ async function renderHistoryPage() {
   UI.setText('hist-today-profit',  fmt(todayProf));
   UI.setText('hist-today-sales',   todaySales.length);
 
-  // Today — profit tile colour
+  // Today â€” profit tile colour
   const profEl = document.getElementById('hist-today-profit');
   if (profEl) profEl.style.color = todayProf >= 0 ? 'var(--green)' : 'var(--red)';
 
@@ -9247,7 +9247,7 @@ async function renderHistoryPage() {
     }
   }
 
-  // ── Past records ───────────────────────────────────────────
+  // â”€â”€ Past records â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const filterEl = UI.el('hist-period-filter');
   const filterVal = filterEl ? filterEl.value : '30';
   const days      = filterVal === 'all' ? null : (parseInt(filterVal) || 30);
@@ -9327,11 +9327,11 @@ async function renderHistoryPage() {
   }).join('');
 }
 
-// ── Shared sale row renderer ────────────────────────────────
+// â”€â”€ Shared sale row renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function _histSaleRow(s, mode) {
   const profColor = (s.profit||0) >= 0 ? 'var(--green)' : 'var(--red)';
   const profSign  = (s.profit||0) >= 0 ? '+' : '';
-  const title = `${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize ? ' · ' + (mode === 'full' ? 'Size ' : 'Sz ') + escapeHtml(s.itemSize) : ''}`;
+  const title = `${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize ? ' Â· ' + (mode === 'full' ? 'Size ' : 'Sz ') + escapeHtml(s.itemSize) : ''}`;
   const unitPrice = fmt(s.actualPrice||s.sellPrice||0);
   const revenue = fmt(s.revenue||0);
   const profit = `${profSign}${fmt(s.profit||0)}`;
@@ -9343,16 +9343,16 @@ function _histSaleRow(s, mode) {
             ${title}
           </div>
           <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--accent2);margin-top:2px;">${revenue}</div>
-          <div style="font-size:11px;color:var(--muted);">${s.qty} x ${unitPrice} · ${fmtTime(s.date)}</div>
+          <div style="font-size:11px;color:var(--muted);">${s.qty} x ${unitPrice} Â· ${fmtTime(s.date)}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
           <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:800;">Profit</div>
           <div style="font-size:12px;font-weight:800;font-family:var(--mono);color:${profColor};">${profit}</div>
         </div>
-        ${s.id ? `<button type="button" onclick="deleteSale(${s.id})" title="Delete sale" style="background:var(--red-light);border:none;color:var(--red);border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px;flex-shrink:0;margin-left:6px;">🗑</button>` : ''}
+        ${s.id ? `<button type="button" onclick="deleteSale(${s.id})" title="Delete sale" style="background:var(--red-light);border:none;color:var(--red);border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px;flex-shrink:0;margin-left:6px;">ðŸ—‘</button>` : ''}
       </div>`;
   }
-  // compact — used in past records
+  // compact â€” used in past records
   return `
     <div class="hist-sale-row" style="border-top:1px solid var(--border);">
       <div style="flex:1;min-width:0;">
@@ -9360,7 +9360,7 @@ function _histSaleRow(s, mode) {
           ${title}
         </div>
         <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent2);margin-top:1px;">${revenue}</div>
-        <div style="font-size:10px;color:var(--muted);">${s.qty} x ${unitPrice} · ${fmtTime(s.date)}</div>
+        <div style="font-size:10px;color:var(--muted);">${s.qty} x ${unitPrice} Â· ${fmtTime(s.date)}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;">
         <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:800;">Profit</div>
@@ -9384,8 +9384,8 @@ function renderAllShoeGroupCards() {
     }
     const { min, max } = groups[g];
     if (rng) {
-      const lbl = groups[g].label ? groups[g].label + ' · ' : '';
-      rng.textContent = lbl + min + '–' + max;
+      const lbl = groups[g].label ? groups[g].label + ' Â· ' : '';
+      rng.textContent = lbl + min + 'â€“' + max;
     }
     container.innerHTML = '';
     for (let s = min; s <= max; s++) {
@@ -9468,8 +9468,8 @@ function updateShoeCollectiveSummary() {
   const n = sorted.length;
   if (!n) {
     qtyEl.textContent = '0';
-    bpEl.textContent = '—';
-    spEl.textContent = '—';
+    bpEl.textContent = 'â€”';
+    spEl.textContent = 'â€”';
     bpEl.classList.remove('accent');
     spEl.classList.remove('accent');
     return;
@@ -9481,8 +9481,8 @@ function updateShoeCollectiveSummary() {
     const sp = parseFloat(UI.el('shoe-shared-sell')?.value || '0') || 0;
     const totalQty = qPer * n;
     qtyEl.textContent = String(totalQty);
-    bpEl.textContent = bp > 0 ? fmt(bp) : '—';
-    spEl.textContent = sp > 0 ? fmt(sp) : '—';
+    bpEl.textContent = bp > 0 ? fmt(bp) : 'â€”';
+    spEl.textContent = sp > 0 ? fmt(sp) : 'â€”';
     bpEl.classList.toggle('accent', bp > 0);
     spEl.classList.toggle('accent', sp > 0);
     return;
@@ -9510,8 +9510,8 @@ function updateShoeCollectiveSummary() {
     bpEl.classList.add('accent');
     spEl.classList.add('accent');
   } else {
-    bpEl.textContent = '—';
-    spEl.textContent = '—';
+    bpEl.textContent = 'â€”';
+    spEl.textContent = 'â€”';
     bpEl.classList.remove('accent');
     spEl.classList.remove('accent');
   }
@@ -9540,7 +9540,7 @@ async function upsertShoeSize(record, opts) {
       return record;
     } catch(e) {
       if (e.name === 'ConstraintError') {
-        // Unique codeSize violation — find and update existing
+        // Unique codeSize violation â€” find and update existing
         const byCS = all.find(s => s.codeSize === record.codeSize);
         if (byCS) {
           const updated = { ...byCS, ...record, id: byCS.id };
@@ -9554,7 +9554,7 @@ async function upsertShoeSize(record, opts) {
 }
 
 async function saveShoeItems(baseCode, baseName, type) {
-  if (_shoeState.sizes.size === 0) { toast('⚠️ Select at least one size', 'err'); return false; }
+  if (_shoeState.sizes.size === 0) { toast('âš ï¸ Select at least one size', 'err'); return false; }
 
   if (!_shoeState.group) {
     const firstSize = [..._shoeState.sizes][0];
@@ -9566,10 +9566,10 @@ async function saveShoeItems(baseCode, baseName, type) {
     sharedQty  = parseInt(UI.el('shoe-shared-qty')?.value  || '0') || 0;
     sharedBuy  = parseFloat(UI.el('shoe-shared-buy')?.value  || '0') || 0;
     sharedSell = parseFloat(UI.el('shoe-shared-sell')?.value || '0') || 0;
-    if (sharedQty  <= 0) { toast('⚠️ Enter quantity per size (must be > 0)', 'err'); return false; }
-    if (sharedBuy  <= 0) { toast('⚠️ Enter buying price',  'err'); return false; }
-    if (sharedSell <= 0) { toast('⚠️ Enter selling price', 'err'); return false; }
-    if (sharedSell < sharedBuy) { toast('⚠️ Sell price cannot be less than buy price', 'err'); return false; }
+    if (sharedQty  <= 0) { toast('âš ï¸ Enter quantity per size (must be > 0)', 'err'); return false; }
+    if (sharedBuy  <= 0) { toast('âš ï¸ Enter buying price',  'err'); return false; }
+    if (sharedSell <= 0) { toast('âš ï¸ Enter selling price', 'err'); return false; }
+    if (sharedSell < sharedBuy) { toast('âš ï¸ Sell price cannot be less than buy price', 'err'); return false; }
   }
 
   const sorted  = _shoeState.sortedSizes;
@@ -9620,8 +9620,8 @@ async function saveShoeItems(baseCode, baseName, type) {
     stockQty += qty;
   }
 
-  if (perSizeErrors.length) toast('⚠️ Skipped: ' + perSizeErrors.join(' · '), 'err');
-  if (saved === 0) { toast('⚠️ No sizes saved — fill all required fields', 'err'); return false; }
+  if (perSizeErrors.length) toast('âš ï¸ Skipped: ' + perSizeErrors.join(' Â· '), 'err');
+  if (saved === 0) { toast('âš ï¸ No sizes saved â€” fill all required fields', 'err'); return false; }
 
   const allSz = await getShoeSizes(baseCode);
   product.qty = allSz.reduce((t, s) => t + s.qty, 0);
@@ -9673,7 +9673,7 @@ function toggleShoeSize(s) {
 }
 window.toggleShoeSize = toggleShoeSize;
 
-// ── Shoe size action handlers ─────────────────────────────────────
+// â”€â”€ Shoe size action handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function openShoeSizeRestock(itemId, size) {
   const item = await dbGet('items', itemId);
   if (!item) { toast('Item not found', 'err'); return; }
@@ -9732,7 +9732,7 @@ async function openShoeSizeEdit(itemId, size) {
     setAddTypeLocked(true);
     setSaveBtnLabel('Save size ' + size);
     const _ml3 = UI.el('form-mode-label');
-    if (_ml3) { _ml3.hidden = false; _ml3.textContent = '✏️ Edit Size ' + size + ' — ' + item.code; }
+    if (_ml3) { _ml3.hidden = false; _ml3.textContent = 'âœï¸ Edit Size ' + size + ' â€” ' + item.code; }
     UI.el('cancel-edit-btn').style.display = 'block';
     updateProfitPreview();
   }, 100);
@@ -9753,7 +9753,7 @@ async function openSellShoeModal(itemId, size) {
   const el = id => document.getElementById(id);
   if (el('sm-icon'))  { el('sm-icon').textContent = t.emoji; el('sm-icon').style.background = t.color || 'var(--surface2)'; }
   if (el('sm-name'))  el('sm-name').textContent  = item.name + ' (Size ' + size + ')';
-  if (el('sm-meta'))  el('sm-meta').textContent  = item.code + ' · Size ' + size;
+  if (el('sm-meta'))  el('sm-meta').textContent  = item.code + ' Â· Size ' + size;
   if (el('sm-stock')) el('sm-stock').textContent = sizeRec.qty;
   if (el('sm-sell'))  el('sm-sell').textContent  = fmt(sizeRec.sellPrice || item.sellPrice || 0);
   if (el('sm-cur'))   el('sm-cur').textContent   = currency;
@@ -9771,7 +9771,7 @@ async function closeShoeSizeActions() {
 }
 window.closeShoeSizeActions = closeShoeSizeActions;
 
-// ── Restored missing shoe functions ─────────────────────────────
+// â”€â”€ Restored missing shoe functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 function getShoeGroups() {
@@ -9823,7 +9823,7 @@ function renderShoeSummary() {
   if (!el) return;
   const sorted = _shoeState.sortedSizes;
   if (!sorted.length) {
-    el.innerHTML = '<span class="shoe-selected-chips-empty">—</span>';
+    el.innerHTML = '<span class="shoe-selected-chips-empty">â€”</span>';
   } else {
     el.innerHTML = sorted.map(s => {
       const g = (_shoeState.groupFor(s) || 's').toLowerCase();
