@@ -7668,6 +7668,11 @@ function closeProfileSheet() {
 
 function tidySettingsPage() {
   updateFirebaseEnvUI();
+  updateUpgradeStepUI(
+    document.getElementById('update-state-available')?.style.display !== 'none' ? 'available'
+    : document.getElementById('update-state-installing')?.style.display !== 'none' ? 'installing'
+    : 'current'
+  );
 }
 
 // backdrop close
@@ -8252,11 +8257,42 @@ function _showUpdateState(state) {
     const el = document.getElementById('update-state-' + s);
     if (el) el.style.display = s === state ? '' : 'none';
   });
+  updateUpgradeStepUI(state);
+}
+
+function updateUpgradeStepUI(state) {
+  const installBtn = document.getElementById('update-install-btn');
+  const idleNote   = document.getElementById('upgrade-step-2-idle');
+  const stepIds    = ['upgrade-step-1','upgrade-step-2','upgrade-step-3'];
+  stepIds.forEach(id => document.getElementById(id)?.classList.remove('settings-step--active'));
+
+  if (state === 'available') {
+    if (installBtn) installBtn.style.display = '';
+    if (idleNote)   idleNote.style.display   = 'none';
+    document.getElementById('upgrade-step-2')?.classList.add('settings-step--active');
+  } else if (state === 'installing') {
+    if (installBtn) installBtn.style.display = 'none';
+    if (idleNote)   idleNote.style.display   = 'none';
+    document.getElementById('upgrade-step-3')?.classList.add('settings-step--active');
+  } else {
+    if (installBtn) installBtn.style.display = 'none';
+    if (idleNote)   idleNote.style.display   = '';
+    document.getElementById('upgrade-step-1')?.classList.add('settings-step--active');
+  }
 }
 
 function _setUpdateLastCheck() {
   const el = document.getElementById('update-last-check');
   if (el) el.textContent = 'Checked: ' + new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  if (typeof updateUpgradeStepUI === 'function') {
+    const st = document.getElementById('update-state-available');
+    const installing = document.getElementById('update-state-installing');
+    updateUpgradeStepUI(
+      st && st.style.display !== 'none' ? 'available'
+      : installing && installing.style.display !== 'none' ? 'installing'
+      : 'current'
+    );
+  }
 }
 
 function _showUpdateBanner() {

@@ -1131,71 +1131,150 @@
 
   <!-- ── System & updates ───────────────────────────────────── -->
   <div class="sec-label">📦 System &amp; updates</div>
-  <p class="settings-hint">App updates change code only — items, sales, and finances stay on this device and in Firebase.</p>
+  <p class="settings-hint">Follow the steps in order. Updates change app code only — your items, sales, and finances are kept.</p>
 
-  <div class="card settings-card" id="update-card">
-    <div id="update-state-current" class="settings-update-row">
-      <div class="settings-update-icon settings-update-icon--ok">
-        <i class="fa-solid fa-circle-check"></i>
-      </div>
-      <div>
-        <div class="settings-update-title">App is up to date</div>
-        <div class="settings-update-sub" id="update-last-check">Checking…</div>
-      </div>
-    </div>
-    <div id="update-state-available" style="display:none;">
-      <div class="settings-update-row" style="margin-bottom:14px;">
-        <div class="settings-update-icon settings-update-icon--warn">
-          <i class="fa-solid fa-arrow-up-from-bracket"></i>
-        </div>
-        <div>
-          <div class="settings-update-title">Update available</div>
-          <div class="settings-update-sub">Install when ready — your data is kept</div>
-        </div>
-      </div>
-      <button type="button" id="update-install-btn" class="settings-btn settings-btn--primary" onclick="installAppUpdate()">
-        <i class="fa-solid fa-download"></i> Install update
-      </button>
-    </div>
-    <div id="update-state-installing" style="display:none;">
-      <div class="settings-update-row" style="margin-bottom:14px;">
-        <div class="settings-update-icon settings-update-icon--busy">
-          <i class="fa-solid fa-spinner fa-spin"></i>
-        </div>
-        <div>
-          <div class="settings-update-title">Installing update…</div>
-          <div class="settings-update-sub" id="update-progress-label">Starting…</div>
-        </div>
-      </div>
-      <div class="settings-progress-track">
-        <div id="update-progress-bar" class="settings-progress-fill"></div>
-      </div>
-      <div class="settings-progress-meta">
-        <span id="update-progress-pct">0%</span><span>100%</span>
-      </div>
-    </div>
-  </div>
+  <div class="card settings-card" id="upgrade-guide-card">
 
-  <div class="card settings-card upgrade-recovery-card" id="upgrade-recovery-card">
-    <div class="upgrade-recovery-block">
-      <div class="upgrade-recovery-heading">If something looks wrong — try in order</div>
-      <ol class="upgrade-recovery-steps">
-        <li><strong>Stale screen?</strong> Tap <em>Clear app cache</em> below.</li>
-        <li><strong>Device behind cloud?</strong> Cloud Sync → <em>Pull cloud → local</em>.</li>
-        <li><strong>Cloud missing this device?</strong> Cloud Sync → <em>Push local → cloud</em>.</li>
-        <li><strong>Local corrupt, cloud good?</strong> <em>Clear local data</em> → then Pull.</li>
-        <li><strong>Cloud wrong, this device good?</strong> <em>Clear cloud data</em> → then Push.</li>
+    <div class="settings-steps-section">
+      <div class="settings-steps-section-title">Normal upgrade</div>
+      <ol class="settings-step-list" start="1">
+
+        <li class="settings-step" id="upgrade-step-1">
+          <div class="settings-step-marker" aria-hidden="true">1</div>
+          <div class="settings-step-content">
+            <div class="settings-step-title">Check for an update</div>
+            <p class="settings-step-desc">Open Settings or wait for the update banner. Status below shows whether a new version is ready.</p>
+            <div class="settings-step-panel" id="update-card">
+              <div id="update-state-current" class="settings-update-row">
+                <div class="settings-update-icon settings-update-icon--ok">
+                  <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <div>
+                  <div class="settings-update-title">App is up to date</div>
+                  <div class="settings-update-sub" id="update-last-check">Checking…</div>
+                </div>
+              </div>
+              <div id="update-state-available" style="display:none;">
+                <div class="settings-update-row">
+                  <div class="settings-update-icon settings-update-icon--warn">
+                    <i class="fa-solid fa-arrow-up-from-bracket"></i>
+                  </div>
+                  <div>
+                    <div class="settings-update-title">Update available</div>
+                    <div class="settings-update-sub">Continue to step 2</div>
+                  </div>
+                </div>
+              </div>
+              <div id="update-state-installing" style="display:none;">
+                <div class="settings-update-row" style="margin-bottom:10px;">
+                  <div class="settings-update-icon settings-update-icon--busy">
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                  </div>
+                  <div>
+                    <div class="settings-update-title">Installing…</div>
+                    <div class="settings-update-sub" id="update-progress-label">Starting…</div>
+                  </div>
+                </div>
+                <div class="settings-progress-track">
+                  <div id="update-progress-bar" class="settings-progress-fill"></div>
+                </div>
+                <div class="settings-progress-meta">
+                  <span id="update-progress-pct">0%</span><span>100%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </li>
+
+        <li class="settings-step" id="upgrade-step-2">
+          <div class="settings-step-marker" aria-hidden="true">2</div>
+          <div class="settings-step-content">
+            <div class="settings-step-title">Install the update</div>
+            <p class="settings-step-desc">Tap install when step 1 shows <strong>Update available</strong>. Skip this step if you are already up to date.</p>
+            <div id="upgrade-step-2-idle" class="settings-step-note">Nothing to install right now.</div>
+            <button type="button" id="update-install-btn" class="settings-btn settings-btn--primary settings-step-action" style="display:none;" onclick="installAppUpdate()">
+              <i class="fa-solid fa-download"></i> Install update (step 2)
+            </button>
+          </div>
+        </li>
+
+        <li class="settings-step" id="upgrade-step-3">
+          <div class="settings-step-marker" aria-hidden="true">3</div>
+          <div class="settings-step-content">
+            <div class="settings-step-title">Wait for reload</div>
+            <p class="settings-step-desc">The app reloads automatically. Log in again if asked — your data stays on this device and in Firebase.</p>
+            <div class="settings-step-note">Optional: Cloud sync → <em>Pull cloud → local</em> to refresh from Firebase after a major update.</div>
+          </div>
+        </li>
+
       </ol>
     </div>
-    <button type="button" class="settings-btn settings-btn--ghost" onclick="clearAppCacheAndReload()">
-      🧹 Clear app cache &amp; reload
-    </button>
-    <div class="upgrade-recovery-block upgrade-recovery-warn">
-      <div class="upgrade-recovery-heading">Last resort only</div>
-      <p class="upgrade-recovery-note">
-        Danger Zone actions permanently delete business records. Test in <strong>Development</strong> first when unsure.
-      </p>
+
+    <div class="settings-steps-divider"></div>
+
+    <div class="settings-steps-section">
+      <div class="settings-steps-section-title settings-steps-section-title--warn">If something looks wrong — try in order</div>
+      <ol class="settings-step-list" start="4">
+
+        <li class="settings-step" id="upgrade-step-4">
+          <div class="settings-step-marker settings-step-marker--soft" aria-hidden="true">4</div>
+          <div class="settings-step-content">
+            <div class="settings-step-title">Clear app cache</div>
+            <p class="settings-step-desc">Fixes stale screens after an update. Does not delete shop data.</p>
+            <button type="button" class="settings-btn settings-btn--ghost settings-step-action" onclick="clearAppCacheAndReload()">
+              🧹 Clear cache &amp; reload (step 4)
+            </button>
+          </div>
+        </li>
+
+        <li class="settings-step" id="upgrade-step-5">
+          <div class="settings-step-marker settings-step-marker--soft" aria-hidden="true">5</div>
+          <div class="settings-step-content">
+            <div class="settings-step-title">Pull cloud → local</div>
+            <p class="settings-step-desc">Use when this device is missing data that exists in Firebase.</p>
+            <div class="settings-step-note">Cloud sync section below → <strong>Pull cloud → local</strong></div>
+          </div>
+        </li>
+
+        <li class="settings-step" id="upgrade-step-6">
+          <div class="settings-step-marker settings-step-marker--soft" aria-hidden="true">6</div>
+          <div class="settings-step-content">
+            <div class="settings-step-title">Push local → cloud</div>
+            <p class="settings-step-desc">Use when Firebase is missing data that exists on this device.</p>
+            <div class="settings-step-note">Cloud sync section below → <strong>Push local → cloud</strong></div>
+          </div>
+        </li>
+
+        <li class="settings-step" id="upgrade-step-7">
+          <div class="settings-step-marker settings-step-marker--soft" aria-hidden="true">7</div>
+          <div class="settings-step-content">
+            <div class="settings-step-title">Clear local data → Pull</div>
+            <p class="settings-step-desc">Local data is corrupt but cloud is correct. Clear local first, then pull.</p>
+            <div class="settings-step-note"><strong>Clear local data</strong> → then <strong>Pull cloud → local</strong></div>
+          </div>
+        </li>
+
+        <li class="settings-step" id="upgrade-step-8">
+          <div class="settings-step-marker settings-step-marker--soft" aria-hidden="true">8</div>
+          <div class="settings-step-content">
+            <div class="settings-step-title">Clear cloud data → Push</div>
+            <p class="settings-step-desc">Cloud is wrong but this device is correct. Clear cloud first, then push.</p>
+            <div class="settings-step-note"><strong>Clear cloud data</strong> → then <strong>Push local → cloud</strong></div>
+          </div>
+        </li>
+
+        <li class="settings-step settings-step--danger" id="upgrade-step-9">
+          <div class="settings-step-marker settings-step-marker--danger" aria-hidden="true">9</div>
+          <div class="settings-step-content">
+            <div class="settings-step-title">Last resort — Danger zone</div>
+            <p class="settings-step-desc">Clear both sides or rebuild database only if steps 4–8 failed. Test in <strong>Development</strong> first.</p>
+            <div class="settings-step-note">Scroll to <strong>Danger zone</strong> at the bottom of Settings.</div>
+          </div>
+        </li>
+
+      </ol>
     </div>
+
   </div>
 
   <!-- ── Cloud sync ─────────────────────────────────────────── -->
