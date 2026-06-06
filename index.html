@@ -196,7 +196,7 @@
   </div>
 
   <!-- User menu (hidden until login) -->
-  <span id="low-stock-badge" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;margin-right:6px;cursor:pointer;" onclick="showPage('list')"></span>
+  <span id="low-stock-badge" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;margin-right:6px;cursor:pointer;" onclick="goDashNav('stock')"></span>
   <div id="user-menu-wrap" style="position:relative;flex-shrink:0;display:none;">
 
     <!-- Pill button shows username; click opens dropdown -->
@@ -305,7 +305,7 @@
      BOTTOM NAVIGATION BAR
      Nav: Dashboard · Inventory · Sales · Operations · Settings
      Role-gated: app.js hides tabs based on currentUser.tabs[]
-     All tabs accessible without manual day management
+     Day open/close (Operations) does not lock or gray out these tabs
      ============================================================== -->
 <div class="nav">
   <button class="nav-btn active" onclick="showPage('dash')" id="tab-dash">
@@ -433,7 +433,8 @@
 
   <!-- ── Row 2: Items · Pieces · Sold · Sales# ────────────────── -->
   <div class="stats-row" style="gap:6px;">
-    <div class="stat-box amber">
+    <div class="stat-box amber dash-stat-link" role="button" tabindex="0"
+         onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}">
       <div class="stat-val" id="d-items" style="font-size:18px;">0</div>
       <div class="stat-lbl">SKUs</div>
     </div>
@@ -502,26 +503,10 @@
     </div>
   </div>
 
-  <!-- ── Insights ─────────────────────────────────────────────── -->
-  <div class="dash-section-label">💡 Insights</div>
-  <div id="d-insights" class="dash-extra" style="margin:0 12px 8px;"></div>
-
-  <!-- ── Top sellers ──────────────────────────────────────────── -->
-  <div class="dash-section-label">🏆 Top Sellers</div>
-  <div class="dash-extra" style="margin:0 12px 8px;">
-    <div id="d-top-sellers"></div>
-  </div>
-
   <!-- ── Top items by stock value ─────────────────────────────── -->
   <div class="dash-section-label">📦 Highest Stock Value</div>
-  <div class="dash-extra" style="margin:0 12px 8px;">
-    <div id="d-top-items"></div>
-  </div>
-
-  <!-- ── By type breakdown ────────────────────────────────────── -->
-  <div class="dash-section-label">📂 By Category</div>
   <div class="dash-extra" style="margin:0 12px 80px;">
-    <div id="d-by-type"></div>
+    <div id="d-top-items"></div>
   </div>
 
   <!-- hidden compat IDs -->
@@ -596,12 +581,11 @@
   <!-- Type filter chips — populated by renderTypeChips() -->
   <div class="chips" id="type-chips"></div>
 
-  <!-- Shoe size-group filter — only shown when shoe type is active -->
+  <!-- Shoe size-group filter — only when Footwear category is selected -->
   <div id="shoe-size-filter" style="display:none;padding:0 0 8px;gap:6px;flex-wrap:wrap;">
-    <button onclick="setSizeGroupFilter('all')"  id="sgf-all"  class="fin-filter-btn active">All Sizes</button>
-    <button onclick="setSizeGroupFilter('S')"    id="sgf-S"    class="fin-filter-btn">S · Children</button>
-    <button onclick="setSizeGroupFilter('M')"    id="sgf-M"    class="fin-filter-btn">M · Teens</button>
-    <button onclick="setSizeGroupFilter('L')"    id="sgf-L"    class="fin-filter-btn">L · Adults</button>
+    <button onclick="setSizeGroupFilter('S')" id="sgf-S" class="fin-filter-btn">S · Children</button>
+    <button onclick="setSizeGroupFilter('M')" id="sgf-M" class="fin-filter-btn">M · Teens</button>
+    <button onclick="setSizeGroupFilter('L')" id="sgf-L" class="fin-filter-btn">L · Adults</button>
   </div>
 
   <!-- Item cards injected here -->
@@ -636,46 +620,106 @@
   <div class="stock-toolbar">
     <div>
       <div class="stock-title">Wishlist</div>
-      <div class="stock-sub" id="wishlist-sub">Prospective items to stock · Screenshot in another app, return here to auto-import</div>
+      <div class="stock-sub" id="wishlist-sub">0 items</div>
     </div>
   </div>
 
-  <div class="stock-monitor-form">
-    <div class="stock-form-title">Add prospective item</div>
-    <div class="stock-form-grid">
-      <input class="add-input" id="wish-name" type="text" placeholder="Item name">
-      <input class="add-input add-mono" id="wish-code" type="text" placeholder="Code optional">
-    </div>
-    <div class="cat-cascade-field">
-      <div id="wish-type-cascade" class="add-cascade"></div>
-      <select class="cat-pick-hidden-select" id="wish-type" aria-label="Category"></select>
-      <div id="wish-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
-    </div>
-    <div class="stock-form-grid">
-      <input class="add-input add-mono" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="Qty">
-    </div>
-    <div class="stock-form-grid">
-      <input class="add-input" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Est. buy price">
-      <input class="add-input" id="wish-note" type="text" maxlength="160" placeholder="Note optional">
-    </div>
-    <div class="add-photo-box wish-photo-box" onclick="triggerWishPhotoUpload()">
-      <img id="wish-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
-      <div id="wish-photo-placeholder" class="add-photo-ph">
-        <span class="add-photo-ph-icon">📷</span>
-        <span class="add-photo-ph-text">Tap to add photo</span>
-        <span class="add-photo-ph-hint">Camera, gallery, or screenshot</span>
-      </div>
-      <button type="button" id="wish-photo-remove" onclick="removeWishFormPhoto(event)" class="add-photo-remove" style="display:none;">✕ Remove</button>
-    </div>
-    <button type="button" class="wish-screenshot-btn" onclick="startWishlistScreenshotImport()">
-      📋 Screenshot from another app
-    </button>
-    <button onclick="saveWishlistItem()" class="stock-add-wish-btn">
-      <i class="fa-solid fa-plus"></i> Add to wishlist
-    </button>
+  <div class="wish-inv-tabs">
+    <button type="button" class="wish-inv-tab active" id="wish-tab-list" onclick="showWishlistSection('list')">List</button>
+    <button type="button" class="wish-inv-tab" id="wish-tab-add" onclick="showWishlistSection('add')">Add</button>
   </div>
 
-  <div id="wishlist-list" style="padding-bottom:80px;"></div>
+  <div id="wishlist-list" class="wish-list-panel"></div>
+
+  <div id="wishlist-add-panel" class="wish-add-panel" style="display:none;">
+    <button type="button" class="wish-add-back" onclick="showWishlistSection('list')">← List</button>
+
+    <div class="wish-add-card">
+      <section class="wish-add-block wish-add-block-photo" aria-labelledby="wish-add-hd-photo">
+        <h3 class="wish-add-block-hd" id="wish-add-hd-photo">Photo</h3>
+        <div class="wish-add-photo-wrap">
+          <div class="add-photo-box wish-photo-box">
+            <img id="wish-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
+            <div id="wish-photo-placeholder" class="add-photo-ph" onclick="triggerWishPhotoUpload()">
+              <span class="add-photo-ph-icon">📷</span>
+              <span class="add-photo-ph-text">Tap to add</span>
+            </div>
+            <button type="button" id="wish-photo-remove" onclick="removeWishFormPhoto(event)" class="add-photo-remove" style="display:none;">✕</button>
+          </div>
+          <button type="button" class="wish-paste-btn" onclick="startWishlistScreenshotImport()">
+            <span class="wish-paste-btn-icon" aria-hidden="true">📋</span>
+            <span>Paste image</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="wish-add-block" aria-labelledby="wish-add-hd-item">
+        <h3 class="wish-add-block-hd" id="wish-add-hd-item">Item</h3>
+        <div class="wish-add-field">
+          <label class="add-label" for="wish-name">Name <span class="add-required">*</span></label>
+          <input class="add-input" id="wish-name" type="text" placeholder="e.g. YS5981 runner" required>
+        </div>
+      </section>
+
+      <section class="wish-add-block" aria-labelledby="wish-add-hd-vendor">
+        <h3 class="wish-add-block-hd" id="wish-add-hd-vendor">Vendor quote</h3>
+        <div class="wish-add-vendor-grid">
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-vendor-name">Vendor</label>
+            <input class="add-input" id="wish-vendor-name" type="text" maxlength="80" placeholder="Shop name">
+          </div>
+          <div class="wish-add-field wish-add-field-price">
+            <label class="add-label" for="wish-vendor-price">Price</label>
+            <div class="wish-price-input-wrap">
+              <span class="wish-price-prefix" aria-hidden="true">K</span>
+              <input class="add-input add-mono add-center" id="wish-vendor-price" type="number" min="0" inputmode="decimal" placeholder="0">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <button type="button" class="wish-add-more-toggle" id="wish-add-more-toggle" onclick="toggleWishAddMore()" aria-expanded="false" aria-controls="wish-add-more">
+        <span class="wish-add-more-toggle-text">More options</span>
+        <span class="wish-add-more-chevron" aria-hidden="true"></span>
+      </button>
+
+      <section id="wish-add-more" class="wish-add-more" hidden aria-label="More options">
+        <div class="wish-add-field">
+          <label class="add-label" for="wish-code">Code</label>
+          <input class="add-input add-mono" id="wish-code" type="text" placeholder="YS5981">
+        </div>
+        <div class="wish-add-field wish-cascade-field">
+          <span class="add-label">Category</span>
+          <div class="cat-cascade-field">
+            <div id="wish-type-cascade" class="add-cascade"></div>
+            <input type="hidden" id="wish-type" value="" aria-label="Category">
+            <div id="wish-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
+          </div>
+        </div>
+        <div class="wish-add-vendor-grid">
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-qty">Qty</label>
+            <input class="add-input add-mono add-center" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="1">
+          </div>
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-cost">BP est.</label>
+            <div class="wish-price-input-wrap">
+              <span class="wish-price-prefix" aria-hidden="true">K</span>
+              <input class="add-input add-mono add-center" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="0">
+            </div>
+          </div>
+        </div>
+        <div class="wish-add-field">
+          <label class="add-label" for="wish-note">Note</label>
+          <input class="add-input" id="wish-note" type="text" maxlength="160" placeholder="Optional">
+        </div>
+      </section>
+    </div>
+
+    <footer class="wish-add-footer">
+      <button type="button" class="wish-save-btn" onclick="saveWishlistItem()">Save to wishlist</button>
+    </footer>
+  </div>
 </div>
 
 <!-- ============================================================== 
@@ -714,8 +758,8 @@
 
   <header class="add-hero">
     <div class="add-hero-text">
-      <h1 class="add-hero-title" id="form-mode-label">New item</h1>
-      <p class="add-hero-sub" id="add-form-sub">Category → details → stock → save</p>
+      <h1 class="add-hero-title" id="form-mode-label" hidden></h1>
+      <p class="add-hero-sub" id="add-form-sub" hidden></p>
     </div>
     <button type="button" id="cancel-edit-btn" class="add-cancel-btn" onclick="cancelEdit()" style="display:none;">Cancel</button>
   </header>
@@ -741,7 +785,6 @@
   <!-- Step 1: Category -->
   <section class="add-card" aria-labelledby="add-step-cat">
     <h2 class="add-card-title" id="add-step-cat"><span class="add-step-badge">1</span> Category</h2>
-    <p class="add-card-hint">Tap to choose category, then sub-categories if shown.</p>
     <input type="hidden" id="f-type" value="">
     <div id="f-type-cascade" class="add-cascade"></div>
     <div id="f-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
@@ -749,11 +792,11 @@
 
   <!-- Step 2: Item details -->
   <section class="add-card" aria-labelledby="add-step-item">
-    <h2 class="add-card-title" id="add-step-item"><span class="add-step-badge">2</span> Item details</h2>
+    <h2 class="add-card-title" id="add-step-item"><span class="add-step-badge">2</span> Item</h2>
 
     <div class="add-field">
       <input class="add-input add-mono" id="f-code" type="text"
-             placeholder="Item code * (e.g. SH001)"
+             placeholder="Code *"
              aria-label="Item code"
              autocomplete="off" spellcheck="false"
              style="text-transform:uppercase;"
@@ -762,105 +805,114 @@
 
     <div class="add-field" id="code-match-field">
       <select class="add-select add-mono" id="code-match-select" disabled aria-label="Existing code match">
-        <option value="">Match existing code…</option>
+        <option value="">Match code…</option>
       </select>
     </div>
 
     <div class="add-field">
       <input class="add-input" id="f-name" type="text"
-             placeholder="Display name (optional)"
+             placeholder="Name"
              aria-label="Display name"
              autocomplete="off" spellcheck="false">
     </div>
 
     <div class="add-field" id="f-size-field">
       <input class="add-input" id="f-size" type="text"
-             placeholder="Size / variant (e.g. 42, Large, N/A)"
+             placeholder="Size"
              aria-label="Size or variant"
              autocomplete="off" spellcheck="false">
     </div>
   </section>
 
   <!-- Shoe sizes (footwear categories) -->
-  <div id="shoe-size-panel" class="add-card add-card-shoe" style="display:none;">
-    <h2 class="add-card-title"><span class="add-step-badge">3</span> Shoe sizes</h2>
-    <div class="add-section add-section-inset">
-      <div class="sg-row">
-        <button type="button" class="sg-btn" id="sg-btn-S" onclick="selectSizeGroup('S')">
-          <span class="sg-ltr">S</span>
-          <span class="sg-range" id="sg-range-S">20–28</span>
-          <span class="sg-name">Children</span>
-        </button>
-        <button type="button" class="sg-btn" id="sg-btn-M" onclick="selectSizeGroup('M')">
-          <span class="sg-ltr">M</span>
-          <span class="sg-range" id="sg-range-M">29–36</span>
-          <span class="sg-name">Teens</span>
-        </button>
-        <button type="button" class="sg-btn" id="sg-btn-L" onclick="selectSizeGroup('L')">
-          <span class="sg-ltr">L</span>
-          <span class="sg-range" id="sg-range-L">37–45</span>
-          <span class="sg-name">Adults</span>
-        </button>
-      </div>
+  <div id="shoe-size-panel" class="add-card add-card-shoe">
+    <h2 class="add-card-title"><span class="add-step-badge">3</span> Sizes</h2>
+    <div class="sg-row sg-row-full">
+        <div class="sg-card" id="sg-card-S" data-group="S">
+          <div class="sg-card-head">
+            <span class="sg-ltr">S</span>
+            <span class="sg-range" id="sg-range-S">20–28</span>
+            <span class="sg-name" aria-hidden="true">Children</span>
+          </div>
+          <div class="sg-card-sizes" id="sg-card-sizes-S"></div>
+        </div>
+        <div class="sg-card" id="sg-card-M" data-group="M">
+          <div class="sg-card-head">
+            <span class="sg-ltr">M</span>
+            <span class="sg-range" id="sg-range-M">29–36</span>
+            <span class="sg-name" aria-hidden="true">Teens</span>
+          </div>
+          <div class="sg-card-sizes" id="sg-card-sizes-M"></div>
+        </div>
+        <div class="sg-card" id="sg-card-L" data-group="L">
+          <div class="sg-card-head">
+            <span class="sg-ltr">L</span>
+            <span class="sg-range" id="sg-range-L">37–45</span>
+            <span class="sg-name" aria-hidden="true">Adults</span>
+          </div>
+          <div class="sg-card-sizes" id="sg-card-sizes-L"></div>
+        </div>
     </div>
 
-    <div id="shoe-sizes-grid" style="display:none;">
-      <p class="add-card-hint" style="margin:10px 0 6px;">Tap sizes to stock</p>
-      <div class="add-section add-section-inset" style="padding-bottom:10px;">
-        <div id="sz-grid"></div>
-        <div id="shoe-selected-summary"></div>
-      </div>
+    <div id="shoe-sizes-grid" hidden aria-hidden="true">
+      <div id="sz-grid"></div>
     </div>
 
-    <div id="shoe-rows-wrap" style="display:none;">
-      <p class="add-card-hint" style="margin:10px 0 6px;">Quantity &amp; pricing</p>
-      <div class="add-section add-section-inset" style="padding-bottom:10px;">
+    <div id="shoe-rows-wrap">
+      <div class="add-section add-section-inset shoe-pricing-panel" style="padding-bottom:10px;">
+        <div id="shoe-stock-summary" class="shoe-stock-summary">
+          <div class="shoe-stock-summary-top">
+            <div id="shoe-selected-summary" class="shoe-selected-chips"></div>
+          </div>
+          <div class="shoe-stock-metrics">
+            <div class="shoe-metric">
+              <span class="shoe-metric-lbl">Qty</span>
+              <strong id="shoe-metric-qty" class="shoe-metric-val">0</strong>
+            </div>
+            <div class="shoe-metric">
+              <span class="shoe-metric-lbl">BP</span>
+              <strong id="shoe-metric-bp" class="shoe-metric-val">—</strong>
+            </div>
+            <div class="shoe-metric">
+              <span class="shoe-metric-lbl">SP</span>
+              <strong id="shoe-metric-sp" class="shoe-metric-val">—</strong>
+            </div>
+          </div>
+        </div>
 
-        <!-- ── Mode toggle tabs ─────────────────────────────── -->
         <div class="shoe-mode-tabs">
           <button type="button" id="mode-tab-shared" class="shoe-mode-tab active"
-                  onclick="setShoeMode('shared')">
-            📋 All Sizes
-          </button>
+                  onclick="setShoeMode('shared')">All sizes</button>
           <button type="button" id="mode-tab-persize" class="shoe-mode-tab"
-                  onclick="setShoeMode('persize')">
-            🎯 Per Size
-          </button>
+                  onclick="setShoeMode('persize')">Per size</button>
         </div>
 
-        <!-- ── Shared mode (default) ────────────────────────── -->
-        <div id="shoe-shared-wrap">
-          <div class="shoe-info-bar">
-            <i class="fa-solid fa-circle-info"></i>
-            Same qty &amp; price for all selected sizes
-          </div>
-          <div class="add-row-3">
-            <div class="add-field">
-              <input class="add-input add-center" id="shoe-shared-qty"
-                     type="number" min="0" inputmode="numeric" placeholder="Qty/size *"
-                     aria-label="Quantity per size">
-            </div>
-            <div class="add-field">
-              <input class="add-input add-center" id="shoe-shared-buy"
-                     type="number" min="0" inputmode="decimal" placeholder="Buy (KES) *"
-                     aria-label="Buy price">
-            </div>
-            <div class="add-field">
-              <input class="add-input add-center" id="shoe-shared-sell"
-                     type="number" min="0" inputmode="decimal" placeholder="Sell (KES) *"
-                     aria-label="Sell price">
+        <form id="shoe-stock-form" class="shoe-stock-form" onsubmit="return false;">
+          <div id="shoe-shared-wrap">
+            <div class="shoe-form-grid">
+              <div class="shoe-form-field">
+                <label for="shoe-shared-qty">Qty</label>
+                <input class="add-input add-center" id="shoe-shared-qty"
+                       type="number" min="0" inputmode="numeric" placeholder="0" required>
+              </div>
+              <div class="shoe-form-field">
+                <label for="shoe-shared-buy">BP</label>
+                <input class="add-input add-center" id="shoe-shared-buy"
+                       type="number" min="0" inputmode="decimal" placeholder="0" required>
+              </div>
+              <div class="shoe-form-field">
+                <label for="shoe-shared-sell">SP</label>
+                <input class="add-input add-center" id="shoe-shared-sell"
+                       type="number" min="0" inputmode="decimal" placeholder="0" required>
+              </div>
             </div>
           </div>
-        </div>
+        </form>
 
         <!-- ── Per-size mode ────────────────────────────────── -->
         <div id="shoe-per-size-wrap" style="display:none;">
-          <div class="shoe-info-bar" style="background:#fef3c7;border-color:#fcd34d;">
-            <i class="fa-solid fa-sliders" style="color:#92400e;"></i>
-            Enter qty &amp; price for each size individually
-          </div>
           <div class="shoe-row-hdr" id="shoe-row-hdr">
-            <span>Size</span><span>Qty</span><span>Buy</span><span>Sell</span>
+            <span>Sz</span><span>Qty</span><span>BP</span><span>SP</span>
           </div>
           <div id="shoe-rows"></div>
         </div>
@@ -871,7 +923,7 @@
 
   <!-- Step 3: Stock & pricing (standard items) -->
   <section id="std-pricing-section" class="add-card">
-    <h2 class="add-card-title"><span class="add-step-badge">3</span> Stock &amp; pricing</h2>
+    <h2 class="add-card-title"><span class="add-step-badge">3</span> Stock</h2>
     <div class="add-section add-section-inset">
 
       <!-- Qty · Buy · Sell in one row -->
@@ -884,14 +936,14 @@
         </div>
         <div class="add-field">
           <input class="add-input add-center" id="f-buy" type="number"
-                 placeholder="Buy (KES) *" min="0" inputmode="decimal"
+                 placeholder="BP *" min="0" inputmode="decimal"
                  aria-label="Buy price"
                  oninput="updateProfitPreview()">
           <span id="bp-cur" style="display:none;">KES</span>
         </div>
         <div class="add-field">
           <input class="add-input add-center" id="f-sell" type="number"
-                 placeholder="Sell (KES) *" min="0" inputmode="decimal"
+                 placeholder="SP *" min="0" inputmode="decimal"
                  aria-label="Sell price"
                  oninput="updateProfitPreview()">
           <span id="sp-cur" style="display:none;">KES</span>
@@ -901,7 +953,7 @@
       <!-- Profit preview pill -->
       <div class="add-profit-pill" id="profit-preview" style="display:none;">
         <div class="app-pill-row">
-          <span class="app-pill-label">Profit / item</span>
+          <span class="app-pill-label">Profit</span>
           <span class="app-pill-val" id="pp-profit"></span>
         </div>
         <div class="app-pill-row">
@@ -909,7 +961,7 @@
           <span class="app-pill-val" id="pp-margin"></span>
         </div>
         <div class="app-pill-row" id="pp-total-row" style="display:none;">
-          <span class="app-pill-label">Total profit</span>
+          <span class="app-pill-label">Total</span>
           <span class="app-pill-val" id="pp-total"></span>
         </div>
         <span id="pp-buy" style="display:none;"></span>
@@ -922,13 +974,12 @@
 
   <!-- Step 4: Photo -->
   <section class="add-card add-card-photo">
-    <h2 class="add-card-title"><span class="add-step-badge">4</span> Photo <span class="add-hint">optional</span></h2>
-    <div class="add-photo-box" id="add-photo-preview" onclick="triggerAddPhotoUpload()">
+    <h2 class="add-card-title"><span class="add-step-badge">4</span> Photo</h2>
+    <div class="add-photo-box" id="add-photo-preview">
       <img id="add-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
-      <div id="add-photo-placeholder" class="add-photo-ph">
+      <div id="add-photo-placeholder" class="add-photo-ph" onclick="triggerAddPhotoUpload()">
         <span class="add-photo-ph-icon">📷</span>
-        <span class="add-photo-ph-text">Add a photo</span>
-        <span class="add-photo-ph-hint">Tap — camera, gallery, or screenshot</span>
+        <span class="add-photo-ph-text">Photo</span>
       </div>
       <button type="button" id="add-photo-remove" onclick="removeAddPhoto(event)" class="add-photo-remove" style="display:none;">Remove</button>
     </div>
@@ -938,7 +989,7 @@
 
   <footer class="add-footer" id="add-footer">
     <button type="button" class="add-save-btn" id="save-btn" onclick="saveItem()">
-      <i class="fa-solid fa-check"></i> Add to inventory
+      <i class="fa-solid fa-check"></i> Save
     </button>
     <button type="button" class="add-footer-cancel" id="restock-cancel-btn" onclick="cancelEdit()" hidden>Cancel</button>
   </footer>
@@ -952,43 +1003,39 @@
      ============================================================== -->
 <div class="page" id="page-finance">
 
-  <!-- ── KPI summary ────────────────────────────────────────── -->
-  <div class="fin-kpi-row" style="grid-template-columns:1fr;padding:10px 12px 6px;">
+  <!-- ── KPI summary (2 rows × 3 cards) ─────────────────────── -->
+  <div class="fin-kpi-row fin-kpi-grid" style="padding:10px 12px 4px;">
+    <div class="fin-kpi" id="fin-net-kpi">
+      <div class="fin-kpi-val" id="fin-net">0</div>
+      <div class="fin-kpi-lbl">Business Pool</div>
+    </div>
+    <div class="fin-kpi fin-extra">
+      <div class="fin-kpi-val" id="fin-invested">0</div>
+      <div class="fin-kpi-lbl">Sales Out</div>
+    </div>
     <div class="fin-kpi fin-extra" style="background:#fff0f0;border-color:#fca5a5;">
       <div class="fin-kpi-val" style="color:var(--accent2);" id="fin-revenue">0</div>
       <div class="fin-kpi-lbl">Revenue</div>
     </div>
-    <div class="fin-kpi green fin-extra">
-      <div class="fin-kpi-val" id="fin-profit">0</div>
-      <div class="fin-kpi-lbl">Profit</div>
-    </div>
-    <div class="fin-kpi" id="fin-net-kpi">
-      <div class="fin-kpi-val" id="fin-net">0</div>
-      <div class="fin-kpi-lbl">Sales Pool</div>
-    </div>
   </div>
 
-  <div class="fin-kpi-row" style="grid-template-columns:1fr 1fr 1fr;padding:0 12px 8px;">
+  <div class="fin-kpi-row fin-kpi-grid" style="padding:0 12px 8px;">
     <div class="fin-kpi green">
-      <div class="fin-kpi-val" id="fin-invested">0</div>
-      <div class="fin-kpi-lbl">💉 Injected</div>
+      <div class="fin-kpi-val" id="fin-profit">0</div>
+      <div class="fin-kpi-lbl">Profit Realized</div>
     </div>
     <div class="fin-kpi red">
       <div class="fin-kpi-val" id="fin-expenses">0</div>
-      <div class="fin-kpi-lbl">💸 Expenses</div>
+      <div class="fin-kpi-lbl">Business Spend</div>
     </div>
     <div class="fin-kpi amber">
       <div class="fin-kpi-val" id="fin-withdrawn">0</div>
-      <div class="fin-kpi-lbl">🏧 Withdrawn</div>
-    </div>
-    <div class="fin-kpi cyan fin-extra">
-      <div class="fin-kpi-val" id="fin-margin">0%</div>
-      <div class="fin-kpi-lbl">Margin</div>
+      <div class="fin-kpi-lbl">Personal Withdraw</div>
     </div>
   </div>
 
-  <!-- ── Record entry ────────────────────────────────────────── -->
-  <div class="sec-label" style="padding:0 14px;margin-bottom:4px;">➕ Record</div>
+  <!-- ── Cash flow recording ─────────────────────────────────── -->
+  <div class="sec-label" style="padding:0 14px;margin-bottom:4px;">➕ CASH FLOW RECORDING</div>
   <div style="margin:0 12px 10px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:12px;">
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
@@ -1032,33 +1079,39 @@
       <option value="other">Other</option>
     </select>
 
-    <button onclick="saveFinanceEntry()"
+    <button type="button" id="fin-save-btn" onclick="saveFinanceEntry()"
             style="width:100%;padding:13px;background:var(--accent);color:white;border:none;
                    border-radius:var(--r);font-size:14px;font-weight:800;cursor:pointer;font-family:var(--sans);">
       Save Entry
     </button>
-    <button onclick="reconcileFinances()"
-            style="width:100%;padding:11px;margin-top:8px;background:var(--surface2);color:var(--text);
+    <button type="button" id="fin-reconcile-btn" onclick="reconcileFinances()" style="display:none;
+            width:100%;padding:11px;margin-top:8px;background:var(--surface2);color:var(--text);
                    border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;font-weight:700;
                    cursor:pointer;font-family:var(--sans);">
       🔧 Reconcile finances with sales
     </button>
-    <div id="fin-reconcile-hint" style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.4;">
+    <div id="fin-reconcile-hint" style="display:none;font-size:10px;color:var(--muted);margin-top:6px;line-height:1.4;">
       Removes duplicate sale rows and fixes figures to match inventory sales.
     </div>
   </div>
 
-  <!-- ── Transactions ────────────────────────────────────────── -->
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 14px;margin-bottom:4px;">
-    <span class="sec-label" style="padding:0;margin:0;">📋 Transactions</span>
-    <div style="display:flex;gap:4px;">
-      <button onclick="filterFinance('all')"        id="fin-filter-all"        class="fin-filter-btn active">All</button>
-      <button onclick="filterFinance('investment')" id="fin-filter-investment" class="fin-filter-btn">💉 In</button>
-      <button onclick="filterFinance('expense')"    id="fin-filter-expense"    class="fin-filter-btn">💸 Out</button>
+  <!-- ── Transactions (collapsed by default) ─────────────────── -->
+  <details id="fin-transactions-panel" class="fin-transactions-panel">
+    <summary class="fin-transactions-summary">
+      <span>📋 Transactions</span>
+      <span class="fin-transactions-chevron">▼</span>
+    </summary>
+    <div class="fin-transactions-body">
+      <div class="fin-transactions-filters">
+        <button type="button" onclick="filterFinance('all')" id="fin-filter-all" class="fin-filter-btn active">All</button>
+        <button type="button" onclick="filterFinance('investment')" id="fin-filter-investment" class="fin-filter-btn">Business</button>
+        <button type="button" onclick="filterFinance('expense')" id="fin-filter-expense" class="fin-filter-btn">Out</button>
+      </div>
+      <div id="fin-summary-line" class="fin-summary-line"></div>
+      <div id="fin-list"></div>
     </div>
-  </div>
-  <div id="fin-summary-line" style="padding:0 14px 4px;font-size:11px;color:var(--muted);"></div>
-  <div id="fin-list" style="padding:0 12px 80px;"></div>
+  </details>
+  <div style="height:80px;"></div>
 
   <!-- hidden compat IDs -->
   <span id="fin-insights"    style="display:none;"></span>
@@ -1072,7 +1125,7 @@
 <!-- ==============================================================
      PAGE: SETTINGS  (id="page-settings")
      Super-user only tab.
-     Sections: Firebase Sync · Item Types · Currency · Sync Debug · About
+     Sections: Firebase Sync · Item Types · Sync Debug · About
      ============================================================== -->
 <div class="page" id="page-settings">
 
@@ -1093,12 +1146,26 @@
       </span>
     </div>
 
-    <!-- Hardcoded project info (for transparency) -->
-    <div style="background:var(--surface2);border-radius:var(--r);padding:12px 14px;
+    <!-- Environment switch -->
+    <div class="fb-env-switch">
+      <span class="fb-env-label">Environment</span>
+      <div class="fb-env-toggle">
+        <button type="button" id="fb-env-prod" class="fb-env-btn" onclick="setFirebaseEnvironment('production')">
+          Production
+        </button>
+        <button type="button" id="fb-env-dev" class="fb-env-btn" onclick="setFirebaseEnvironment('development')">
+          Development
+        </button>
+      </div>
+    </div>
+
+    <!-- Project info -->
+    <div id="fb-env-info" style="background:var(--surface2);border-radius:var(--r);padding:12px 14px;
                 margin-bottom:14px;font-size:12px;font-family:var(--mono);
                 color:var(--muted);line-height:1.8;">
-      <div><strong style="color:var(--text2);">Project:</strong> mandela-generals</div>
-      <div><strong style="color:var(--text2);">Database:</strong> Firestore</div>
+      <div><strong style="color:var(--text2);">Environment:</strong> <span id="fb-env-name">—</span></div>
+      <div><strong style="color:var(--text2);">Project:</strong> <span id="fb-env-project">mandela-generals</span></div>
+      <div id="fb-env-prefix"><strong style="color:var(--text2);">Collections:</strong> items, sales, …</div>
       <div><strong style="color:var(--text2);">Sync:</strong> Auto on every change + 2-min heartbeat</div>
     </div>
 
@@ -1112,22 +1179,27 @@
                    cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
       🔄 Reconnect Firebase
     </button>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-      <button onclick="forcePushToFirebase()"
-              style="padding:12px;background:var(--green-light);color:var(--green);
-                     border:1.5px solid #a8d8b5;border-radius:var(--r);font-size:13px;
-                     font-weight:700;cursor:pointer;font-family:var(--sans);">
-        ⬆️ Push All
+
+    <p style="font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.45;">
+      Each button does one thing. Use <strong>Pull</strong> or <strong>Push</strong> to sync without wiping data first.
+    </p>
+    <div class="sync-actions-grid">
+      <button type="button" class="sync-action-btn sync-action-danger" onclick="clearLocalData()">
+        🗑️ Clear local data
       </button>
-      <button onclick="pullFromFirebase()"
-              style="padding:12px;background:#dbeafe;color:#1d4ed8;
-                     border:1.5px solid #93c5fd;border-radius:var(--r);font-size:13px;
-                     font-weight:700;cursor:pointer;font-family:var(--sans);">
-        ⬇️ Pull Latest
+      <button type="button" class="sync-action-btn sync-action-danger" onclick="clearCloudData()">
+        ☁️ Clear cloud data
+      </button>
+      <button type="button" class="sync-action-btn sync-action-pull" onclick="pullFromFirebase()">
+        ⬇️ Pull cloud → local
+      </button>
+      <button type="button" class="sync-action-btn sync-action-push" onclick="forcePushToFirebase()">
+        ⬆️ Push local → cloud
       </button>
     </div>
+
     <button onclick="disconnectFirebase()"
-            style="width:100%;padding:12px;background:var(--red-light);color:var(--red);
+            style="width:100%;margin-top:8px;padding:12px;background:var(--red-light);color:var(--red);
                    border:1.5px solid rgba(192,57,43,0.25);border-radius:var(--r);
                    font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);">
       ✕ Disconnect
@@ -1201,20 +1273,6 @@
     </button>
   </div>
 
-  <!-- ── Currency ───────────────────────────────────────────── -->
-  <div class="sec-label" style="margin-top:16px;">💱 Currency</div>
-  <div class="card">
-    <select class="form-select form-select-bold"
-            id="currency-sel"
-            onchange="saveCurrency()"
-            aria-label="Shop currency">
-      <option value="KES">KES — Kenyan Shilling</option>
-      <option value="TZS">TZS — Tanzanian Shilling</option>
-      <option value="UGX">UGX — Ugandan Shilling</option>
-      <option value="USD">USD — US Dollar</option>
-    </select>
-  </div>
-
   <!-- ── Sync Debug panel ───────────────────────────────────── -->
   <div class="sec-label" style="margin-top:4px;">🔍 Sync Debug</div>
   <div class="card" style="padding:12px;">
@@ -1255,27 +1313,16 @@
   <div class="card" style="border:1px solid var(--red);padding:16px;" id="danger-zone-card">
     <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Historical data &amp; sync</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.45;">
-      Use these when figures disagree between devices or after testing.
-      Session login and currency preferences are kept.
+      Nuclear options only. For normal sync use the four buttons above (clear, pull, or push separately).
+      Session login is kept.
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">
-      <button onclick="clearLocalDataAndPull()"
-              style="padding:12px;background:var(--surface2);color:var(--text);border:1.5px solid var(--border);
-                     border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);text-align:left;">
-        📥 Clear local data &amp; pull from cloud
-      </button>
-      <button onclick="clearCloudDataAndPush()"
-              style="padding:12px;background:var(--surface2);color:var(--text);border:1.5px solid var(--border);
-                     border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);text-align:left;">
-        📤 Clear cloud data &amp; push from this device
-      </button>
-      <button onclick="clearBothLocalAndCloud()"
-              style="padding:12px;background:var(--red);color:white;border:none;
-                     border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);text-align:left;">
-        🗑️ Clear both local &amp; cloud data
-      </button>
-    </div>
+    <button onclick="clearBothLocalAndCloud()"
+            style="width:100%;padding:12px;background:var(--red);color:white;border:none;
+                   border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);text-align:left;
+                   margin-bottom:8px;">
+      🗑️ Clear both local &amp; cloud data
+    </button>
 
     <button onclick="clearAppCacheAndReload()"
             style="width:100%;padding:11px;background:transparent;border:1.5px solid var(--border);
@@ -1584,7 +1631,7 @@
       </div>
       <div class="cat-cascade-field">
         <div id="off-type-cascade" class="add-cascade"></div>
-        <select class="cat-pick-hidden-select" id="off-type" aria-label="Category"></select>
+        <input type="hidden" id="off-type" value="" aria-label="Category">
         <div id="off-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
       </div>
       <div class="stock-form-grid">
@@ -1617,23 +1664,54 @@
     <div id="wd-photo-wrap" class="wish-detail-photo-wrap">
       <img id="wd-photo-img" class="wish-detail-photo" src="" alt="" style="display:none;">
       <div id="wd-photo-empty" class="wish-detail-photo-empty">📷</div>
+      <div id="wd-shoe-overlay" class="wd-shoe-overlay" hidden></div>
     </div>
 
     <div class="wish-detail-body">
-      <div id="wd-name" class="wish-detail-name"></div>
-      <div id="wd-code" class="wish-detail-code"></div>
-      <div id="wd-meta" class="wish-detail-meta"></div>
-      <div id="wd-note" class="wish-detail-note" style="display:none;"></div>
+      <h2 id="wd-name" class="wish-detail-name"></h2>
+
+      <section class="wish-detail-block" aria-labelledby="wd-hd-item">
+        <h3 class="wish-detail-section-label" id="wd-hd-item">Item details</h3>
+        <dl id="wd-item-details" class="wish-detail-dl"></dl>
+      </section>
+
+      <section class="wish-detail-block" aria-labelledby="wd-hd-vendors">
+        <h3 class="wish-detail-section-label" id="wd-hd-vendors">Vendors</h3>
+        <div id="wd-vendor-list"></div>
+      </section>
+
+      <section class="wish-detail-block wish-detail-add-vendor" aria-labelledby="wd-hd-add-vendor">
+        <h3 class="wish-detail-section-label" id="wd-hd-add-vendor">Add vendor</h3>
+        <div class="wish-detail-vendor-form">
+          <div class="wish-detail-field">
+            <label class="add-label" for="wd-vendor-name">Vendor name</label>
+            <input class="add-input" id="wd-vendor-name" type="text" maxlength="80" placeholder="Shop name" autocomplete="off">
+          </div>
+          <div class="wish-detail-field wish-detail-field-price">
+            <label class="add-label" for="wd-vendor-price">Amount</label>
+            <div class="wish-price-input-wrap">
+              <span class="wish-price-prefix" aria-hidden="true">K</span>
+              <input class="add-input add-mono add-center" id="wd-vendor-price" type="number" min="0" inputmode="decimal" placeholder="0" autocomplete="off">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="wish-detail-block" aria-labelledby="wd-hd-note">
+        <h3 class="wish-detail-section-label" id="wd-hd-note">Note</h3>
+        <textarea class="wish-detail-note-input" id="wd-note-input" rows="3" maxlength="160" placeholder="Optional note"></textarea>
+      </section>
     </div>
 
-    <div class="wish-detail-actions">
-      <button type="button" class="wish-detail-btn stock" onclick="wishlistDetailStock()">
-        <i class="fa-solid fa-boxes-stacked"></i> Stock it
-      </button>
-      <button type="button" class="wish-detail-btn delete" onclick="wishlistDetailDelete()">
-        <i class="fa-solid fa-trash"></i> Remove
-      </button>
-    </div>
+    <footer class="wish-detail-footer">
+      <button type="button" class="wish-detail-btn save" onclick="saveWishlistDetail()">Save</button>
+      <div class="wish-detail-footer-row">
+        <button type="button" class="wish-detail-btn stock" onclick="wishlistDetailStock()">
+          <i class="fa-solid fa-boxes-stacked"></i> Stock
+        </button>
+        <button type="button" class="wish-detail-btn delete" onclick="wishlistDetailDelete()">Remove</button>
+      </div>
+    </footer>
   </div>
 </div>
 
@@ -1672,9 +1750,10 @@
 
       <!-- Photo block — full width at top -->
       <div id="sh-photo-area-inner" style="width:100%;height:200px;position:relative;background:var(--surface2);overflow:hidden;flex-shrink:0;">
-        <div id="sh-photo-pan" style="display:none;width:100%;height:100%;overflow:hidden;touch-action:none;position:absolute;inset:0;">
-          <img id="sh-photo-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;user-select:none;-webkit-user-drag:none;">
+        <div id="sh-photo-pan" class="photo-viewport" style="display:none;width:100%;height:100%;overflow:hidden;touch-action:none;position:absolute;inset:0;z-index:1;">
+          <img id="sh-photo-img" src="" alt="" class="photo-pan-img" style="user-select:none;-webkit-user-drag:none;">
         </div>
+        <p class="photo-pan-hint" id="sh-photo-pan-hint" style="display:none;">Pan · 2× full</p>
         <div id="sh-photo-fallback" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:64px;">
           <span id="sh-icon"></span>
         </div>
@@ -1693,43 +1772,35 @@
       <div id="sh-shoe-sizes" style="display:none;margin:10px 12px 8px;"></div>
       <div id="sh-selected-size-bar" style="display:none;padding:8px 12px;margin:0 12px 8px;background:var(--green-light);border:1.5px solid var(--green);border-radius:var(--r);font-size:12px;font-weight:700;color:var(--green);text-align:center;"></div>
 
-      <div style="padding:10px 12px 6px;flex-shrink:0;">
-        <button id="sh-sell-btn" onclick="openSellFromSheet()"
-                style="width:100%;padding:16px;background:#1e7a3e;color:white;border:none;
-                       border-radius:var(--r);font-size:18px;font-weight:900;cursor:pointer;
-                       font-family:var(--sans);letter-spacing:.5px;box-shadow:0 4px 12px rgba(30,122,62,.35);">
-          💰 SELL
-        </button>
+      <!-- Prices & stock stats -->
+      <div id="sh-price-cols" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin:12px 12px 10px;">
+        <div class="sh-stat-box"><div class="sh-stat-lbl">Buying</div><div class="sh-stat-val muted" id="sh-buy"></div></div>
+        <div class="sh-stat-box"><div class="sh-stat-lbl">Selling</div><div class="sh-stat-val accent2" id="sh-sell"></div></div>
+        <div class="sh-stat-box accent-bg"><div class="sh-stat-lbl">Stock</div><div class="sh-stat-val accent" id="sh-qty"></div></div>
+        <div class="sh-stat-box"><div class="sh-stat-lbl">Sold</div><div class="sh-stat-val green" id="sh-sold">0</div></div>
       </div>
 
-      <!-- Icon action row: Delete · Restock · (separator) -->
-      <div id="sh-action-row" style="display:flex;gap:8px;padding:0 12px 8px;justify-content:center;">
-        <button class="btn-del" onclick="deleteItem()"
-                style="flex:1;padding:10px 6px;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:3px;border-radius:var(--r);max-width:80px;">
-          <i class="fa-solid fa-trash" style="font-size:16px;"></i>Delete
+      <!-- Delete (left) · Restock (right) -->
+      <div id="sh-action-row" class="detail-action-row">
+        <button type="button" class="btn-del detail-action-btn" onclick="deleteItem()">
+          <i class="fa-solid fa-trash"></i> Delete
         </button>
-        <button onclick="toggleRestock()"
-                style="flex:1;max-width:80px;padding:10px 6px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:var(--r);font-size:11px;font-weight:700;cursor:pointer;font-family:var(--sans);display:flex;flex-direction:column;align-items:center;gap:3px;">
-          <i class="fa-solid fa-boxes-stacked" style="font-size:16px;"></i>Restock
+        <button type="button" class="detail-action-btn detail-action-restock" onclick="toggleRestock()">
+          <i class="fa-solid fa-boxes-stacked"></i> Restock
         </button>
       </div>
 
       <!-- Inline restock panel -->
       <div id="restock-panel" class="detail-restock-panel" style="display:none;">
-        <input id="restock-qty" type="number" min="1" placeholder="Qty to add" inputmode="numeric"
-               aria-label="Restock quantity" class="detail-restock-qty">
+        <div class="detail-restock-grid">
+          <input id="restock-buy" type="number" min="0" step="any" inputmode="decimal" placeholder="Buy price" aria-label="Buy price" class="detail-restock-field">
+          <input id="restock-sell" type="number" min="0" step="any" inputmode="decimal" placeholder="Sell price" aria-label="Sell price" class="detail-restock-field">
+          <input id="restock-qty" type="number" min="1" placeholder="Qty to add" inputmode="numeric" aria-label="Restock quantity" class="detail-restock-field">
+        </div>
         <div class="detail-restock-actions">
           <button type="button" id="detail-restock-btn" class="detail-restock-confirm" onclick="confirmRestock()">RESTOCK</button>
           <button type="button" class="detail-restock-cancel" onclick="toggleRestock()">Cancel</button>
         </div>
-      </div>
-
-      <!-- Stat boxes -->
-      <div id="sh-price-cols" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin:0 12px 10px;">
-        <div class="sh-stat-box"><div class="sh-stat-lbl">Buy</div><div class="sh-stat-val muted" id="sh-buy"></div></div>
-        <div class="sh-stat-box"><div class="sh-stat-lbl">Sell</div><div class="sh-stat-val accent2" id="sh-sell"></div></div>
-        <div class="sh-stat-box accent-bg"><div class="sh-stat-lbl">Stock</div><div class="sh-stat-val accent" id="sh-qty"></div></div>
-        <div class="sh-stat-box"><div class="sh-stat-lbl">Sold</div><div class="sh-stat-val green" id="sh-sold">0</div></div>
       </div>
 
       <!-- Code + size row -->
@@ -1744,6 +1815,10 @@
       <span id="sh-total" style="display:none;"></span>
       <span id="sh-revenue" style="display:none;"></span>
       <span id="sh-profit-made" style="display:none;"></span>
+
+      <div class="detail-sell-wrap">
+        <button type="button" id="sh-sell-btn" class="detail-sell-btn" onclick="openSellFromSheet()">💰 SELL</button>
+      </div>
 
     </div><!-- /info-panel -->
   </div>
@@ -1870,31 +1945,6 @@
     </div>
   </div>
 </div><!-- /splash -->
-
-
-<!-- ==============================================================
-     OVERLAY: DAY CLOSED
-     Full-screen overlay shown on restricted pages (Dash, Add)
-     when the business day is not OPEN.
-     showDayClosedOverlay(attemptedTab) and hideDayClosedOverlay()
-     in app.js control visibility.
-     ============================================================== -->
-<div id="day-closed-overlay">
-  <div style="font-size:64px;margin-bottom:16px;">🔒</div>
-  <div style="font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px;">
-    Day Not Open
-  </div>
-  <div style="font-size:15px;color:var(--muted);margin-bottom:28px;line-height:1.6;"
-       id="day-closed-msg">
-    Please open the business day to access this section.
-  </div>
-  <button onclick="showPage('operations')"
-          style="padding:16px 32px;background:var(--accent);color:white;border:none;
-                 border-radius:var(--r);font-size:16px;font-weight:800;
-                 cursor:pointer;font-family:var(--sans);">
-    📅 Go to Day
-  </button>
-</div>
 
 
 <!-- ==============================================================
