@@ -1125,94 +1125,149 @@
 <!-- ==============================================================
      PAGE: SETTINGS  (id="page-settings")
      Super-user only tab.
-     Sections: Firebase Sync · Item Types · Sync Debug · About
+     Sections: System · Cloud Sync · Diagnostics · Shop Setup · Danger Zone · About
      ============================================================== -->
 <div class="page" id="page-settings">
 
-  <!-- ── Firebase Sync ─────────────────────────────────────── -->
-  <div class="sec-label">☁️ Firebase Sync</div>
-  <div class="card" id="firebase-setup-card">
+  <!-- ── System & updates ───────────────────────────────────── -->
+  <div class="sec-label">📦 System &amp; updates</div>
+  <p class="settings-hint">App updates change code only — items, sales, and finances stay on this device and in Firebase.</p>
 
-    <!-- Connection status dot + text -->
-    <div id="fb-status-bar"
-         style="display:flex;align-items:center;gap:10px;padding:12px 14px;
-                border-radius:var(--r);background:var(--surface2);
-                border:1px solid var(--border);margin-bottom:14px;">
-      <span id="fb-status-dot"
-            style="width:12px;height:12px;border-radius:50%;background:var(--muted);flex-shrink:0;"></span>
-      <span id="fb-status-text"
-            style="font-size:14px;font-weight:700;color:var(--muted);">
-        Not configured
-      </span>
+  <div class="card settings-card" id="update-card">
+    <div id="update-state-current" class="settings-update-row">
+      <div class="settings-update-icon settings-update-icon--ok">
+        <i class="fa-solid fa-circle-check"></i>
+      </div>
+      <div>
+        <div class="settings-update-title">App is up to date</div>
+        <div class="settings-update-sub" id="update-last-check">Checking…</div>
+      </div>
+    </div>
+    <div id="update-state-available" style="display:none;">
+      <div class="settings-update-row" style="margin-bottom:14px;">
+        <div class="settings-update-icon settings-update-icon--warn">
+          <i class="fa-solid fa-arrow-up-from-bracket"></i>
+        </div>
+        <div>
+          <div class="settings-update-title">Update available</div>
+          <div class="settings-update-sub">Install when ready — your data is kept</div>
+        </div>
+      </div>
+      <button type="button" id="update-install-btn" class="settings-btn settings-btn--primary" onclick="installAppUpdate()">
+        <i class="fa-solid fa-download"></i> Install update
+      </button>
+    </div>
+    <div id="update-state-installing" style="display:none;">
+      <div class="settings-update-row" style="margin-bottom:14px;">
+        <div class="settings-update-icon settings-update-icon--busy">
+          <i class="fa-solid fa-spinner fa-spin"></i>
+        </div>
+        <div>
+          <div class="settings-update-title">Installing update…</div>
+          <div class="settings-update-sub" id="update-progress-label">Starting…</div>
+        </div>
+      </div>
+      <div class="settings-progress-track">
+        <div id="update-progress-bar" class="settings-progress-fill"></div>
+      </div>
+      <div class="settings-progress-meta">
+        <span id="update-progress-pct">0%</span><span>100%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card settings-card upgrade-recovery-card" id="upgrade-recovery-card">
+    <div class="upgrade-recovery-block">
+      <div class="upgrade-recovery-heading">If something looks wrong — try in order</div>
+      <ol class="upgrade-recovery-steps">
+        <li><strong>Stale screen?</strong> Tap <em>Clear app cache</em> below.</li>
+        <li><strong>Device behind cloud?</strong> Cloud Sync → <em>Pull cloud → local</em>.</li>
+        <li><strong>Cloud missing this device?</strong> Cloud Sync → <em>Push local → cloud</em>.</li>
+        <li><strong>Local corrupt, cloud good?</strong> <em>Clear local data</em> → then Pull.</li>
+        <li><strong>Cloud wrong, this device good?</strong> <em>Clear cloud data</em> → then Push.</li>
+      </ol>
+    </div>
+    <button type="button" class="settings-btn settings-btn--ghost" onclick="clearAppCacheAndReload()">
+      🧹 Clear app cache &amp; reload
+    </button>
+    <div class="upgrade-recovery-block upgrade-recovery-warn">
+      <div class="upgrade-recovery-heading">Last resort only</div>
+      <p class="upgrade-recovery-note">
+        Danger Zone actions permanently delete business records. Test in <strong>Development</strong> first when unsure.
+      </p>
+    </div>
+  </div>
+
+  <!-- ── Cloud sync ─────────────────────────────────────────── -->
+  <div class="sec-label" style="margin-top:16px;">☁️ Cloud sync</div>
+  <p class="settings-hint">Production is live shop data. Development uses separate cloud collections (<code>dev_*</code>).</p>
+
+  <div class="card settings-card" id="firebase-setup-card">
+
+    <div id="fb-status-bar" class="fb-status-bar">
+      <span id="fb-status-dot" class="fb-status-dot"></span>
+      <span id="fb-status-text" class="fb-status-text">Not configured</span>
     </div>
 
-    <!-- Environment switch -->
     <div class="fb-env-switch">
       <span class="fb-env-label">Environment</span>
       <div class="fb-env-toggle">
-        <button type="button" id="fb-env-prod" class="fb-env-btn" onclick="setFirebaseEnvironment('production')">
-          Production
-        </button>
-        <button type="button" id="fb-env-dev" class="fb-env-btn" onclick="setFirebaseEnvironment('development')">
-          Development
-        </button>
+        <button type="button" id="fb-env-prod" class="fb-env-btn" onclick="setFirebaseEnvironment('production')">Production</button>
+        <button type="button" id="fb-env-dev" class="fb-env-btn" onclick="setFirebaseEnvironment('development')">Development</button>
       </div>
     </div>
 
-    <!-- Project info -->
-    <div id="fb-env-info" style="background:var(--surface2);border-radius:var(--r);padding:12px 14px;
-                margin-bottom:14px;font-size:12px;font-family:var(--mono);
-                color:var(--muted);line-height:1.8;">
-      <div><strong style="color:var(--text2);">Environment:</strong> <span id="fb-env-name">—</span></div>
-      <div><strong style="color:var(--text2);">Project:</strong> <span id="fb-env-project">mandela-generals</span></div>
-      <div id="fb-env-prefix"><strong style="color:var(--text2);">Collections:</strong> items, sales, …</div>
-      <div><strong style="color:var(--text2);">Sync:</strong> Auto on every change + 2-min heartbeat</div>
+    <div id="fb-env-info" class="fb-env-info">
+      <div><strong>Environment:</strong> <span id="fb-env-name">—</span></div>
+      <div><strong>Project:</strong> <span id="fb-env-project">mandela-generals</span></div>
+      <div id="fb-env-prefix"><strong>Collections:</strong> items, sales, …</div>
+      <div><strong>Auto-sync:</strong> On every change (when online)</div>
     </div>
 
-    <!-- Hidden config input (kept for backward compatibility) -->
     <input type="hidden" id="fb-config-input">
 
-    <!-- Action buttons -->
-    <button onclick="runSyncDebug()"
-            style="width:100%;padding:14px;background:var(--accent);color:white;
-                   border:none;border-radius:var(--r);font-size:15px;font-weight:800;
-                   cursor:pointer;font-family:var(--sans);margin-bottom:10px;">
-      🔄 Reconnect Firebase
-    </button>
-
-    <p style="font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.45;">
-      Each button does one thing. Use <strong>Pull</strong> or <strong>Push</strong> to sync without wiping data first.
-    </p>
-    <div class="sync-actions-grid">
-      <button type="button" class="sync-action-btn sync-action-danger" onclick="clearLocalData()">
-        🗑️ Clear local data
-      </button>
-      <button type="button" class="sync-action-btn sync-action-danger" onclick="clearCloudData()">
-        ☁️ Clear cloud data
-      </button>
-      <button type="button" class="sync-action-btn sync-action-pull" onclick="pullFromFirebase()">
-        ⬇️ Pull cloud → local
-      </button>
-      <button type="button" class="sync-action-btn sync-action-push" onclick="forcePushToFirebase()">
-        ⬆️ Push local → cloud
-      </button>
+    <div class="sync-actions-group">
+      <div class="sync-actions-label">Sync — merge without wiping first</div>
+      <div class="sync-actions-grid">
+        <button type="button" class="sync-action-btn sync-action-pull" onclick="pullFromFirebase()">⬇️ Pull cloud → local</button>
+        <button type="button" class="sync-action-btn sync-action-push" onclick="forcePushToFirebase()">⬆️ Push local → cloud</button>
+      </div>
     </div>
 
-    <button onclick="disconnectFirebase()"
-            style="width:100%;margin-top:8px;padding:12px;background:var(--red-light);color:var(--red);
-                   border:1.5px solid rgba(192,57,43,0.25);border-radius:var(--r);
-                   font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans);">
-      ✕ Disconnect
-    </button>
+    <div class="sync-actions-group">
+      <div class="sync-actions-label sync-actions-label--warn">Clear — one side only</div>
+      <div class="sync-actions-grid">
+        <button type="button" class="sync-action-btn sync-action-danger" onclick="clearLocalData()">🗑️ Clear local data</button>
+        <button type="button" class="sync-action-btn sync-action-danger" onclick="clearCloudData()">☁️ Clear cloud data</button>
+      </div>
+    </div>
+
+    <div class="settings-btn-row">
+      <button type="button" class="settings-btn settings-btn--primary" onclick="reconnectFirebase()">🔄 Reconnect</button>
+      <button type="button" class="settings-btn settings-btn--ghost settings-btn--danger-text" onclick="disconnectFirebase()">✕ Disconnect</button>
+    </div>
   </div>
 
-  <!-- ── Categories & shoe setup ─────────────────────────────── -->
-  <div class="sec-label">🏷️ Categories</div>
-  <div style="font-size:12px;color:var(--muted);margin:0 14px 8px;line-height:1.45;">
-    Activate categories for dropdowns. Toggle 👟 for size-grid mode (like shoes).
-    Nest sub-categories without limit (e.g. Footwear → School Shoes → Boys → Size 10).
-    Any category can be a parent when adding a sub-category.
+  <!-- ── Sync diagnostics ───────────────────────────────────── -->
+  <div class="sec-label" style="margin-top:16px;">🔍 Sync diagnostics</div>
+  <div class="card settings-card settings-card--compact" id="sync-debug-card">
+    <div class="sync-debug-counts">
+      <div class="sync-debug-stat">
+        <div class="sync-debug-stat-label">Local items</div>
+        <div class="sync-debug-stat-val" id="debug-local-items">—</div>
+      </div>
+      <div class="sync-debug-stat">
+        <div class="sync-debug-stat-label">Cloud items</div>
+        <div class="sync-debug-stat-val sync-debug-stat-val--green" id="debug-fb-items">—</div>
+      </div>
+    </div>
+    <button type="button" class="settings-btn settings-btn--primary" onclick="runSyncDebug()">🔍 Check &amp; sync now</button>
+    <div id="debug-log" class="sync-debug-log"></div>
   </div>
+
+  <!-- ── Shop setup ─────────────────────────────────────────── -->
+  <div class="sec-label" style="margin-top:16px;">🏷️ Shop setup</div>
+  <p class="settings-hint">Categories for inventory. Toggle 👟 for size-grid mode (shoes). Nest sub-categories to any depth.</p>
 
   <div class="card" style="margin-bottom:8px;">
     <div style="font-size:12px;font-weight:700;margin-bottom:8px;">New parent category</div>
@@ -1273,118 +1328,22 @@
     </button>
   </div>
 
-  <!-- ── Sync Debug panel ───────────────────────────────────── -->
-  <div class="sec-label" style="margin-top:4px;">🔍 Sync Debug</div>
-  <div class="card" style="padding:12px;">
-    <!-- Local vs Firebase counts -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-      <div style="background:var(--surface2);border-radius:var(--r);padding:10px;text-align:center;">
-        <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;">
-          Local Items
-        </div>
-        <div style="font-size:22px;font-weight:800;color:var(--accent);font-family:var(--mono);"
-             id="debug-local-items">—</div>
-      </div>
-      <div style="background:var(--surface2);border-radius:var(--r);padding:10px;text-align:center;">
-        <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;">
-          Firebase Items
-        </div>
-        <div style="font-size:22px;font-weight:800;color:var(--green);font-family:var(--mono);"
-             id="debug-fb-items">—</div>
-      </div>
-    </div>
-    <!-- Check button + log output -->
-    <button onclick="runSyncDebug()"
-            style="width:100%;padding:12px;background:var(--accent);color:white;
-                   border:none;border-radius:var(--r);font-size:14px;font-weight:700;
-                   cursor:pointer;font-family:var(--sans);margin-bottom:8px;">
-      🔍 Check &amp; Sync Now
-    </button>
-    <div id="debug-log"
-         style="font-size:11px;font-family:var(--mono);color:var(--muted);
-                background:var(--surface2);border-radius:var(--r);padding:10px;
-                max-height:120px;overflow-y:auto;white-space:pre-line;line-height:1.6;">
-    </div>
-  </div>
 
-
-  <!-- ── Danger Zone ────────────────────────────────────────── -->
-  <div class="sec-label" style="margin-top:16px;color:var(--red);">⚠️ Danger Zone</div>
-  <div class="card" style="border:1px solid var(--red);padding:16px;" id="danger-zone-card">
-    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Historical data &amp; sync</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.45;">
-      Nuclear options only. For normal sync use the four buttons above (clear, pull, or push separately).
-      Session login is kept.
-    </div>
-
-    <button onclick="clearBothLocalAndCloud()"
-            style="width:100%;padding:12px;background:var(--red);color:white;border:none;
-                   border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);text-align:left;
-                   margin-bottom:8px;">
+  <!-- ── Danger zone ────────────────────────────────────────── -->
+  <div class="sec-label settings-sec-danger" style="margin-top:16px;">⚠️ Danger zone</div>
+  <div class="card settings-card settings-card--danger" id="danger-zone-card">
+    <p class="settings-hint settings-hint--danger">
+      Permanently deletes business records. Use sync buttons and recovery steps above first. Login is kept.
+    </p>
+    <button type="button" class="settings-btn settings-btn--danger" onclick="clearBothLocalAndCloud()">
       🗑️ Clear both local &amp; cloud data
     </button>
-
-    <button onclick="clearAppCacheAndReload()"
-            style="width:100%;padding:11px;background:transparent;border:1.5px solid var(--border);
-                   border-radius:var(--r);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);color:var(--muted);">
-      🧹 Clear app cache &amp; reload (fixes stale screens)
-    </button>
-
-    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">Full schema rebuild</div>
-      <button onclick="resetAndRebuildDB()"
-              style="width:100%;padding:12px;background:#7c3aed;color:white;border:none;
-                     border-radius:var(--r);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--sans);">
-        🔧 Rebuild database (type RESET to confirm)
+    <div class="settings-danger-divider">
+      <div class="upgrade-recovery-heading">Full schema rebuild</div>
+      <p class="upgrade-recovery-note">Recreates empty local database. Pull from cloud afterward if data exists there.</p>
+      <button type="button" class="settings-btn settings-btn--purple" onclick="resetAndRebuildDB()">
+        🔧 Rebuild database
       </button>
-    </div>
-  </div>
-
-
-  <!-- ── App Update ─────────────────────────────────────────── -->
-  <div class="sec-label" style="margin-top:16px;">🔄 App Update</div>
-  <div class="card" id="update-card" style="padding:16px;">
-    <div id="update-state-current" style="display:flex;align-items:center;gap:12px;">
-      <div style="width:36px;height:36px;border-radius:50%;background:var(--green-light);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-        <i class="fa-solid fa-circle-check" style="color:var(--green);font-size:16px;"></i>
-      </div>
-      <div>
-        <div style="font-size:14px;font-weight:700;color:var(--text);">App is up to date</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;" id="update-last-check">Checking…</div>
-      </div>
-    </div>
-    <div id="update-state-available" style="display:none;">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-        <div style="width:36px;height:36px;border-radius:50%;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <i class="fa-solid fa-arrow-up-from-bracket" style="color:#d97706;font-size:16px;"></i>
-        </div>
-        <div>
-          <div style="font-size:14px;font-weight:700;color:var(--text);">Update available!</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;">New version ready to install</div>
-        </div>
-      </div>
-      <button id="update-install-btn" onclick="installAppUpdate()"
-              style="width:100%;padding:14px;background:var(--accent);color:white;border:none;
-                     border-radius:var(--r);font-size:15px;font-weight:800;cursor:pointer;font-family:var(--sans);">
-        <i class="fa-solid fa-download"></i> Install Update
-      </button>
-    </div>
-    <div id="update-state-installing" style="display:none;">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-        <div style="width:36px;height:36px;border-radius:50%;background:var(--accent-light);display:flex;align-items:center;justify-content:center;">
-          <i class="fa-solid fa-spinner fa-spin" style="color:var(--accent);font-size:16px;"></i>
-        </div>
-        <div>
-          <div style="font-size:14px;font-weight:700;color:var(--text);">Installing update…</div>
-          <div style="font-size:11px;color:var(--muted);" id="update-progress-label">Starting…</div>
-        </div>
-      </div>
-      <div style="background:var(--surface2);border-radius:20px;height:8px;overflow:hidden;margin-bottom:6px;">
-        <div id="update-progress-bar" style="height:100%;background:var(--accent);border-radius:20px;width:0%;transition:width .4s ease;"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-family:var(--mono);">
-        <span id="update-progress-pct">0%</span><span>100%</span>
-      </div>
     </div>
   </div>
 

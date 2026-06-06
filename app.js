@@ -6671,9 +6671,15 @@ function disconnectFirebase() {
   if (typeof window._fbUnsubBd === 'function') { window._fbUnsubBd(); window._fbUnsubBd = null; }
   fbApp = null; fbDb = null; fbReady = false;
   localStorage.removeItem('fb_config');
-  document.getElementById('fb-config-input').value = '';
+  const cfgInput = document.getElementById('fb-config-input');
+  if (cfgInput) cfgInput.value = '';
   setFbStatus('off');
   toast('Firebase disconnected', '');
+}
+
+async function reconnectFirebase() {
+  toast('Reconnecting…', '');
+  await initFirebase();
 }
 
 
@@ -7662,11 +7668,6 @@ function closeProfileSheet() {
 
 function tidySettingsPage() {
   updateFirebaseEnvUI();
-  const primarySync = document.querySelector('#firebase-setup-card button[onclick="runSyncDebug()"]');
-  if (primarySync) primarySync.textContent = 'Sync Now';
-  document.querySelectorAll('#page-settings button[onclick="runSyncDebug()"]').forEach(btn => {
-    if (btn !== primarySync) btn.style.display = 'none';
-  });
 }
 
 // backdrop close
@@ -9144,6 +9145,7 @@ window.dashSetPeriod = dashSetPeriod;
 window.deleteItem = deleteItem;
 window.deleteType = deleteType;
 window.disconnectFirebase = disconnectFirebase;
+window.reconnectFirebase = reconnectFirebase;
 window.setFirebaseEnvironment = setFirebaseEnvironment;
 window.dismissAppUpdate = dismissAppUpdate;
 window.dismissInstall = dismissInstall;

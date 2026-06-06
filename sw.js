@@ -1,10 +1,10 @@
-// ===== MANDELA GENERALS SERVICE WORKER v14 =====
+﻿// ===== MANDELA GENERALS SERVICE WORKER v14 =====
 // Strategy:
 //   App files  → Network-first (always try fresh, fallback to cache offline)
 //   Firebase SDK → Cache-first (static SDK, rarely changes)
 //   Firestore API → Network-only (never cache live data)
 
-const CACHE_NAME = 'mandela-v20260603-offstock-cat';   // bump this on every deploy
+const CACHE_NAME = 'mandela-v20260606-settings';   // bump this on every deploy
 const FIREBASE_CACHE = 'firebase-sdk-v1';
 
 const APP_FILES = [

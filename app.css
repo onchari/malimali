@@ -2048,6 +2048,234 @@ body {
 #sales-slot-history {
   padding-bottom: 12px;
 }
+#page-settings .settings-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 14px 10px;
+  line-height: 1.45;
+}
+#page-settings .settings-hint code {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--surface2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+#page-settings .settings-hint--danger {
+  margin: 0 0 12px;
+  color: var(--text2);
+}
+#page-settings .settings-card {
+  margin-bottom: 10px;
+  padding: 14px 16px;
+}
+#page-settings .settings-card--compact {
+  padding: 12px 14px;
+}
+#page-settings .settings-card--danger {
+  border: 1px solid rgba(192, 57, 43, 0.35);
+}
+#page-settings .settings-sec-danger {
+  color: var(--red);
+}
+#page-settings .settings-btn {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--r);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--sans);
+  border: none;
+}
+#page-settings .settings-btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+#page-settings .settings-btn--ghost {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  color: var(--text2);
+}
+#page-settings .settings-btn--danger {
+  background: var(--red);
+  color: #fff;
+  text-align: left;
+  margin-bottom: 8px;
+}
+#page-settings .settings-btn--danger-text {
+  color: var(--red);
+  border-color: rgba(192, 57, 43, 0.25);
+  background: var(--red-light);
+}
+#page-settings .settings-btn--purple {
+  background: #7c3aed;
+  color: #fff;
+  margin-top: 8px;
+}
+#page-settings .settings-btn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+#page-settings .settings-update-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+#page-settings .settings-update-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
+}
+#page-settings .settings-update-icon--ok {
+  background: var(--green-light);
+  color: var(--green);
+}
+#page-settings .settings-update-icon--warn {
+  background: #fef3c7;
+  color: #d97706;
+}
+#page-settings .settings-update-icon--busy {
+  background: var(--accent-light);
+  color: var(--accent);
+}
+#page-settings .settings-update-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+#page-settings .settings-update-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+#page-settings .settings-progress-track {
+  background: var(--surface2);
+  border-radius: 20px;
+  height: 8px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+#page-settings .settings-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 20px;
+  width: 0%;
+  transition: width 0.4s ease;
+}
+#page-settings .settings-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+#page-settings .settings-danger-divider {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+#page-settings .fb-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+#page-settings .fb-status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex-shrink: 0;
+}
+#page-settings .fb-status-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+}
+#page-settings .fb-env-info {
+  background: var(--surface2);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--muted);
+  line-height: 1.8;
+}
+#page-settings .fb-env-info strong {
+  color: var(--text2);
+}
+#page-settings .sync-actions-group {
+  margin-bottom: 12px;
+}
+#page-settings .sync-actions-group:last-of-type {
+  margin-bottom: 14px;
+}
+#page-settings .sync-actions-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text2);
+  margin-bottom: 6px;
+}
+#page-settings .sync-actions-label--warn {
+  color: var(--red);
+}
+#page-settings .sync-debug-counts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+#page-settings .sync-debug-stat {
+  background: var(--surface2);
+  border-radius: var(--r);
+  padding: 10px;
+  text-align: center;
+}
+#page-settings .sync-debug-stat-label {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+#page-settings .sync-debug-stat-val {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--accent);
+  font-family: var(--mono);
+}
+#page-settings .sync-debug-stat-val--green {
+  color: var(--green);
+}
+#page-settings .sync-debug-log {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--muted);
+  background: var(--surface2);
+  border-radius: var(--r);
+  padding: 10px;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-line;
+  line-height: 1.6;
+  margin-top: 8px;
+  min-height: 2.4em;
+}
+
 .fb-env-switch {
   display: flex;
   align-items: center;
@@ -2103,11 +2331,50 @@ body[data-firebase-env="development"]::before {
   color: #78350f;
 }
 
+.upgrade-recovery-card {
+  padding: 14px 16px;
+}
+.upgrade-recovery-card .settings-btn {
+  margin-top: 4px;
+  margin-bottom: 12px;
+}
+.upgrade-recovery-block {
+  margin-bottom: 12px;
+}
+.upgrade-recovery-block:last-child {
+  margin-bottom: 0;
+}
+.upgrade-recovery-heading {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.upgrade-recovery-steps {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.55;
+}
+.upgrade-recovery-steps li + li {
+  margin-top: 6px;
+}
+.upgrade-recovery-warn {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.upgrade-recovery-note {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
 .sync-actions-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-bottom: 8px;
 }
 .sync-action-btn {
   padding: 12px 10px;
