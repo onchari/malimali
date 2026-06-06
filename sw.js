@@ -1,8 +1,8 @@
-﻿// ===== MANDELA GENERALS SERVICE WORKER v14 =====
+// ===== MANDELA GENERALS SERVICE WORKER v14 =====
 // Strategy:
-//   App files  â†’ Network-first (always try fresh, fallback to cache offline)
-//   Firebase SDK â†’ Cache-first (static SDK, rarely changes)
-//   Firestore API â†’ Network-only (never cache live data)
+//   App files  → Network-first (always try fresh, fallback to cache offline)
+//   Firebase SDK → Cache-first (static SDK, rarely changes)
+//   Firestore API → Network-only (never cache live data)
 
 const CACHE_NAME = 'mandela-v20260603-offstock-cat';   // bump this on every deploy
 const FIREBASE_CACHE = 'firebase-sdk-v1';
@@ -22,7 +22,7 @@ const FIREBASE_URLS = [
   'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js'
 ];
 
-// â”€â”€ INSTALL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── INSTALL ─────────────────────────────────────────────────────────
 self.addEventListener('install', e => {
   e.waitUntil(
     Promise.all([
@@ -34,11 +34,11 @@ self.addEventListener('install', e => {
       )
     ])
   );
-  // Activate immediately â€” don't wait for old SW to stop
+  // Activate immediately — don't wait for old SW to stop
   self.skipWaiting();
 });
 
-// â”€â”€ ACTIVATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── ACTIVATE ─────────────────────────────────────────────────────────
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
@@ -56,11 +56,11 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// â”€â”€ FETCH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── FETCH ─────────────────────────────────────────────────────────────
 self.addEventListener('fetch', e => {
   const url = e.request.url;
 
-  // 1. Firestore / Firebase auth API â€” always network, never cache
+  // 1. Firestore / Firebase auth API — always network, never cache
   if (
     url.includes('firestore.googleapis.com') ||
     url.includes('firebase.googleapis.com') ||
@@ -70,7 +70,7 @@ self.addEventListener('fetch', e => {
     return; // pass through
   }
 
-  // 2. Firebase SDK scripts â€” cache-first (they never change)
+  // 2. Firebase SDK scripts — cache-first (they never change)
   if (url.includes('gstatic.com/firebasejs')) {
     e.respondWith(
       caches.match(e.request).then(cached => {
@@ -84,14 +84,14 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // 3. App files â€” NETWORK-FIRST
+  // 3. App files — NETWORK-FIRST
   //    Try the network first so updates are always seen immediately.
   //    Fall back to cache only when offline.
   if (e.request.method === 'GET') {
     e.respondWith(
       fetch(e.request)
         .then(res => {
-          // Got a fresh response â€” update the cache and return it
+          // Got a fresh response — update the cache and return it
           if (res && res.status === 200) {
             const clone = res.clone();
             caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
@@ -99,7 +99,7 @@ self.addEventListener('fetch', e => {
           return res;
         })
         .catch(() => {
-          // Network failed (offline) â€” serve from cache
+          // Network failed (offline) — serve from cache
           return caches.match(e.request).then(cached => {
             if (cached) return cached;
             // Last resort: return cached index.html for navigation
@@ -112,7 +112,7 @@ self.addEventListener('fetch', e => {
   }
 });
 
-// â”€â”€ BACKGROUND SYNC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── BACKGROUND SYNC ───────────────────────────────────────────────────
 self.addEventListener('sync', e => {
   if (e.tag === 'firebase-sync') {
     e.waitUntil(
@@ -123,7 +123,7 @@ self.addEventListener('sync', e => {
   }
 });
 
-// â”€â”€ MESSAGES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MESSAGES ──────────────────────────────────────────────────────────
 self.addEventListener('message', e => {
   if (e.data && e.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
