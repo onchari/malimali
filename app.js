@@ -4777,7 +4777,7 @@ async function _renderDashSummary(ctx) {
   ));
   if (wishCount > 0) {
     cards.push(_dashSumCard(
-      ''
+      '',
       fmtN(wishCount),
       'Wishlist',
       wishCount + ' item' + (wishCount !== 1 ? 's' : '') + ' to stock - tap to open',
@@ -4787,7 +4787,7 @@ async function _renderDashSummary(ctx) {
   }
   if (alertCount > 0) {
     cards.push(_dashSumCard(
-      ''
+      '',
       fmtN(alertCount) + ' alerts',
       'Needs attention',
       (outStk.length ? outStk.length + ' out - ' : '') + (lowStk.length ? lowStk.length + ' low' : ''),
