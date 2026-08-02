@@ -559,43 +559,28 @@ function applyAddFormFootwearUI(isShoe) {
   const shoePanel  = UI.el('shoe-size-panel');
   const stdPricing = UI.el('std-pricing-section');
   const sizeField  = document.getElementById('f-size-field');
-  const vtField    = document.getElementById('variant-type-field');
-  const gvPanel    = document.getElementById('general-variant-panel');
   const modeToggle = document.getElementById('item-mode-toggle');
   const inRestock  = pageAdd?.classList.contains('restock-mode');
   if (inRestock) {
-    if (shoePanel)   shoePanel.style.display = 'none';
-    if (stdPricing)  stdPricing.style.display = 'block';
-    if (vtField)     vtField.style.display = 'none';
-    if (gvPanel)     gvPanel.style.display = 'none';
-    if (modeToggle)  modeToggle.style.display = 'none';
+    if (shoePanel)  shoePanel.style.display = 'none';
+    if (stdPricing) stdPricing.style.display = 'block';
+    if (modeToggle) modeToggle.style.display = 'none';
     return;
   }
   if (modeToggle) modeToggle.style.removeProperty('display');
   if (isShoe) {
-    if (shoePanel) shoePanel.style.removeProperty('display');
+    if (shoePanel)  shoePanel.style.removeProperty('display');
     if (stdPricing) stdPricing.style.display = 'none';
-    if (sizeField) sizeField.style.display = 'none';
-    if (vtField) vtField.style.display = 'none';
-    if (gvPanel) gvPanel.style.display = 'none';
-    _variantState.reset();
+    if (sizeField)  sizeField.style.display = 'none';
     renderShoeGroupButtons();
     prepareShoeSizePickerUI();
     showShoePricingPanel();
     initShoeCollectiveSummaryListeners();
     updateShoeCollectiveSummary();
   } else {
-    if (shoePanel) shoePanel.style.display = 'none';
-    if (sizeField) sizeField.style.removeProperty('display');
-    if (vtField) vtField.style.removeProperty('display');
-    // std-pricing hidden only if a variant type is already chosen
-    if (_variantState.variantType) {
-      if (stdPricing) stdPricing.style.display = 'none';
-      if (gvPanel) gvPanel.style.removeProperty('display');
-    } else {
-      if (stdPricing) stdPricing.style.removeProperty('display');
-      if (gvPanel) gvPanel.style.display = 'none';
-    }
+    if (shoePanel)  shoePanel.style.display = 'none';
+    if (stdPricing) stdPricing.style.removeProperty('display');
+    if (sizeField)  sizeField.style.removeProperty('display');
   }
 }
 
@@ -881,16 +866,6 @@ class ShoeState {
   }
 }
 
-// ── VariantState: manages general (non-shoe) variant selection ─────
-class VariantState {
-  constructor() { this.reset(); }
-  reset() {
-    this.variantType = ''; // e.g. 'Color', 'Size', 'Brand'
-    this.variants    = []; // [{label:string}] — qty/buy/sell read from DOM inputs
-  }
-  get hasSelection() { return this.variants.length > 0; }
-}
-
 // ── Standard 4: SavingOverlay class - progress UI ──────────────────
 class SavingOverlay {
   constructor() {
@@ -941,7 +916,6 @@ class SavingOverlay {
 // ── Singleton instances ─────────────────────────────────────────────
 const _overlay       = new SavingOverlay();
 const _shoeState     = new ShoeState();
-const _variantState  = new VariantState();
 
 // ── Standard 5: DRY - single UI refresh chain ──────────────────────
 // Replaces 15+ repeated blocks of:
@@ -3341,21 +3315,6 @@ async function saveItem() {
       toast(''+savedCount+' shoe size(s) saved!','ok');return;
     }
 
-    // VARIANT MODE (non-footwear items with variants)
-    if (_variantState.variantType && _variantState.variants.length > 0) {
-      const savedCount = await saveVariantItems(code, name, type);
-      if (!savedCount) return;
-      clearForm();
-      clearAddFormPhoto();
-      allItems = await dbAll('items');
-      await enrichShoeItems(allItems);
-      renderList(); renderDashboard(); updateHeader(); scheduleSync();
-      await renderWishlistPage();
-      await renderStockMonitorSummary();
-      toast('' + savedCount + ' variant(s) saved!', 'ok');
-      return;
-    }
-
     // STANDARD ADD / EDIT - only code and name are required; size, qty, buy and sell are optional
     const isRecord = !!_addFormIsRecord;
     const size=UI.el('f-size')?.value.trim()||'';
@@ -3462,7 +3421,6 @@ function clearForm() {
   setAddTypeLocked(false);
 
   _shoeState.reset();
-  _variantState.reset();
   resetShoeUiPanels();
   _addFormWasFootwear = false;
   _addFormIsRecord    = false;
@@ -3835,7 +3793,7 @@ async function renderList() {
             </div>
             <span class="shoe-group-name">${escapeHtml(item.name||'')}</span>
             <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;">
-              <span>${groupTotalPcs} pcs</span><span>Sold ${groupSoldPcs} sold</span>
+              <span>${groupTotalPcs} pcs</span><span>Sold ${groupSoldPcs}</span>
               <span>${fmt(groupBuyCost)}</span><span style="color:var(--accent2);">${fmt(_grpRevenue)}</span>
             </div>
           </div>
@@ -4095,7 +4053,7 @@ async function getStockMonitorRows() {
           buyPrice: sz.buyPrice || item.buyPrice || item.buy || 0,
           label: 'Out of stock - size ' + sz.size
         }));
-    } else if ((item.qty || 0) <= 0) {
+    } else if (!item.isRecord && (item.qty || 0) <= 0) {
       rows.push({
         kind: 'out',
         itemId: item.id,
@@ -4634,7 +4592,7 @@ function openSellFromSheet() {
       }
       openSellShoeModal(id, _selectedShoeSize);
     } else {
-      if (item.qty <= 0) { toast('Warning: Out of stock', 'err'); return; }
+      if (item.qty <= 0 && !item.isRecord) { toast('Warning: Out of stock', 'err'); return; }
       openSellModal(id);
     }
   }, 120);
@@ -4706,8 +4664,8 @@ async function openSheet(id) {
   set('sh-type', item.type);
   const tbadge = document.getElementById('sh-type-badge'); if (tbadge) tbadge.textContent = t.emoji + ' ' + item.type;
   set('sh-size', item.size || '-');
-  set('sh-buy', fmt(item.buy));
-  set('sh-sell', fmt(item.sell));
+  set('sh-buy', fmt(item.buyPrice || item.buy || 0));
+  set('sh-sell', fmt(item.sellPrice || item.sell || 0));
   set('sh-profit', fmt(item.profit));
   set('sh-qty', item.qty + ' pcs');
   set('sh-code-large', item.code + (item.size ? ' - ' + item.size : ''));
@@ -4725,15 +4683,15 @@ async function openSheet(id) {
     const totalQty   = freshSizes.reduce((t,s) => t+s.qty, 0);
     item.qty         = totalQty;
     // Show shoe buy/sell from defaults
-    set('sh-buy',  fmt(item.defaultBuy  || 0));
-    set('sh-sell', fmt(item.defaultSell || 0));
+    set('sh-buy',  fmt(item.buyPrice  || item.defaultBuy  || 0));
+    set('sh-sell', fmt(item.sellPrice || item.defaultSell || 0));
     set('sh-qty',  totalQty + ' pcs');
     if (sizeSec) sizeSec.style.display = 'block';
     if (sizebar) { sizebar.style.display = 'none'; sizebar.textContent = ''; }
     await renderShoeDetailGrid(item);
   } else {
-    set('sh-buy',  fmt(item.buy  || 0));
-    set('sh-sell', fmt(item.sell || 0));
+    set('sh-buy',  fmt(item.buyPrice  || item.buy  || 0));
+    set('sh-sell', fmt(item.sellPrice || item.sell || 0));
     set('sh-qty',  item.qty + ' pcs');
     if (sizeSec) sizeSec.style.display = 'none';
     if (sizebar) sizebar.style.display = 'none';
@@ -4742,14 +4700,14 @@ async function openSheet(id) {
   // Out of stock
   const outBadge = document.getElementById('sh-out-badge');
   const sellBtn = document.getElementById('sh-sell-btn');
-  if (item.qty <= 0 && !item.isShoe) {
+  if (item.qty <= 0 && !item.isShoe && !item.isRecord) {
     if (outBadge) outBadge.style.display = 'block';
     if (sellBtn) { sellBtn.disabled = true; sellBtn.style.opacity = '0.4'; sellBtn.style.cursor = 'not-allowed'; sellBtn.textContent = 'OUT OF STOCK'; }
   } else {
     if (outBadge) outBadge.style.display = 'none';
     if (sellBtn) { sellBtn.disabled = false; sellBtn.style.opacity = '1'; sellBtn.style.cursor = 'pointer'; sellBtn.textContent = item.isShoe ? 'SELECT SIZE & SELL' : 'SELL'; }
   }
-  set('sh-total', fmt(item.buy * item.qty));
+  set('sh-total', fmt((item.buyPrice || item.buy || 0) * (item.qty || 0)));
   set('sh-sold', soldQty);
   set('sh-revenue', fmt(revenue));
   set('sh-profit-made', fmt(profitMade));
@@ -4878,6 +4836,7 @@ async function editItem() {
   UI.el('f-qty').value   = item.qty   ?? '';
   UI.el('f-buy').value   = item.buyPrice  || item.buy  || '';  // normalized field name
   UI.el('f-sell').value  = item.sellPrice || item.sell || '';  // normalized field name
+  if (item.isRecord) setItemMode(true);
   // Lock code and type - identifying fields
   ['f-code'].forEach(id => {
     const el = document.getElementById(id);
@@ -5496,7 +5455,9 @@ async function updateSellModal() {
   const buyOnRecord = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.buyPrice  || item.buyPrice  || item.buy  || 0) : (item.buy  || item.buyPrice  || 0);
   const buyRaw    = parseFloat(document.getElementById('sm-buy')?.value);
   const baseBuy   = (!isNaN(buyRaw) && buyRaw >= 0) ? buyRaw : buyOnRecord;
-  const maxStock  = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.qty || 0) : (item.qty || 0);
+  const maxStock  = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.qty || 0)
+               : item.isRecord ? 999999
+               : (item.qty || 0);
   const qtyEl = document.getElementById('sm-qty');
   let qty = parseInt(qtyEl?.value || '0');
   if (!Number.isFinite(qty) || qty < 0) qty = 0;
@@ -7290,8 +7251,8 @@ async function openDay() {
   if (!bday.opened_at) {
     // First open of the day - snapshot opening stock value
     const items = await dbAll('items');
-    bday.openingStockCost   = items.reduce((s, i) => s + i.buy * i.qty, 0);
-    bday.openingStockRetail = items.reduce((s, i) => s + i.sell * i.qty, 0);
+    bday.openingStockCost   = items.reduce((s, i) => s + (i.buyPrice  || i.buy  || 0) * (i.qty || 0), 0);
+    bday.openingStockRetail = items.reduce((s, i) => s + (i.sellPrice || i.sell || 0) * (i.qty || 0), 0);
   }
 
   bday.status          = 'OPEN';
@@ -7321,10 +7282,10 @@ async function closeDay() {
   // Note: tracks NEW items added today (by createdAt).
   // Restocks to existing items are not separately tracked - a future
   // 'stock_events' log store would capture this properly.
-  const todayStart = today + 'T00:00:00';
+  const todayStart = (activeDay.businessDate || activeDay.business_date) + 'T00:00:00';
   const items     = await dbAll('items');
   const purchases = items.filter(i => i.createdAt && i.createdAt >= todayStart);
-  const closingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
+  const closingStockCost = items.reduce((s, i) => s + (i.buyPrice || i.buy || 0) * (i.qty || 0), 0);
   const margin = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : 0;
   const avgSale = daySales.length > 0 ? (revenue / daySales.length) : 0;
   const openT = activeDay.opened_at ? fmtTime(activeDay.opened_at) : '?';
@@ -7401,8 +7362,8 @@ async function confirmCloseDay() {
   activeDay.profit       = daySales.reduce((s, x) => s + x.profit, 0);
   activeDay.itemsSold    = daySales.reduce((s, x) => s + x.qty, 0);
   activeDay.purchasesCount = purchases.length;
-  activeDay.purchaseCost   = purchases.reduce((s, i) => s + i.buy * i.qty, 0);
-  activeDay.closingStockCost = items.reduce((s, i) => s + i.buy * i.qty, 0);
+  activeDay.purchaseCost   = purchases.reduce((s, i) => s + (i.buyPrice || i.buy || 0) * (i.qty || 0), 0);
+  activeDay.closingStockCost = items.reduce((s, i) => s + (i.buyPrice || i.buy || 0) * (i.qty || 0), 0);
 
   await dbPut('business_days', activeDay);
   document.getElementById('day-summary-sheet').classList.remove('open');
@@ -7700,8 +7661,8 @@ async function renderDaySessionsList() {
   const all = await dbAll('business_days');
   const today = todayDateStr();
   const past = all
-    .filter(d => d.business_date !== today && (d.status === 'CLOSED' || d.status === 'LOCKED'))
-    .sort((a, b) => b.business_date.localeCompare(a.business_date));
+    .filter(d => (d.businessDate || d.business_date) !== today && (d.status === 'CLOSED' || d.status === 'LOCKED'))
+    .sort((a, b) => (b.businessDate || b.business_date || '').localeCompare(a.businessDate || a.business_date || ''));
 
   const list = document.getElementById('day-sessions-list');
   if (!list) return;
@@ -7717,11 +7678,11 @@ async function renderDaySessionsList() {
     return '<div class="card" style="margin-bottom:8px;padding:14px;cursor:pointer;" onclick="viewPastSession(' + s.id + ')">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
       '<div>' +
-        '<div style="font-size:14px;font-weight:800;color:var(--text);">' + fmtFullDate(s.business_date) + '</div>' +
+        '<div style="font-size:14px;font-weight:800;color:var(--text);">' + fmtFullDate(s.businessDate || s.business_date) + '</div>' +
         '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">' +
-          (s.opened_at ? fmtTime(s.opened_at) : '-') + ' to ' +
-          (s.closed_at ? fmtTime(s.closed_at) : 'auto') +
-          (s.reopened_count > 0 ? ' - Reopened ' + s.reopened_count + 'x' : '') +
+          ((s.openedAt || s.opened_at) ? fmtTime(s.openedAt || s.opened_at) : '-') + ' to ' +
+          ((s.closedAt || s.closed_at) ? fmtTime(s.closedAt || s.closed_at) : 'auto') +
+          ((s.reopenedCount || s.reopened_count || 0) > 0 ? ' - Reopened ' + (s.reopenedCount || s.reopened_count) + 'x' : '') +
         '</div>' +
       '</div>' +
       (locked
@@ -7738,6 +7699,19 @@ async function renderDaySessionsList() {
       '</div>';
   }).join('');
 }
+
+// ── View past session detail ──────────────────────────────────────────
+async function viewPastSession(id) {
+  const bday = await dbGet('business_days', id);
+  if (!bday) { toast('Session not found', 'err'); return; }
+  const date = bday.businessDate || bday.business_date || '';
+  const revenue = fmt(bday.revenue || 0);
+  const profit  = fmt(bday.profit  || 0);
+  const sales   = bday.salesCount  || 0;
+  toast(fmtFullDate(date) + ' — Rev: ' + revenue + ', Profit: ' + profit + ', Sales: ' + sales, 'ok');
+}
+window.viewPastSession = viewPastSession;
+
 // ═══════════════════════════════════════════════════════════
 // RESTOCK
 // ═══════════════════════════════════════════════════════════
@@ -7789,11 +7763,9 @@ async function confirmRestock() {
     const unitBuy = buyRaw !== null ? buyRaw : (item.buyPrice || item.buy || 0);
     if (sellRaw !== null) {
       item.sellPrice = sellRaw;
-      item.sell = sellRaw;
     }
     if (buyRaw !== null) {
-      item.buyPrice = buyRaw;
-      item.buy = buyRaw;
+      item.buyPrice  = buyRaw;
     }
     item.qty += qty;
     item.updatedAt = new Date().toISOString();
@@ -8629,7 +8601,8 @@ async function attemptLogin() {
     return;
   }
 
-  const user = USERS.find(u => u.username === username && u.pin === pin);
+  const hash = await hashPin(pin);
+  const user = USERS.find(u => u.username === username && u.pinHash === hash);
   if (!user) {
     err.style.display = 'block';
     document.getElementById('login-pin').value = '';
@@ -8947,6 +8920,7 @@ function _setFinanceRecordOptions() {
   sel.value = cur;
 }
 
+let renderFinancePage;
 renderFinancePage = async function() {
   const dateEl = document.getElementById('fin-date');
   if (dateEl && !dateEl.value) dateEl.value = todayDateStr();
@@ -9003,6 +8977,7 @@ renderFinancePage = async function() {
   if (!window._finReconcileUnlocked) _showFinReconcile(false);
 };
 
+let renderFinList;
 renderFinList = function(entries) {
   const list = document.getElementById('fin-list');
   if (!list) return;
@@ -9045,6 +9020,7 @@ renderFinList = function(entries) {
   list.innerHTML = '<div style="border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;">' + rows.join('') + '</div>';
 };
 
+let saveFinanceEntry;
 saveFinanceEntry = async function() {
   const type   = document.getElementById('fin-type').value;
   const amount = Input.money('fin-amount');
@@ -9155,156 +9131,6 @@ function setItemMode(isRecord) {
 }
 window.setItemMode = setItemMode;
 
-function setVariantType(vtype) {
-  _variantState.variantType = vtype;
-  _variantState.variants = [];
-  document.querySelectorAll('#variant-type-pills .vt-pill').forEach(b => {
-    b.classList.toggle('active', b.textContent.trim() === (vtype || 'None'));
-  });
-  const gvPanel    = document.getElementById('general-variant-panel');
-  const stdPricing = document.getElementById('std-pricing-section');
-  const sizeField  = document.getElementById('f-size-field');
-  if (vtype) {
-    if (gvPanel)    gvPanel.style.removeProperty('display');
-    if (stdPricing) stdPricing.style.display = 'none';
-    if (sizeField)  sizeField.style.display = 'none';
-    renderVariantList();
-  } else {
-    if (gvPanel)    gvPanel.style.display = 'none';
-    if (stdPricing) stdPricing.style.removeProperty('display');
-    if (sizeField)  sizeField.style.removeProperty('display');
-  }
-}
-window.setVariantType = setVariantType;
-
-function addVariantValue() {
-  const input = document.getElementById('gv-add-input');
-  const label = (input?.value || '').trim();
-  if (!label) { input?.focus(); return; }
-  if (_variantState.variants.find(v => v.label.toLowerCase() === label.toLowerCase())) {
-    toast('"' + label + '" already added', 'err'); return;
-  }
-  _variantState.variants.push({ label });
-  if (input) input.value = '';
-  renderVariantList();
-  input?.focus();
-}
-window.addVariantValue = addVariantValue;
-
-function removeVariantValue(idx) {
-  _variantState.variants.splice(idx, 1);
-  renderVariantList();
-}
-window.removeVariantValue = removeVariantValue;
-
-function renderVariantList() {
-  const container = document.getElementById('gv-items-list');
-  if (!container) return;
-  const vs = _variantState.variants;
-  const summary = document.getElementById('gv-stock-summary');
-  if (!vs.length) {
-    container.innerHTML = '<div class="gv-empty">No variants yet — type a value above and tap <strong>+</strong></div>';
-    if (summary) summary.style.display = 'none';
-    const saveBtn = UI.el('save-btn');
-    if (saveBtn) setSaveBtnLabel('Save');
-    return;
-  }
-  container.innerHTML = `
-    <div class="gv-row-hdr"><span>${_variantState.variantType||'Variant'}</span><span>Qty</span><span>Buy</span><span>Sell</span><span></span></div>
-    ${vs.map((v, i) => `
-    <div class="gv-row">
-      <div class="gv-label">${escapeHtml(v.label)}</div>
-      <input type="number" class="gv-cell" id="gv-qty-${i}" min="0" inputmode="numeric" placeholder="0" oninput="updateVariantSummary()">
-      <input type="number" class="gv-cell" id="gv-buy-${i}" min="0" inputmode="decimal" placeholder="0" oninput="updateVariantSummary()">
-      <input type="number" class="gv-cell" id="gv-sell-${i}" min="0" inputmode="decimal" placeholder="0" oninput="updateVariantSummary()">
-      <button type="button" class="gv-remove" onclick="removeVariantValue(${i})" title="Remove">×</button>
-    </div>`).join('')}`;
-  if (summary) summary.style.display = 'block';
-  updateVariantSummary();
-}
-window.renderVariantList = renderVariantList;
-
-function updateVariantSummary() {
-  let totalQty = 0, buySum = 0, sellSum = 0, priced = 0;
-  _variantState.variants.forEach((v, i) => {
-    const q = parseInt(document.getElementById('gv-qty-'  + i)?.value || '0') || 0;
-    const b = parseFloat(document.getElementById('gv-buy-' + i)?.value || '0') || 0;
-    const s = parseFloat(document.getElementById('gv-sell-'+ i)?.value || '0') || 0;
-    totalQty += q;
-    if (b > 0 || s > 0) { buySum += b; sellSum += s; priced++; }
-  });
-  const qEl = document.getElementById('gv-metric-qty');
-  const bEl = document.getElementById('gv-metric-bp');
-  const sEl = document.getElementById('gv-metric-sp');
-  if (qEl) qEl.textContent = String(totalQty);
-  if (bEl) bEl.textContent = priced ? fmt(Math.round(buySum / priced)) : '-';
-  if (sEl) sEl.textContent = priced ? fmt(Math.round(sellSum / priced)) : '-';
-  const saveBtn = UI.el('save-btn');
-  const n = _variantState.variants.length;
-  if (saveBtn && n > 0) setSaveBtnLabel('Save ' + n + ' variant' + (n !== 1 ? 's' : ''));
-}
-window.updateVariantSummary = updateVariantSummary;
-
-async function saveVariantItems(baseCode, baseName, type) {
-  const vs = _variantState.variants.map((v, i) => ({
-    label: v.label,
-    qty:   parseInt(document.getElementById('gv-qty-'  + i)?.value || '0') || 0,
-    buy:   parseFloat(document.getElementById('gv-buy-' + i)?.value || '0') || 0,
-    sell:  parseFloat(document.getElementById('gv-sell-'+ i)?.value || '0') || 0,
-  }));
-  if (!vs.length) { toast('Add at least one variant', 'err'); return false; }
-  for (const v of vs) {
-    if (v.qty  < 0) { toast(v.label + ': qty cannot be negative', 'err');  return false; }
-    if (v.buy  < 0) { toast(v.label + ': buy cannot be negative', 'err');  return false; }
-    if (v.sell < 0) { toast(v.label + ': sell cannot be negative', 'err'); return false; }
-    if (v.buy > 0 && v.sell > 0 && v.sell < v.buy) { toast(v.label + ': sell < buy', 'err'); return false; }
-  }
-  const variantType = _variantState.variantType;
-  const allItms = await dbAll('items');
-  let product = allItms.find(i => i.code === baseCode);
-  if (!product) {
-    const avgBuy  = vs.reduce((s,v)=>s+v.buy,  0) / vs.length;
-    const avgSell = vs.reduce((s,v)=>s+v.sell, 0) / vs.length;
-    const pid = await dbAdd('items', {
-      code: baseCode, name: baseName || (type + ' ' + baseCode),
-      type, category: type,
-      isShoe: false, hasVariants: true, variantType,
-      buyPrice: Math.round(avgBuy), sellPrice: Math.round(avgSell),
-      profit: Math.round(avgSell - avgBuy), qty: 0,
-      createdAt: new Date().toISOString(),
-    });
-    product = await dbGet('items', pid);
-  } else {
-    product.hasVariants = true;
-    product.variantType = variantType;
-    await dbPut('items', product);
-  }
-  let saved = 0, stockCost = 0, stockQty = 0;
-  for (const v of vs) {
-    await upsertShoeSize({
-      itemCode: baseCode, itemId: product.id,
-      size: 0, sizeGroup: v.label, variantType,
-      qty: v.qty, buyPrice: v.buy, sellPrice: v.sell,
-      profit: v.sell - v.buy,
-      codeSize: baseCode + '_' + v.label,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-    }, { addQty: true });
-    saved++;
-    stockCost += v.qty * v.buy;
-    stockQty  += v.qty;
-  }
-  const allSz = await getShoeSizes(baseCode);
-  product.qty = allSz.reduce((t, s) => t + s.qty, 0);
-  await dbPut('items', product);
-  await recordStockInvestment(product, stockCost, stockQty, variantType + ' stock');
-  await markWishlistStockedForItem(product);
-  fbSyncItem(product);
-  if (_addFormPhotoData && product?.id) await setItemPhoto(product.id, _addFormPhotoData);
-  _variantState.reset();
-  return saved;
-}
-window.saveVariantItems = saveVariantItems;
-
 function setSizeGroupFilter(group) {
   window._activeSizeGroupFilter = group;
   document.querySelectorAll('[id^="sgf-"]').forEach(b => b.classList.remove('active'));
@@ -9395,7 +9221,7 @@ async function _doCloseDay() {
   activeDay.revenue      = daySales.reduce((s,x)=>s+x.revenue,0);
   activeDay.profit       = daySales.reduce((s,x)=>s+x.profit,0);
   activeDay.itemsSold    = daySales.reduce((s,x)=>s+x.qty,0);
-  activeDay.closingStockCost = items.reduce((s,i)=>s+i.buy*i.qty,0);
+  activeDay.closingStockCost = items.reduce((s,i)=>s+(i.buyPrice||i.buy||0)*(i.qty||0),0);
   await dbPut('business_days', activeDay);
   clearDayTabLocks();
   renderDashboard();
@@ -9539,6 +9365,7 @@ function _moveSalesDetailsAfterOpening() {
   else if (openingForm && openingForm.style.display !== 'none') openingForm.insertAdjacentElement('afterend', sales);
 }
 
+let renderDayState;
 renderDayState = function() {
   const today = activeDay ? (activeDay.businessDate || activeDay.business_date) : todayDateStr();
   const titleEl = document.getElementById('day-banner-title');
@@ -9591,6 +9418,7 @@ renderDayState = function() {
 };
 window.renderDayState = renderDayState;
 
+let lockOpeningBalances;
 lockOpeningBalances = async function() {
   if (!activeDay) {
     const today = todayDateStr();
@@ -9610,6 +9438,7 @@ lockOpeningBalances = async function() {
 };
 window.lockOpeningBalances = lockOpeningBalances;
 
+let reconcileDay;
 reconcileDay = async function() {
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
   const data = _getDayRecon(today);
@@ -9696,6 +9525,7 @@ reconcileDay = async function() {
 };
 window.reconcileDay = reconcileDay;
 
+let dayStartOver;
 dayStartOver = async function() {
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
   if (!confirm("Clear today's closing records only?\n\nOpening balances will be kept.")) return;

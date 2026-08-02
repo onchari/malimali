@@ -292,7 +292,6 @@
 .add-hero-sub:not([hidden]) {
   display: block;
 }
-.sg-name { display: none; }
 .shoe-stock-summary-top {
   margin-bottom: 8px;
 }
@@ -757,8 +756,6 @@ body {
   justify-content: space-between;
   box-shadow: 0 2px 8px rgba(30,122,62,0.25);
 }
-.header-title { font-size: 17px; font-weight: 800; letter-spacing: -0.3px; color: white; }
-
 /* NAV */
 .nav {
   display: flex;
@@ -2625,13 +2622,6 @@ body[data-firebase-env="development"]::before {
   opacity: 1;
 }
 
-  20% { transform: rotate(15deg); }
-  40% { transform: rotate(-12deg); }
-  60% { transform: rotate(8deg); }
-  80% { transform: rotate(-5deg); }
-}
-.bell-shake { animation: bellShake 0.5s ease; }
-
 /* ===== LOGIN SCREEN ===== */
 #login-screen {
   position: fixed; inset: 0; z-index: 1000;
@@ -2640,14 +2630,6 @@ body[data-firebase-env="development"]::before {
   align-items: center; justify-content: center;
   padding: 32px 24px;
   font-family: var(--sans);
-}
-.login-logo {
-  width: 80px; height: 80px;
-  background: rgba(255,255,255,0.15);
-  border-radius: 20px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 44px; margin-bottom: 16px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
 }
 .login-title { font-size: 26px; font-weight: 800; color: white; letter-spacing: -0.5px; }
 .login-sub { font-size: 13px; color: rgba(255,255,255,0.65); margin-top: 4px; margin-bottom: 36px; font-family: var(--mono); }
@@ -2796,10 +2778,10 @@ body[data-firebase-env="development"]::before {
   animation-delay: 0.15s;
 }
 .login-logo {
-  animation: bounceIn 0.6s ease both;
+  animation: slideUp 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
 }
 .login-title {
-  animation: fadeIn 0.5s ease both;
+  animation: slideUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
   animation-delay: 0.05s;
 }
 
@@ -3214,7 +3196,7 @@ body.photo-lightbox-open { overflow: hidden; }
 .dash-hchip-sales { background: rgba(0,122,255,0.10); color: var(--accent); }
 .dash-hchip-ok    { background: rgba(30,122,62,0.10); color: var(--green); }
 .dash-hchip-warn  { background: rgba(245,158,11,0.13); color: var(--amber); }
-.dash-hchip-muted { background: var(--bg2); color: var(--muted); }
+.dash-hchip-muted { background: var(--surface2); color: var(--muted); }
 .dash-summary-cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3714,7 +3696,7 @@ body.photo-lightbox-open { overflow: hidden; }
   align-items: center;
   gap: 14px;
   padding: 10px 14px;
-  background: var(--bg2);
+  background: var(--bg);
   border-radius: 12px;
   border: 1px solid var(--border);
   margin-bottom: 4px;
@@ -3827,105 +3809,6 @@ body.photo-lightbox-open { overflow: hidden; }
   text-transform: uppercase;
   letter-spacing: .5px;
 }
-
-/* ── Variant type pills ──────────────────────────────────────────── */
-.vt-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 4px 0 2px;
-}
-.vt-pill {
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 12px;
-  border-radius: 20px;
-  border: 1.5px solid var(--border);
-  background: var(--bg);
-  color: var(--muted);
-  cursor: pointer;
-  transition: background .15s, color .15s, border-color .15s;
-}
-.vt-pill.active,
-.vt-pill:active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
-}
-
-/* ── General variant panel ───────────────────────────────────────── */
-.gv-add-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 10px;
-}
-.gv-add-input { flex: 1; }
-.gv-add-btn {
-  width: 40px; height: 40px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: white;
-  border: none;
-  font-size: 16px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; flex-shrink: 0;
-}
-.gv-add-btn:active { opacity: .8; }
-.gv-empty {
-  font-size: 12px;
-  color: var(--muted);
-  text-align: center;
-  padding: 16px 0;
-}
-.gv-items-list { margin-bottom: 8px; }
-.gv-row-hdr {
-  display: grid;
-  grid-template-columns: 1fr 60px 70px 70px 28px;
-  gap: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  padding: 0 2px 4px;
-}
-.gv-row {
-  display: grid;
-  grid-template-columns: 1fr 60px 70px 70px 28px;
-  gap: 4px;
-  align-items: center;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--border);
-}
-.gv-label {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.gv-cell {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 5px 4px;
-  font-size: 12px;
-  font-family: var(--mono);
-  text-align: center;
-  background: var(--bg);
-}
-.gv-remove {
-  width: 24px; height: 24px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg2);
-  color: var(--muted);
-  font-size: 14px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-}
-.gv-remove:active { background: var(--red); color: white; }
 
 /* Variant badge in stock list rows (mirrors shoe-size-badge) */
 .variant-badge {

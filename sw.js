@@ -4,7 +4,7 @@
 //   Firebase SDK  to  Cache-first (static SDK, rarely changes)
 //   Firestore API  to  Network-only (never cache live data)
 
-const CACHE_NAME = 'mandela-v20260802-english-ui';   // bump this on every deploy
+const CACHE_NAME = 'mandela-v20260802b-english-ui';   // bump this on every deploy
 const FIREBASE_CACHE = 'firebase-sdk-v1';
 
 const APP_FILES = [
@@ -32,10 +32,8 @@ self.addEventListener('install', e => {
           fetch(url).then(res => c.put(url, res)).catch(() => {})
         ))
       )
-    ])
+    ]).then(() => self.skipWaiting())
   );
-  // Activate immediately - don't wait for old SW to stop
-  self.skipWaiting();
 });
 
 // ── ACTIVATE ─────────────────────────────────────────────────────────
