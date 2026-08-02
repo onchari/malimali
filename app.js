@@ -9540,10 +9540,10 @@ async function saveShoeItems(baseCode, baseName, type) {
     sharedQty  = parseInt(UI.el('shoe-shared-qty')?.value  || '0') || 0;
     sharedBuy  = parseFloat(UI.el('shoe-shared-buy')?.value  || '0') || 0;
     sharedSell = parseFloat(UI.el('shoe-shared-sell')?.value || '0') || 0;
-    if (sharedQty  <= 0) { toast('Warning: Enter quantity per size (must be > 0)', 'err'); return false; }
-    if (sharedBuy  <= 0) { toast('Warning: Enter buying price',  'err'); return false; }
-    if (sharedSell <= 0) { toast('Warning: Enter selling price', 'err'); return false; }
-    if (sharedSell < sharedBuy) { toast('Warning: Sell price cannot be less than buy price', 'err'); return false; }
+    if (sharedQty < 0)  { toast('Warning: Quantity cannot be negative', 'err'); return false; }
+    if (sharedBuy < 0)  { toast('Warning: Buy price cannot be negative', 'err'); return false; }
+    if (sharedSell < 0) { toast('Warning: Sell price cannot be negative', 'err'); return false; }
+    if (sharedBuy > 0 && sharedSell > 0 && sharedSell < sharedBuy) { toast('Warning: Sell price cannot be less than buy price', 'err'); return false; }
   }
 
   const sorted  = _shoeState.sortedSizes;
@@ -9577,9 +9577,10 @@ async function saveShoeItems(baseCode, baseName, type) {
       qty  = parseInt(UI.el('shr-qty-'  + size)?.value || '0') || 0;
       buy  = parseFloat(UI.el('shr-buy-'  + size)?.value || '0') || 0;
       sell = parseFloat(UI.el('shr-sell-' + size)?.value || '0') || 0;
-      if (qty  <= 0) { perSizeErrors.push('Size ' + size + ': qty must be > 0'); continue; }
-      if (buy  <= 0) { perSizeErrors.push('Size ' + size + ': buy price required'); continue; }
-      if (sell <= 0) { perSizeErrors.push('Size ' + size + ': sell price required'); continue; }
+      if (qty < 0)  { perSizeErrors.push('Size ' + size + ': quantity cannot be negative'); continue; }
+      if (buy < 0)  { perSizeErrors.push('Size ' + size + ': buy price cannot be negative'); continue; }
+      if (sell < 0) { perSizeErrors.push('Size ' + size + ': sell price cannot be negative'); continue; }
+      if (buy > 0 && sell > 0 && sell < buy) { perSizeErrors.push('Size ' + size + ': sell price cannot be less than buy price'); continue; }
     } else { qty = sharedQty; buy = sharedBuy; sell = sharedSell; }
 
     await upsertShoeSize({
@@ -9595,7 +9596,7 @@ async function saveShoeItems(baseCode, baseName, type) {
   }
 
   if (perSizeErrors.length) toast('Warning: Skipped: ' + perSizeErrors.join(' - '), 'err');
-  if (saved === 0) { toast('Warning: No sizes saved - fill all required fields', 'err'); return false; }
+  if (saved === 0) { toast('Warning: No sizes saved - check quantity and price values', 'err'); return false; }
 
   const allSz = await getShoeSizes(baseCode);
   product.qty = allSz.reduce((t, s) => t + s.qty, 0);
