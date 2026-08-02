@@ -4710,64 +4710,13 @@ function goDashNav(target) {
     return;
   }
   if (target === 'itemsSold') {
-    openItemsSoldSheet();
+    const filterEl = document.getElementById('hist-period-filter');
+    if (filterEl) filterEl.value = _dashPeriod;
+    showPage('sell');
+    showSalesTab('history');
   }
 }
 window.goDashNav = goDashNav;
-
-async function openItemsSoldSheet() {
-  const allSales = await dbAll('sales');
-  const range = _dashDateRange();
-  const sales = _filterSalesByRange(allSales, range);
-
-  UI.setText('items-sold-period-lbl', _dashPeriodLabel());
-
-  const tbody = document.getElementById('items-sold-tbody');
-  const tfoot = document.getElementById('items-sold-tfoot');
-  if (!tbody || !tfoot) return;
-
-  if (!sales.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);font-family:var(--sans);padding:16px 0;">No items sold in this period</td></tr>';
-    tfoot.innerHTML = '';
-  } else {
-    const rows = [...sales].sort((a, b) => new Date(b.date) - new Date(a.date));
-    let totalBp = 0, totalSell = 0, totalProfit = 0;
-    tbody.innerHTML = rows.map((s, i) => {
-      const qty = s.qty || 1;
-      const buy = (s.buyPrice || 0) * qty;
-      const sell = (s.actualPrice || s.sellPrice || 0) * qty;
-      const profit = s.profit || 0;
-      totalBp += buy;
-      totalSell += sell;
-      totalProfit += profit;
-      const name = escapeHtml(s.itemName || s.itemCode || 'Item') + (qty > 1 ? ' (×' + qty + ')' : '');
-      return '<tr>' +
-        '<td>' + (i + 1) + '</td>' +
-        '<td>' + name + '</td>' +
-        '<td>' + fmt(buy) + '</td>' +
-        '<td>' + fmt(sell) + '</td>' +
-        '<td class="' + (profit >= 0 ? 'is-profit-pos' : 'is-profit-neg') + '">' + fmt(profit) + '</td>' +
-      '</tr>';
-    }).join('');
-    tfoot.innerHTML = '<tr>' +
-      '<td></td>' +
-      '<td>TOTAL</td>' +
-      '<td>' + fmt(totalBp) + '</td>' +
-      '<td>' + fmt(totalSell) + '</td>' +
-      '<td class="' + (totalProfit >= 0 ? 'is-profit-pos' : 'is-profit-neg') + '">' + fmt(totalProfit) + '</td>' +
-    '</tr>';
-  }
-
-  const sheet = document.getElementById('items-sold-sheet');
-  if (sheet) sheet.classList.add('open');
-}
-window.openItemsSoldSheet = openItemsSoldSheet;
-
-function closeItemsSoldSheet() {
-  const sheet = document.getElementById('items-sold-sheet');
-  if (sheet) sheet.classList.remove('open');
-}
-window.closeItemsSoldSheet = closeItemsSoldSheet;
 
 async function _renderDashSummary(ctx) {
   const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -9234,8 +9183,10 @@ async function renderHistoryPage() {
   const todaySales = allSales.filter(s => (s.businessDate || s.date?.slice(0,10)) === today);
   const todayRev   = todaySales.reduce((s,x) => s + (x.revenue||0), 0);
   const todayProf  = todaySales.reduce((s,x) => s + (x.profit||0),  0);
+  const todayCost  = todayRev - todayProf;
 
   UI.setText('hist-today-revenue', fmt(todayRev));
+  UI.setText('hist-today-cost',    fmt(todayCost));
   UI.setText('hist-today-profit',  fmt(todayProf));
   UI.setText('hist-today-sales',   todaySales.length);
 
@@ -9255,10 +9206,20 @@ async function renderHistoryPage() {
   }
 
   // ── Past records ───────────────────────────────────────────
-  const filterEl = UI.el('hist-period-filter');
-  const filterVal = filterEl ? filterEl.value : '30';
-  const days      = filterVal === 'all' ? null : (parseInt(filterVal) || 30);
-  const cutoff    = days ? new Date(Date.now() - days * 86400000) : null;
+  // Uses the same period vocabulary as the dashboard period selector, so
+  // navigating here from a dashboard card shows the matching range.
+  const filterEl  = UI.el('hist-period-filter');
+  const filterVal = filterEl ? filterEl.value : 'month';
+  let cutoff = null;
+  if (filterVal === 'today') {
+    cutoff = new Date(today + 'T00:00:00');
+  } else if (filterVal === 'week') {
+    const d = new Date(); d.setDate(d.getDate() - 6);
+    cutoff = new Date(d.toISOString().split('T')[0] + 'T00:00:00');
+  } else if (filterVal === 'month') {
+    const d = new Date(); d.setDate(1);
+    cutoff = new Date(d.toISOString().split('T')[0] + 'T00:00:00');
+  }
 
   const byDate = {};
   allSales.forEach(s => {
@@ -9283,27 +9244,32 @@ async function renderHistoryPage() {
 
   // Totals summary for the selected period
   const periodRev  = datesSorted.reduce((s,d) => s + byDate[d].revenue, 0);
+  const periodCost = datesSorted.reduce((s,d) => s + byDate[d].cost,    0);
   const periodProf = datesSorted.reduce((s,d) => s + byDate[d].profit,  0);
   const periodSales= datesSorted.reduce((s,d) => s + byDate[d].sales.length, 0);
   const pMargin    = periodRev > 0 ? (periodProf / periodRev * 100).toFixed(1) : '0.0';
 
   const summaryHtml = `
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 8px;text-align:center;">
-        <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--accent2);">${fmt(periodRev)}</div>
-        <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Revenue</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 6px;text-align:center;">
+        <div style="font-size:11px;font-weight:900;font-family:var(--mono);color:var(--accent2);">${fmt(periodRev)}</div>
+        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Revenue</div>
       </div>
-      <div style="background:var(--green-light);border:1px solid var(--green);border-radius:var(--r);padding:10px 8px;text-align:center;">
-        <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--green);">${fmt(periodProf)}</div>
-        <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Profit</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 6px;text-align:center;">
+        <div style="font-size:11px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmt(periodCost)}</div>
+        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Cost (BP)</div>
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 8px;text-align:center;">
-        <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--text);">${pMargin}%</div>
-        <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Margin</div>
+      <div style="background:var(--green-light);border:1px solid var(--green);border-radius:var(--r);padding:10px 6px;text-align:center;">
+        <div style="font-size:11px;font-weight:900;font-family:var(--mono);color:var(--green);">${fmt(periodProf)}</div>
+        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Profit</div>
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 8px;text-align:center;">
-        <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:var(--text);">${periodSales}</div>
-        <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Sales</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 6px;text-align:center;">
+        <div style="font-size:11px;font-weight:900;font-family:var(--mono);color:var(--text);">${pMargin}%</div>
+        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Margin</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 6px;text-align:center;">
+        <div style="font-size:11px;font-weight:900;font-family:var(--mono);color:var(--text);">${periodSales}</div>
+        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Sales</div>
       </div>
     </div>`;
 
@@ -9340,6 +9306,7 @@ function _histSaleRow(s, mode) {
   const profSign  = (s.profit||0) >= 0 ? '+' : '';
   const title = `${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize ? ' - ' + (mode === 'full' ? 'Size ' : 'Sz ') + escapeHtml(s.itemSize) : ''}`;
   const unitPrice = fmt(s.actualPrice||s.sellPrice||0);
+  const buyPrice = fmt(s.buyPrice||0);
   const revenue = fmt(s.revenue||0);
   const profit = `${profSign}${fmt(s.profit||0)}`;
   if (mode === 'full') {
@@ -9351,6 +9318,7 @@ function _histSaleRow(s, mode) {
           </div>
           <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--accent2);margin-top:2px;">${revenue}</div>
           <div style="font-size:11px;color:var(--muted);">${s.qty} x ${unitPrice} - ${fmtTime(s.date)}</div>
+          <div style="font-size:11px;color:var(--muted);">BP ${buyPrice}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
           <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:800;">Profit</div>
@@ -9368,6 +9336,7 @@ function _histSaleRow(s, mode) {
         </div>
         <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent2);margin-top:1px;">${revenue}</div>
         <div style="font-size:10px;color:var(--muted);">${s.qty} x ${unitPrice} - ${fmtTime(s.date)}</div>
+        <div style="font-size:10px;color:var(--muted);">BP ${buyPrice}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;">
         <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:800;">Profit</div>

@@ -53,44 +53,6 @@
 .restock-view #profit-preview {
   margin: 0 14px 14px;
 }
-.items-sold-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-  white-space: nowrap;
-}
-.items-sold-table th,
-.items-sold-table td {
-  padding: 8px 10px;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-}
-.items-sold-table th {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: .3px;
-  background: var(--surface2);
-  position: sticky;
-  top: 0;
-}
-.items-sold-table td {
-  font-family: var(--mono);
-  color: var(--text);
-}
-.items-sold-table td:nth-child(2) {
-  font-family: var(--sans);
-  white-space: normal;
-}
-.items-sold-table td.is-profit-pos { color: var(--green); }
-.items-sold-table td.is-profit-neg { color: var(--red); }
-.items-sold-table tfoot td {
-  font-weight: 800;
-  border-bottom: none;
-  border-top: 2px solid var(--border);
-  background: var(--surface2);
-}
 .restock-summary-table {
   width: 100%;
   border-collapse: collapse;
@@ -3796,7 +3758,7 @@ body.photo-lightbox-open { overflow: hidden; }
 }
 .hist-today-date { font-size: 15px; font-weight: 800; color: white; }
 .hist-today-sub  { font-size: 11px; color: rgba(255,255,255,.7); margin-top: 1px; }
-.hist-today-stats { display: flex; gap: 16px; }
+.hist-today-stats { display: flex; gap: 14px; flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
 .hist-stat       { text-align: center; }
 .hist-stat-val   { font-size: 15px; font-weight: 900; font-family: var(--mono); color: white; }
 .hist-stat-val.green { color: #86efac; }

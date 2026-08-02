@@ -525,37 +525,6 @@
   </div>
 </div>
 
-<!-- Items sold sheet: tabular record of items sold for the dashboard's selected period -->
-<div class="sheet-overlay" id="items-sold-sheet">
-  <div class="sheet" style="max-height:92vh;overflow:auto;max-width:560px;">
-    <div class="sheet-handle"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
-      <div>
-        <div class="sheet-title">Items Sold</div>
-        <div class="sheet-code" id="items-sold-period-lbl">This period</div>
-      </div>
-      <button onclick="closeItemsSoldSheet()" class="stock-icon-btn" title="Close">
-        <i class="fa-solid fa-xmark"></i>
-      </button>
-    </div>
-
-    <div style="overflow-x:auto;">
-      <table class="items-sold-table">
-        <thead>
-          <tr>
-            <th>No</th>
-            <th>Item</th>
-            <th>BP</th>
-            <th>Selling Price</th>
-            <th>Profit Realized</th>
-          </tr>
-        </thead>
-        <tbody id="items-sold-tbody"></tbody>
-        <tfoot id="items-sold-tfoot"></tfoot>
-      </table>
-    </div>
-  </div>
-</div>
 
 <!-- ==============================================================
      PAGE: WISHLIST  (id="page-wishlist")
@@ -1430,6 +1399,10 @@
           <div class="hist-stat-lbl">Revenue</div>
         </div>
         <div class="hist-stat">
+          <div class="hist-stat-val" id="hist-today-cost">KES 0</div>
+          <div class="hist-stat-lbl">Cost</div>
+        </div>
+        <div class="hist-stat">
           <div class="hist-stat-val green" id="hist-today-profit">KES 0</div>
           <div class="hist-stat-lbl">Profit</div>
         </div>
@@ -1446,10 +1419,10 @@
     <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0 6px;">
       <span class="sec-label" style="padding:0;margin:0;">Past Records</span>
       <select id="hist-period-filter" class="add-select" style="width:auto;height:34px;font-size:12px;padding:0 28px 0 8px;" onchange="renderHistoryPage()">
-        <option value="7">Last 7 days</option>
-        <option value="30" selected>Last 30 days</option>
-        <option value="90">Last 90 days</option>
-        <option value="all">All time</option>
+        <option value="today">Today</option>
+        <option value="week">This Week</option>
+        <option value="month" selected>This Month</option>
+        <option value="all">All Time</option>
       </select>
     </div>
 
