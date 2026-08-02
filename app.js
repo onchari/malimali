@@ -9199,9 +9199,8 @@ async function renderHistoryPage() {
     if (!todaySales.length) {
       todayList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales today yet.</div>';
     } else {
-      todayList.innerHTML = [...todaySales]
-        .sort((a,b) => new Date(b.date) - new Date(a.date))
-        .map(s => _histSaleRow(s, 'full')).join('');
+      const rows = [...todaySales].sort((a,b) => new Date(b.date) - new Date(a.date));
+      todayList.innerHTML = _histTable(rows, todayCost, todayRev, todayProf);
     }
   }
 
@@ -9279,9 +9278,7 @@ async function renderHistoryPage() {
                   { weekday:'short', day:'numeric', month:'short', year:'numeric' });
     const margin = day.revenue > 0 ? (day.profit / day.revenue * 100).toFixed(0) : '0';
     const profColor = day.profit >= 0 ? 'var(--green)' : 'var(--red)';
-    const rows  = [...day.sales]
-      .sort((a,b) => new Date(b.date) - new Date(a.date))
-      .map(s => _histSaleRow(s, 'compact')).join('');
+    const rows  = [...day.sales].sort((a,b) => new Date(b.date) - new Date(a.date));
 
     return `
       <div class="hist-day-card">
@@ -9295,54 +9292,46 @@ async function renderHistoryPage() {
             <div style="font-size:11px;font-weight:700;font-family:var(--mono);color:${profColor};">profit ${fmt(day.profit)} <span style="color:var(--muted);font-weight:600;">(${margin}%)</span></div>
           </div>
         </div>
-        ${rows}
+        ${_histTable(rows, day.cost, day.revenue, day.profit)}
       </div>`;
   }).join('');
 }
 
-// ── Shared sale row renderer ────────────────────────────────
-function _histSaleRow(s, mode) {
-  const profColor = (s.profit||0) >= 0 ? 'var(--green)' : 'var(--red)';
-  const profSign  = (s.profit||0) >= 0 ? '+' : '';
-  const title = `${escapeHtml(s.itemName||s.itemCode||'Item')}${s.itemSize ? ' - ' + (mode === 'full' ? 'Size ' : 'Sz ') + escapeHtml(s.itemSize) : ''}`;
-  const unitPrice = fmt(s.actualPrice||s.sellPrice||0);
-  const buyPrice = fmt(s.buyPrice||0);
-  const revenue = fmt(s.revenue||0);
-  const profit = `${profSign}${fmt(s.profit||0)}`;
-  if (mode === 'full') {
-    return `
-      <div class="hist-sale-row">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            ${title}
-          </div>
-          <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--accent2);margin-top:2px;">${revenue}</div>
-          <div style="font-size:11px;color:var(--muted);">${s.qty} x ${unitPrice} - ${fmtTime(s.date)}</div>
-          <div style="font-size:11px;color:var(--muted);">BP ${buyPrice}</div>
-        </div>
-        <div style="text-align:right;flex-shrink:0;">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:800;">Profit</div>
-          <div style="font-size:12px;font-weight:800;font-family:var(--mono);color:${profColor};">${profit}</div>
-        </div>
-        ${s.id ? `<button type="button" onclick="deleteSale(${s.id})" title="Delete sale" style="background:var(--red-light);border:none;color:var(--red);border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px;flex-shrink:0;margin-left:6px;">Del</button>` : ''}
-      </div>`;
-  }
-  // compact - used in past records
-  return `
-    <div class="hist-sale-row" style="border-top:1px solid var(--border);">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-          ${title}
-        </div>
-        <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent2);margin-top:1px;">${revenue}</div>
-        <div style="font-size:10px;color:var(--muted);">${s.qty} x ${unitPrice} - ${fmtTime(s.date)}</div>
-        <div style="font-size:10px;color:var(--muted);">BP ${buyPrice}</div>
-      </div>
-      <div style="text-align:right;flex-shrink:0;">
-        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:800;">Profit</div>
-        <div style="font-size:11px;font-weight:700;font-family:var(--mono);color:${profColor};">${profit}</div>
-      </div>
-    </div>`;
+// ── Tabular sale record renderer: No | Item | Buying Price | Price Sold | Profit Realized ──
+function _histTable(sales, totalBuy, totalSell, totalProfit) {
+  const rows = sales.map((s, i) => {
+    const qty = s.qty || 1;
+    const buy = (s.buyPrice || 0) * qty;
+    const sell = (s.actualPrice || s.sellPrice || 0) * qty;
+    const profit = s.profit || 0;
+    const name = escapeHtml(s.itemName || s.itemCode || 'Item') +
+      (s.itemSize ? ' - Sz ' + escapeHtml(s.itemSize) : '') +
+      (qty > 1 ? ' (×' + qty + ')' : '');
+    const delBtn = s.id
+      ? `<button type="button" onclick="deleteSale(${s.id})" title="Delete sale" class="hist-row-del"><i class="fa-solid fa-trash"></i></button>`
+      : '';
+    return '<tr>' +
+      '<td>' + (i + 1) + '</td>' +
+      '<td>' + name + delBtn + '</td>' +
+      '<td>' + fmt(buy) + '</td>' +
+      '<td>' + fmt(sell) + '</td>' +
+      '<td class="' + (profit >= 0 ? 'hp-pos' : 'hp-neg') + '">' + fmt(profit) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  const totalsRow = '<tr>' +
+    '<td></td>' +
+    '<td>TOTAL</td>' +
+    '<td>' + fmt(totalBuy) + '</td>' +
+    '<td>' + fmt(totalSell) + '</td>' +
+    '<td class="' + (totalProfit >= 0 ? 'hp-pos' : 'hp-neg') + '">' + fmt(totalProfit) + '</td>' +
+  '</tr>';
+
+  return '<div class="hist-table-wrap"><table class="hist-table">' +
+    '<thead><tr><th>No</th><th>Item (Description)</th><th>Buying Price</th><th>Price Sold</th><th>Profit Realized</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody>' +
+    '<tfoot>' + totalsRow + '</tfoot>' +
+  '</table></div>';
 }
 window.renderHistoryPage = renderHistoryPage;
 
