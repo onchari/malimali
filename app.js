@@ -2,7 +2,10 @@
 // DATABASE SCHEMA  v11 -  Mandela General Stores
 // ===================================================================
 let db;
-const DB_NAME = 'InventoryApp';
+// DB_NAME is resolved per-environment in initDB() - production and development
+// use entirely separate local IndexedDB databases so dev work can never
+// touch real shop data. See getFirebaseEnv() / KEY_FIREBASE_ENV below.
+let DB_NAME = 'InventoryApp';
 const DB_VER  = 11;
 
 // ── APP CONSTANTS ─────────────────────────────────────────────────────
@@ -22,6 +25,11 @@ const SHOE_GROUP_DEFAULTS = Object.freeze({
 });
 
 function initDB() {
+  // Development runs on a completely separate local database from production.
+  // A rebuild/reset can therefore only ever touch DB_NAME for the CURRENT
+  // environment - it is structurally impossible for a dev-mode rebuild to
+  // reach the production database, and vice versa.
+  DB_NAME = getFirebaseEnv() === 'development' ? 'InventoryApp_dev' : 'InventoryApp';
   const req = indexedDB.open(DB_NAME, DB_VER);
 
   req.onupgradeneeded = e => {
@@ -1638,7 +1646,7 @@ function mountNewSubParentCascade() {
     idPrefix: 'new-sub-parent',
     valueMode: 'id',
     requireLeaf: false,
-    placeholder: 'Parent category...'
+    placeholder: 'Parent category (optional - leave blank for top-level)'
   });
 }
 
@@ -2084,53 +2092,49 @@ function pickEmoji(el) {
   selectedEmoji = el.dataset.e;
 }
 
-async function addType() {
+// Single "Add category" form covers both cases: no parent selected in the
+// cascade -> top-level category; parent selected -> sub-category under it
+// (replaces the old separate addType()/addSubCategory() + their two forms).
+async function addCategoryOrSub() {
   try {
-  const name = document.getElementById('new-type-name').value.trim();
-  if (!name) { toast('Enter a category name', 'err'); return; }
-  if (types.find(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Category already exists', 'err'); return; }
-  const isFootwear = document.getElementById('new-type-footwear')?.checked || false;
-  await dbAdd('types', {
-    name, emoji: selectedEmoji, color: '#1e293b',
-    active: true, parentId: null, isFootwear, sortOrder: types.length + 1
-  });
-  document.getElementById('new-type-name').value = '';
-  const ft = document.getElementById('new-type-footwear');
-  if (ft) ft.checked = false;
-  await loadTypes();
-  renderCategorySettings();
-  toast('Category added', 'ok');
-  } catch(e) { console.error("[addType]", e); toast("Error: " + e.message, "err"); }
-}
+    const name = (document.getElementById('new-type-name')?.value || '').trim();
+    if (!name) { toast('Enter a category name', 'err'); return; }
+    if (types.find(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Category already exists', 'err'); return; }
 
-async function addSubCategory() {
-  try {
-    const parentId = parseInt(document.getElementById('new-sub-parent')?.value, 10);
-    const name = (document.getElementById('new-sub-name')?.value || '').trim();
-    if (!parentId) return Validate.fail('Select a parent category', 'new-sub-parent');
-    if (!name) { toast('Enter sub-category name', 'err'); return; }
-    if (types.find(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Name already exists', 'err'); return; }
-    const parent = getTypeById(parentId);
-    const inheritFootwear = parent ? isFootwearType(parent.name) : false;
+    const parentRaw = document.getElementById('new-sub-parent')?.value;
+    const parentId  = parentRaw ? parseInt(parentRaw, 10) : null;
+    const parent    = parentId ? getTypeById(parentId) : null;
+
+    const isFootwear = parent
+      ? isFootwearType(parent.name)
+      : (document.getElementById('new-type-footwear')?.checked || false);
+    const sortOrder = parentId
+      ? types.filter(t => _typeParentMatches(t.parentId, parentId)).length + 1
+      : types.length + 1;
+
     await dbAdd('types', {
       name,
       emoji: parent?.emoji || selectedEmoji,
       color: parent?.color || '#1e293b',
       active: true,
       parentId,
-      isFootwear: inheritFootwear,
-      sortOrder: types.filter(t => _typeParentMatches(t.parentId, parentId)).length + 1
+      isFootwear,
+      sortOrder,
     });
-    document.getElementById('new-sub-name').value = '';
+
+    document.getElementById('new-type-name').value = '';
+    const ft = document.getElementById('new-type-footwear');
+    if (ft) ft.checked = false;
+
     await loadTypes();
     renderCategorySettings();
-    toast('Sub-category added', 'ok');
+    toast(parentId ? 'Sub-category added' : 'Category added', 'ok');
   } catch (e) {
-    console.error('[addSubCategory]', e);
+    console.error('[addCategoryOrSub]', e);
     toast('Error: ' + e.message, 'err');
   }
 }
-window.addSubCategory = addSubCategory;
+window.addCategoryOrSub = addCategoryOrSub;
 
 async function deleteType(id) {
   try {
@@ -5451,18 +5455,20 @@ function addNotif(msg){const l=document.getElementById('notif-list');if(!l)retur
 function closePastSessionSheet(){const s=document.getElementById('past-session-sheet');if(s)s.classList.remove('open');}
 
 // ═══════════════════════════════════════════════════════════════
-// FACTORY RESET - clears ALL local data and Firebase
-// Only accessible to Super User in Settings
+// FULL SCHEMA REBUILD - clears the LOCAL database only and recreates
+// it clean. Cloud data (Firebase) is left untouched on purpose, so a
+// corrupted local database can always be recovered afterward with
+// "Pull cloud to local" in Settings. Only accessible to Super User.
 // ═══════════════════════════════════════════════════════════════
-// ── Full database rebuild - wipes all data and starts fresh ────────
 async function resetAndRebuildDB() {
   const msg =
-    'FULL DATABASE RESET\n\n' +
+    'FULL SCHEMA REBUILD\n\n' +
     'This will:\n' +
-    '• Delete ALL items, sales, finances, shoe sizes\n' +
-    '• Delete ALL business day records\n' +
-    '• Clear Firebase cloud data if connected\n' +
-    '• Recreate the database schema clean (v' + DB_VER + ')\n\n' +
+    '• Delete ALL local items, sales, finances, shoe sizes\n' +
+    '• Delete ALL local business day records\n' +
+    '• Recreate the local database schema clean (v' + DB_VER + ')\n\n' +
+    'Cloud data is NOT touched - if this environment syncs to Firebase, ' +
+    'use "Pull cloud to local" afterward to restore your data.\n\n' +
     'Your login and preferences are kept.\n' +
     'This CANNOT be undone. Type RESET to confirm:';
 
@@ -5472,37 +5478,19 @@ async function resetAndRebuildDB() {
   try {
     toast('Rebuilding database...', '');
 
-    // 1. Clear all IndexedDB data stores
+    // 1. Clear all local IndexedDB data stores (cloud data is untouched)
     await DB.clearAll([
       STORES.ITEMS, STORES.SALES, STORES.SIZES,
       STORES.FINANCES, STORES.BDAYS, STORES.TYPES, STORES.WISHLIST,
     ]);
-    console.log('[DB] All stores cleared');
+    console.log('[DB] All local stores cleared');
 
-    // 2. Clear Firebase if connected
-    if (fbReady && fbDb) {
-      try {
-        const { collection, getDocs, writeBatch, doc } = await waitForFbImports();
-        for (const col of [STORES.ITEMS, STORES.SALES, STORES.SIZES, STORES.FINANCES, STORES.BDAYS, STORES.WISHLIST]) {
-          const snap = await getDocs(fbCol(col));
-          if (snap.empty) continue;
-          let batch = writeBatch(fbDb); let n = 0;
-          for (const d of snap.docs) {
-            batch.delete(fbDoc(col, d.id));
-            if (++n % 400 === 0) { await batch.commit(); batch = writeBatch(fbDb); n = 0; }
-          }
-          if (n > 0) await batch.commit();
-        }
-        console.log('[DB] Firebase cleared');
-      } catch(e) { console.warn('[DB] Firebase clear partial:', e.message); }
-    }
-
-    // 3. Reset in-memory state
+    // 2. Reset in-memory state
     allItems  = [];
     activeDay = null;
     types     = [];
 
-    // 4. Clear relevant localStorage keys (keep session + prefs)
+    // 3. Clear relevant localStorage keys (keep session + prefs)
     const keep = {
       [KEY_SESSION]:      localStorage.getItem(KEY_SESSION),
       [KEY_FIREBASE_ENV]: localStorage.getItem(KEY_FIREBASE_ENV),
@@ -5512,7 +5500,7 @@ async function resetAndRebuildDB() {
     Object.entries(keep).forEach(([k, v]) => v && localStorage.setItem(k, v));
     _clearAllDayReconKeys();
 
-    // 5. Reload default types and re-render
+    // 4. Reload default types and re-render
     await loadTypes();
     renderList();
     renderDashboard();
@@ -5528,6 +5516,216 @@ async function resetAndRebuildDB() {
   }
 }
 window.resetAndRebuildDB = resetAndRebuildDB;
+
+// ═══════════════════════════════════════════════════════════════════
+// DEVELOPMENT SEED DATA
+// Realistic dummy items/sales/wishlist/finance records used ONLY to
+// populate the Development environment's own database. Never runs
+// against production - see the guards in rebuildDevDatabaseWithSeed().
+// ═══════════════════════════════════════════════════════════════════
+const DEV_SEED_STANDARD_ITEMS = [
+  // Clothes
+  { type: 'Clothes',     code: 'CL-001', name: "Men's Polo Shirt - Blue",         buy: 450,  sell: 800,  qty: 22 },
+  { type: 'Clothes',     code: 'CL-002', name: 'Ladies Maxi Dress - Floral',      buy: 700,  sell: 1300, qty: 8  },
+  { type: 'Clothes',     code: 'CL-003', name: 'Kids Hoodie - Grey',              buy: 500,  sell: 950,  qty: 0  },
+  { type: 'Clothes',     code: 'CL-004', name: 'Denim Jeans - Slim Fit',          buy: 900,  sell: 1600, qty: 15 },
+  // Plastics
+  { type: 'Plastics',    code: 'PL-001', name: '20L Water Bucket',                buy: 250,  sell: 400,  qty: 40 },
+  { type: 'Plastics',    code: 'PL-002', name: 'Plastic Chair - White',           buy: 550,  sell: 900,  qty: 12 },
+  { type: 'Plastics',    code: 'PL-003', name: 'Storage Basin - Large',           buy: 300,  sell: 550,  qty: 1  },
+  { type: 'Plastics',    code: 'PL-004', name: 'Laundry Basket',                  buy: 200,  sell: 380,  qty: 18 },
+  // Gas
+  { type: 'Gas',         code: 'GA-001', name: '13kg Gas Cylinder Refill',        buy: 2200, sell: 2850, qty: 6  },
+  { type: 'Gas',         code: 'GA-002', name: '6kg Gas Cylinder Refill',         buy: 1100, sell: 1500, qty: 9  },
+  { type: 'Gas',         code: 'GA-003', name: 'Gas Regulator - Standard',        buy: 600,  sell: 1000, qty: 0  },
+  { type: 'Gas',         code: 'GA-004', name: 'Gas Hose Pipe 2m',                buy: 250,  sell: 450,  qty: 14 },
+  // Electronics
+  { type: 'Electronics', code: 'EL-001', name: 'LED Bulb 9W',                     buy: 90,   sell: 180,  qty: 60 },
+  { type: 'Electronics', code: 'EL-002', name: 'Extension Cable 4-Way',           buy: 350,  sell: 650,  qty: 10 },
+  { type: 'Electronics', code: 'EL-003', name: 'Phone Charger - Type C',          buy: 300,  sell: 600,  qty: 1  },
+  { type: 'Electronics', code: 'EL-004', name: 'Bluetooth Speaker - Mini',        buy: 900,  sell: 1600, qty: 5  },
+  // Food
+  { type: 'Food',        code: 'FD-001', name: 'Maize Flour 2kg',                 buy: 140,  sell: 175,  qty: 50 },
+  { type: 'Food',        code: 'FD-002', name: 'Cooking Oil 1L',                  buy: 260,  sell: 320,  qty: 30 },
+  { type: 'Food',        code: 'FD-003', name: 'Sugar 1kg',                       buy: 130,  sell: 160,  qty: 0  },
+  { type: 'Food',        code: 'FD-004', name: 'Rice 2kg - Pishori',              buy: 280,  sell: 350,  qty: 25 },
+  // Cosmetics
+  { type: 'Cosmetics',   code: 'CO-001', name: 'Vaseline Petroleum Jelly 100ml',  buy: 120,  sell: 220,  qty: 20 },
+  { type: 'Cosmetics',   code: 'CO-002', name: 'Body Lotion 400ml',               buy: 180,  sell: 320,  qty: 16 },
+  { type: 'Cosmetics',   code: 'CO-003', name: 'Bar Soap - 800g',                 buy: 80,   sell: 150,  qty: 1  },
+  { type: 'Cosmetics',   code: 'CO-004', name: 'Hair Relaxer Kit',                buy: 250,  sell: 450,  qty: 9  },
+  // General
+  { type: 'General',     code: 'GE-001', name: 'Padlock - Medium',                buy: 150,  sell: 280,  qty: 24 },
+  { type: 'General',     code: 'GE-002', name: 'Umbrella - Black',                buy: 300,  sell: 550,  qty: 11 },
+  { type: 'General',     code: 'GE-003', name: 'Torch - Rechargeable',            buy: 400,  sell: 750,  qty: 0  },
+  { type: 'General',     code: 'GE-004', name: 'Broom - Nylon',                   buy: 100,  sell: 200,  qty: 33 },
+];
+
+const DEV_SEED_SHOE_ITEMS = [
+  { code: 'SH-001', name: 'School Shoes - Black',  buy: 800,  sell: 1400, sizes: [{ size:'32', group:'M', qty:6 }, { size:'34', group:'M', qty:4 }, { size:'36', group:'M', qty:0 }] },
+  { code: 'SH-002', name: 'Nike Air Max Sneaker',   buy: 2500, sell: 4200, sizes: [{ size:'40', group:'L', qty:3 }, { size:'42', group:'L', qty:5 }, { size:'44', group:'L', qty:2 }] },
+  { code: 'SH-003', name: 'Ladies Sandals - Tan',   buy: 600,  sell: 1100, sizes: [{ size:'37', group:'L', qty:7 }, { size:'38', group:'L', qty:1 }, { size:'39', group:'L', qty:0 }] },
+  { code: 'SH-004', name: "Men's Official Shoes",   buy: 1800, sell: 3200, sizes: [{ size:'41', group:'L', qty:4 }, { size:'42', group:'L', qty:6 }, { size:'43', group:'L', qty:3 }] },
+];
+
+// Local (not UTC) YYYY-MM-DD, matching todayDateStr()'s convention - avoids
+// the day drifting by the local UTC offset when building past seed dates.
+function _seedLocalDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
+
+async function seedDevDatabase() {
+  const now = new Date();
+  const soldItems = []; // flattened sellable lines: standard items + each shoe size
+
+  // ── Standard items ──────────────────────────────────────────────
+  for (const s of DEV_SEED_STANDARD_ITEMS) {
+    const profit = s.sell - s.buy;
+    const id = await dbAdd('items', {
+      type: s.type, code: s.code, name: s.name, variant: '',
+      buyPrice: s.buy, sellPrice: s.sell, profit,
+      qty: s.qty, createdAt: now.toISOString(),
+    });
+    soldItems.push({ id, code: s.code, name: s.name, type: s.type, buyPrice: s.buy, sellPrice: s.sell, size: '' });
+  }
+
+  // ── Footwear items + per-size stock ─────────────────────────────
+  for (const s of DEV_SEED_SHOE_ITEMS) {
+    const totalQty = s.sizes.reduce((t, sz) => t + sz.qty, 0);
+    const pid = await dbAdd('items', {
+      code: s.code, name: s.name, type: 'Footwear', category: 'Footwear', isShoe: true,
+      buyPrice: s.buy, sellPrice: s.sell, profit: s.sell - s.buy,
+      qty: totalQty, createdAt: now.toISOString(),
+    });
+    for (const sz of s.sizes) {
+      await dbAdd('shoe_sizes', {
+        itemCode: s.code, itemId: pid, size: sz.size, sizeGroup: sz.group,
+        qty: sz.qty, buyPrice: s.buy, sellPrice: s.sell, profit: s.sell - s.buy,
+        codeSize: s.code + '_' + sz.size,
+        createdAt: now.toISOString(), updatedAt: now.toISOString(),
+      });
+      soldItems.push({ id: pid, code: s.code, name: s.name + ' (Size ' + sz.size + ')', type: 'Footwear', buyPrice: s.buy, sellPrice: s.sell, size: sz.size });
+    }
+  }
+
+  // ── Sales history - last 21 days, varied volume, occasional price overrides ──
+  const paymentCycle = ['cash', 'cash', 'cash', 'mpesa'];
+  let saleSeq = 0;
+  for (let dayOffset = 20; dayOffset >= 0; dayOffset--) {
+    const d = new Date(now); d.setDate(d.getDate() - dayOffset);
+    const businessDate = _seedLocalDateStr(d);
+    const dow = d.getDay();
+    let salesToday = (dow === 0 || dow === 6) ? 6 : 3; // busier on weekends
+    if (dayOffset === 10) salesToday = 0;              // one quiet/no-sale day for realism
+
+    for (let i = 0; i < salesToday; i++) {
+      const pick = soldItems[(saleSeq * 7 + i * 3) % soldItems.length];
+      const qty = 1 + (saleSeq % 3);
+      const overridden = saleSeq % 5 === 0;
+      const actualPrice = overridden
+        ? Math.max(pick.buyPrice, pick.sellPrice - Math.round(pick.sellPrice * 0.1))
+        : pick.sellPrice;
+      const revenue = qty * actualPrice;
+      const profit  = qty * (actualPrice - pick.buyPrice);
+      const saleTime = new Date(d);
+      saleTime.setHours(9 + (i % 9), (i * 17) % 60, 0, 0);
+
+      await dbAdd('sales', {
+        itemId: pick.id, itemCode: pick.code, itemName: pick.name, itemType: pick.type,
+        itemSize: pick.size || '', qty, buyPrice: pick.buyPrice, sellPrice: pick.sellPrice,
+        actualPrice, revenue, profit, overridden,
+        paymentMethod: paymentCycle[saleSeq % paymentCycle.length],
+        soldBy: 'system', businessDate, date: saleTime.toISOString(),
+      });
+      saleSeq++;
+    }
+  }
+
+  // ── Wishlist entries ─────────────────────────────────────────────
+  const wishSeed = [
+    { name: 'Solar Lamp - Rechargeable', type: 'Electronics', qty: 10, cost: 900,  note: 'Customers keep asking for these' },
+    { name: 'School Bag - Junior',       type: 'General',     qty: 15, cost: 600,  note: '' },
+    { name: 'Motorcycle Helmet',         type: 'General',     qty: 5,  cost: 2200, note: 'Check with boda riders on preferred brand' },
+  ];
+  for (const w of wishSeed) {
+    await dbAdd('wishlist', {
+      name: w.name, code: '', type: w.type, qty: w.qty, estimatedCost: w.cost,
+      note: w.note, vendorQuotes: [], status: 'prospective',
+      createdAt: now.toISOString(), createdBy: 'system',
+    });
+  }
+
+  // ── Finance entries ──────────────────────────────────────────────
+  const financeSeed = [
+    { type: 'injection',  amount: 50000, description: 'Owner capital injection', daysAgo: 20 },
+    { type: 'expense',    amount: 3500,  description: 'Shop rent contribution',  daysAgo: 15 },
+    { type: 'expense',    amount: 1200,  description: 'Transport for restock',   daysAgo: 9  },
+    { type: 'withdrawal', amount: 5000,  description: 'Owner withdrawal',        daysAgo: 4  },
+  ];
+  for (const f of financeSeed) {
+    const d = new Date(now); d.setDate(d.getDate() - f.daysAgo);
+    const cat = f.type === 'injection' ? 'owner_capital' : f.type === 'withdrawal' ? 'cash_drawer' : 'general';
+    await dbAdd('finances', {
+      type: f.type, amount: f.amount, description: f.description, category: cat,
+      date: _seedLocalDateStr(d), createdAt: d.toISOString(), createdBy: 'system',
+    });
+  }
+}
+
+// ── Rebuild the Development database with fresh sample data ─────────
+// Hard-guarded: refuses to run unless the app is actually in the
+// Development environment AND the currently-open database is the
+// dev-suffixed one - a rebuild here can never reach production data.
+async function rebuildDevDatabaseWithSeed() {
+  if (getFirebaseEnv() !== 'development' || !DB_NAME.endsWith('_dev')) {
+    toast('Error: Rebuild with sample data is only available in Development mode', 'err');
+    return;
+  }
+
+  const input = prompt(
+    'REBUILD DEVELOPMENT DATABASE\n\n' +
+    'This wipes the local development database (' + DB_NAME + ') only and replaces it with ' +
+    'a fresh set of realistic sample data - items (incl. footwear sizes), 3 weeks of sales ' +
+    'history, wishlist entries, and finance records.\n\n' +
+    'Your production data lives in a separate database and is never touched by this.\n\n' +
+    'Type SEED to confirm:'
+  );
+  if (input !== 'SEED') { toast('Rebuild cancelled', ''); return; }
+
+  try {
+    toast('Rebuilding development database...', '');
+
+    await DB.clearAll([
+      STORES.ITEMS, STORES.SALES, STORES.SIZES,
+      STORES.FINANCES, STORES.BDAYS, STORES.TYPES, STORES.WISHLIST,
+    ]);
+
+    allItems  = [];
+    activeDay = null;
+    types     = [];
+
+    await loadTypes();
+    await seedDevDatabase();
+    await loadActiveDay();
+
+    allItems = await dbAll('items');
+    await enrichShoeItems(allItems);
+    renderList();
+    renderDashboard();
+    updateHeader();
+    try { updateLowStockBadge(); } catch(_) { /* intentionally ignored */ }
+
+    toast('Development database rebuilt with sample data!', 'ok');
+    console.log('[DEV SEED] Rebuild complete on ' + DB_NAME);
+  } catch(e) {
+    toast('Error: Rebuild failed: ' + e.message, 'err');
+    console.error('[DEV SEED]', e);
+  }
+}
+window.rebuildDevDatabaseWithSeed = rebuildDevDatabaseWithSeed;
 
 async function resetAllData() {
   const confirmed = confirm(
@@ -5766,6 +5964,16 @@ function setFbStatus(status) {
   if (dot) { dot.style.background = colors[status]; dot.style.boxShadow = status==='on' ? '0 0 6px var(--green)' : 'none'; }
   if (txt) txt.textContent = labels[status];
 
+  // Reconnect/Disconnect is a single button whose label/action flips with state
+  const toggleBtn = document.getElementById('fb-connection-toggle');
+  if (toggleBtn) {
+    const connected = status === 'on' || status === 'connecting' || status === 'syncing';
+    toggleBtn.textContent = connected ? 'Disconnect' : 'Reconnect';
+    toggleBtn.classList.toggle('settings-btn--primary', !connected);
+    toggleBtn.classList.toggle('settings-btn--ghost', connected);
+    toggleBtn.classList.toggle('settings-btn--danger-text', connected);
+  }
+
   // Update sync bar under header
   const bar = document.getElementById('sync-bar');
   const barDot = document.getElementById('sync-bar-dot');
@@ -5843,46 +6051,66 @@ function fbDoc(name, id) {
 function updateFirebaseEnvUI() {
   const env = getFirebaseEnv();
   const cfg = FIREBASE_ENVIRONMENTS[env];
+  const isDev = env === 'development';
   document.body.dataset.firebaseEnv = env;
   const nameEl = document.getElementById('fb-env-name');
   if (nameEl) nameEl.textContent = cfg.label;
   const projectEl = document.getElementById('fb-env-project');
-  if (projectEl) {
-    projectEl.textContent = cfg.collectionPrefix
-      ? cfg.projectId + ' - ' + cfg.collectionPrefix + '*'
-      : cfg.projectId;
-  }
+  if (projectEl) projectEl.textContent = isDev ? 'None - local database only' : cfg.projectId;
   const prefixEl = document.getElementById('fb-env-prefix');
-  if (prefixEl) {
-    prefixEl.textContent = cfg.collectionPrefix
-      ? 'Collections: ' + cfg.collectionPrefix + 'items, ' + cfg.collectionPrefix + 'sales,...'
-      : 'Collections: items, sales,...';
-  }
+  if (prefixEl) prefixEl.textContent = isDev ? 'Collections: none (cloud sync disabled)' : 'Collections: items, sales,...';
+  const autosyncEl = document.getElementById('fb-env-autosync');
+  if (autosyncEl) autosyncEl.textContent = isDev ? 'Disabled (local database only)' : 'On every change (when online)';
   document.getElementById('fb-env-prod')?.classList.toggle('active', env === 'production');
-  document.getElementById('fb-env-dev')?.classList.toggle('active', env === 'development');
+  document.getElementById('fb-env-dev')?.classList.toggle('active', isDev);
+
+  // Developer tools are only ever visible while actually in Development.
+  const devCard = document.getElementById('dev-tools-card');
+  if (devCard) devCard.style.display = isDev ? '' : 'none';
+  const dbNameEl = document.getElementById('dev-tools-dbname');
+  if (dbNameEl) dbNameEl.textContent = DB_NAME;
+
+  // Sync actions and diagnostics are inert in Development (cloud is always
+  // off there) - hide them so Settings isn't cluttered with dead buttons.
+  const syncActions = document.getElementById('fb-sync-actions-wrap');
+  if (syncActions) syncActions.style.display = isDev ? 'none' : '';
+  const diagnostics = document.getElementById('fb-diagnostics-wrap');
+  if (diagnostics) diagnostics.style.display = isDev ? 'none' : '';
 }
 
 async function setFirebaseEnvironment(env) {
   if (!FIREBASE_ENVIRONMENTS[env]) return;
-  if (getFirebaseEnv() === env && fbReady) {
+  if (getFirebaseEnv() === env) {
     updateFirebaseEnvUI();
     return;
   }
   const label = FIREBASE_ENVIRONMENTS[env].label;
-  if (!confirm(
-    'Switch to ' + label + '?\n\n' +
-    'Cloud data is kept in separate collections per environment. ' +
-    'Firebase will reconnect.'
-  )) return;
-  disconnectFirebase();
+  // Dev and prod each use their own local IndexedDB database, so switching
+  // requires a reload to reopen the correct one - there's no way to hot-swap
+  // an already-open IndexedDB connection to a different database.
+  const msg = env === 'development'
+    ? 'Switch to ' + label + '?\n\n' +
+      'This moves to a separate local development database - no cloud sync, and it can ' +
+      'never affect your real shop data. Use "Rebuild with sample data" in Settings ' +
+      'afterward to load realistic test data. The app will reload.'
+    : 'Switch to ' + label + '?\n\n' +
+      'This returns to your live shop database and cloud sync. The app will reload.';
+  if (!confirm(msg)) return;
   localStorage.setItem(KEY_FIREBASE_ENV, env);
-  updateFirebaseEnvUI();
-  await initFirebase();
+  location.reload();
 }
 
 async function initFirebase() {
   try {
     updateFirebaseEnvUI();
+    // Development never talks to the cloud - it runs entirely on its own
+    // local database (see initDB()). This is the single choke point every
+    // caller (startup, reconnect, sync debug, env switch) goes through.
+    if (getFirebaseEnv() === 'development') {
+      fbApp = null; fbDb = null; fbReady = false;
+      setFbStatus('off');
+      return;
+    }
     setFbStatus('connecting');
     const {
       initializeApp, getApps,
@@ -6620,8 +6848,16 @@ async function reconnectFirebase() {
   await initFirebase();
 }
 
-
-
+// Single button standing in for the old separate Reconnect/Disconnect pair -
+// its label already reflects current state (see setFbStatus()).
+async function toggleFirebaseConnection() {
+  if (fbReady) {
+    disconnectFirebase();
+  } else {
+    await reconnectFirebase();
+  }
+}
+window.toggleFirebaseConnection = toggleFirebaseConnection;
 
 async function runSyncDebug() {
   const log = document.getElementById('debug-log');

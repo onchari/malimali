@@ -1183,7 +1183,7 @@
 
   <!-- ── Cloud sync ─────────────────────────────────────────── -->
   <div class="sec-label" style="margin-top:16px;">Cloud sync</div>
-  <p class="settings-hint">Production is live shop data. Development uses separate cloud collections (<code>dev_*</code>).</p>
+  <p class="settings-hint">Production syncs to the live cloud database. Development runs on its own local database only - cloud sync is disabled, so nothing done in Development can ever reach production.</p>
 
   <div class="card settings-card" id="firebase-setup-card">
 
@@ -1204,48 +1204,64 @@
       <div><strong>Environment:</strong> <span id="fb-env-name">-</span></div>
       <div><strong>Project:</strong> <span id="fb-env-project">mandela-generals</span></div>
       <div id="fb-env-prefix"><strong>Collections:</strong> items, sales,...</div>
-      <div><strong>Auto-sync:</strong> On every change (when online)</div>
+      <div><strong>Auto-sync:</strong> <span id="fb-env-autosync">On every change (when online)</span></div>
     </div>
 
     <input type="hidden" id="fb-config-input">
 
-    <div class="sync-actions-group">
-      <div class="sync-actions-label">Sync - merge without wiping first</div>
-      <div class="sync-actions-grid">
-        <button type="button" class="sync-action-btn sync-action-pull" onclick="pullFromFirebase()">Pull cloud to local</button>
-        <button type="button" class="sync-action-btn sync-action-push" onclick="forcePushToFirebase()">Push local to cloud</button>
+    <!-- Sync actions - meaningless in Development (cloud sync is off), so hidden there -->
+    <div id="fb-sync-actions-wrap">
+      <div class="sync-actions-group">
+        <div class="sync-actions-label">Sync - merge without wiping first</div>
+        <div class="sync-actions-grid">
+          <button type="button" class="sync-action-btn sync-action-pull" onclick="pullFromFirebase()">Pull cloud to local</button>
+          <button type="button" class="sync-action-btn sync-action-push" onclick="forcePushToFirebase()">Push local to cloud</button>
+        </div>
       </div>
-    </div>
 
-    <div class="sync-actions-group">
-      <div class="sync-actions-label sync-actions-label--warn">Clear - one side only</div>
-      <div class="sync-actions-grid">
-        <button type="button" class="sync-action-btn sync-action-danger" onclick="clearLocalData()">Clear local data</button>
-        <button type="button" class="sync-action-btn sync-action-danger" onclick="clearCloudData()">Clear cloud data</button>
+      <div class="sync-actions-group">
+        <div class="sync-actions-label sync-actions-label--warn">Clear - one side only</div>
+        <div class="sync-actions-grid">
+          <button type="button" class="sync-action-btn sync-action-danger" onclick="clearLocalData()">Clear local data</button>
+          <button type="button" class="sync-action-btn sync-action-danger" onclick="clearCloudData()">Clear cloud data</button>
+        </div>
       </div>
-    </div>
 
-    <div class="settings-btn-row">
-      <button type="button" class="settings-btn settings-btn--primary" onclick="reconnectFirebase()">Reconnect</button>
-      <button type="button" class="settings-btn settings-btn--ghost settings-btn--danger-text" onclick="disconnectFirebase()">Disconnect</button>
+      <div class="settings-btn-row">
+        <button type="button" id="fb-connection-toggle" class="settings-btn settings-btn--primary" onclick="toggleFirebaseConnection()">Reconnect</button>
+      </div>
     </div>
   </div>
 
-  <!-- ── Sync diagnostics ───────────────────────────────────── -->
-  <div class="sec-label" style="margin-top:16px;">Sync diagnostics</div>
-  <div class="card settings-card settings-card--compact" id="sync-debug-card">
-    <div class="sync-debug-counts">
-      <div class="sync-debug-stat">
-        <div class="sync-debug-stat-label">Local items</div>
-        <div class="sync-debug-stat-val" id="debug-local-items">-</div>
+  <!-- ── Developer tools - only shown while in the Development environment ── -->
+  <div id="dev-tools-card" class="card settings-card" style="display:none;">
+    <div class="upgrade-recovery-heading">Developer Tools</div>
+    <p class="settings-hint">
+      Running on the local development database (<code id="dev-tools-dbname">InventoryApp_dev</code>).
+      Cloud sync is off here, so nothing below can ever affect production.
+    </p>
+    <button type="button" class="settings-btn settings-btn--purple" onclick="rebuildDevDatabaseWithSeed()">
+      Rebuild with sample data
+    </button>
+  </div>
+
+  <!-- ── Sync diagnostics - only meaningful in Production ─────── -->
+  <div id="fb-diagnostics-wrap">
+    <div class="sec-label" style="margin-top:16px;">Sync diagnostics</div>
+    <div class="card settings-card settings-card--compact" id="sync-debug-card">
+      <div class="sync-debug-counts">
+        <div class="sync-debug-stat">
+          <div class="sync-debug-stat-label">Local items</div>
+          <div class="sync-debug-stat-val" id="debug-local-items">-</div>
+        </div>
+        <div class="sync-debug-stat">
+          <div class="sync-debug-stat-label">Cloud items</div>
+          <div class="sync-debug-stat-val sync-debug-stat-val--green" id="debug-fb-items">-</div>
+        </div>
       </div>
-      <div class="sync-debug-stat">
-        <div class="sync-debug-stat-label">Cloud items</div>
-        <div class="sync-debug-stat-val sync-debug-stat-val--green" id="debug-fb-items">-</div>
-      </div>
+      <button type="button" class="settings-btn settings-btn--primary" onclick="runSyncDebug()">Check &amp; sync now</button>
+      <div id="debug-log" class="sync-debug-log"></div>
     </div>
-    <button type="button" class="settings-btn settings-btn--primary" onclick="runSyncDebug()">Check &amp; sync now</button>
-    <div id="debug-log" class="sync-debug-log"></div>
   </div>
 
   <!-- ── Shop setup ─────────────────────────────────────────── -->
@@ -1253,7 +1269,12 @@
   <p class="settings-hint">Categories for inventory. Toggle size-grid mode (shoes). Nest sub-categories to any depth.</p>
 
   <div class="card" style="margin-bottom:8px;">
-    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">New parent category</div>
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">Add category</div>
+    <div class="cat-cascade-field">
+      <div id="new-sub-parent-cascade" class="add-cascade"></div>
+      <select class="cat-pick-hidden-select form-select form-select-bold" id="new-sub-parent" style="margin-bottom:8px;" aria-label="Parent category (optional)"></select>
+      <div id="new-sub-parent-breadcrumb" class="add-type-breadcrumb" hidden></div>
+    </div>
     <div class="emoji-pick" id="emoji-pick" style="margin-bottom:10px;">
       <div class="ep sel" data-e="📦" onclick="pickEmoji(this)">📦</div>
       <div class="ep" data-e="👟" onclick="pickEmoji(this)">👟</div>
@@ -1272,25 +1293,12 @@
     </div>
     <div class="type-add-row" style="margin-top:0;">
       <input class="type-input" id="new-type-name" placeholder="Category name e.g. Footwear">
-      <button class="type-add-btn" onclick="addType()">Add</button>
+      <button class="type-add-btn" onclick="addCategoryOrSub()">Add</button>
     </div>
     <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--text2);cursor:pointer;">
       <input type="checkbox" id="new-type-footwear" style="width:16px;height:16px;">
-      Use size-grid mode (multi-size stock like shoes)
+      Use size-grid mode (multi-size stock like shoes) - top-level categories only
     </label>
-  </div>
-
-  <div class="card" style="margin-bottom:8px;">
-    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">New sub-category (any depth)</div>
-    <div class="cat-cascade-field">
-      <div id="new-sub-parent-cascade" class="add-cascade"></div>
-      <select class="cat-pick-hidden-select form-select form-select-bold" id="new-sub-parent" style="margin-bottom:8px;" aria-label="Parent category"></select>
-      <div id="new-sub-parent-breadcrumb" class="add-type-breadcrumb" hidden></div>
-    </div>
-    <div class="type-add-row" style="margin-top:0;">
-      <input class="type-input" id="new-sub-name" placeholder="Sub-category e.g. School Shoes">
-      <button class="type-add-btn" onclick="addSubCategory()">Add sub</button>
-    </div>
   </div>
 
   <div class="card" style="margin-bottom:4px;">
