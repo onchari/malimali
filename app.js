@@ -4717,7 +4717,7 @@ async function _renderDashSummary(ctx) {
   if (!wrap) return;
 
   const {
-    allSales, totalItems, totalQty, stockRetail,
+    allSales, totalItems,
     totalRevenue, totalProfitEarned, totalSalesCount, totalPiecesSold,
     outStk, lowStk, margin, today, todayDashSales, todayDashProf
   } = ctx;
@@ -4778,9 +4778,9 @@ async function _renderDashSummary(ctx) {
   }
 
   const cards = [];
-  cards.push(_dashSumCard('', fmtN(totalItems) + ' SKUs', 'Inventory', fmtN(totalQty) + ' pcs - retail ' + fmt(stockRetail), null, 'stock'));
+  cards.push(_dashSumCard('', fmtN(totalPiecesSold), 'Items sold for this period', null, null));
   cards.push(_dashSumCard('', fmt(totalRevenue), periodLbl + ' revenue', trendNote || (fmt(totalProfitEarned) + ' profit - ' + margin.toFixed(1) + '% margin'), totalProfitEarned >= 0 ? 'var(--green)' : 'var(--red)'));
-  cards.push(_dashSumCard('', fmtN(totalSalesCount), 'Sales - ' + fmtN(totalPiecesSold) + ' pcs', totalSalesCount ? 'Avg ' + fmt(totalRevenue / totalSalesCount) + ' per sale' : 'No sales in period'));
+  cards.push(_dashSumCard('', fmtN(totalSalesCount), 'Sales', totalSalesCount ? 'Avg ' + fmt(totalRevenue / totalSalesCount) + ' per sale' : 'No sales in period'));
   cards.push(_dashSumCard(
     dayOpen ? 'Open' : (activeDay ? 'Locked' : 'Paused'),
     dayOpen ? 'Open' : (activeDay ? activeDay.status : '-'),
@@ -4827,8 +4827,6 @@ async function renderDashboard() {
   const sales = _filterSalesByRange(allSales, range);
 
   const totalItems  = allItems.length;
-  const totalQty    = allItems.reduce((s,i) => s+(i.qty||0), 0);
-  const stockRetail = allItems.reduce((s,i) => s+((i.sellPrice||i.sell||0)*(i.qty||0)), 0);
 
   const totalRevenue      = sales.reduce((s,x) => s+(x.revenue||0), 0);
   const totalProfitEarned = sales.reduce((s,x) => s+(x.profit||0), 0);
@@ -4843,7 +4841,7 @@ async function renderDashboard() {
   const todayDashProf  = todayDashSales.reduce((s,x)=>s+(x.profit||0),0);
 
   await _renderDashSummary({
-    allSales, totalItems, totalQty, stockRetail,
+    allSales, totalItems,
     totalRevenue, totalProfitEarned, totalSalesCount, totalPiecesSold,
     outStk, lowStk, margin, today, todayDashSales, todayDashProf
   });
