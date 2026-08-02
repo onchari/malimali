@@ -3720,6 +3720,23 @@ async function renderList() {
 
   const cards = [];
 
+  // Pre-build sub-category type groups (non-shoe items whose type has a parentId)
+  const _typeGroupMap = {};
+  const _seenTypeGroups = new Set();
+  const _groupedItemIds = new Set();
+  for (const _gi of filtered) {
+    if (_gi.isShoe) continue;
+    const _gtObj = getTypeObj(_gi.type);
+    if (_gtObj && _gtObj.parentId) {
+      const _gpt = types.find(t => t.id === _gtObj.parentId);
+      if (_gpt) {
+        if (!_typeGroupMap[_gpt.id]) _typeGroupMap[_gpt.id] = { parentType: _gpt, items: [] };
+        _typeGroupMap[_gpt.id].items.push(_gi);
+        _groupedItemIds.add(_gi.id);
+      }
+    }
+  }
+
   for (const item of filtered) {
     const t = getTypeObj(item.type);
 
@@ -3814,6 +3831,72 @@ async function renderList() {
               </div>
             </div>`);
         });
+        cards.push('<div style="height:6px;"></div>');
+      }
+
+    } else if (_groupedItemIds.has(item.id)) {
+      // ── SUB-CATEGORY GROUP - expandable like footwear ─────────────
+      const ptId = getTypeObj(item.type).parentId;
+      if (_seenTypeGroups.has(ptId)) continue;
+      _seenTypeGroups.add(ptId);
+
+      const { parentType, items: groupItems } = _typeGroupMap[ptId];
+      const isExpanded = (UI.el('search')?.value||'').length > 0 || _expandedTypeGroups.has(ptId);
+      const groupTotalQty = groupItems.reduce((s,i) => s+(i.qty||0), 0);
+      const groupRevenue  = allSales.filter(s => groupItems.some(i => i.id === s.itemId)).reduce((s,x) => s+(x.revenue||0), 0);
+      const allOut = groupItems.every(i => i.qty <= 0);
+      const hasOut = groupItems.some(i => i.qty <= 0);
+
+      cards.push(`
+        <div class="type-group-header" onclick="toggleTypeGroup(${ptId})" style="cursor:pointer;">
+          <div class="shoe-group-icon" style="background:${parentType.color||'#334155'};">${parentType.emoji||'📦'}</div>
+          <div class="shoe-group-info" style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="shoe-group-code">${escapeHtml(parentType.name)}</span>
+              ${allOut?'<span style="font-size:9px;background:var(--red);color:white;padding:1px 6px;border-radius:10px;font-weight:700;">OUT</span>':hasOut?'<span style="font-size:9px;background:#d97706;color:white;padding:1px 6px;border-radius:10px;font-weight:700;">PARTIAL</span>':''}
+            </div>
+            <div style="font-size:10px;color:rgba(255,255,255,.6);font-family:var(--mono);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;">
+              <span>${groupItems.length} item${groupItems.length!==1?'s':''}</span>
+              <span>${groupTotalQty} pcs</span>
+              <span style="color:var(--accent2);">${fmt(groupRevenue)}</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+            <span style="font-size:16px;color:rgba(255,255,255,.6);transition:transform .2s;display:inline-block;transform:rotate(${isExpanded?180:0}deg);">▼</span>
+          </div>
+        </div>`);
+
+      if (!isExpanded) {
+        cards.push('<div style="height:4px;"></div>');
+      } else {
+        for (const ci of groupItems) {
+          const ct = getTypeObj(ci.type);
+          const sc = ci.qty === 0 ? 'tag-red' : ci.qty <= LOW_STOCK_LEVEL ? 'tag-amber' : 'tag-green';
+          const sl = ci.qty === 0 ? 'Out' : ci.qty + ' pcs';
+          const sq = (salesByItem[ci.id] || {}).qty || 0;
+          const sp = ci.sellPrice || ci.sell || 0;
+          const bp = ci.buyPrice  || ci.buy  || 0;
+          cards.push(`
+            <div class="item-card type-group-child-row${ci.qty<=0?' shoe-out-card':''}" onclick="openSheet(${ci.id})">
+              ${ci.qty<=0?'<div class="out-of-stock-overlay"><span>OUT OF STOCK - RESTOCK</span></div>':''}
+              <div class="item-top">
+                <div class="item-icon" style="background:${ct.color||'var(--surface2)'};">${ct.emoji||'📦'}</div>
+                <div class="item-body">
+                  <div class="item-code">${escapeHtml(ci.code)}${(ci.variant||ci.size)?' - '+escapeHtml(ci.variant||ci.size):''}</div>
+                  <div class="item-name">${escapeHtml(ci.name||'')}</div>
+                  <div class="item-tags">
+                    <span class="tag tag-cyan">${escapeHtml(ci.type)}</span>
+                    <span class="tag tag-gray">${sq} sold</span>
+                    <span class="tag ${sc}">${sl}</span>
+                  </div>
+                </div>
+                <div class="item-right">
+                  <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(sp)}</div>
+                  <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">Buy: ${fmt(bp)}</div>
+                </div>
+              </div>
+            </div>`);
+        }
         cards.push('<div style="height:6px;"></div>');
       }
 
@@ -8866,6 +8949,7 @@ function _showFinReconcile(show) {
 window._showFinReconcile = _showFinReconcile;
 
 let _expandedShoeGroups = new Set();
+let _expandedTypeGroups = new Set();
 window._activeSizeGroupFilter = 'all';
 
 function toggleShoeGroup(code) {
@@ -8877,6 +8961,16 @@ function toggleShoeGroup(code) {
   renderList();
 }
 window.toggleShoeGroup = toggleShoeGroup;
+
+function toggleTypeGroup(parentTypeId) {
+  if (_expandedTypeGroups.has(parentTypeId)) {
+    _expandedTypeGroups.delete(parentTypeId);
+  } else {
+    _expandedTypeGroups.add(parentTypeId);
+  }
+  renderList();
+}
+window.toggleTypeGroup = toggleTypeGroup;
 
 function setSizeGroupFilter(group) {
   window._activeSizeGroupFilter = group;

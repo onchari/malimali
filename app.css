@@ -3708,6 +3708,31 @@ body.photo-lightbox-open { overflow: hidden; }
 /* Even/odd for multiple shoe groups */
 #item-list > .shoe-group-header:nth-of-type(even) { background: #1a3352; }
 
+/* Sub-category expandable group header (mirrors shoe-group-header) */
+.type-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #1c3a2e;
+  border-bottom: 1.5px solid rgba(255,255,255,.08);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#item-list > .type-group-header:nth-of-type(even) { background: #17322a; }
+
+/* Child rows of a sub-category group */
+.type-group-child-row {
+  border-left: 4px solid var(--accent2) !important;
+  border-bottom: 1px solid var(--border) !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding-left: 10px !important;
+}
+.type-group-child-row:nth-child(even) { background: #f5faf6; }
+.type-group-child-row:active { background: #d4edda; }
+
 .shoe-group-icon {
   width: 32px; height: 32px;
   border-radius: 8px;
