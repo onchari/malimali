@@ -3709,40 +3709,92 @@ body.photo-lightbox-open { overflow: hidden; }
 #item-list > .shoe-group-header:nth-of-type(even) { background: #1a3352; }
 
 /* ── Item mode toggle (Track Stock / Record Only) ───────────────── */
-.item-mode-card {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 12px !important;
+.add-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: var(--bg2);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  margin-bottom: 4px;
 }
-.item-mode-btn {
+
+/* iOS-style pill toggle */
+.ios-toggle {
+  position: relative;
+  display: inline-block;
+  width: 62px;
+  height: 32px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.ios-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.ios-toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 32px;
+  background: #d1d5db;
+  transition: background .25s;
+  display: flex;
+  align-items: center;
+  padding-left: 9px;
+}
+.ios-toggle input:checked + .ios-toggle-track {
+  background: #f97316;   /* orange when ON */
+}
+.ios-toggle-on-label {
+  font-size: 9px;
+  font-weight: 900;
+  color: white;
+  letter-spacing: .6px;
+  opacity: 0;
+  transition: opacity .2s;
+  user-select: none;
+}
+.ios-toggle input:checked + .ios-toggle-track .ios-toggle-on-label {
+  opacity: 1;
+}
+.ios-toggle-thumb {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 2px 5px rgba(0,0,0,.28);
+  transition: transform .25s;
+}
+.ios-toggle input:checked ~ .ios-toggle-thumb {
+  transform: translateX(30px);
+}
+
+/* Label text next to toggle */
+.add-mode-desc {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 12px 8px;
-  border-radius: 10px;
-  border: 2px solid var(--border);
-  background: var(--bg);
+  gap: 1px;
+  min-width: 0;
+}
+.add-mode-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.add-mode-title i { margin-right: 4px; }
+.add-mode-sub {
+  font-size: 10.5px;
   color: var(--muted);
-  cursor: pointer;
-  transition: background .15s, border-color .15s, color .15s;
-  line-height: 1.2;
 }
-.item-mode-btn i   { font-size: 20px; margin-bottom: 2px; }
-.item-mode-btn span { font-size: 13px; font-weight: 700; }
-.item-mode-btn small { font-size: 10px; opacity: .75; }
-.item-mode-btn.active {
-  border-color: var(--accent);
-  background: rgba(30,122,62,.09);
-  color: var(--accent);
-}
-/* Record mode active state — amber tint */
-#mode-btn-record.active {
-  border-color: #f59e0b;
-  background: rgba(245,158,11,.09);
-  color: #92400e;
-}
+/* Record Only state */
+.add-mode-bar.record-mode .add-mode-title { color: #92400e; }
+.add-mode-bar.record-mode { background: #fffbeb; border-color: #f59e0b; }
 
 /* Record mode note in pricing section */
 .record-mode-note {

@@ -691,6 +691,19 @@
 
   <div class="add-flow">
 
+  <!-- Item mode toggle: Track Stock ↔ Record Only -->
+  <div id="item-mode-toggle" class="add-mode-bar">
+    <label class="ios-toggle" for="mode-toggle-input" title="Toggle between Track Stock and Record Only">
+      <input type="checkbox" id="mode-toggle-input" checked onchange="setItemMode(!this.checked)">
+      <span class="ios-toggle-track"><span class="ios-toggle-on-label">ON</span></span>
+      <span class="ios-toggle-thumb"></span>
+    </label>
+    <div class="add-mode-desc" id="mode-label-text">
+      <span class="add-mode-title"><i class="fa-solid fa-boxes-stacked"></i> Track Stock</span>
+      <span class="add-mode-sub">Qty, prices &amp; stock alerts</span>
+    </div>
+  </div>
+
   <!-- Step 1: Category -->
   <section class="add-card" aria-labelledby="add-step-cat">
     <h2 class="add-card-title" id="add-step-cat"><span class="add-step-badge">1</span> Category</h2>
@@ -734,19 +747,6 @@
   </section>
 
   <!-- Step 2b: Item mode toggle -->
-  <div id="item-mode-toggle" class="add-card item-mode-card">
-    <button type="button" id="mode-btn-track" class="item-mode-btn active" onclick="setItemMode(false)">
-      <i class="fa-solid fa-boxes-stacked"></i>
-      <span>Track Stock</span>
-      <small>Qty, prices &amp; alerts</small>
-    </button>
-    <button type="button" id="mode-btn-record" class="item-mode-btn" onclick="setItemMode(true)">
-      <i class="fa-solid fa-file-lines"></i>
-      <span>Record Only</span>
-      <small>Price info, qty unknown</small>
-    </button>
-  </div>
-
   <!-- Shoe sizes (footwear categories) -->
   <div id="shoe-size-panel" class="add-card add-card-shoe">
     <h2 class="add-card-title"><span class="add-step-badge">3</span> Sizes</h2>
