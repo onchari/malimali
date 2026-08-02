@@ -1082,8 +1082,7 @@ body {
 .search-input::placeholder { color: var(--muted); }
 
 /* FILTER CHIPS */
-.chips { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 14px; padding-bottom: 2px; scrollbar-width: none; }
-.chips::-webkit-scrollbar { display: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .chip {
   padding: 6px 14px;
   border-radius: 20px;
