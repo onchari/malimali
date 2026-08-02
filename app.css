@@ -3764,26 +3764,29 @@ body.photo-lightbox-open { overflow: hidden; }
 .hist-stat-val.green { color: #86efac; }
 .hist-stat-lbl   { font-size: 9px; color: rgba(255,255,255,.65); text-transform: uppercase; letter-spacing: .3px; }
 
-.hist-table-wrap { overflow-x: auto; }
+.hist-table-wrap { width: 100%; }
 .hist-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
-  font-size: 12px;
-  white-space: nowrap;
+  font-size: 11px;
 }
 .hist-table th,
 .hist-table td {
-  padding: 8px 10px;
+  padding: 6px 4px;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  word-wrap: break-word;
 }
 .hist-table th {
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: .3px;
+  letter-spacing: .2px;
   background: var(--surface2);
+  white-space: normal;
 }
 .hist-table td {
   font-family: var(--mono);
@@ -3792,6 +3795,7 @@ body.photo-lightbox-open { overflow: hidden; }
 .hist-table td:nth-child(2) {
   font-family: var(--sans);
   white-space: normal;
+  word-break: break-word;
 }
 .hist-table td.hp-pos { color: var(--green); }
 .hist-table td.hp-neg { color: var(--red); }

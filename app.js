@@ -9347,7 +9347,8 @@ function _histTable(sales, totalBuy, totalSell, totalProfit) {
   '</tr>';
 
   return '<div class="hist-table-wrap"><table class="hist-table">' +
-    '<thead><tr><th>No</th><th>Item</th><th>Buying Price (KES)</th><th>Price Sold (KES)</th><th>Profit (KES)</th><th></th></tr></thead>' +
+    '<colgroup><col style="width:7%"><col style="width:37%"><col style="width:16%"><col style="width:16%"><col style="width:16%"><col style="width:8%"></colgroup>' +
+    '<thead><tr><th>No</th><th>Item</th><th>BUY (KES)</th><th>SELL (KES)</th><th>Profit (KES)</th><th></th></tr></thead>' +
     '<tbody>' + rows + '</tbody>' +
     '<tfoot>' + totalsRow + '</tfoot>' +
   '</table></div>';
