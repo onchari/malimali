@@ -3776,8 +3776,8 @@ body.photo-lightbox-open { overflow: hidden; }
   padding: 6px 4px;
   text-align: left;
   border-bottom: 1px solid var(--border);
-  overflow: hidden;
   word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 .hist-table th {
   font-size: 8px;

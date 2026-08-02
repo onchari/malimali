@@ -3867,14 +3867,12 @@ function filterStockRows(rows, kind) {
 }
 
 async function renderStockMonitorSummary() {
-  const btn = document.querySelector('.stock-monitor-btn');
   const sub = document.getElementById('stock-monitor-sub');
-  if (!btn && !sub) return;
+  if (!sub) return;
   const rows = await getStockMonitorRows();
   const outCount = rows.filter(r => r.kind === 'out').length;
   const wishCount = rows.filter(r => r.kind === 'prospective').length;
-  if (btn) btn.classList.toggle('active', outCount > 0);
-  if (sub) sub.textContent = outCount + ' out of stock';
+  sub.textContent = outCount + ' out of stock';
   const wishSub = document.getElementById('wishlist-sub');
   if (wishSub) wishSub.textContent = wishCount + ' prospective items';
 }
@@ -9309,10 +9307,6 @@ function _fmtNum(n) {
   return (parseFloat(n) || 0).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-function _truncate(str, max) {
-  return str.length > max ? str.slice(0, max) + '...' : str;
-}
-
 // ── Tabular sale record renderer: No | Item | Buying Price | Price Sold | Profit ──
 function _histTable(sales, totalBuy, totalSell, totalProfit) {
   const rows = sales.map((s, i) => {
@@ -9323,7 +9317,7 @@ function _histTable(sales, totalBuy, totalSell, totalProfit) {
     const rawName = (s.itemName || s.itemCode || 'Item') +
       (s.itemSize ? ' - Sz ' + s.itemSize : '') +
       (qty > 1 ? ' (×' + qty + ')' : '');
-    const name = escapeHtml(_truncate(rawName, 30));
+    const name = escapeHtml(rawName);
     const delBtn = s.id
       ? `<button type="button" onclick="deleteSale(${s.id})" title="Delete sale" class="hist-row-del"><i class="fa-solid fa-trash"></i></button>`
       : '';
