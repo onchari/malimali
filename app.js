@@ -4707,9 +4707,67 @@ function goDashNav(target) {
     showPage('inventory');
     showInventoryTab('wishlist');
     if (typeof showWishlistSection === 'function') showWishlistSection('list');
+    return;
+  }
+  if (target === 'itemsSold') {
+    openItemsSoldSheet();
   }
 }
 window.goDashNav = goDashNav;
+
+async function openItemsSoldSheet() {
+  const allSales = await dbAll('sales');
+  const range = _dashDateRange();
+  const sales = _filterSalesByRange(allSales, range);
+
+  UI.setText('items-sold-period-lbl', _dashPeriodLabel());
+
+  const tbody = document.getElementById('items-sold-tbody');
+  const tfoot = document.getElementById('items-sold-tfoot');
+  if (!tbody || !tfoot) return;
+
+  if (!sales.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);font-family:var(--sans);padding:16px 0;">No items sold in this period</td></tr>';
+    tfoot.innerHTML = '';
+  } else {
+    const rows = [...sales].sort((a, b) => new Date(b.date) - new Date(a.date));
+    let totalBp = 0, totalSell = 0, totalProfit = 0;
+    tbody.innerHTML = rows.map((s, i) => {
+      const qty = s.qty || 1;
+      const buy = (s.buyPrice || 0) * qty;
+      const sell = (s.actualPrice || s.sellPrice || 0) * qty;
+      const profit = s.profit || 0;
+      totalBp += buy;
+      totalSell += sell;
+      totalProfit += profit;
+      const name = escapeHtml(s.itemName || s.itemCode || 'Item') + (qty > 1 ? ' (×' + qty + ')' : '');
+      return '<tr>' +
+        '<td>' + (i + 1) + '</td>' +
+        '<td>' + name + '</td>' +
+        '<td>' + fmt(buy) + '</td>' +
+        '<td>' + fmt(sell) + '</td>' +
+        '<td class="' + (profit >= 0 ? 'is-profit-pos' : 'is-profit-neg') + '">' + fmt(profit) + '</td>' +
+      '</tr>';
+    }).join('');
+    tfoot.innerHTML = '<tr>' +
+      '<td></td>' +
+      '<td>TOTAL</td>' +
+      '<td>' + fmt(totalBp) + '</td>' +
+      '<td>' + fmt(totalSell) + '</td>' +
+      '<td class="' + (totalProfit >= 0 ? 'is-profit-pos' : 'is-profit-neg') + '">' + fmt(totalProfit) + '</td>' +
+    '</tr>';
+  }
+
+  const sheet = document.getElementById('items-sold-sheet');
+  if (sheet) sheet.classList.add('open');
+}
+window.openItemsSoldSheet = openItemsSoldSheet;
+
+function closeItemsSoldSheet() {
+  const sheet = document.getElementById('items-sold-sheet');
+  if (sheet) sheet.classList.remove('open');
+}
+window.closeItemsSoldSheet = closeItemsSoldSheet;
 
 async function _renderDashSummary(ctx) {
   const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -4778,7 +4836,7 @@ async function _renderDashSummary(ctx) {
   }
 
   const cards = [];
-  cards.push(_dashSumCard('', fmtN(totalPiecesSold), 'Items sold for this period', null, null));
+  cards.push(_dashSumCard('', fmtN(totalPiecesSold), 'Items sold for this period', null, null, 'itemsSold'));
   cards.push(_dashSumCard('', fmt(totalRevenue), periodLbl + ' revenue', trendNote || (fmt(totalProfitEarned) + ' profit - ' + margin.toFixed(1) + '% margin'), totalProfitEarned >= 0 ? 'var(--green)' : 'var(--red)'));
   cards.push(_dashSumCard('', fmtN(totalSalesCount), 'Sales', totalSalesCount ? 'Avg ' + fmt(totalRevenue / totalSalesCount) + ' per sale' : 'No sales in period'));
   cards.push(_dashSumCard(

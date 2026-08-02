@@ -525,7 +525,39 @@
   </div>
 </div>
 
-<!-- ============================================================== 
+<!-- Items sold sheet: tabular record of items sold for the dashboard's selected period -->
+<div class="sheet-overlay" id="items-sold-sheet">
+  <div class="sheet" style="max-height:92vh;overflow:auto;max-width:560px;">
+    <div class="sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+      <div>
+        <div class="sheet-title">Items Sold</div>
+        <div class="sheet-code" id="items-sold-period-lbl">This period</div>
+      </div>
+      <button onclick="closeItemsSoldSheet()" class="stock-icon-btn" title="Close">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table class="items-sold-table">
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Item</th>
+            <th>BP</th>
+            <th>Selling Price</th>
+            <th>Profit Realized</th>
+          </tr>
+        </thead>
+        <tbody id="items-sold-tbody"></tbody>
+        <tfoot id="items-sold-tfoot"></tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ==============================================================
      PAGE: WISHLIST  (id="page-wishlist")
      Prospective items the business may stock later.
      ============================================================== -->
