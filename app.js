@@ -4752,16 +4752,30 @@ async function _renderDashSummary(ctx) {
   }
 
   const alertCount = outStk.length + lowStk.length;
-  const headlineParts = [];
-  if (totalItems === 0) headlineParts.push('Add your first items to start tracking stock and sales.');
-  else {
-    if (dayOpen && _dashPeriod === 'today') headlineParts.push('Day is open - record sales as they happen.');
-    else if (dayLabel) headlineParts.push(dayLabel + '.');
-    if (totalSalesCount > 0) headlineParts.push(periodLbl + ': ' + fmtN(totalSalesCount) + ' sales, ' + fmt(totalRevenue) + ' revenue.');
-    if (alertCount > 0) headlineParts.push(alertCount + ' stock alert' + (alertCount !== 1 ? 's' : '') + ' need attention.');
-    else if (totalItems > 0) headlineParts.push('Stock levels look healthy.');
+  const headlineChips = [];
+  if (totalItems === 0) {
+    headlineChips.push({ icon: 'box-open', text: 'Add items to start tracking', tone: 'muted' });
+  } else {
+    if (dayOpen && _dashPeriod === 'today') {
+      headlineChips.push({ icon: 'circle-dot', text: 'Day open', tone: 'open' });
+    } else if (activeDay) {
+      headlineChips.push({ icon: 'circle-pause', text: dayLabel, tone: 'muted' });
+    }
+    if (totalSalesCount > 0) {
+      headlineChips.push({ icon: 'chart-line', text: fmtN(totalSalesCount) + ' sales · ' + fmt(totalRevenue), tone: 'sales' });
+    }
+    if (alertCount > 0) {
+      headlineChips.push({ icon: 'triangle-exclamation', text: alertCount + ' stock alert' + (alertCount !== 1 ? 's' : ''), tone: 'warn' });
+    } else if (totalItems > 0) {
+      headlineChips.push({ icon: 'circle-check', text: 'Stock healthy', tone: 'ok' });
+    }
   }
-  setEl('d-summary-headline', headlineParts.join(' '));
+  const _headlineEl = document.getElementById('d-summary-headline');
+  if (_headlineEl) {
+    _headlineEl.innerHTML = headlineChips.map(c =>
+      '<span class="dash-hchip dash-hchip-' + c.tone + '"><i class="fa-solid fa-' + c.icon + '"></i>' + c.text + '</span>'
+    ).join('');
+  }
 
   const cards = [];
   cards.push(_dashSumCard('', fmtN(totalItems) + ' SKUs', 'Inventory', fmtN(totalQty) + ' pcs - retail ' + fmt(stockRetail), null, 'stock'));

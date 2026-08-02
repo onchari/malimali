@@ -3188,12 +3188,28 @@ body.photo-lightbox-open { overflow: hidden; }
   flex-shrink: 0;
 }
 .dash-summary-headline {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text2);
-  line-height: 1.45;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   margin: 0 0 12px;
 }
+.dash-hchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.dash-hchip i { font-size: 10px; }
+.dash-hchip-open  { background: rgba(30,122,62,0.13); color: var(--green); }
+.dash-hchip-sales { background: rgba(0,122,255,0.10); color: var(--accent); }
+.dash-hchip-ok    { background: rgba(30,122,62,0.10); color: var(--green); }
+.dash-hchip-warn  { background: rgba(245,158,11,0.13); color: var(--amber); }
+.dash-hchip-muted { background: var(--bg2); color: var(--muted); }
 .dash-summary-cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
