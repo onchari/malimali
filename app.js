@@ -9054,9 +9054,6 @@ function _renderReconcileInsights(data, today) {
         '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Should Have</div>' +
         '<div style="font-size:10px;color:var(--muted);line-height:2;margin-bottom:8px;">' +
           'Opening: <b>'+fmt(an.opTotal)+'</b><br>+ Sales: <b>'+fmt(sy.sysTotalRev)+'</b>' +
-          (cl.injected>0?'<br>+ Injected: <b>'+fmt(cl.injected)+'</b>':'') +
-          (cl.expenses>0?'<br>− Expenses: <b>'+fmt(cl.expenses)+'</b>':'') +
-          (cl.withdrawn>0?'<br>− Withdrawn: <b>'+fmt(cl.withdrawn)+'</b>':'') +
         '</div>' +
         '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--accent);border-top:1px solid var(--border);padding-top:8px;">'+fmt(an.correctDay)+'</div>' +
       '</div>' +
@@ -9244,12 +9241,15 @@ reconcileDay = async function() {
   const salesCount   = daySales.length;
   const margin       = sysTotalRev > 0 ? (sysTotalProf / sysTotalRev * 100) : 0;
 
+  // Expected total = Opening + Revenue only. Injected/expenses/withdrawn are
+  // NOT netted into this target - they're separate business transactions,
+  // not part of what the till "should" hold from opening + sales alone.
   const opTotal    = (data.opening.cash||0) + (data.opening.till||0) + (data.opening.mpesa||0);
-  const correctDay = opTotal + sysTotalRev + useInjected - useExpenses - useWithdrawn;
+  const correctDay = opTotal + sysTotalRev;
   const actualDay  = cash + till + mpesa;
   const variance   = actualDay - correctDay;
 
-  const expCash   = (data.opening.cash||0) + (data.opening.till||0) + sysCashRev + useInjected - useExpenses - useWithdrawn;
+  const expCash   = (data.opening.cash||0) + (data.opening.till||0) + sysCashRev;
   const expMpesa  = (data.opening.mpesa||0) + sysMpesaRev;
   const physCash  = cash + till;
   const physMpesa = mpesa;

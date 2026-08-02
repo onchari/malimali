@@ -4062,17 +4062,18 @@ body.photo-lightbox-open { overflow: hidden; }
 
 /* ── Reconciliation form ───────────────────────────────────── */
 .day-recon-header {
-  background: var(--accent);
+  background: var(--surface2);
   padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
 }
 .day-recon-header-title {
   font-size: 13px;
   font-weight: 800;
-  color: white;
+  color: var(--text);
 }
 .day-recon-header-sub {
   font-size: 10px;
-  color: rgba(255,255,255,.7);
+  color: var(--muted);
   margin-top: 2px;
 }
 .day-recon-fields {
