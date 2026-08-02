@@ -8945,19 +8945,12 @@ function _renderOpeningSummary(data) {
 function _renderReconcileInsights(data, today) {
   const el = document.getElementById('day-reconcile-insights');
   if (!el || !data || !data.closing) return;
-  const o  = data.opening;
   const cl = data.closing;
   const sy = data.system;
   const an = data.analysis || {};
   if (an.correctDay == null && an.correct != null) an.correctDay = an.correct;
   if (an.actualDay == null && an.exact != null) an.actualDay = an.exact;
   if (an.variance == null && an.correctDay != null) an.variance = (an.actualDay || 0) - (an.correctDay || 0);
-  an.expCash = an.expCash ?? 0;
-  an.expMpesa = an.expMpesa ?? 0;
-  an.physCash = an.physCash ?? ((cl.cash || 0) + (cl.till || 0));
-  an.physMpesa = an.physMpesa ?? (cl.mpesa || 0);
-  an.cashVar = an.cashVar ?? (an.physCash - an.expCash);
-  an.mpesaVar = an.mpesaVar ?? (an.physMpesa - an.expMpesa);
   an.netMove = an.netMove ?? 0;
   an.opTotal = an.opTotal ?? 0;
 
@@ -8969,39 +8962,6 @@ function _renderReconcileInsights(data, today) {
   const vl   = isOk ? 'Balanced'
              : an.variance > 0 ? '+'+fmt(an.variance)+' surplus'
              : fmt(absV)+' short';
-  const clf  = v => Math.abs(v) <= 5 ? 'rc-ok' : Math.abs(v) <= 300 ? 'rc-warn' : 'rc-bad';
-
-  // ── Per-pocket row ─────────────────────────────────────
-  const pocketRow = (icon, lbl, opening, expected, physical) => {
-    const v   = physical - expected;
-    const cls = clf(v);
-    const vs  = Math.abs(v) <= 5 ? 'OK' : v > 0 ? 'Up +'+fmt(v) : 'Down -'+fmt(Math.abs(v));
-    const vc2 = Math.abs(v) <= 5 ? 'var(--green)' : v > 0 ? '#d97706' : 'var(--red)';
-    return '<div class="'+cls+'" style="padding:10px 12px;border-bottom:1px solid var(--border);">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">' +
-        '<div style="display:flex;align-items:center;gap:7px;">' +
-          '<span style="font-size:15px;">'+icon+'</span>' +
-          '<span style="font-size:12px;font-weight:800;color:var(--text);">'+lbl+'</span>' +
-        '</div>' +
-        '<span style="font-size:11px;font-weight:800;color:'+vc2+';">'+vs+'</span>' +
-      '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;text-align:center;">' +
-        '<div style="background:var(--surface2);border-radius:var(--r);padding:5px 4px;">' +
-          '<div style="font-size:12px;font-weight:900;font-family:var(--mono);color:var(--muted);">'+fmt(opening)+'</div>' +
-          '<div style="font-size:9px;color:var(--muted);margin-top:1px;font-weight:600;text-transform:uppercase;">Opening</div>' +
-        '</div>' +
-        '<div style="background:#eef4ff;border-radius:var(--r);padding:5px 4px;">' +
-          '<div style="font-size:12px;font-weight:900;font-family:var(--mono);color:var(--accent);">'+fmt(expected)+'</div>' +
-          '<div style="font-size:9px;color:var(--muted);margin-top:1px;font-weight:600;text-transform:uppercase;">Expected</div>' +
-        '</div>' +
-        '<div style="background:'+(Math.abs(v)<=5?'var(--green-light)':Math.abs(v)<=300?'#fef3c7':'var(--red-light)')+';border-radius:var(--r);padding:5px 4px;">' +
-          '<div style="font-size:12px;font-weight:900;font-family:var(--mono);color:'+vc2+';">'+fmt(physical)+'</div>' +
-          '<div style="font-size:9px;color:var(--muted);margin-top:1px;font-weight:600;text-transform:uppercase;">Physical</div>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-  };
-
   // ── Insights ──────────────────────────────────────────
   const ins = [];
   // Show the working behind the verdict, not just the conclusion - one line per calculation.
@@ -9018,12 +8978,6 @@ function _renderReconcileInsights(data, today) {
   } else {
     ins.push({i:'',c:'rc-bad', t:'Short by '+fmt(absV)+'. Less cash than expected. Check for unrecorded expense, undeclared withdrawal, or theft.'});
   }
-  if (Math.abs(an.cashVar)  > 50 && Math.abs(an.mpesaVar) <= 50)
-    ins.push({i:'',c:clf(an.cashVar),  t:'Cash discrepancy ('+fmt(Math.abs(an.cashVar))+'). M-Pesa is balanced - issue is in physical cash.'});
-  if (Math.abs(an.mpesaVar) > 50 && Math.abs(an.cashVar)  <= 50)
-    ins.push({i:'',c:clf(an.mpesaVar), t:'M-Pesa discrepancy ('+fmt(Math.abs(an.mpesaVar))+'). Cash is balanced - check M-Pesa statement.'});
-  if (Math.abs(an.cashVar)  > 50 && Math.abs(an.mpesaVar) > 50)
-    ins.push({i:'',c:'rc-bad',         t:'Both Cash and M-Pesa are off. Recount everything carefully.'});
   if (cl.expenses > 0 && sy.sysTotalRev > 0 && cl.expenses > sy.sysTotalRev * 0.35)
     ins.push({i:'',c:'rc-warn',t:'Expenses ('+fmt(cl.expenses)+') are '+((cl.expenses/sy.sysTotalRev)*100).toFixed(0)+'% of revenue - high for today.'});
   if (sy.margin < 10 && sy.sysTotalRev > 0)
@@ -9078,13 +9032,6 @@ function _renderReconcileInsights(data, today) {
     '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:'+(isOk?'var(--green-light)':isWn?'#fef3c7':'var(--red-light)')+';border:1.5px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';border-radius:var(--r-lg);margin-bottom:8px;">' +
       '<span style="font-size:13px;font-weight:800;color:'+vc+';">Variance</span>' +
       '<span style="font-size:20px;font-weight:900;font-family:var(--mono);color:'+vc+';">'+vi+' '+vl+'</span>' +
-    '</div>' +
-
-    // ── Per-pocket detail ───────────────────────────────
-    '<div class="day-section-label">Pocket Detail</div>' +
-    '<div style="border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;margin-bottom:8px;">' +
-      pocketRow('', 'Cash (Hand + Till)', (o.cash||0)+(o.till||0), an.expCash,  an.physCash) +
-      pocketRow('', 'M-Pesa Float',        o.mpesa||0,              an.expMpesa, an.physMpesa) +
     '</div>' +
 
     // ── Insights ─────────────────────────────────────────
@@ -9251,20 +9198,17 @@ reconcileDay = async function() {
   const salesCount   = daySales.length;
   const margin       = sysTotalRev > 0 ? (sysTotalProf / sysTotalRev * 100) : 0;
 
-  // Expected total = Opening + Revenue only.
+  // Expected total = Opening + Revenue only. Reconciliation checks the
+  // day's TOTAL money, not per-pocket - cash/till/mpesa balances shift
+  // around between each other during the day (e.g. topping up M-Pesa
+  // float from cash), so a per-pocket "expected vs physical" check would
+  // flag normal transfers as if they were discrepancies.
   const opTotal    = (data.opening.cash||0) + (data.opening.till||0) + (data.opening.mpesa||0);
   const correctDay = opTotal + sysTotalRev;
   // Actual/"Day Money" = Injected + Cash + Till + M-Pesa + Expenses + Withdrawn.
   const actualDay  = useInjected + cash + till + mpesa + useExpenses + useWithdrawn;
   const variance   = actualDay - correctDay;
-
-  const expCash   = (data.opening.cash||0) + (data.opening.till||0) + sysCashRev;
-  const expMpesa  = (data.opening.mpesa||0) + sysMpesaRev;
-  const physCash  = cash + till;
-  const physMpesa = mpesa;
-  const cashVar   = physCash - expCash;
-  const mpesaVar  = physMpesa - expMpesa;
-  const netMove   = sysTotalRev + useInjected - useExpenses - useWithdrawn;
+  const netMove    = sysTotalRev + useInjected - useExpenses - useWithdrawn;
 
   _saveDayRecon(today, {
     step: 'reconciled', date: today,
@@ -9272,7 +9216,7 @@ reconcileDay = async function() {
     reconciledAt: new Date().toISOString(),
     closing: { injected: useInjected, cash, till, mpesa, expenses: useExpenses, withdrawn: useWithdrawn },
     system: { sysCashRev, sysMpesaRev, sysTotalRev, sysTotalProf, salesCount, margin },
-    analysis: { opTotal, correctDay, actualDay, variance, expCash, expMpesa, physCash, physMpesa, cashVar, mpesaVar, netMove }
+    analysis: { opTotal, correctDay, actualDay, variance, netMove }
   });
 
   await _doCloseDay();
