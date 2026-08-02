@@ -665,13 +665,13 @@
 
 /* Photo box */
 #page-add .add-card-photo .add-photo-box {
-  height: 72px;
+  height: 92px;
 }
 #page-add .add-card-photo .add-photo-ph-icon {
-  font-size: 18px;
+  font-size: 22px;
 }
 #page-add .add-card-photo .add-photo-ph-text {
-  font-size: 11px;
+  font-size: 12px;
 }
 .add-photo-box {
   width: 100%;

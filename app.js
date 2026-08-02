@@ -5165,6 +5165,14 @@ async function confirmOffStockSale() {
   toast('Sale recorded - monitor marked NOT ACCOUNTED', 'ok');
 }
 
+// Shows the "enter buy price" field only when the item/size has no cost on record yet.
+function _toggleSmBuyField(currentBuy) {
+  const field = document.getElementById('sm-buy-field');
+  const input = document.getElementById('sm-buy');
+  if (input) input.value = '';
+  if (field) field.style.display = (currentBuy > 0) ? 'none' : '';
+}
+
 async function openSellModal(itemId) {
   try {
   const item = await dbGet('items', itemId);
@@ -5191,6 +5199,7 @@ async function openSellModal(itemId) {
   document.getElementById('sm-qty').min = 0;
   document.getElementById('sm-qty').max = item.qty;
   document.getElementById('sm-actual').value = '';
+  _toggleSmBuyField(_itemBuy);
   updateSellModal();
   document.getElementById('sell-modal').classList.add('open');
   } catch(e) { console.error("[openSellModal]", e); toast("Error: " + e.message, "err"); }
@@ -5211,7 +5220,9 @@ async function updateSellModal() {
   const item = await dbGet('items', currentSellItemId);
   // For shoe sales use the specific size record prices & stock
   const basePrice = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.sellPrice || item.sellPrice || item.sell || 0) : (item.sell || item.sellPrice || 0);
-  const baseBuy   = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.buyPrice  || item.buyPrice  || item.buy  || 0) : (item.buy  || item.buyPrice  || 0);
+  const buyOnRecord = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.buyPrice  || item.buyPrice  || item.buy  || 0) : (item.buy  || item.buyPrice  || 0);
+  const buyRaw    = parseFloat(document.getElementById('sm-buy')?.value);
+  const baseBuy   = (!isNaN(buyRaw) && buyRaw >= 0) ? buyRaw : buyOnRecord;
   const maxStock  = (_isShoeSale && _sellShoeSize) ? (_sellShoeSize.qty || 0) : (item.qty || 0);
   const qtyEl = document.getElementById('sm-qty');
   let qty = parseInt(qtyEl?.value || '0');
@@ -5275,16 +5286,21 @@ async function confirmSale() {
   // ── Read form values ───────────────────────────────────────────
   const qtyEl     = document.getElementById('sm-qty');
   const actualEl  = document.getElementById('sm-actual');
+  const buyEl     = document.getElementById('sm-buy');
   const qty       = parseInt(qtyEl?.value || '0');
   const actualRaw = parseFloat(actualEl?.value || '');
+  const buyEntered = parseFloat(buyEl?.value || '');
 
   // ── Prices - use normalized sellPrice/buyPrice ─────────────────
   const sellPrice = _isShoeSale && _sellShoeSize
     ? (_sellShoeSize.sellPrice || item.sellPrice || item.sell || 0)
     : (item.sellPrice || item.sell || 0);
-  const buyPrice  = _isShoeSale && _sellShoeSize
+  const buyOnRecord = _isShoeSale && _sellShoeSize
     ? (_sellShoeSize.buyPrice  || item.buyPrice  || item.buy  || 0)
     : (item.buyPrice  || item.buy  || 0);
+  // If there was no buy price on record, use whatever the user entered at sell time and save it.
+  const buyPriceEntered = buyOnRecord <= 0 && !isNaN(buyEntered) && buyEntered >= 0;
+  const buyPrice = buyPriceEntered ? buyEntered : buyOnRecord;
 
   const priceUsed = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : sellPrice;
 
@@ -5329,6 +5345,17 @@ async function confirmSale() {
     businessDate:  todayDateStr(), // auto-assigned by date
     date:          new Date().toISOString(),
   };
+
+  // ── Persist a newly-entered buy price so future sales use it ────
+  if (buyPriceEntered) {
+    if (_isShoeSale && _sellShoeSize) {
+      _sellShoeSize.buyPrice = buyPrice;
+      _sellShoeSize.profit   = sellPrice - buyPrice;
+    } else {
+      item.buyPrice = buyPrice;
+      item.profit   = sellPrice - buyPrice;
+    }
+  }
 
   // ── Deduct stock ───────────────────────────────────────────────
   if (_isShoeSale && _sellShoeSize) {
@@ -9734,6 +9761,7 @@ async function openSellShoeModal(itemId, size) {
   if (el('sm-cur'))   el('sm-cur').textContent   = currency;
   if (el('sm-qty'))   { el('sm-qty').value = 0; el('sm-qty').min = 0; el('sm-qty').max = sizeRec.qty; }
   if (el('sm-actual')) el('sm-actual').value = '';
+  _toggleSmBuyField(sizeRec.buyPrice || item.buyPrice || 0);
   const sellModal = document.getElementById('sell-modal');
   if (sellModal) sellModal.classList.add('open');
   updateSellModal();

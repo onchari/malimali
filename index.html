@@ -1492,6 +1492,30 @@
       </div>
     </div>
 
+    <!-- Buy price entry - only shown when the item has no buy price on record -->
+    <div id="sm-buy-field" style="margin-bottom:14px;display:none;">
+      <div style="display:flex;align-items:center;border:2px solid var(--border);
+                  border-radius:var(--r);overflow:hidden;background:var(--surface);">
+        <span style="padding:0 12px;font-size:13px;font-weight:700;font-family:var(--mono);
+                     color:var(--text2);background:var(--surface2);
+                     border-right:2px solid var(--border);min-height:50px;
+                     display:flex;align-items:center;">
+          KES
+        </span>
+        <input id="sm-buy" type="number"
+               placeholder="Buy price (optional)"
+               aria-label="Buy price"
+               min="0" inputmode="decimal"
+               style="flex:1;border:none;font-size:15px;font-weight:600;
+                      font-family:var(--mono);color:var(--text);background:transparent;
+                      outline:none;padding:13px 14px;"
+               oninput="updateSellModal()">
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;padding:0 2px;">
+        No buy price on record - enter it to track profit accurately
+      </div>
+    </div>
+
     <!-- Optional price override -->
     <div style="margin-bottom:14px;">
       <div style="display:flex;align-items:center;border:2px solid var(--border);
