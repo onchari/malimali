@@ -8882,6 +8882,7 @@ openDay = async function() {
   const data  = _getDayRecon(today);
   if (!data) {
     _saveDayRecon(today, { step: 'opening_form', date: today });
+    _clearOpeningInputsOnly(); // fresh day - always start the opening form at 0
   }
   renderDayState();
 };
@@ -8892,6 +8893,7 @@ function initCloseDay() {
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
   const data  = _getDayRecon(today) || {};
   _saveDayRecon(today, {...data, step: 'closing_form' });
+  _clearClosingInputsOnly(); // fresh closing attempt - always start at 0 (auto-fill from Finance still applies after)
   renderDayState();
 }
 window.initCloseDay = initCloseDay;
@@ -9046,6 +9048,11 @@ function _renderReconcileInsights(data, today) {
 // ── Auto-close at 11:59 PM ───────────────────────────────────────
 function _clearClosingInputsOnly() {
   ['cl-injected','cl-cash','cl-till','cl-mpesa','cl-expenses','cl-withdrawn']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = '0'; });
+}
+
+function _clearOpeningInputsOnly() {
+  ['op-cash','op-till','op-mpesa']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = '0'; });
 }
 
