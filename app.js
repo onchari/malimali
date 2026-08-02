@@ -559,16 +559,23 @@ function applyAddFormFootwearUI(isShoe) {
   const shoePanel  = UI.el('shoe-size-panel');
   const stdPricing = UI.el('std-pricing-section');
   const sizeField  = document.getElementById('f-size-field');
+  const vtField    = document.getElementById('variant-type-field');
+  const gvPanel    = document.getElementById('general-variant-panel');
   const inRestock  = pageAdd?.classList.contains('restock-mode');
   if (inRestock) {
     if (shoePanel) shoePanel.style.display = 'none';
     if (stdPricing) stdPricing.style.display = 'block';
+    if (vtField) vtField.style.display = 'none';
+    if (gvPanel) gvPanel.style.display = 'none';
     return;
   }
   if (isShoe) {
     if (shoePanel) shoePanel.style.removeProperty('display');
     if (stdPricing) stdPricing.style.display = 'none';
     if (sizeField) sizeField.style.display = 'none';
+    if (vtField) vtField.style.display = 'none';
+    if (gvPanel) gvPanel.style.display = 'none';
+    _variantState.reset();
     renderShoeGroupButtons();
     prepareShoeSizePickerUI();
     showShoePricingPanel();
@@ -576,8 +583,16 @@ function applyAddFormFootwearUI(isShoe) {
     updateShoeCollectiveSummary();
   } else {
     if (shoePanel) shoePanel.style.display = 'none';
-    if (stdPricing) stdPricing.style.removeProperty('display');
     if (sizeField) sizeField.style.removeProperty('display');
+    if (vtField) vtField.style.removeProperty('display');
+    // std-pricing hidden only if a variant type is already chosen
+    if (_variantState.variantType) {
+      if (stdPricing) stdPricing.style.display = 'none';
+      if (gvPanel) gvPanel.style.removeProperty('display');
+    } else {
+      if (stdPricing) stdPricing.style.removeProperty('display');
+      if (gvPanel) gvPanel.style.display = 'none';
+    }
   }
 }
 
@@ -863,6 +878,16 @@ class ShoeState {
   }
 }
 
+// ── VariantState: manages general (non-shoe) variant selection ─────
+class VariantState {
+  constructor() { this.reset(); }
+  reset() {
+    this.variantType = ''; // e.g. 'Color', 'Size', 'Brand'
+    this.variants    = []; // [{label:string}] — qty/buy/sell read from DOM inputs
+  }
+  get hasSelection() { return this.variants.length > 0; }
+}
+
 // ── Standard 4: SavingOverlay class - progress UI ──────────────────
 class SavingOverlay {
   constructor() {
@@ -911,8 +936,9 @@ class SavingOverlay {
 }
 
 // ── Singleton instances ─────────────────────────────────────────────
-const _overlay   = new SavingOverlay();
-const _shoeState = new ShoeState();
+const _overlay       = new SavingOverlay();
+const _shoeState     = new ShoeState();
+const _variantState  = new VariantState();
 
 // ── Standard 5: DRY - single UI refresh chain ──────────────────────
 // Replaces 15+ repeated blocks of:
@@ -3312,6 +3338,21 @@ async function saveItem() {
       toast(''+savedCount+' shoe size(s) saved!','ok');return;
     }
 
+    // VARIANT MODE (non-footwear items with variants)
+    if (_variantState.variantType && _variantState.variants.length > 0) {
+      const savedCount = await saveVariantItems(code, name, type);
+      if (!savedCount) return;
+      clearForm();
+      clearAddFormPhoto();
+      allItems = await dbAll('items');
+      await enrichShoeItems(allItems);
+      renderList(); renderDashboard(); updateHeader(); scheduleSync();
+      await renderWishlistPage();
+      await renderStockMonitorSummary();
+      toast('' + savedCount + ' variant(s) saved!', 'ok');
+      return;
+    }
+
     // STANDARD ADD / EDIT - only code and name are required; size, qty, buy and sell are optional
     const size=UI.el('f-size')?.value.trim()||'';
     const qtyRaw=UI.el('f-qty')?.value||'';
@@ -3827,6 +3868,91 @@ async function renderList() {
                 <div class="item-right">
                   <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent2);">${fmt(price)}</div>
                   <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px;">Buy: ${fmt(buy)}</div>
+                </div>
+              </div>
+            </div>`);
+        });
+        cards.push('<div style="height:6px;"></div>');
+      }
+
+    } else if (item.hasVariants) {
+      // ── GENERAL VARIANT ITEM - expandable like footwear ───────────
+      const variants = allSizes
+        .filter(s => s.itemCode === item.code)
+        .sort((a, b) => String(a.sizeGroup||'').localeCompare(String(b.sizeGroup||'')));
+
+      if (!variants.length) {
+        cards.push(`
+          <div class="item-card" onclick="openSheet(${item.id})">
+            <div class="item-top">
+              <div class="item-icon" style="background:${t.color||'var(--surface2)'};">${t.emoji}</div>
+              <div class="item-body">
+                <div class="item-code">${escapeHtml(item.code)}</div>
+                <div class="item-name">${escapeHtml(item.name||'')}</div>
+                <div class="item-tags">
+                  <span class="tag tag-cyan">${escapeHtml(item.type)}</span>
+                  <span class="tag tag-gray">No variants</span>
+                </div>
+              </div>
+            </div>
+          </div>`);
+        continue;
+      }
+
+      const groupTotalPcs = variants.reduce((s,v) => s+(v.qty||0), 0);
+      const groupSoldPcs  = variants.reduce((s,v) => s+(salesBySize[item.code+'_'+v.sizeGroup]||0), 0);
+      const groupRevenue  = allSales.filter(s=>s.itemCode===item.code).reduce((s,x)=>s+(x.revenue||0),0);
+      const allOut  = variants.every(v => v.qty <= 0);
+      const hasOut  = variants.some(v => v.qty <= 0);
+      const isExpanded = (UI.el('search')?.value||'').length > 0 || (_expandedShoeGroups&&_expandedShoeGroups.has(item.code));
+
+      cards.push(`
+        <div class="shoe-group-header" onclick="toggleShoeGroup('${escapeHtml(item.code)}')" style="cursor:pointer;">
+          <div class="shoe-group-icon" style="background:${t.color||'#334155'};">${t.emoji}</div>
+          <div class="shoe-group-info" style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="shoe-group-code">${escapeHtml(item.code)}</span>
+              ${allOut?'<span style="font-size:9px;background:var(--red);color:white;padding:1px 6px;border-radius:10px;font-weight:700;">OUT</span>':hasOut?'<span style="font-size:9px;background:#d97706;color:white;padding:1px 6px;border-radius:10px;font-weight:700;">PARTIAL</span>':''}
+            </div>
+            <span class="shoe-group-name">${escapeHtml(item.name||'')}</span>
+            <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;">
+              <span>${variants.length} ${escapeHtml(item.variantType||'variant')}${variants.length!==1?'s':''}</span>
+              <span>${groupTotalPcs} pcs</span>
+              <span>Sold ${groupSoldPcs}</span>
+              <span style="color:var(--accent2);">${fmt(groupRevenue)}</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+            <span class="tag tag-cyan" style="font-size:10px;">${escapeHtml(item.variantType||'Variants')}</span>
+            <span style="font-size:16px;color:var(--muted);transition:transform .2s;display:inline-block;transform:rotate(${isExpanded?180:0}deg);">▼</span>
+          </div>
+        </div>`);
+
+      if (!isExpanded) { cards.push('<div style="height:4px;"></div>'); }
+      else {
+        variants.forEach(v => {
+          const isOut = v.qty <= 0;
+          const isLow = !isOut && v.qty <= LOW_STOCK_LEVEL;
+          const sc    = isOut ? 'tag-red' : isLow ? 'tag-amber' : 'tag-green';
+          const sl    = isOut ? 'Out' : v.qty + ' pcs';
+          const sq    = salesBySize[item.code+'_'+v.sizeGroup] || 0;
+          const sp    = v.sellPrice || item.sellPrice || 0;
+          const bp    = v.buyPrice  || item.buyPrice  || 0;
+          cards.push(`
+            <div class="item-card shoe-size-row${isOut?' shoe-out-card':''}" onclick="openSheet(${item.id})">
+              ${isOut?'<div class="out-of-stock-overlay"><span>OUT OF STOCK - RESTOCK</span></div>':''}
+              <div class="item-top">
+                <div class="variant-badge ${isOut?'out':isLow?'low':''}">${escapeHtml(v.sizeGroup||'?')}</div>
+                <div class="item-body">
+                  <div class="item-code">${escapeHtml(item.name||item.code)}</div>
+                  <div class="item-tags">
+                    <span class="tag tag-gray">${sq} sold</span>
+                    <span class="tag ${sc}">${sl}</span>
+                  </div>
+                </div>
+                <div class="item-right">
+                  <div style="font-size:14px;font-weight:900;font-family:var(--mono);color:var(--accent2);">${fmt(sp)}</div>
+                  <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px;">Buy: ${fmt(bp)}</div>
                 </div>
               </div>
             </div>`);
@@ -8971,6 +9097,160 @@ function toggleTypeGroup(parentTypeId) {
   renderList();
 }
 window.toggleTypeGroup = toggleTypeGroup;
+
+// ══════════════════════════════════════════════════════════════════
+// GENERAL VARIANT UI FUNCTIONS
+// ══════════════════════════════════════════════════════════════════
+
+function setVariantType(vtype) {
+  _variantState.variantType = vtype;
+  _variantState.variants = [];
+  document.querySelectorAll('#variant-type-pills .vt-pill').forEach(b => {
+    b.classList.toggle('active', b.textContent.trim() === (vtype || 'None'));
+  });
+  const gvPanel    = document.getElementById('general-variant-panel');
+  const stdPricing = document.getElementById('std-pricing-section');
+  const sizeField  = document.getElementById('f-size-field');
+  if (vtype) {
+    if (gvPanel)    gvPanel.style.removeProperty('display');
+    if (stdPricing) stdPricing.style.display = 'none';
+    if (sizeField)  sizeField.style.display = 'none';
+    renderVariantList();
+  } else {
+    if (gvPanel)    gvPanel.style.display = 'none';
+    if (stdPricing) stdPricing.style.removeProperty('display');
+    if (sizeField)  sizeField.style.removeProperty('display');
+  }
+}
+window.setVariantType = setVariantType;
+
+function addVariantValue() {
+  const input = document.getElementById('gv-add-input');
+  const label = (input?.value || '').trim();
+  if (!label) { input?.focus(); return; }
+  if (_variantState.variants.find(v => v.label.toLowerCase() === label.toLowerCase())) {
+    toast('"' + label + '" already added', 'err'); return;
+  }
+  _variantState.variants.push({ label });
+  if (input) input.value = '';
+  renderVariantList();
+  input?.focus();
+}
+window.addVariantValue = addVariantValue;
+
+function removeVariantValue(idx) {
+  _variantState.variants.splice(idx, 1);
+  renderVariantList();
+}
+window.removeVariantValue = removeVariantValue;
+
+function renderVariantList() {
+  const container = document.getElementById('gv-items-list');
+  if (!container) return;
+  const vs = _variantState.variants;
+  const summary = document.getElementById('gv-stock-summary');
+  if (!vs.length) {
+    container.innerHTML = '<div class="gv-empty">No variants yet — type a value above and tap <strong>+</strong></div>';
+    if (summary) summary.style.display = 'none';
+    const saveBtn = UI.el('save-btn');
+    if (saveBtn) setSaveBtnLabel('Save');
+    return;
+  }
+  container.innerHTML = `
+    <div class="gv-row-hdr"><span>${_variantState.variantType||'Variant'}</span><span>Qty</span><span>Buy</span><span>Sell</span><span></span></div>
+    ${vs.map((v, i) => `
+    <div class="gv-row">
+      <div class="gv-label">${escapeHtml(v.label)}</div>
+      <input type="number" class="gv-cell" id="gv-qty-${i}" min="0" inputmode="numeric" placeholder="0" oninput="updateVariantSummary()">
+      <input type="number" class="gv-cell" id="gv-buy-${i}" min="0" inputmode="decimal" placeholder="0" oninput="updateVariantSummary()">
+      <input type="number" class="gv-cell" id="gv-sell-${i}" min="0" inputmode="decimal" placeholder="0" oninput="updateVariantSummary()">
+      <button type="button" class="gv-remove" onclick="removeVariantValue(${i})" title="Remove">×</button>
+    </div>`).join('')}`;
+  if (summary) summary.style.display = 'block';
+  updateVariantSummary();
+}
+window.renderVariantList = renderVariantList;
+
+function updateVariantSummary() {
+  let totalQty = 0, buySum = 0, sellSum = 0, priced = 0;
+  _variantState.variants.forEach((v, i) => {
+    const q = parseInt(document.getElementById('gv-qty-'  + i)?.value || '0') || 0;
+    const b = parseFloat(document.getElementById('gv-buy-' + i)?.value || '0') || 0;
+    const s = parseFloat(document.getElementById('gv-sell-'+ i)?.value || '0') || 0;
+    totalQty += q;
+    if (b > 0 || s > 0) { buySum += b; sellSum += s; priced++; }
+  });
+  const qEl = document.getElementById('gv-metric-qty');
+  const bEl = document.getElementById('gv-metric-bp');
+  const sEl = document.getElementById('gv-metric-sp');
+  if (qEl) qEl.textContent = String(totalQty);
+  if (bEl) bEl.textContent = priced ? fmt(Math.round(buySum / priced)) : '-';
+  if (sEl) sEl.textContent = priced ? fmt(Math.round(sellSum / priced)) : '-';
+  const saveBtn = UI.el('save-btn');
+  const n = _variantState.variants.length;
+  if (saveBtn && n > 0) setSaveBtnLabel('Save ' + n + ' variant' + (n !== 1 ? 's' : ''));
+}
+window.updateVariantSummary = updateVariantSummary;
+
+async function saveVariantItems(baseCode, baseName, type) {
+  const vs = _variantState.variants.map((v, i) => ({
+    label: v.label,
+    qty:   parseInt(document.getElementById('gv-qty-'  + i)?.value || '0') || 0,
+    buy:   parseFloat(document.getElementById('gv-buy-' + i)?.value || '0') || 0,
+    sell:  parseFloat(document.getElementById('gv-sell-'+ i)?.value || '0') || 0,
+  }));
+  if (!vs.length) { toast('Add at least one variant', 'err'); return false; }
+  for (const v of vs) {
+    if (v.qty  < 0) { toast(v.label + ': qty cannot be negative', 'err');  return false; }
+    if (v.buy  < 0) { toast(v.label + ': buy cannot be negative', 'err');  return false; }
+    if (v.sell < 0) { toast(v.label + ': sell cannot be negative', 'err'); return false; }
+    if (v.buy > 0 && v.sell > 0 && v.sell < v.buy) { toast(v.label + ': sell < buy', 'err'); return false; }
+  }
+  const variantType = _variantState.variantType;
+  const allItms = await dbAll('items');
+  let product = allItms.find(i => i.code === baseCode);
+  if (!product) {
+    const avgBuy  = vs.reduce((s,v)=>s+v.buy,  0) / vs.length;
+    const avgSell = vs.reduce((s,v)=>s+v.sell, 0) / vs.length;
+    const pid = await dbAdd('items', {
+      code: baseCode, name: baseName || (type + ' ' + baseCode),
+      type, category: type,
+      isShoe: false, hasVariants: true, variantType,
+      buyPrice: Math.round(avgBuy), sellPrice: Math.round(avgSell),
+      profit: Math.round(avgSell - avgBuy), qty: 0,
+      createdAt: new Date().toISOString(),
+    });
+    product = await dbGet('items', pid);
+  } else {
+    product.hasVariants = true;
+    product.variantType = variantType;
+    await dbPut('items', product);
+  }
+  let saved = 0, stockCost = 0, stockQty = 0;
+  for (const v of vs) {
+    await upsertShoeSize({
+      itemCode: baseCode, itemId: product.id,
+      size: 0, sizeGroup: v.label, variantType,
+      qty: v.qty, buyPrice: v.buy, sellPrice: v.sell,
+      profit: v.sell - v.buy,
+      codeSize: baseCode + '_' + v.label,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }, { addQty: true });
+    saved++;
+    stockCost += v.qty * v.buy;
+    stockQty  += v.qty;
+  }
+  const allSz = await getShoeSizes(baseCode);
+  product.qty = allSz.reduce((t, s) => t + s.qty, 0);
+  await dbPut('items', product);
+  await recordStockInvestment(product, stockCost, stockQty, variantType + ' stock');
+  await markWishlistStockedForItem(product);
+  fbSyncItem(product);
+  if (_addFormPhotoData && product?.id) await setItemPhoto(product.id, _addFormPhotoData);
+  _variantState.reset();
+  return saved;
+}
+window.saveVariantItems = saveVariantItems;
 
 function setSizeGroupFilter(group) {
   window._activeSizeGroupFilter = group;

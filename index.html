@@ -830,6 +830,54 @@
     </div>
   </div>
 
+  <!-- ── Variant type selector (non-footwear) ─────────────────── -->
+  <div id="variant-type-field" class="add-card" style="display:none;">
+    <h2 class="add-card-title"><span class="add-step-badge">3</span> Variants</h2>
+    <div class="vt-pills" id="variant-type-pills">
+      <button type="button" class="vt-pill active" onclick="setVariantType('')">None</button>
+      <button type="button" class="vt-pill" onclick="setVariantType('Size')">Size</button>
+      <button type="button" class="vt-pill" onclick="setVariantType('Number')">Number</button>
+      <button type="button" class="vt-pill" onclick="setVariantType('Design')">Design</button>
+      <button type="button" class="vt-pill" onclick="setVariantType('Color')">Color</button>
+      <button type="button" class="vt-pill" onclick="setVariantType('Brand')">Brand</button>
+      <button type="button" class="vt-pill" onclick="setVariantType('Material')">Material</button>
+      <button type="button" class="vt-pill" onclick="setVariantType('Mode')">Mode</button>
+      <button type="button" class="vt-pill" onclick="setVariantType('Type')">Type</button>
+    </div>
+  </div>
+
+  <!-- ── General variant panel ─────────────────────────────────── -->
+  <div id="general-variant-panel" class="add-card add-card-shoe" style="display:none;">
+    <div class="gv-add-row">
+      <input type="text" id="gv-add-input" class="add-input gv-add-input"
+             placeholder="Type variant value (e.g. Red, XL, Nike…)"
+             autocomplete="off" spellcheck="false"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();addVariantValue();}">
+      <button type="button" class="gv-add-btn" onclick="addVariantValue()">
+        <i class="fa-solid fa-plus"></i>
+      </button>
+    </div>
+    <div id="gv-items-list" class="gv-items-list">
+      <div class="gv-empty">No variants yet — type a value above and tap <strong>+</strong></div>
+    </div>
+    <div id="gv-stock-summary" class="shoe-stock-summary" style="display:none;">
+      <div class="shoe-stock-metrics">
+        <div class="shoe-metric">
+          <span class="shoe-metric-lbl">Total Qty</span>
+          <strong id="gv-metric-qty" class="shoe-metric-val">0</strong>
+        </div>
+        <div class="shoe-metric">
+          <span class="shoe-metric-lbl">Avg Buy</span>
+          <strong id="gv-metric-bp" class="shoe-metric-val">-</strong>
+        </div>
+        <div class="shoe-metric">
+          <span class="shoe-metric-lbl">Avg Sell</span>
+          <strong id="gv-metric-sp" class="shoe-metric-val">-</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Step 3: Stock & pricing (standard items) -->
   <section id="std-pricing-section" class="add-card">
     <h2 class="add-card-title"><span class="add-step-badge">3</span> Stock</h2>

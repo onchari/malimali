@@ -3708,6 +3708,123 @@ body.photo-lightbox-open { overflow: hidden; }
 /* Even/odd for multiple shoe groups */
 #item-list > .shoe-group-header:nth-of-type(even) { background: #1a3352; }
 
+/* ── Variant type pills ──────────────────────────────────────────── */
+.vt-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0 2px;
+}
+.vt-pill {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.vt-pill.active,
+.vt-pill:active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* ── General variant panel ───────────────────────────────────────── */
+.gv-add-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.gv-add-input { flex: 1; }
+.gv-add-btn {
+  width: 40px; height: 40px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+}
+.gv-add-btn:active { opacity: .8; }
+.gv-empty {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  padding: 16px 0;
+}
+.gv-items-list { margin-bottom: 8px; }
+.gv-row-hdr {
+  display: grid;
+  grid-template-columns: 1fr 60px 70px 70px 28px;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  padding: 0 2px 4px;
+}
+.gv-row {
+  display: grid;
+  grid-template-columns: 1fr 60px 70px 70px 28px;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.gv-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gv-cell {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 4px;
+  font-size: 12px;
+  font-family: var(--mono);
+  text-align: center;
+  background: var(--bg);
+}
+.gv-remove {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--muted);
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.gv-remove:active { background: var(--red); color: white; }
+
+/* Variant badge in stock list rows (mirrors shoe-size-badge) */
+.variant-badge {
+  min-width: 44px; height: 44px;
+  border-radius: 8px;
+  border: 2px solid var(--accent);
+  background: rgba(30,122,62,.08);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 900;
+  font-family: var(--mono);
+  display: flex; align-items: center; justify-content: center;
+  text-align: center;
+  flex-shrink: 0;
+  padding: 0 4px;
+}
+.variant-badge.low { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+.variant-badge.out { background: #fee2e2; border-color: #fca5a5; color: #991b1b; opacity: .8; }
+
 /* Sub-category expandable group header (mirrors shoe-group-header) */
 .type-group-header {
   display: flex;
