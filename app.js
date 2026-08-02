@@ -9004,12 +9004,12 @@ function _renderReconcileInsights(data, today) {
 
   // ── Insights ──────────────────────────────────────────
   const ins = [];
-  // Show the working behind the verdict, not just the conclusion.
+  // Show the working behind the verdict, not just the conclusion - one line per calculation.
   ins.push({i:'', c:'rc-info', t:
-    'Should have ' + fmt(an.correctDay) + ' (Opening ' + fmt(an.opTotal) + ' + Sales ' + fmt(sy.sysTotalRev) + '). ' +
-    'Actually have ' + fmt(an.actualDay) + ' (Injected ' + fmt(cl.injected) + ' + Cash ' + fmt(cl.cash) + ' + Till ' + fmt(cl.till) +
-    ' + M-Pesa ' + fmt(cl.mpesa) + ' + Expenses ' + fmt(cl.expenses) + ' + Withdrawn ' + fmt(cl.withdrawn) + '). ' +
-    'Variance = ' + fmt(an.actualDay) + ' − ' + fmt(an.correctDay) + ' = ' + (an.variance >= 0 ? '+' : '') + fmt(an.variance) + '.'
+    'Should have: Opening ' + fmt(an.opTotal) + ' + Sales ' + fmt(sy.sysTotalRev) + ' = <b>' + fmt(an.correctDay) + '</b><br>' +
+    'Actually have: Injected ' + fmt(cl.injected) + ' + Cash ' + fmt(cl.cash) + ' + Till ' + fmt(cl.till) +
+    ' + M-Pesa ' + fmt(cl.mpesa) + ' + Expenses ' + fmt(cl.expenses) + ' + Withdrawn ' + fmt(cl.withdrawn) + ' = <b>' + fmt(an.actualDay) + '</b><br>' +
+    'Variance: ' + fmt(an.actualDay) + ' − ' + fmt(an.correctDay) + ' = <b>' + (an.variance >= 0 ? '+' : '') + fmt(an.variance) + '</b>'
   });
   if (isOk) {
     ins.push({i:'',c:'rc-ok',  t:'Perfect - every shilling accounted for!'});
