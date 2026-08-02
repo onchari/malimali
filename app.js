@@ -9060,7 +9060,10 @@ function _renderReconcileInsights(data, today) {
       '<div style="background:'+(isOk?'var(--green-light)':isWn?'#fef3c7':'var(--red-light)')+';border:1.5px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';border-radius:var(--r-lg);padding:12px 14px;">' +
         '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Actually Have</div>' +
         '<div style="font-size:10px;color:var(--muted);line-height:2;margin-bottom:8px;">' +
+          (cl.injected>0?'Injected: <b>'+fmt(cl.injected)+'</b><br>':'') +
           'Cash: <b>'+fmt(cl.cash)+'</b><br>Till: <b>'+fmt(cl.till)+'</b><br>M-Pesa: <b>'+fmt(cl.mpesa)+'</b>' +
+          (cl.expenses>0?'<br>Expenses: <b>'+fmt(cl.expenses)+'</b>':'') +
+          (cl.withdrawn>0?'<br>Withdrawn: <b>'+fmt(cl.withdrawn)+'</b>':'') +
         '</div>' +
         '<div style="font-size:18px;font-weight:900;font-family:var(--mono);color:'+vc+';border-top:1px solid '+(isOk?'#a8d8b5':isWn?'#f5d9a0':'#fca5a5')+';padding-top:8px;">'+fmt(an.actualDay)+'</div>' +
       '</div>' +
@@ -9241,12 +9244,11 @@ reconcileDay = async function() {
   const salesCount   = daySales.length;
   const margin       = sysTotalRev > 0 ? (sysTotalProf / sysTotalRev * 100) : 0;
 
-  // Expected total = Opening + Revenue only. Injected/expenses/withdrawn are
-  // NOT netted into this target - they're separate business transactions,
-  // not part of what the till "should" hold from opening + sales alone.
+  // Expected total = Opening + Revenue only.
   const opTotal    = (data.opening.cash||0) + (data.opening.till||0) + (data.opening.mpesa||0);
   const correctDay = opTotal + sysTotalRev;
-  const actualDay  = cash + till + mpesa;
+  // Actual/"Day Money" = Injected + Cash + Till + M-Pesa + Expenses + Withdrawn.
+  const actualDay  = useInjected + cash + till + mpesa + useExpenses + useWithdrawn;
   const variance   = actualDay - correctDay;
 
   const expCash   = (data.opening.cash||0) + (data.opening.till||0) + sysCashRev;
