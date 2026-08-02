@@ -733,6 +733,20 @@
     </div>
   </section>
 
+  <!-- Step 2b: Item mode toggle -->
+  <div id="item-mode-toggle" class="add-card item-mode-card">
+    <button type="button" id="mode-btn-track" class="item-mode-btn active" onclick="setItemMode(false)">
+      <i class="fa-solid fa-boxes-stacked"></i>
+      <span>Track Stock</span>
+      <small>Qty, prices &amp; alerts</small>
+    </button>
+    <button type="button" id="mode-btn-record" class="item-mode-btn" onclick="setItemMode(true)">
+      <i class="fa-solid fa-file-lines"></i>
+      <span>Record Only</span>
+      <small>Price info, qty unknown</small>
+    </button>
+  </div>
+
   <!-- Shoe sizes (footwear categories) -->
   <div id="shoe-size-panel" class="add-card add-card-shoe">
     <h2 class="add-card-title"><span class="add-step-badge">3</span> Sizes</h2>
@@ -881,6 +895,10 @@
   <!-- Step 3: Stock & pricing (standard items) -->
   <section id="std-pricing-section" class="add-card">
     <h2 class="add-card-title"><span class="add-step-badge">3</span> Stock</h2>
+    <div id="record-mode-note" class="record-mode-note" style="display:none;">
+      <i class="fa-solid fa-circle-info"></i>
+      Qty not tracked — item always shows as available for sale.
+    </div>
     <div class="add-section add-section-inset">
 
       <!-- Qty - Buy - Sell in one row -->

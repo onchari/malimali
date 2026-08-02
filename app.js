@@ -561,14 +561,17 @@ function applyAddFormFootwearUI(isShoe) {
   const sizeField  = document.getElementById('f-size-field');
   const vtField    = document.getElementById('variant-type-field');
   const gvPanel    = document.getElementById('general-variant-panel');
+  const modeToggle = document.getElementById('item-mode-toggle');
   const inRestock  = pageAdd?.classList.contains('restock-mode');
   if (inRestock) {
-    if (shoePanel) shoePanel.style.display = 'none';
-    if (stdPricing) stdPricing.style.display = 'block';
-    if (vtField) vtField.style.display = 'none';
-    if (gvPanel) gvPanel.style.display = 'none';
+    if (shoePanel)   shoePanel.style.display = 'none';
+    if (stdPricing)  stdPricing.style.display = 'block';
+    if (vtField)     vtField.style.display = 'none';
+    if (gvPanel)     gvPanel.style.display = 'none';
+    if (modeToggle)  modeToggle.style.display = 'none';
     return;
   }
+  if (modeToggle) modeToggle.style.removeProperty('display');
   if (isShoe) {
     if (shoePanel) shoePanel.style.removeProperty('display');
     if (stdPricing) stdPricing.style.display = 'none';
@@ -3354,24 +3357,25 @@ async function saveItem() {
     }
 
     // STANDARD ADD / EDIT - only code and name are required; size, qty, buy and sell are optional
+    const isRecord = !!_addFormIsRecord;
     const size=UI.el('f-size')?.value.trim()||'';
-    const qtyRaw=UI.el('f-qty')?.value||'';
+    const qtyRaw=isRecord ? '0' : (UI.el('f-qty')?.value||'');
     const qty=qtyRaw === '' ? 0 : parseInt(qtyRaw);
     const buyRaw=UI.el('f-buy')?.value||'';
     const sellRaw=UI.el('f-sell')?.value||'';
     const buy=parseFloat(buyRaw)||0;
     const sell=parseFloat(sellRaw)||0;
-    if (qtyRaw !== '' && isNaN(qty)) return Validate.fail('Enter a valid quantity', 'f-qty');
-    if (qty < 0) return Validate.fail('Quantity cannot be negative', 'f-qty');
-    if (qty > 999999) return Validate.fail('Quantity exceeds maximum (999,999)', 'f-qty');
-    if (qty > CODE_MAX_QTY && !confirm('Adding ' + qty + ' units - confirm?')) return;
+    if (!isRecord && qtyRaw !== '' && isNaN(qty)) return Validate.fail('Enter a valid quantity', 'f-qty');
+    if (!isRecord && qty < 0) return Validate.fail('Quantity cannot be negative', 'f-qty');
+    if (!isRecord && qty > 999999) return Validate.fail('Quantity exceeds maximum (999,999)', 'f-qty');
+    if (!isRecord && qty > CODE_MAX_QTY && !confirm('Adding ' + qty + ' units - confirm?')) return;
     if (!Validate.moneyOptional(buyRaw === '' ? null : buy, 'f-buy', 'Buy price')) return;
     if (!Validate.moneyOptional(sellRaw === '' ? null : sell, 'f-sell', 'Sell price')) return;
     if (buy > 0 && sell > 0 && sell < buy) {
       return Validate.fail('Selling price (' + fmt(sell) + ') cannot be less than buying price (' + fmt(buy) + ')', 'f-sell');
     }
     const profit=sell-buy;
-    const item={type,code,name,variant:size,buyPrice:buy,sellPrice:sell,profit,qty,createdAt:new Date().toISOString()};
+    const item={type,code,name,variant:size,buyPrice:buy,sellPrice:sell,profit,qty,isRecord,createdAt:new Date().toISOString()};
 
     if(editIdRaw){
       const resolvedId = parseInt(editIdRaw);
@@ -3387,6 +3391,7 @@ async function saveItem() {
         sellPrice: sell,
         profit,
         qty,
+        isRecord,
         createdAt: original ? (original.createdAt || item.createdAt) : item.createdAt,
         updatedAt: new Date().toISOString(),
         updatedBy: currentUser ? currentUser.username : 'system',
@@ -3457,8 +3462,11 @@ function clearForm() {
   setAddTypeLocked(false);
 
   _shoeState.reset();
+  _variantState.reset();
   resetShoeUiPanels();
   _addFormWasFootwear = false;
+  _addFormIsRecord    = false;
+  setItemMode(false);   // reset toggle to Track Stock
   _preloadShoeCode = '';
   const pageAdd = document.getElementById('page-add');
   if (pageAdd) pageAdd.classList.remove('footwear-add-mode');
@@ -3483,6 +3491,7 @@ let _editOriginItemId   = null;
 let _editingItemId      = null;  // tracks current edit ID reliably (backup to hidden input)
 let _lastAddFormType    = '';    // last f-type value - avoid wiping shoe sizes on tab switch
 let _addFormWasFootwear = false;
+let _addFormIsRecord    = false;   // true = Record Only mode
 let _preloadShoeCode    = '';
 let _selectedShoeSize   = null;
 let _selectedShoeSizes  = new Set();
@@ -4028,15 +4037,16 @@ async function renderList() {
 
     } else {
       // ── STANDARD ITEM - single card ───────────────────────────────
-      const stockColor = item.qty === 0 ? 'tag-red' : item.qty <= LOW_STOCK_LEVEL ? 'tag-amber' : 'tag-green';
-      const stockLabel = item.qty === 0 ? 'Out'   : item.qty + ' pcs';
+      const isRec      = !!item.isRecord;
+      const stockColor = isRec ? 'tag-amber' : item.qty === 0 ? 'tag-red' : item.qty <= LOW_STOCK_LEVEL ? 'tag-amber' : 'tag-green';
+      const stockLabel = isRec ? 'Record' : item.qty === 0 ? 'Out' : item.qty + ' pcs';
       const soldQty    = (salesByItem[item.id] || {}).qty || 0;
       const sellPrice  = item.sellPrice || item.sell || 0;
       const buyPrice   = item.buyPrice  || item.buy  || 0;
 
       cards.push(`
-        <div class="item-card${item.qty<=0?' shoe-out-card':''}" onclick="openSheet(${item.id})">
-          ${item.qty<=0 ? '<div class="out-of-stock-overlay"><span>OUT OF STOCK - RESTOCK</span></div>' : ''}
+        <div class="item-card${isRec ? ' item-card-record' : (item.qty<=0?' shoe-out-card':'')}" onclick="openSheet(${item.id})">
+          ${!isRec && item.qty<=0 ? '<div class="out-of-stock-overlay"><span>OUT OF STOCK - RESTOCK</span></div>' : ''}
           <div class="item-top">
             <div class="item-icon" style="background:${t.color||'var(--surface2)'};">${t.emoji}</div>
             <div class="item-body">
@@ -4044,6 +4054,7 @@ async function renderList() {
               <div class="item-name">${escapeHtml(item.name||'')}</div>
               <div class="item-tags">
                 <span class="tag tag-cyan">${escapeHtml(item.type)}</span>
+                ${isRec ? '<span class="tag tag-record">RECORD</span>' : ''}
                 <span class="tag tag-gray">${soldQty} sold</span>
                 <span class="tag ${stockColor}">${stockLabel}</span>
               </div>
@@ -5439,7 +5450,7 @@ async function openSellModal(itemId) {
   try {
   const item = await dbGet('items', itemId);
   if (!item) { toast('Warning: Item not found', 'err'); return; }
-  if (item.qty <= 0) {
+  if (item.qty <= 0 && !item.isRecord) {
     toast('Warning: ' + (item.name || item.code) + ' is out of stock - restock first', 'err');
     return;
   }
@@ -5448,8 +5459,8 @@ async function openSellModal(itemId) {
   document.getElementById('sm-icon').textContent = t.emoji;
   document.getElementById('sm-icon').style.background = t.color || 'var(--surface2)';
   document.getElementById('sm-name').textContent = item.name;
-  document.getElementById('sm-meta').textContent = item.code + (item.size ? ' - ' + item.size : '');
-  document.getElementById('sm-stock').textContent = item.qty;
+  document.getElementById('sm-meta').textContent = item.code + (item.size ? ' - ' + item.size : '') + (item.isRecord ? ' · Record' : '');
+  document.getElementById('sm-stock').textContent = item.isRecord ? '∞' : item.qty;
   const _itemSell = item.sellPrice || item.sell || 0;
   const _itemBuy  = item.buyPrice  || item.buy  || 0;
   document.getElementById('sm-sell').textContent = fmt(_itemSell);
@@ -5459,7 +5470,7 @@ async function openSellModal(itemId) {
   document.getElementById('sm-cur').textContent = currency;
   document.getElementById('sm-qty').value = 0;
   document.getElementById('sm-qty').min = 0;
-  document.getElementById('sm-qty').max = item.qty;
+  document.getElementById('sm-qty').max = item.isRecord ? 999999 : item.qty;
   document.getElementById('sm-actual').value = '';
   _toggleSmBuyField(_itemBuy);
   updateSellModal();
@@ -5574,12 +5585,14 @@ async function confirmSale() {
     _overlay.hide();
     return;
   }
-  if (qty > maxQty) {
-    Validate.fail('Only ' + maxQty + ' in stock - cannot sell ' + qty, 'sm-qty');
-    _overlay.hide();
-    return;
+  if (!item.isRecord) {
+    if (qty > maxQty) {
+      Validate.fail('Only ' + maxQty + ' in stock - cannot sell ' + qty, 'sm-qty');
+      _overlay.hide();
+      return;
+    }
+    if (!Validate.stock(qty, maxQty, itemLabel)) { _overlay.hide(); return; }
   }
-  if (!Validate.stock(qty, maxQty, itemLabel)) { _overlay.hide(); return; }
 
   // ── Validate sale price ────────────────────────────────────────
   if (!Validate.salePrice(priceUsed, buyPrice, sellPrice)) { _overlay.hide(); return; }
@@ -5619,22 +5632,24 @@ async function confirmSale() {
     }
   }
 
-  // ── Deduct stock ───────────────────────────────────────────────
-  if (_isShoeSale && _sellShoeSize) {
-    _sellShoeSize.qty = Math.max(0, (_sellShoeSize.qty || 0) - qty);
-    _sellShoeSize.updatedAt = new Date().toISOString();
-    await dbPut('shoe_sizes', _sellShoeSize);
-    const allSz = await getShoeSizes(item.code);
-    item.qty = allSz.reduce((t, s) => t + s.qty, 0);
-    if (fbReady && fbDb) {
-      try {
-        const { doc, setDoc } = await waitForFbImports();
-        if (!_sellShoeSize.fbId) _sellShoeSize.fbId = 'sz_' + _sellShoeSize.codeSize;
-        await setDoc(fbDoc('shoe_sizes', _sellShoeSize.fbId), sanitiseForFirestore({..._sellShoeSize}));
-      } catch(e) { console.warn('[SYNC] shoe size:', e.message); }
+  // ── Deduct stock (skip for record-only items) ─────────────────
+  if (!item.isRecord) {
+    if (_isShoeSale && _sellShoeSize) {
+      _sellShoeSize.qty = Math.max(0, (_sellShoeSize.qty || 0) - qty);
+      _sellShoeSize.updatedAt = new Date().toISOString();
+      await dbPut('shoe_sizes', _sellShoeSize);
+      const allSz = await getShoeSizes(item.code);
+      item.qty = allSz.reduce((t, s) => t + s.qty, 0);
+      if (fbReady && fbDb) {
+        try {
+          const { doc, setDoc } = await waitForFbImports();
+          if (!_sellShoeSize.fbId) _sellShoeSize.fbId = 'sz_' + _sellShoeSize.codeSize;
+          await setDoc(fbDoc('shoe_sizes', _sellShoeSize.fbId), sanitiseForFirestore({..._sellShoeSize}));
+        } catch(e) { console.warn('[SYNC] shoe size:', e.message); }
+      }
+    } else {
+      item.qty = Math.max(0, item.qty - qty);
     }
-  } else {
-    item.qty = Math.max(0, item.qty - qty);
   }
   await dbPut('items', item);
 
@@ -9101,6 +9116,30 @@ window.toggleTypeGroup = toggleTypeGroup;
 // ══════════════════════════════════════════════════════════════════
 // GENERAL VARIANT UI FUNCTIONS
 // ══════════════════════════════════════════════════════════════════
+
+function setItemMode(isRecord) {
+  _addFormIsRecord = !!isRecord;
+  const trackBtn  = document.getElementById('mode-btn-track');
+  const recordBtn = document.getElementById('mode-btn-record');
+  if (trackBtn)  trackBtn.classList.toggle('active',  !isRecord);
+  if (recordBtn) recordBtn.classList.toggle('active', !!isRecord);
+
+  const qtyField   = document.querySelector('#std-pricing-section .add-field:has(#f-qty)') ||
+                     document.getElementById('f-qty')?.closest('.add-field');
+  const recordNote = document.getElementById('record-mode-note');
+
+  if (isRecord) {
+    if (qtyField)   qtyField.style.display = 'none';
+    if (recordNote) recordNote.style.display = 'block';
+    // Pre-fill qty with 0 so save logic works
+    const qtyEl = document.getElementById('f-qty');
+    if (qtyEl) qtyEl.value = '0';
+  } else {
+    if (qtyField)   qtyField.style.removeProperty('display');
+    if (recordNote) recordNote.style.display = 'none';
+  }
+}
+window.setItemMode = setItemMode;
 
 function setVariantType(vtype) {
   _variantState.variantType = vtype;

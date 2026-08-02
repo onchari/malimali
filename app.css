@@ -3708,6 +3708,74 @@ body.photo-lightbox-open { overflow: hidden; }
 /* Even/odd for multiple shoe groups */
 #item-list > .shoe-group-header:nth-of-type(even) { background: #1a3352; }
 
+/* ── Item mode toggle (Track Stock / Record Only) ───────────────── */
+.item-mode-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px !important;
+}
+.item-mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+  line-height: 1.2;
+}
+.item-mode-btn i   { font-size: 20px; margin-bottom: 2px; }
+.item-mode-btn span { font-size: 13px; font-weight: 700; }
+.item-mode-btn small { font-size: 10px; opacity: .75; }
+.item-mode-btn.active {
+  border-color: var(--accent);
+  background: rgba(30,122,62,.09);
+  color: var(--accent);
+}
+/* Record mode active state — amber tint */
+#mode-btn-record.active {
+  border-color: #f59e0b;
+  background: rgba(245,158,11,.09);
+  color: #92400e;
+}
+
+/* Record mode note in pricing section */
+.record-mode-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 0 0 10px;
+}
+.record-mode-note i { color: #f59e0b; }
+
+/* ── Record-only item card in stock list ────────────────────────── */
+.item-card-record {
+  background: #fffbeb !important;
+  border-left: 4px solid #f59e0b !important;
+}
+.tag-record {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #f59e0b;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
 /* ── Variant type pills ──────────────────────────────────────────── */
 .vt-pills {
   display: flex;
