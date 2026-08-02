@@ -4676,7 +4676,7 @@ function _dashPrevDateRange() {
 function _filterSalesByRange(allSales, range) {
   if (!range || !range.from) return allSales;
   return allSales.filter(s => {
-    const d = s.businessDate || (s.date || '').split('T')[0];
+    const d = s.businessDate || s.business_date || (s.date || '').split('T')[0];
     return d >= range.from && d <= range.to;
   });
 }
@@ -7292,7 +7292,10 @@ function updateDayBanner() {
 // ── LIVE STATS - full cash flow summary ─────────────────────────────
 async function updateDayLiveStats() {
   if (!activeDay) return;
-  const today  = activeDay.businessDate || activeDay.business_date || todayDateStr();
+  // Always the real calendar date - same as the Dashboard's "Today" filter -
+  // so these live figures never drift out of sync with it. (activeDay.businessDate
+  // can lag behind if the app stays open across midnight without a reload.)
+  const today  = todayDateStr();
   const sales  = await dbAll('sales');
   const fins   = await dbAll('finances');
 
