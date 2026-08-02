@@ -4166,6 +4166,7 @@ body.photo-lightbox-open { overflow: hidden; }
 .rc-ok    { background: #f0faf4; }
 .rc-warn  { background: #fef3c7; }
 .rc-bad   { background: #fff0f0; }
+.rc-info  { background: #eef4ff; }
 
 /* ── Empty state ───────────────────────────────────────────── */
 .day-empty {
