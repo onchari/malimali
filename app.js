@@ -4717,7 +4717,7 @@ async function _renderDashSummary(ctx) {
   if (!wrap) return;
 
   const {
-    allItems, allSales, sales, totalItems, totalQty, stockRetail, stockCost,
+    allSales, totalItems, totalQty, stockRetail,
     totalRevenue, totalProfitEarned, totalSalesCount, totalPiecesSold,
     outStk, lowStk, margin, today, todayDashSales, todayDashProf
   } = ctx;
@@ -4828,9 +4828,7 @@ async function renderDashboard() {
 
   const totalItems  = allItems.length;
   const totalQty    = allItems.reduce((s,i) => s+(i.qty||0), 0);
-  const stockCost   = allItems.reduce((s,i) => s+((i.buyPrice||i.buy||0)*(i.qty||0)), 0);
   const stockRetail = allItems.reduce((s,i) => s+((i.sellPrice||i.sell||0)*(i.qty||0)), 0);
-  const potProfit   = stockRetail - stockCost;
 
   const totalRevenue      = sales.reduce((s,x) => s+(x.revenue||0), 0);
   const totalProfitEarned = sales.reduce((s,x) => s+(x.profit||0), 0);
@@ -4845,14 +4843,10 @@ async function renderDashboard() {
   const todayDashProf  = todayDashSales.reduce((s,x)=>s+(x.profit||0),0);
 
   await _renderDashSummary({
-    allItems, allSales, sales, totalItems, totalQty, stockRetail, stockCost,
+    allSales, totalItems, totalQty, stockRetail,
     totalRevenue, totalProfitEarned, totalSalesCount, totalPiecesSold,
     outStk, lowStk, margin, today, todayDashSales, todayDashProf
   });
-
-  setEl('d-stock-val',    fmt(stockCost));
-  setEl('d-retail-total', fmt(stockRetail));
-  setEl('d-potential-profit', fmt(potProfit));
 
   // ── 7-day sparkline ───────────────────────────────────────
   const sparkWrap = document.getElementById('d-sparkline-wrap');
@@ -4875,39 +4869,6 @@ async function renderDashboard() {
         </div>`;
       }).join('');
       if (sparkLbls) sparkLbls.innerHTML = days7.map((d,i)=>`<div style="flex:1;text-align:center;font-size:9px;color:var(--muted);font-weight:${days7[i]===today?800:600};">${new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short'}).slice(0,2)}</div>`).join('');
-    }
-  }
-
-  // ── Top items by stock value ──────────────────────────────
-  const topEl = document.getElementById('d-top-items');
-  if (topEl) {
-    const sorted = [...allItems].sort((a,b)=>((b.sellPrice||b.sell||0)*b.qty)-((a.sellPrice||a.sell||0)*a.qty)).slice(0,5);
-    if (!sorted.length) { topEl.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:8px 0;">No items yet</div>`; }
-    else {
-      const maxVal = (sorted[0].sellPrice||sorted[0].sell||0)*sorted[0].qty || 1;
-      topEl.innerHTML = sorted.map(item => {
-        const sell = item.sellPrice||item.sell||0;
-        const buy  = item.buyPrice||item.buy||0;
-        const val  = sell * item.qty;
-        const pct  = Math.max(6, Math.round(val/maxVal*100));
-        const t    = getTypeObj(item.type);
-        return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:6px;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span style="font-size:16px;">${t.emoji}</span>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name||item.code)}</div>
-              <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${escapeHtml(item.code)} - ${fmtN(item.qty)} pcs - buy ${fmt(buy)}</div>
-            </div>
-            <div style="text-align:right;flex-shrink:0;">
-              <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(val)}</div>
-              <div style="font-size:9px;color:var(--green);font-weight:700;">+${fmt((sell-buy)*item.qty)} pot.</div>
-            </div>
-          </div>
-          <div style="background:var(--surface2);border-radius:3px;height:5px;overflow:hidden;">
-            <div style="height:100%;background:linear-gradient(90deg,var(--accent3),var(--accent2));width:${pct}%;border-radius:3px;"></div>
-          </div>
-        </div>`;
-      }).join('');
     }
   }
 }
