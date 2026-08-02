@@ -4719,7 +4719,7 @@ async function _renderDashSummary(ctx) {
   const {
     allItems, allSales, sales, totalItems, totalQty, stockRetail, stockCost,
     totalRevenue, totalProfitEarned, totalSalesCount, totalPiecesSold,
-    outStk, lowStk, margin, today, todayDashSales, todayDashRev, todayDashProf
+    outStk, lowStk, margin, today, todayDashSales, todayDashProf
   } = ctx;
 
   const periodLbl = _dashPeriodLabel();
@@ -4842,69 +4842,17 @@ async function renderDashboard() {
   const outStk = allItems.filter(i => i.qty === 0);
   const lowStk = allItems.filter(i => i.qty > 0 && i.qty <= LOW_STOCK_LEVEL);
   const todayDashSales = allSales.filter(s => (s.businessDate||(s.date||'').split('T')[0]) === today);
-  const todayDashRev   = todayDashSales.reduce((s,x)=>s+(x.revenue||0),0);
   const todayDashProf  = todayDashSales.reduce((s,x)=>s+(x.profit||0),0);
 
   await _renderDashSummary({
     allItems, allSales, sales, totalItems, totalQty, stockRetail, stockCost,
     totalRevenue, totalProfitEarned, totalSalesCount, totalPiecesSold,
-    outStk, lowStk, margin, today, todayDashSales, todayDashRev, todayDashProf
+    outStk, lowStk, margin, today, todayDashSales, todayDashProf
   });
 
-  setEl('d-revenue',      fmt(totalRevenue));
-  setEl('d-profit-earned',fmt(totalProfitEarned));
-  setEl('d-margin',       margin.toFixed(1)+'%');
-  setEl('d-items',        fmtN(totalItems));
-  setEl('d-qty',          fmtN(totalQty));
-  setEl('d-total-sold',   fmtN(totalSalesCount));
-  setEl('d-pieces-sold',  fmtN(totalPiecesSold));
   setEl('d-stock-val',    fmt(stockCost));
   setEl('d-retail-total', fmt(stockRetail));
   setEl('d-potential-profit', fmt(potProfit));
-  // Compat
-  setEl('d-cost-total', fmt(stockCost));
-  setEl('d-remaining',  fmt(stockRetail));
-
-  // Margin colour
-  const mEl = document.getElementById('d-margin');
-  if (mEl) mEl.style.color = margin >= 20 ? 'var(--green)' : margin >= 10 ? 'var(--amber)' : 'var(--red)';
-
-  // ── Sold vs remaining bar ─────────────────────────────────
-  const barWrap = document.getElementById('d-stock-bar-wrap');
-  const totalEver = totalPiecesSold + totalQty;
-  if (barWrap && totalEver > 0) {
-    barWrap.style.display = '';
-    const soldPct = (totalPiecesSold / totalEver * 100).toFixed(1);
-    const remPct  = (totalQty / totalEver * 100).toFixed(1);
-    const barSold = document.getElementById('d-stock-bar-sold');
-    if (barSold) barSold.style.width = soldPct + '%';
-    setEl('d-bar-sold-lbl', fmtN(totalPiecesSold) + ' sold (' + soldPct + '%)');
-    setEl('d-bar-rem-lbl',  fmtN(totalQty) + ' remaining (' + remPct + '%)');
-  } else if (barWrap) { barWrap.style.display = 'none'; }
-
-  // ── Today at a Glance (only show on Today period) ─────────
-  const todayDashQty   = todayDashSales.reduce((s,x)=>s+(x.qty||0),0);
-  const todayDashRecon = typeof _getDayRecon === 'function' ? _getDayRecon(today) : null;
-  const todayDashVariance = todayDashRecon?.analysis ? todayDashRecon.analysis.variance : null;
-  const todayWrap = document.getElementById('d-today-wrap');
-  if (todayWrap) {
-    if (_dashPeriod === 'today') {
-      todayWrap.style.display = '';
-      const grid = document.getElementById('d-today-grid');
-      if (grid) grid.innerHTML = [
-        { label:'Sales',   val:fmtN(todayDashSales.length), color:'var(--accent)' },
-        { label:'Revenue', val:fmt(todayDashRev), color:'var(--green)' },
-        { label:'Profit',  val:fmt(todayDashProf), color: todayDashProf>=0?'var(--accent2)':'var(--red)' },
-        {
-          label: todayDashVariance === null ? 'Pieces' : 'Variance',
-          val: todayDashVariance === null ? fmtN(todayDashQty) : ((todayDashVariance>=0?'+':'') + fmt(todayDashVariance)),
-          color: todayDashVariance === null ? 'var(--accent)' : (Math.abs(todayDashVariance) < 1 ? 'var(--green)' : 'var(--red)')
-        },
-      ].map(k=>`<div class="stat-box" style="padding:10px 8px;"><div class="stat-lbl" style="margin-bottom:3px;">${k.label}</div><div class="stat-val" style="font-size:15px;color:${k.color};">${k.val}</div></div>`).join('');
-    } else {
-      todayWrap.style.display = 'none';
-    }
-  }
 
   // ── 7-day sparkline ───────────────────────────────────────
   const sparkWrap = document.getElementById('d-sparkline-wrap');
@@ -4928,16 +4876,6 @@ async function renderDashboard() {
       }).join('');
       if (sparkLbls) sparkLbls.innerHTML = days7.map((d,i)=>`<div style="flex:1;text-align:center;font-size:9px;color:var(--muted);font-weight:${days7[i]===today?800:600};">${new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short'}).slice(0,2)}</div>`).join('');
     }
-  }
-
-  // ── Alerts ────────────────────────────────────────────────
-  const alertEl = document.getElementById('d-alerts');
-  if (alertEl) {
-    let html = '';
-    const alertStyle = 'cursor:pointer;border-radius:var(--r);padding:10px 12px;margin-bottom:6px;font-size:12px;font-weight:600;';
-    if (outStk.length) html += `<div role="button" tabindex="0" onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}" style="background:var(--red-light);border:1px solid rgba(192,57,43,0.25);color:var(--red);${alertStyle}"><strong>${outStk.length}</strong> out of stock - tap to view stock</div>`;
-    if (lowStk.length) html += `<div role="button" tabindex="0" onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}" style="background:var(--amber-light);border:1px solid #f5d9a0;color:var(--amber);${alertStyle}"><strong>${lowStk.length}</strong> running low - tap to view stock</div>`;
-    alertEl.innerHTML = html;
   }
 
   // ── Top items by stock value ──────────────────────────────

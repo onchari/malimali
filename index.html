@@ -415,46 +415,6 @@
     <div id="d-summary-cards" class="dash-summary-cards"></div>
   </section>
 
-  <!-- ── Row 1: Revenue - Profit - Margin ────────────────────── -->
-  <div class="stats-row" style="grid-template-columns:1fr 1fr 1fr;gap:6px;">
-    <div class="stat-box green">
-      <div class="stat-val" id="d-revenue" style="font-size:15px;">0</div>
-      <div class="stat-lbl">Revenue</div>
-    </div>
-    <div class="stat-box cyan">
-      <div class="stat-val" id="d-profit-earned" style="font-size:15px;">0</div>
-      <div class="stat-lbl">Profit</div>
-    </div>
-    <div class="stat-box purple">
-      <div class="stat-val" id="d-margin" style="font-size:15px;">0%</div>
-      <div class="stat-lbl">Margin</div>
-    </div>
-  </div>
-
-  <!-- ── Row 2: Items - Pieces - Sold - Sales# ────────────────── -->
-  <div class="stats-row" style="gap:6px;">
-    <div class="stat-box amber dash-stat-link" role="button" tabindex="0"
-         onclick="goDashNav('stock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goDashNav('stock');}">
-      <div class="stat-val" id="d-items" style="font-size:18px;">0</div>
-      <div class="stat-lbl">SKUs</div>
-    </div>
-    <div class="stat-box cyan">
-      <div class="stat-val" id="d-qty" style="font-size:18px;">0</div>
-      <div class="stat-lbl">In Stock</div>
-    </div>
-    <div class="stat-box green">
-      <div class="stat-val" id="d-total-sold" style="font-size:18px;">0</div>
-      <div class="stat-lbl">Sales</div>
-    </div>
-    <div class="stat-box purple">
-      <div class="stat-val" id="d-pieces-sold" style="font-size:18px;">0</div>
-      <div class="stat-lbl">Pieces Out</div>
-    </div>
-  </div>
-
-  <!-- ── Alert strip ──────────────────────────────────────────── -->
-  <div id="d-alerts" style="padding:0 12px;"></div>
-
   <!-- ── 7-day revenue spark line ─────────────────────────────── -->
   <div id="d-sparkline-wrap" class="dash-extra" style="margin:0 12px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -463,12 +423,6 @@
     </div>
     <div id="d-sparkline" style="display:flex;align-items:flex-end;gap:3px;height:48px;"></div>
     <div id="d-sparkline-labels" style="display:flex;gap:3px;margin-top:4px;"></div>
-  </div>
-
-  <!-- ── Today snapshot ───────────────────────────────────────── -->
-  <div id="d-today-wrap" class="dash-extra" style="margin:0 12px 8px;display:none;">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Today at a Glance</div>
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;" id="d-today-grid"></div>
   </div>
 
   <!-- ── Stock health ─────────────────────────────────────────── -->
@@ -488,19 +442,6 @@
         <div class="stat-lbl">Pot. Profit</div>
       </div>
     </div>
-    <!-- Stock progress bar: sold vs remaining -->
-    <div id="d-stock-bar-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:10px 12px;display:none;">
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">
-        <span>Pieces Sold</span><span>Remaining in Stock</span>
-      </div>
-      <div style="height:10px;border-radius:5px;background:var(--surface2);overflow:hidden;display:flex;">
-        <div id="d-stock-bar-sold" style="height:100%;background:var(--accent);border-radius:5px 0 0 5px;transition:width .4s;"></div>
-        <div id="d-stock-bar-rem"  style="height:100%;background:var(--surface2);flex:1;"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--muted);margin-top:4px;">
-        <span id="d-bar-sold-lbl"></span><span id="d-bar-rem-lbl"></span>
-      </div>
-    </div>
   </div>
 
   <!-- ── Top items by stock value ─────────────────────────────── -->
@@ -508,10 +449,6 @@
   <div class="dash-extra" style="margin:0 12px 80px;">
     <div id="d-top-items"></div>
   </div>
-
-  <!-- hidden compat IDs -->
-  <span id="d-cost-total" style="display:none;"></span>
-  <span id="d-remaining"  style="display:none;"></span>
 
 </div><!-- /page-dash -->
 
