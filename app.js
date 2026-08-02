@@ -3273,14 +3273,9 @@ async function saveItem() {
     // COMMON FIELDS
     const type=UI.el('f-type')?.value||'';
     const code=sanitiseCode(UI.el('f-code')?.value||'');
-    const name=(UI.el('f-name')?.value||'').trim().replace(/[ \t]+/g,' ')||(type+' '+code);
-    if (!type) {
-      toast('Select a category (and sub-category if shown)', 'err');
-      const firstCat = document.getElementById('f-type-parent') || document.querySelector('#f-type-cascade .cat-pick-btn');
-      if (firstCat) firstCat.focus();
-      return;
-    }
+    const name=(UI.el('f-name')?.value||'').trim().replace(/[ \t]+/g,' ');
     if(!code){toast('Warning: Enter item code','err');return;}
+    if(!name){return Validate.fail('Enter item name', 'f-name');}
     if (!editIdRaw) {
       const codeMatches = await findCodeMatchesForSave(code);
       const existingCode = codeMatches.find(i => i.code === code);
@@ -3312,23 +3307,23 @@ async function saveItem() {
       toast(''+savedCount+' shoe size(s) saved!','ok');return;
     }
 
-    // STANDARD ADD / EDIT
+    // STANDARD ADD / EDIT - only code and name are required; size, qty, buy and sell are optional
     const size=UI.el('f-size')?.value.trim()||'';
     const qtyRaw=UI.el('f-qty')?.value||'';
-    const qty=parseInt(qtyRaw);
-    const buy=parseFloat(UI.el('f-buy')?.value)||0;
-    const sell=parseFloat(UI.el('f-sell')?.value)||0;
-    if (!size) return Validate.fail('Enter a size or variant (e.g. N/A, Medium, 42)', 'f-size');
-    if (qtyRaw === '' || isNaN(qty)) return Validate.fail('Enter a quantity', 'f-qty');
-    if (!editIdRaw) {
-      // New item: qty must be ≥ 1
-      if (!Validate.qty(qty, 'f-qty')) return;
-    } else {
-      // Edit: qty can be 0 (stock may be legitimately depleted via sales)
-      if (qty < 0) return Validate.fail('Quantity cannot be negative', 'f-qty');
-    }
+    const qty=qtyRaw === '' ? 0 : parseInt(qtyRaw);
+    const buyRaw=UI.el('f-buy')?.value||'';
+    const sellRaw=UI.el('f-sell')?.value||'';
+    const buy=parseFloat(buyRaw)||0;
+    const sell=parseFloat(sellRaw)||0;
+    if (qtyRaw !== '' && isNaN(qty)) return Validate.fail('Enter a valid quantity', 'f-qty');
+    if (qty < 0) return Validate.fail('Quantity cannot be negative', 'f-qty');
+    if (qty > 999999) return Validate.fail('Quantity exceeds maximum (999,999)', 'f-qty');
     if (qty > CODE_MAX_QTY && !confirm('Adding ' + qty + ' units - confirm?')) return;
-    if (!Validate.price(buy, sell, 'f-buy', 'f-sell')) return;
+    if (!Validate.moneyOptional(buyRaw === '' ? null : buy, 'f-buy', 'Buy price')) return;
+    if (!Validate.moneyOptional(sellRaw === '' ? null : sell, 'f-sell', 'Sell price')) return;
+    if (buy > 0 && sell > 0 && sell < buy) {
+      return Validate.fail('Selling price (' + fmt(sell) + ') cannot be less than buying price (' + fmt(buy) + ')', 'f-sell');
+    }
     const profit=sell-buy;
     const item={type,code,name,variant:size,buyPrice:buy,sellPrice:sell,profit,qty,createdAt:new Date().toISOString()};
 

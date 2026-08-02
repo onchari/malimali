@@ -720,7 +720,7 @@
 
     <div class="add-field">
       <input class="add-input" id="f-name" type="text"
-             placeholder="Name"
+             placeholder="Name *"
              aria-label="Display name"
              autocomplete="off" spellcheck="false">
     </div>
@@ -839,20 +839,20 @@
       <div class="add-row-3">
         <div class="add-field">
           <input class="add-input add-center add-mono" id="f-qty" type="number"
-                 placeholder="Qty *" min="0" inputmode="numeric"
+                 placeholder="Qty" min="0" inputmode="numeric"
                  aria-label="Quantity"
                  oninput="updateProfitPreview()">
         </div>
         <div class="add-field">
           <input class="add-input add-center" id="f-buy" type="number"
-                 placeholder="BP *" min="0" inputmode="decimal"
+                 placeholder="BP" min="0" inputmode="decimal"
                  aria-label="Buy price"
                  oninput="updateProfitPreview()">
           <span id="bp-cur" style="display:none;">KES</span>
         </div>
         <div class="add-field">
           <input class="add-input add-center" id="f-sell" type="number"
-                 placeholder="SP *" min="0" inputmode="decimal"
+                 placeholder="SP" min="0" inputmode="decimal"
                  aria-label="Sell price"
                  oninput="updateProfitPreview()">
           <span id="sp-cur" style="display:none;">KES</span>
