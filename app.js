@@ -9065,24 +9065,6 @@ function _moveSalesDetailsAfterOpening() {
   else if (openingForm && openingForm.style.display !== 'none') openingForm.insertAdjacentElement('afterend', sales);
 }
 
-async function _prefillClosingFromFinances(today) {
-  try {
-    const fins = await dbAll('finances');
-    const day = (today || '').slice(0, 10);
-    const sumType = type => fins
-      .filter(e => e.type === type && (e.date || (e.createdAt || '').split('T')[0]).slice(0, 10) === day)
-      .reduce((s, e) => s + (e.amount || 0), 0);
-    const setIfEmpty = (id, val) => {
-      const el = document.getElementById(id);
-      // Fields default to "0" now (not blank), so treat untouched-0 the same as empty.
-      if (el && (el.value === '' || el.value === '0') && val > 0) el.value = String(val);
-    };
-    setIfEmpty('cl-injected', sumType('injection'));
-    setIfEmpty('cl-expenses', sumType('expense'));
-    setIfEmpty('cl-withdrawn', sumType('withdrawal'));
-  } catch (_) { /* intentionally ignored */ }
-}
-
 renderDayState = function() {
   const today = activeDay ? (activeDay.businessDate || activeDay.business_date) : todayDateStr();
   const titleEl = document.getElementById('day-banner-title');
@@ -9117,7 +9099,6 @@ renderDayState = function() {
     _renderOpeningSummary(data);
     const el = document.getElementById('day-step-closing-form');
     if (el) el.style.display = '';
-    _prefillClosingFromFinances(today);
   } else if (step === 'opening_locked' || (data && data.opening)) {
     if (openLocked) openLocked.style.display = '';
     _renderOpeningSummary(data);
@@ -9300,7 +9281,6 @@ function scheduleSync() {
 // ═══════════════════════════════════════════════════════════
 // WINDOW EXPORTS - all onclick= handlers
 // ═══════════════════════════════════════════════════════════
-window.addType = addType;
 window.adjSellQty = adjSellQty;
 window.applyAppUpdate = applyAppUpdate;
 window.attemptLogin = attemptLogin;
