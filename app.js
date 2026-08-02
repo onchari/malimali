@@ -824,6 +824,7 @@ class ShoeState {
     this.sizes      = new Set();  // selected size numbers
     this.shownGroups= new Set();  // groups whose buttons are rendered
     this.perSizeMode= false;      // true = per-size pricing
+    this.lockedSizes= new Set();  // sizes already in stock - not selectable (restock-mode)
   }
 
   // Add or remove a size
@@ -3527,6 +3528,50 @@ async function preloadShoeSizesForAdd(code) {
   updateShoeCollectiveSummary();
 }
 
+// ── Restock an existing footwear collection - only missing/out-of-stock
+// sizes are selectable. Sizes already carrying stock (qty > 0) are locked.
+async function preloadShoeSizesForRestock(code) {
+  _shoeState.reset();
+  const records = await getShoeSizes(code);
+  records.filter(r => (r.qty || 0) > 0).forEach(r => _shoeState.lockedSizes.add(Number(r.size)));
+  const grid = UI.el('sz-grid');
+  if (grid) grid.innerHTML = '';
+  renderAllShoeGroupCards();
+  showShoePricingPanel();
+  renderShoeSummary();
+  updateShoeCollectiveSummary();
+}
+window.preloadShoeSizesForRestock = preloadShoeSizesForRestock;
+
+// Entry point: "Restock" button on a footwear collection's stock-list header.
+async function openShoeCollectionRestock(code) {
+  const items = (allItems && allItems.length) ? allItems : await dbAll('items');
+  const item = items.find(i => i.code === code && i.isShoe);
+  if (!item) { toast('Item not found', 'err'); return; }
+
+  showPage('add');
+  setTimeout(async () => {
+    setAddFormType(item.type || '', { skipTypeChange: true });
+    UI.el('f-code').value  = item.code || '';
+    UI.el('f-name').value  = item.name || '';
+    UI.el('edit-id').value = '';
+    onTypeChange();
+
+    ['f-code', 'f-name'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.disabled = true; el.style.opacity = '0.45'; el.style.cursor = 'not-allowed'; }
+    });
+    setAddTypeLocked(true);
+    setSaveBtnLabel('Save new sizes');
+    const ml = UI.el('form-mode-label');
+    if (ml) { ml.hidden = false; ml.textContent = 'Restock ' + item.code + ' - missing & out-of-stock sizes only'; }
+    UI.el('cancel-edit-btn').style.display = 'block';
+
+    await preloadShoeSizesForRestock(item.code);
+  }, 100);
+}
+window.openShoeCollectionRestock = openShoeCollectionRestock;
+
 function showCodeDropdown(items, typedCode) {
   const select = document.getElementById('code-match-select');
   if (select) {
@@ -3728,6 +3773,10 @@ async function renderList() {
             </div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+            <button type="button" class="shoe-group-restock-btn" title="Restock - add missing or out-of-stock sizes"
+                    onclick="event.stopPropagation();openShoeCollectionRestock('${escapeHtml(item.code)}')">
+              <i class="fa-solid fa-plus"></i>
+            </button>
             <span class="tag tag-cyan" style="font-size:10px;">${escapeHtml(item.type)}</span>
             <span style="font-size:16px;color:var(--muted);transition:transform .2s;display:inline-block;transform:rotate(${isExpanded?180:0}deg);">▼</span>
           </div>
@@ -9571,10 +9620,16 @@ function renderAllShoeGroupCards() {
     for (let s = min; s <= max; s++) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'sz-btn' + (_shoeState.sizes.has(s) ? ' sz-active' : '');
+      const isLocked = _shoeState.lockedSizes.has(s);
+      btn.className = 'sz-btn' + (_shoeState.sizes.has(s) ? ' sz-active' : '') + (isLocked ? ' sz-locked' : '');
       btn.id = 'sz-' + s;
       btn.textContent = String(s);
-      btn.onclick = () => toggleShoeSize(s);
+      if (isLocked) {
+        btn.disabled = true;
+        btn.title = 'Already in stock';
+      } else {
+        btn.onclick = () => toggleShoeSize(s);
+      }
       container.appendChild(btn);
     }
     const anySelected = _getGroupSizes(g).some(sz => _shoeState.sizes.has(sz));
@@ -9842,6 +9897,7 @@ function deselectSizeGroup(g) {
 window.deselectSizeGroup = deselectSizeGroup;
 
 function toggleShoeSize(s) {
+  if (_shoeState.lockedSizes.has(s)) return; // already in stock - restock-mode disables these
   if (_shoeState.sizes.has(s)) _shoeState.sizes.delete(s); else _shoeState.sizes.add(s);
 
   renderAllShoeGroupCards();
