@@ -8882,9 +8882,8 @@ openDay = async function() {
   const data  = _getDayRecon(today);
   if (!data) {
     _saveDayRecon(today, { step: 'opening_form', date: today });
-    _clearOpeningInputsOnly(); // fresh day - always start the opening form at 0
   }
-  renderDayState();
+  renderDayState(); // resets the opening form to 0 as part of showing it
 };
 window.openDay = openDay;
 
@@ -8893,8 +8892,7 @@ function initCloseDay() {
   const today = activeDay ? (activeDay.businessDate||activeDay.business_date) : todayDateStr();
   const data  = _getDayRecon(today) || {};
   _saveDayRecon(today, {...data, step: 'closing_form' });
-  _clearClosingInputsOnly(); // fresh closing attempt - always start at 0 (auto-fill from Finance still applies after)
-  renderDayState();
+  renderDayState(); // resets the closing form to 0 as part of showing it
 }
 window.initCloseDay = initCloseDay;
 
@@ -9099,6 +9097,7 @@ renderDayState = function() {
     _renderOpeningSummary(data);
     const el = document.getElementById('day-step-closing-form');
     if (el) el.style.display = '';
+    _clearClosingInputsOnly(); // always 0 on every render of this form - no stale values ever
   } else if (step === 'opening_locked' || (data && data.opening)) {
     if (openLocked) openLocked.style.display = '';
     _renderOpeningSummary(data);
@@ -9107,6 +9106,7 @@ renderDayState = function() {
   } else if (step === 'opening_form' || isOpen) {
     const el = document.getElementById('day-step-opening-form');
     if (el) el.style.display = '';
+    _clearOpeningInputsOnly(); // always 0 on every render of this form - no stale values ever
   } else {
     const el = document.getElementById('day-step-open');
     if (el) el.style.display = '';
@@ -9244,9 +9244,8 @@ dayStartOver = async function() {
     await dbPut('business_days', activeDay);
     clearDayTabLocks();
   }
-  _clearClosingInputsOnly();
   toast('Closing cleared - redo end-of-day', '');
-  renderDayState();
+  renderDayState(); // resets the closing form to 0 as part of showing it
   renderFinancePage();
 };
 window.dayStartOver = dayStartOver;
