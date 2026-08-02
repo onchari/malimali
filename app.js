@@ -9225,11 +9225,12 @@ async function renderHistoryPage() {
     const d = s.businessDate || s.date?.slice(0,10) || today;
     if (d === today) return;
     if (cutoff && new Date(d + 'T12:00:00') < cutoff) return;
-    if (!byDate[d]) byDate[d] = { sales:[], revenue:0, profit:0, cost:0 };
+    if (!byDate[d]) byDate[d] = { sales:[], revenue:0, profit:0, cost:0, qty:0 };
     byDate[d].sales.push(s);
     byDate[d].revenue += (s.revenue || 0);
     byDate[d].profit  += (s.profit  || 0);
     byDate[d].cost    += ((s.revenue||0) - (s.profit||0));
+    byDate[d].qty     += (s.qty || 0);
   });
 
   const datesSorted = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
@@ -9276,20 +9277,26 @@ async function renderHistoryPage() {
     const day   = byDate[date];
     const label = new Date(date + 'T12:00:00').toLocaleDateString('en-GB',
                   { weekday:'short', day:'numeric', month:'short', year:'numeric' });
-    const margin = day.revenue > 0 ? (day.profit / day.revenue * 100).toFixed(0) : '0';
     const profColor = day.profit >= 0 ? 'var(--green)' : 'var(--red)';
     const rows  = [...day.sales].sort((a,b) => new Date(b.date) - new Date(a.date));
 
     return `
       <div class="hist-day-card">
         <div class="hist-day-header">
-          <div>
-            <div style="font-size:14px;font-weight:800;">${label}</div>
-            <div style="font-size:11px;color:var(--muted);">${day.sales.length} sale${day.sales.length!==1?'s':''}</div>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-size:14px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(day.revenue)}</div>
-            <div style="font-size:11px;font-weight:700;font-family:var(--mono);color:${profColor};">profit ${fmt(day.profit)} <span style="color:var(--muted);font-weight:600;">(${margin}%)</span></div>
+          <div class="hist-day-date">${label}</div>
+          <div class="hist-day-stats">
+            <div class="hist-day-stat">
+              <div class="hist-day-stat-val">${fmt(day.revenue)}</div>
+              <div class="hist-day-stat-lbl">Revenue</div>
+            </div>
+            <div class="hist-day-stat">
+              <div class="hist-day-stat-val" style="color:${profColor};">${fmt(day.profit)}</div>
+              <div class="hist-day-stat-lbl">Profit Realized</div>
+            </div>
+            <div class="hist-day-stat">
+              <div class="hist-day-stat-val">${fmtN(day.qty)}</div>
+              <div class="hist-day-stat-lbl">Items Sold</div>
+            </div>
           </div>
         </div>
         ${_histTable(rows, day.cost, day.revenue, day.profit)}
@@ -9297,38 +9304,50 @@ async function renderHistoryPage() {
   }).join('');
 }
 
-// ── Tabular sale record renderer: No | Item | Buying Price | Price Sold | Profit Realized ──
+// Money formatted for a table cell (no currency prefix - shown once in the header instead)
+function _fmtNum(n) {
+  return (parseFloat(n) || 0).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function _truncate(str, max) {
+  return str.length > max ? str.slice(0, max) + '...' : str;
+}
+
+// ── Tabular sale record renderer: No | Item | Buying Price | Price Sold | Profit ──
 function _histTable(sales, totalBuy, totalSell, totalProfit) {
   const rows = sales.map((s, i) => {
     const qty = s.qty || 1;
     const buy = (s.buyPrice || 0) * qty;
     const sell = (s.actualPrice || s.sellPrice || 0) * qty;
     const profit = s.profit || 0;
-    const name = escapeHtml(s.itemName || s.itemCode || 'Item') +
-      (s.itemSize ? ' - Sz ' + escapeHtml(s.itemSize) : '') +
+    const rawName = (s.itemName || s.itemCode || 'Item') +
+      (s.itemSize ? ' - Sz ' + s.itemSize : '') +
       (qty > 1 ? ' (×' + qty + ')' : '');
+    const name = escapeHtml(_truncate(rawName, 30));
     const delBtn = s.id
       ? `<button type="button" onclick="deleteSale(${s.id})" title="Delete sale" class="hist-row-del"><i class="fa-solid fa-trash"></i></button>`
       : '';
     return '<tr>' +
       '<td>' + (i + 1) + '</td>' +
-      '<td>' + name + delBtn + '</td>' +
-      '<td>' + fmt(buy) + '</td>' +
-      '<td>' + fmt(sell) + '</td>' +
-      '<td class="' + (profit >= 0 ? 'hp-pos' : 'hp-neg') + '">' + fmt(profit) + '</td>' +
+      '<td>' + name + '</td>' +
+      '<td>' + _fmtNum(buy) + '</td>' +
+      '<td>' + _fmtNum(sell) + '</td>' +
+      '<td class="' + (profit >= 0 ? 'hp-pos' : 'hp-neg') + '">' + _fmtNum(profit) + '</td>' +
+      '<td class="hist-td-action">' + delBtn + '</td>' +
     '</tr>';
   }).join('');
 
   const totalsRow = '<tr>' +
     '<td></td>' +
     '<td>TOTAL</td>' +
-    '<td>' + fmt(totalBuy) + '</td>' +
-    '<td>' + fmt(totalSell) + '</td>' +
-    '<td class="' + (totalProfit >= 0 ? 'hp-pos' : 'hp-neg') + '">' + fmt(totalProfit) + '</td>' +
+    '<td>' + _fmtNum(totalBuy) + '</td>' +
+    '<td>' + _fmtNum(totalSell) + '</td>' +
+    '<td class="' + (totalProfit >= 0 ? 'hp-pos' : 'hp-neg') + '">' + _fmtNum(totalProfit) + '</td>' +
+    '<td></td>' +
   '</tr>';
 
   return '<div class="hist-table-wrap"><table class="hist-table">' +
-    '<thead><tr><th>No</th><th>Item (Description)</th><th>Buying Price</th><th>Price Sold</th><th>Profit Realized</th></tr></thead>' +
+    '<thead><tr><th>No</th><th>Item</th><th>Buying Price (KES)</th><th>Price Sold (KES)</th><th>Profit (KES)</th><th></th></tr></thead>' +
     '<tbody>' + rows + '</tbody>' +
     '<tfoot>' + totalsRow + '</tfoot>' +
   '</table></div>';
