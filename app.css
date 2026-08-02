@@ -4089,12 +4089,6 @@ body.photo-lightbox-open { overflow: hidden; }
   border-bottom: 1px solid var(--border);
 }
 .day-recon-row:last-of-type { border-bottom: none; }
-.day-recon-emoji {
-  font-size: 20px;
-  flex-shrink: 0;
-  width: 28px;
-  text-align: center;
-}
 .day-recon-info {
   flex: 1;
   min-width: 0;
@@ -4110,7 +4104,8 @@ body.photo-lightbox-open { overflow: hidden; }
   margin-top: 1px;
 }
 .day-recon-input {
-  width: 100px;
+  width: 90px;
+  max-width: 32%;
   padding: 9px 10px;
   border: 1.5px solid var(--border);
   border-radius: var(--r);
@@ -4122,21 +4117,18 @@ body.photo-lightbox-open { overflow: hidden; }
   outline: none;
   flex-shrink: 0;
   transition: border-color .15s;
+  /* Hide native number-input spinner/stepper arrows */
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.day-recon-input::-webkit-outer-spin-button,
+.day-recon-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 .day-recon-input:focus {
   border-color: var(--accent);
   background: white;
-}
-.day-recon-input-flex {
-  flex: 1;
-  min-width: 0;
-  width: auto;
-  text-align: left;
-}
-.day-recon-input-flex::placeholder {
-  font-weight: 500;
-  font-size: 12px;
-  color: var(--muted);
 }
 #sm-qty::placeholder {
   font-size: 14px;

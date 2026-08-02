@@ -2047,22 +2047,28 @@
       </div>
       <div class="day-recon-fields">
         <div class="day-recon-row">
-          <span class="day-recon-emoji">Cash</span>
-          <input id="op-cash" type="number" min="0" inputmode="decimal"
-                 placeholder="Cash at hand - loose float" class="day-recon-input day-recon-input-flex"
-                 aria-label="Cash at hand">
+          <div class="day-recon-info">
+            <div class="day-recon-field-label">Cash</div>
+            <div class="day-recon-field-sub">Loose float at hand</div>
+          </div>
+          <input id="op-cash" type="number" min="0" inputmode="decimal" value="0"
+                 class="day-recon-input" aria-label="Cash at hand">
         </div>
         <div class="day-recon-row">
-          <span class="day-recon-emoji">Till</span>
-          <input id="op-till" type="number" min="0" inputmode="decimal"
-                 placeholder="Amount in till - register cash" class="day-recon-input day-recon-input-flex"
-                 aria-label="Amount in till">
+          <div class="day-recon-info">
+            <div class="day-recon-field-label">Till</div>
+            <div class="day-recon-field-sub">Register cash</div>
+          </div>
+          <input id="op-till" type="number" min="0" inputmode="decimal" value="0"
+                 class="day-recon-input" aria-label="Amount in till">
         </div>
         <div class="day-recon-row" style="border-bottom:none;">
-          <span class="day-recon-emoji">M-Pesa</span>
-          <input id="op-mpesa" type="number" min="0" inputmode="decimal"
-                 placeholder="M-Pesa float - till balance" class="day-recon-input day-recon-input-flex"
-                 aria-label="M-Pesa float">
+          <div class="day-recon-info">
+            <div class="day-recon-field-label">M-Pesa</div>
+            <div class="day-recon-field-sub">Till balance</div>
+          </div>
+          <input id="op-mpesa" type="number" min="0" inputmode="decimal" value="0"
+                 class="day-recon-input" aria-label="M-Pesa float">
         </div>
         <button onclick="lockOpeningBalances()" class="day-recon-btn" style="background:var(--green);">
           Save and Lock Opening
@@ -2103,40 +2109,52 @@
       </div>
       <div class="day-recon-fields">
         <div class="day-recon-row">
-          <span class="day-recon-emoji">Inject</span>
-          <input id="cl-injected" type="number" min="0" inputmode="decimal"
-                 placeholder="Cash injected - extra added today" class="day-recon-input day-recon-input-flex"
-                 aria-label="Cash injected">
+          <div class="day-recon-info">
+            <div class="day-recon-field-label">Injected</div>
+            <div class="day-recon-field-sub">Extra cash added today</div>
+          </div>
+          <input id="cl-injected" type="number" min="0" inputmode="decimal" value="0"
+                 class="day-recon-input" aria-label="Cash injected">
         </div>
         <div class="day-recon-row">
-          <span class="day-recon-emoji">Cash</span>
-          <input id="cl-cash" type="number" min="0" inputmode="decimal"
-                 placeholder="Cash at hand - loose notes now" class="day-recon-input day-recon-input-flex"
-                 aria-label="Cash at hand">
+          <div class="day-recon-info">
+            <div class="day-recon-field-label">Cash</div>
+            <div class="day-recon-field-sub">Loose notes now</div>
+          </div>
+          <input id="cl-cash" type="number" min="0" inputmode="decimal" value="0"
+                 class="day-recon-input" aria-label="Cash at hand">
         </div>
         <div class="day-recon-row">
-          <span class="day-recon-emoji">Till</span>
-          <input id="cl-till" type="number" min="0" inputmode="decimal"
-                 placeholder="Amount in till - register now" class="day-recon-input day-recon-input-flex"
-                 aria-label="Amount in till">
+          <div class="day-recon-info">
+            <div class="day-recon-field-label">Till</div>
+            <div class="day-recon-field-sub">Register now</div>
+          </div>
+          <input id="cl-till" type="number" min="0" inputmode="decimal" value="0"
+                 class="day-recon-input" aria-label="Amount in till">
         </div>
         <div class="day-recon-row">
-          <span class="day-recon-emoji">M-Pesa</span>
-          <input id="cl-mpesa" type="number" min="0" inputmode="decimal"
-                 placeholder="M-Pesa float - balance now" class="day-recon-input day-recon-input-flex"
-                 aria-label="M-Pesa float">
+          <div class="day-recon-info">
+            <div class="day-recon-field-label">M-Pesa</div>
+            <div class="day-recon-field-sub">Balance now</div>
+          </div>
+          <input id="cl-mpesa" type="number" min="0" inputmode="decimal" value="0"
+                 class="day-recon-input" aria-label="M-Pesa float">
         </div>
         <div class="day-recon-row">
-          <span class="day-recon-emoji">Expense</span>
-          <input id="cl-expenses" type="number" min="0" inputmode="decimal"
-                 placeholder="Expenses paid - cash out today" class="day-recon-input day-recon-input-flex"
-                 aria-label="Expenses paid">
+          <div class="day-recon-info">
+            <div class="day-recon-field-label">Expenses</div>
+            <div class="day-recon-field-sub">Cash paid out today</div>
+          </div>
+          <input id="cl-expenses" type="number" min="0" inputmode="decimal" value="0"
+                 class="day-recon-input" aria-label="Expenses paid">
         </div>
         <div class="day-recon-row" style="border-bottom:none;">
-          <span class="day-recon-emoji">Till</span>
-          <input id="cl-withdrawn" type="number" min="0" inputmode="decimal"
-                 placeholder="Amount withdrawn - owner take-out" class="day-recon-input day-recon-input-flex"
-                 aria-label="Amount withdrawn">
+          <div class="day-recon-info">
+            <div class="day-recon-field-label">Withdrawn</div>
+            <div class="day-recon-field-sub">Owner take-out</div>
+          </div>
+          <input id="cl-withdrawn" type="number" min="0" inputmode="decimal" value="0"
+                 class="day-recon-input" aria-label="Amount withdrawn">
         </div>
         <button onclick="reconcileDay()" class="day-recon-btn">
           Reconcile and Close Day

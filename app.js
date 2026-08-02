@@ -9089,7 +9089,7 @@ function _renderReconcileInsights(data, today) {
 // ── Auto-close at 11:59 PM ───────────────────────────────────────
 function _clearClosingInputsOnly() {
   ['cl-injected','cl-cash','cl-till','cl-mpesa','cl-expenses','cl-withdrawn']
-    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = '0'; });
 }
 
 function _moveSalesDetailsAfterOpening() {
@@ -9110,7 +9110,8 @@ async function _prefillClosingFromFinances(today) {
       .reduce((s, e) => s + (e.amount || 0), 0);
     const setIfEmpty = (id, val) => {
       const el = document.getElementById(id);
-      if (el && el.value === '' && val > 0) el.value = String(val);
+      // Fields default to "0" now (not blank), so treat untouched-0 the same as empty.
+      if (el && (el.value === '' || el.value === '0') && val > 0) el.value = String(val);
     };
     setIfEmpty('cl-injected', sumType('injection'));
     setIfEmpty('cl-expenses', sumType('expense'));
@@ -9225,7 +9226,7 @@ reconcileDay = async function() {
       useInjected = finTotals.injection || 0;
       useExpenses = finTotals.expense || 0;
       useWithdrawn = finTotals.withdrawal || 0;
-      const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v > 0 ? String(v) : ''; };
+      const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v || 0); };
       setVal('cl-injected', useInjected);
       setVal('cl-expenses', useExpenses);
       setVal('cl-withdrawn', useWithdrawn);
