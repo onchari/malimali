@@ -581,7 +581,8 @@ function applyAddFormFootwearUI(isShoe) {
   } else {
     if (shoePanel)  shoePanel.style.display = 'none';
     if (stdPricing) stdPricing.style.removeProperty('display');
-    if (sizeField)  sizeField.style.removeProperty('display');
+    // For footwear in Record Only mode hide size field too — sizes not relevant
+    if (sizeField)  sizeField.style.display = (isShoe && _addFormIsRecord) ? 'none' : '';
   }
 }
 
@@ -3715,17 +3716,15 @@ async function renderList() {
   renderTypeChips();
   _renderSizeGroupFilter();
 
-  // Filter non-shoe items normally
+  // Filter — if there's a query, rank by match score; otherwise sort by recency
   let filtered = allItems.filter(item => {
-    const q = search;
-    const matchSearch = !q ||
-      (item.name || '').toLowerCase().includes(q) ||
-      (item.code || '').toLowerCase().includes(q) ||
-      (item.variant || item.size || '').toLowerCase().includes(q) ||
-      (item.type || '').toLowerCase().includes(q);
-    const matchType = itemMatchesTypeFilter(item, activeTypeFilter);
+    const matchSearch = !search || _gscScore(item, search) > 0;
+    const matchType   = itemMatchesTypeFilter(item, activeTypeFilter);
     return matchSearch && matchType;
-  }).sort((a, b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
+  }).sort((a, b) => {
+    if (search) return _gscScore(b, search) - _gscScore(a, search);
+    return new Date(b.createdAt||0) - new Date(a.createdAt||0);
+  });
 
   updateHeader();
 
@@ -9145,6 +9144,188 @@ function toggleShoeGroup(code) {
   renderList();
 }
 window.toggleShoeGroup = toggleShoeGroup;
+
+// ══════════════════════════════════════════════════════════════════
+// GLOBAL SEARCH  (dashboard quick-find + inventory enhancement)
+// ══════════════════════════════════════════════════════════════════
+
+let _gscTimer = null;
+
+/** Score how well an item matches the query (higher = better match) */
+function _gscScore(item, q) {
+  if (!q) return 0;
+  const name    = (item.name    || '').toLowerCase();
+  const code    = (item.code    || '').toLowerCase();
+  const type    = (item.type    || '').toLowerCase();
+  const variant = (item.variant || item.size || '').toLowerCase();
+  let s = 0;
+  if (code === q)         s += 120;
+  if (name === q)         s += 100;
+  if (code.startsWith(q)) s +=  70;
+  if (name.startsWith(q)) s +=  60;
+  if (code.includes(q))   s +=  40;
+  if (name.includes(q))   s +=  35;
+  if (variant.includes(q))s +=  20;
+  if (type.includes(q))   s +=  10;
+  return s;
+}
+
+/** Wrap matching text in a highlight span */
+function _gscHighlight(text, q) {
+  if (!q || !text) return escapeHtml(text || '');
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx < 0) return escapeHtml(text);
+  return escapeHtml(text.slice(0, idx)) +
+    '<mark class="gsc-hl">' + escapeHtml(text.slice(idx, idx + q.length)) + '</mark>' +
+    escapeHtml(text.slice(idx + q.length));
+}
+
+async function _gscSearch(raw) {
+  const q = (raw || '').trim().toLowerCase();
+  if (!q) { gscHideResults(); return; }
+
+  const items = allItems.length ? allItems : await dbAll('items');
+  await enrichShoeItems(items);
+
+  // Score & sort
+  const scored = items
+    .map(item => ({ item, score: _gscScore(item, q) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12);
+
+  const container = document.getElementById('gsc-results');
+  if (!container) return;
+
+  if (!scored.length) {
+    container.innerHTML = '<div class="gsc-empty"><i class="fa-solid fa-magnifying-glass"></i> No items match "<strong>' + escapeHtml(raw) + '</strong>"</div>';
+    container.style.display = 'block';
+    return;
+  }
+
+  const allSizes = await dbAll('shoe_sizes');
+  const allSales = await dbAll('sales');
+  const soldMap  = {};
+  allSales.forEach(s => { soldMap[s.itemId] = (soldMap[s.itemId] || 0) + (s.qty || 1); });
+
+  let html = '';
+  for (const { item } of scored) {
+    const t        = getTypeObj(item.type);
+    const sell     = item.sellPrice || item.sell || 0;
+    const sellMin  = item.sellPriceMin || 0;
+    const isRec    = !!item.isRecord;
+    const qty      = item.isShoe
+      ? allSizes.filter(s => s.itemCode === item.code).reduce((n, s) => n + (s.qty || 0), 0)
+      : (item.qty || 0);
+    const sold     = soldMap[item.id] || 0;
+
+    const stockCls  = isRec ? 'gsc-badge-rec' : qty === 0 ? 'gsc-badge-out' : qty <= LOW_STOCK_LEVEL ? 'gsc-badge-low' : 'gsc-badge-ok';
+    const stockLbl  = isRec ? 'Record' : qty === 0 ? 'Out' : qty + ' pcs';
+    const priceStr  = sellMin > 0 && sellMin < sell
+      ? fmt(sellMin) + ' – ' + fmt(sell)
+      : sell > 0 ? fmt(sell) : '—';
+
+    html += `<div class="gsc-item" onclick="gscOpenItem(${item.id})" role="button" tabindex="0">
+      <div class="gsc-item-icon" style="background:${t.color||'var(--surface2)'};">${t.emoji}</div>
+      <div class="gsc-item-body">
+        <div class="gsc-item-name">${_gscHighlight(item.name || item.code, raw)}</div>
+        <div class="gsc-item-meta">
+          <span class="gsc-item-code">${_gscHighlight(item.code, raw)}</span>
+          <span class="gsc-item-type">${escapeHtml(item.type || '')}</span>
+          ${sold ? '<span class="gsc-item-sold">' + sold + ' sold</span>' : ''}
+        </div>
+      </div>
+      <div class="gsc-item-right">
+        <div class="gsc-item-price">${priceStr}</div>
+        <span class="gsc-badge ${stockCls}">${stockLbl}</span>
+      </div>
+    </div>`;
+  }
+
+  // Footer action
+  html += `<div class="gsc-footer">
+    <button class="gsc-view-all" onclick="gscViewAll()">
+      <i class="fa-solid fa-list"></i>
+      View all ${scored.length === 12 ? '12+' : scored.length} results in Inventory
+    </button>
+  </div>`;
+
+  container.innerHTML = html;
+  container.style.display = 'block';
+  const backdrop = document.getElementById('gsc-backdrop');
+  if (backdrop) backdrop.style.display = 'block';
+}
+
+function gscOnInput(val) {
+  const clearBtn = document.getElementById('gsc-clear');
+  if (clearBtn) clearBtn.style.display = val ? 'flex' : 'none';
+  clearTimeout(_gscTimer);
+  if (!val.trim()) { gscHideResults(); return; }
+  _gscTimer = setTimeout(() => _gscSearch(val), 120);
+}
+
+function gscOnKey(e) {
+  if (e.key === 'Escape') { gscClear(); return; }
+  if (e.key === 'Enter') {
+    const first = document.querySelector('.gsc-item');
+    if (first) first.click();
+  }
+}
+
+function gscHideResults() {
+  const r = document.getElementById('gsc-results');
+  const b = document.getElementById('gsc-backdrop');
+  if (r) r.style.display = 'none';
+  if (b) b.style.display = 'none';
+}
+
+function gscClear() {
+  const inp = document.getElementById('gsc-input');
+  const btn = document.getElementById('gsc-clear');
+  if (inp) inp.value = '';
+  if (btn) btn.style.display = 'none';
+  gscHideResults();
+}
+
+function gscOpenItem(itemId) {
+  gscClear();
+  openSheet(itemId);
+}
+
+function gscViewAll() {
+  const q = (document.getElementById('gsc-input')?.value || '').trim();
+  gscClear();
+  showPage('list');
+  const inv = document.getElementById('search');
+  if (inv) {
+    inv.value = q;
+    onInventorySearch(q);
+  }
+}
+
+window.gscOnInput  = gscOnInput;
+window.gscOnKey    = gscOnKey;
+window.gscClear    = gscClear;
+window.gscOpenItem = gscOpenItem;
+window.gscViewAll  = gscViewAll;
+
+// ── Inventory search wrapper (adds clear button, re-uses renderList) ─
+function onInventorySearch(val) {
+  const btn = document.getElementById('search-clear');
+  if (btn) btn.style.display = val ? 'flex' : 'none';
+  renderList();
+}
+
+function clearInventorySearch() {
+  const inp = document.getElementById('search');
+  const btn = document.getElementById('search-clear');
+  if (inp) { inp.value = ''; }
+  if (btn) btn.style.display = 'none';
+  renderList();
+}
+
+window.onInventorySearch    = onInventorySearch;
+window.clearInventorySearch = clearInventorySearch;
 
 function toggleTypeGroup(parentTypeId) {
   if (_expandedTypeGroups.has(parentTypeId)) {

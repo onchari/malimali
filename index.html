@@ -394,6 +394,24 @@
      ============================================================== -->
 <div class="page active" id="page-dash">
 
+  <!-- ── Global search ────────────────────────────────────────── -->
+  <div class="gsc-wrap" id="gsc-wrap">
+    <div class="gsc-bar">
+      <i class="fa-solid fa-magnifying-glass gsc-icon"></i>
+      <input type="search" id="gsc-input" class="gsc-input"
+             placeholder="Search items — name, code, type…"
+             autocomplete="off" spellcheck="false"
+             oninput="gscOnInput(this.value)"
+             onkeydown="gscOnKey(event)">
+      <button id="gsc-clear" class="gsc-clear" onclick="gscClear()" style="display:none;"
+              aria-label="Clear search">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div id="gsc-results" class="gsc-results" style="display:none;"></div>
+  </div>
+  <div id="gsc-backdrop" class="gsc-backdrop" onclick="gscClear()" style="display:none;"></div>
+
   <!-- ── Period selector ──────────────────────────────────────── -->
   <div class="dash-period-bar">
     <button onclick="dashSetPeriod('today')"  id="dash-period-today"  class="fin-filter-btn active">Today</button>
@@ -484,8 +502,13 @@
   <div class="search-wrap">
     <span class="s-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
     <input class="search-input" id="search"
-           placeholder="Search by name, code, size..."
-           oninput="renderList()">
+           placeholder="Search by name, code, type, size…"
+           autocomplete="off" spellcheck="false"
+           oninput="onInventorySearch(this.value)">
+    <button id="search-clear" class="search-clear-btn" onclick="clearInventorySearch()"
+            style="display:none;" aria-label="Clear">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
   </div>
 
   <!-- Type filter chips - populated by renderTypeChips() -->
