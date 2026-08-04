@@ -568,7 +568,8 @@ function applyAddFormFootwearUI(isShoe) {
     return;
   }
   if (modeToggle) modeToggle.style.removeProperty('display');
-  if (isShoe) {
+  // Record Only: size selection is never needed regardless of category
+  if (isShoe && !_addFormIsRecord) {
     if (shoePanel)  shoePanel.style.removeProperty('display');
     if (stdPricing) stdPricing.style.display = 'none';
     if (sizeField)  sizeField.style.display = 'none';
@@ -1279,7 +1280,7 @@ function showPage(id) {
   if (id === 'sell') showSalesTab(_activeSalesTab);
   if (id === 'finance')  { renderFinancePage(); }
   if (id === 'settings') { renderCategorySettings(); }
-  if (id === 'add') setItemMode(_addFormIsRecord);
+  if (id === 'add') setTimeout(() => setItemMode(_addFormIsRecord), 0);
 }
 
 // Guard: wrap showPage to enforce tab access by role
@@ -3423,7 +3424,9 @@ function clearForm() {
   UI.el('edit-id').value   = '';
   _editingItemId = null;  // clear JS-side edit tracker
   _lastAddFormType = '';
-  setAddFormType('', { skipTypeChange: true });
+  // Default to General category; fall back to empty if it doesn't exist
+  const _defaultType = types.find(t => t.name === 'General' && isCategoryActive(t)) ? 'General' : '';
+  setAddFormType(_defaultType, { skipTypeChange: true });
   UI.el('f-code').value    = '';
   UI.el('f-name').value    = '';
   UI.el('f-size').value    = '';
@@ -3452,7 +3455,6 @@ function clearForm() {
   resetShoeUiPanels();
   _addFormWasFootwear = false;
   _addFormIsRecord    = true;
-  setItemMode(true);    // reset toggle to Record Only (default)
   _preloadShoeCode = '';
   const pageAdd = document.getElementById('page-add');
   if (pageAdd) pageAdd.classList.remove('footwear-add-mode');
@@ -3466,6 +3468,9 @@ function clearForm() {
   hideRestockView();
   _wishStockingFromId = null;
   onTypeChange();
+
+  // Apply Record Only AFTER onTypeChange so nothing overwrites it
+  setItemMode(true);
 
   clearCodeMatchSelect();
   hideCodeDropdown();
@@ -9182,6 +9187,10 @@ function setItemMode(isRecord) {
     if (qtyField)   qtyField.style.removeProperty('display');
     if (recordNote) recordNote.style.display = 'none';
   }
+
+  // Re-evaluate shoe panel visibility — toggling mode on a footwear category
+  // must show/hide sizes immediately without waiting for onTypeChange
+  applyAddFormFootwearUI(isAddFormFootwearContext());
 }
 window.setItemMode = setItemMode;
 
@@ -9619,7 +9628,7 @@ window.dayStartOver = dayStartOver;
 initDB();
 updateFirebaseEnvUI();
 setTimeout(initFirebase, 800);
-setItemMode(true);   // default: Record Only
+setTimeout(() => setItemMode(true), 0);  // default: Record Only — runs after all sync init
 
 // ── Debounced sync (pull remote, then push local) ───────────
 let _autoSyncTimer = null;
