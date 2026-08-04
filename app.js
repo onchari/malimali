@@ -2161,38 +2161,50 @@ async function deleteType(id) {
 
 // ===== PROFIT PREVIEW =====
 function updateProfitPreview() {
-  const buy  = parseFloat(UI.el('f-buy').value)  || 0;
-  const sell = parseFloat(UI.el('f-sell').value) || 0;
-  const qty  = parseInt(UI.el('f-qty').value)    || 0;
+  const buy     = parseFloat(UI.el('f-buy')?.value)     || 0;
+  const sell    = parseFloat(UI.el('f-sell')?.value)    || 0;
+  const sellMin = parseFloat(UI.el('f-sell-min')?.value) || 0;
+  const qty     = parseInt(UI.el('f-qty')?.value)       || 0;
   const preview = UI.el('profit-preview');
   if (!preview) return;
 
   if (buy > 0 && sell > 0) {
-    const profit = sell - buy;
-    const margin = sell > 0 ? ((profit / sell) * 100).toFixed(1) : 0;
-    const profitColor = profit >= 0 ? 'var(--green)' : 'var(--red)';
+    const profitMax = sell - buy;
+    const profitMin = sellMin > 0 ? sellMin - buy : profitMax;
+    const hasRange  = sellMin > 0 && sellMin < sell;
+    const marginMax = ((profitMax / sell) * 100).toFixed(1);
+    const colorMax  = profitMax >= 0 ? 'var(--green)' : 'var(--red)';
+    const colorMin  = profitMin >= 0 ? 'var(--green)' : 'var(--red)';
 
-    // Compact pill values
-    const ppProfit = document.getElementById('pp-profit');
-    const ppMargin = document.getElementById('pp-margin');
-    const ppTotal  = document.getElementById('pp-total');
+    const ppProfit   = document.getElementById('pp-profit');
+    const ppMargin   = document.getElementById('pp-margin');
+    const ppTotal    = document.getElementById('pp-total');
     const ppTotalRow = document.getElementById('pp-total-row');
 
-    if (ppProfit) { ppProfit.textContent = (profit >= 0 ? '+' : '') + fmt(profit); ppProfit.style.color = profitColor; }
-    if (ppMargin) { ppMargin.textContent = margin + '%'; ppMargin.style.color = profit >= 0 ? 'var(--accent)' : 'var(--red)'; }
+    if (ppProfit) {
+      ppProfit.textContent = hasRange
+        ? (profitMin >= 0 ? '+' : '') + fmt(profitMin) + ' – ' + (profitMax >= 0 ? '+' : '') + fmt(profitMax)
+        : (profitMax >= 0 ? '+' : '') + fmt(profitMax);
+      ppProfit.style.color = colorMin;
+    }
+    if (ppMargin) { ppMargin.textContent = marginMax + '%'; ppMargin.style.color = profitMax >= 0 ? 'var(--accent)' : 'var(--red)'; }
 
     if (qty > 0) {
-      if (ppTotal)    { ppTotal.textContent = (profit >= 0 ? '+' : '') + fmt(profit * qty); ppTotal.style.color = profitColor; }
+      if (ppTotal) {
+        ppTotal.textContent = hasRange
+          ? (profitMin >= 0 ? '+' : '') + fmt(profitMin * qty) + ' – ' + (profitMax >= 0 ? '+' : '') + fmt(profitMax * qty)
+          : (profitMax >= 0 ? '+' : '') + fmt(profitMax * qty);
+        ppTotal.style.color = colorMin;
+      }
       if (ppTotalRow) ppTotalRow.style.display = '';
     } else {
       if (ppTotalRow) ppTotalRow.style.display = 'none';
     }
 
-    // Hidden fields kept for compatibility
     const ppBuy  = document.getElementById('pp-buy');
     const ppSell = document.getElementById('pp-sell');
     if (ppBuy)  ppBuy.textContent  = fmt(buy);
-    if (ppSell) ppSell.textContent = fmt(sell);
+    if (ppSell) ppSell.textContent = hasRange ? fmt(sellMin) + ' – ' + fmt(sell) : fmt(sell);
 
     preview.style.display = 'block';
   } else {
@@ -3297,8 +3309,11 @@ async function saveItem() {
       }
     }
 
-    // SHOE MODE
-    if (isFootwearType(type) && !editIdRaw) {
+    // Determine Record Only mode early — affects both shoe and standard paths
+    const isRecord = !!_addFormIsRecord;
+
+    // SHOE MODE — skipped for Record Only (no sizes needed for record items)
+    if (isFootwearType(type) && !editIdRaw && !isRecord) {
       const savedCount = await saveShoeItems(code, name, type);
       if (!savedCount) return;
       if (_wishStockingFromId) {
@@ -3315,26 +3330,35 @@ async function saveItem() {
       toast(''+savedCount+' shoe size(s) saved!','ok');return;
     }
 
-    // STANDARD ADD / EDIT - only code and name are required; size, qty, buy and sell are optional
-    const isRecord = !!_addFormIsRecord;
+    // STANDARD ADD / EDIT
     const size=UI.el('f-size')?.value.trim()||'';
     const qtyRaw=isRecord ? '0' : (UI.el('f-qty')?.value||'');
     const qty=qtyRaw === '' ? 0 : parseInt(qtyRaw);
     const buyRaw=UI.el('f-buy')?.value||'';
     const sellRaw=UI.el('f-sell')?.value||'';
+    const sellMinRaw=UI.el('f-sell-min')?.value||'';
     const buy=parseFloat(buyRaw)||0;
     const sell=parseFloat(sellRaw)||0;
+    const sellPriceMin=parseFloat(sellMinRaw)||0;
     if (!isRecord && qtyRaw !== '' && isNaN(qty)) return Validate.fail('Enter a valid quantity', 'f-qty');
     if (!isRecord && qty < 0) return Validate.fail('Quantity cannot be negative', 'f-qty');
     if (!isRecord && qty > 999999) return Validate.fail('Quantity exceeds maximum (999,999)', 'f-qty');
     if (!isRecord && qty > CODE_MAX_QTY && !confirm('Adding ' + qty + ' units - confirm?')) return;
+    // Record Only: buy price is the one mandatory pricing field
+    if (isRecord && (!buy || buy <= 0)) return Validate.fail('Buy price is required for Record items', 'f-buy');
     if (!Validate.moneyOptional(buyRaw === '' ? null : buy, 'f-buy', 'Buy price')) return;
     if (!Validate.moneyOptional(sellRaw === '' ? null : sell, 'f-sell', 'Sell price')) return;
     if (buy > 0 && sell > 0 && sell < buy) {
       return Validate.fail('Selling price (' + fmt(sell) + ') cannot be less than buying price (' + fmt(buy) + ')', 'f-sell');
     }
+    if (sellPriceMin > 0 && sell > 0 && sellPriceMin >= sell) {
+      return Validate.fail('Min sell price must be lower than sell price (' + fmt(sell) + ')', 'f-sell-min');
+    }
+    if (sellPriceMin > 0 && buy > 0 && sellPriceMin < buy) {
+      if (!confirm('Min sell price (' + fmt(sellPriceMin) + ') is below buy price (' + fmt(buy) + '). Confirm?')) return;
+    }
     const profit=sell-buy;
-    const item={type,code,name,variant:size,buyPrice:buy,sellPrice:sell,profit,qty,isRecord,createdAt:new Date().toISOString()};
+    const item={type,code,name,variant:size,buyPrice:buy,sellPrice:sell,sellPriceMin:sellPriceMin||undefined,profit,qty,isRecord,createdAt:new Date().toISOString()};
 
     if(editIdRaw){
       const resolvedId = parseInt(editIdRaw);
@@ -3346,8 +3370,9 @@ async function saveItem() {
         id:        resolvedId,
         type, code, name,
         variant:   size,
-        buyPrice:  buy,
-        sellPrice: sell,
+        buyPrice:     buy,
+        sellPrice:    sell,
+        sellPriceMin: sellPriceMin || undefined,
         profit,
         qty,
         isRecord,
@@ -3401,9 +3426,11 @@ function clearForm() {
   UI.el('f-code').value    = '';
   UI.el('f-name').value    = '';
   UI.el('f-size').value    = '';
-  UI.el('f-qty').value     = '';
-  UI.el('f-buy').value     = '';
-  UI.el('f-sell').value    = '';
+  UI.el('f-qty').value      = '';
+  UI.el('f-buy').value      = '';
+  UI.el('f-sell').value     = '';
+  const _fSellMin = UI.el('f-sell-min');
+  if (_fSellMin) _fSellMin.value = '';
   const pp = UI.el('profit-preview');
   if (pp) pp.style.display = 'none';
   setSaveBtnLabel('Save');
@@ -3423,8 +3450,8 @@ function clearForm() {
   _shoeState.reset();
   resetShoeUiPanels();
   _addFormWasFootwear = false;
-  _addFormIsRecord    = false;
-  setItemMode(false);   // reset toggle to Track Stock
+  _addFormIsRecord    = true;
+  setItemMode(true);    // reset toggle to Record Only (default)
   _preloadShoeCode = '';
   const pageAdd = document.getElementById('page-add');
   if (pageAdd) pageAdd.classList.remove('footwear-add-mode');
@@ -3449,7 +3476,7 @@ let _editOriginItemId   = null;
 let _editingItemId      = null;  // tracks current edit ID reliably (backup to hidden input)
 let _lastAddFormType    = '';    // last f-type value - avoid wiping shoe sizes on tab switch
 let _addFormWasFootwear = false;
-let _addFormIsRecord    = false;   // true = Record Only mode
+let _addFormIsRecord    = true;    // true = Record Only mode (default)
 let _preloadShoeCode    = '';
 let _selectedShoeSize   = null;
 let _selectedShoeSizes  = new Set();
@@ -4834,8 +4861,10 @@ async function editItem() {
   UI.el('f-name').value  = item.name  || '';
   UI.el('f-size').value  = item.variant || item.size || '';   // normalized field name
   UI.el('f-qty').value   = item.qty   ?? '';
-  UI.el('f-buy').value   = item.buyPrice  || item.buy  || '';  // normalized field name
-  UI.el('f-sell').value  = item.sellPrice || item.sell || '';  // normalized field name
+  UI.el('f-buy').value   = item.buyPrice  || item.buy  || '';
+  UI.el('f-sell').value  = item.sellPrice || item.sell || '';
+  const _editSellMin = UI.el('f-sell-min');
+  if (_editSellMin) _editSellMin.value = item.sellPriceMin || '';
   if (item.isRecord) setItemMode(true);
   // Lock code and type - identifying fields
   ['f-code'].forEach(id => {
@@ -5422,10 +5451,29 @@ async function openSellModal(itemId) {
   document.getElementById('sm-stock').textContent = item.isRecord ? '∞' : item.qty;
   const _itemSell = item.sellPrice || item.sell || 0;
   const _itemBuy  = item.buyPrice  || item.buy  || 0;
+  const _itemSellMin = item.sellPriceMin || 0;
   document.getElementById('sm-sell').textContent = fmt(_itemSell);
+  const _smPriceRange = document.getElementById('sm-price-range');
+  const _smMinVal     = document.getElementById('sm-price-min-val');
+  if (_smPriceRange) {
+    if (_itemSellMin > 0 && _itemSellMin < _itemSell) {
+      if (_smMinVal) _smMinVal.textContent = fmt(_itemSellMin);
+      _smPriceRange.style.display = 'block';
+    } else {
+      _smPriceRange.style.display = 'none';
+    }
+  }
+  const _maxProfit = _itemSell - _itemBuy;
+  const _minProfit = _itemSellMin > 0 ? _itemSellMin - _itemBuy : _maxProfit;
   const _smProfit = document.getElementById('sm-profit');
-  if (_smProfit) _smProfit.textContent = (_itemSell - _itemBuy >= 0 ? '+' : '') + fmt(_itemSell - _itemBuy);
-  const _tpel=document.getElementById('sm-total-profit'); if(_tpel) _tpel.textContent = (_itemSell - _itemBuy >= 0 ? '+' : '') + fmt(_itemSell - _itemBuy);
+  if (_smProfit) {
+    _smProfit.textContent = _itemSellMin > 0 && _itemSellMin < _itemSell
+      ? ('+' + fmt(_minProfit) + ' – +' + fmt(_maxProfit))
+      : ((_maxProfit >= 0 ? '+' : '') + fmt(_maxProfit));
+  }
+  const _smProfitRange = document.getElementById('sm-profit-range');
+  if (_smProfitRange) _smProfitRange.style.display = 'none';
+  const _tpel=document.getElementById('sm-total-profit'); if(_tpel) _tpel.textContent = (_maxProfit >= 0 ? '+' : '') + fmt(_maxProfit);
   document.getElementById('sm-cur').textContent = currency;
   document.getElementById('sm-qty').value = 0;
   document.getElementById('sm-qty').min = 0;
@@ -5487,10 +5535,16 @@ async function updateSellModal() {
     smProfit.textContent = (profitPerItem >= 0 ? '+' : '') + fmt(profitPerItem);
     smProfit.style.color = profitPerItem >= 0 ? 'var(--green)' : 'var(--red)';
   }
+  // ── Min-price floor warning ────────────────────────────────────
+  const sellMin = (_isShoeSale && _sellShoeSize ? (_sellShoeSize.sellPriceMin||0) : (item.sellPriceMin||0));
+  const minWarn = document.getElementById('sm-min-warn');
+  const belowMin = sellMin > 0 && priceUsed > 0 && priceUsed < sellMin;
+  if (minWarn) minWarn.style.display = belowMin ? 'block' : 'none';
+
   const confirmBtn = document.getElementById('confirm-sale-btn');
   if (confirmBtn) {
-    confirmBtn.textContent = 'CONFIRM SALE';
-    confirmBtn.style.background = '#1e7a3e';
+    confirmBtn.textContent = belowMin ? '⚠ CONFIRM BELOW MIN' : 'CONFIRM SALE';
+    confirmBtn.style.background = belowMin ? '#d97706' : '#1e7a3e';
     confirmBtn.title = priceUsed < baseBuy && priceUsed > 0 ? 'Warning: selling below cost price' : '';
   }
   } catch(e) { console.error("[updateSellModal]", e); toast("Error: " + e.message, "err"); }
@@ -5557,6 +5611,13 @@ async function confirmSale() {
 
   // ── Validate sale price ────────────────────────────────────────
   if (!Validate.salePrice(priceUsed, buyPrice, sellPrice)) { _overlay.hide(); return; }
+  const _sellMin = (_isShoeSale && _sellShoeSize ? (_sellShoeSize.sellPriceMin || 0) : (item.sellPriceMin || 0));
+  if (_sellMin > 0 && priceUsed < _sellMin) {
+    const go = confirm(
+      'Price ' + fmt(priceUsed) + ' is below minimum ' + fmt(_sellMin) + '.\nSell anyway?'
+    );
+    if (!go) { _overlay.hide(); return; }
+  }
 
   const revenue = qty * priceUsed;
   const profit  = qty * (priceUsed - buyPrice);

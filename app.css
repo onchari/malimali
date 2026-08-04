@@ -374,6 +374,14 @@
   flex-direction: column;
   gap: 5px;
 }
+.add-field-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  padding-left: 2px;
+}
 
 .add-label {
   font-size: 11px;
@@ -612,6 +620,31 @@
 /* 2 and 3 column grids */
 .add-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .add-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+
+/* Sell price range row (min acceptable price) */
+.add-sell-range-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(245,158,11,.07);
+  border: 1px dashed #f59e0b;
+  border-radius: 8px;
+}
+.sell-range-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #92400e;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sell-range-input {
+  width: 100px !important;
+  flex-shrink: 0;
+  border-color: #f59e0b !important;
+}
+.sell-range-input:focus { border-color: #d97706 !important; }
 
 /* Profit preview */
 .add-profit-pill {
