@@ -1279,6 +1279,7 @@ function showPage(id) {
   if (id === 'sell') showSalesTab(_activeSalesTab);
   if (id === 'finance')  { renderFinancePage(); }
   if (id === 'settings') { renderCategorySettings(); }
+  if (id === 'add') setItemMode(_addFormIsRecord);
 }
 
 // Guard: wrap showPage to enforce tab access by role
@@ -9161,21 +9162,13 @@ function setItemMode(isRecord) {
   const toggleInput = document.getElementById('mode-toggle-input');
   if (toggleInput) toggleInput.checked = !isRecord;
 
-  // Update label text and bar colour
-  const labelEl = document.getElementById('mode-label-text');
-  const modeBar = document.getElementById('item-mode-toggle');
-  if (labelEl) {
-    if (isRecord) {
-      labelEl.innerHTML =
-        '<span class="add-mode-title"><i class="fa-solid fa-file-lines"></i> Record Only</span>' +
-        '<span class="add-mode-sub">Price info only — qty not tracked</span>';
-    } else {
-      labelEl.innerHTML =
-        '<span class="add-mode-title"><i class="fa-solid fa-boxes-stacked"></i> Track Stock</span>' +
-        '<span class="add-mode-sub">Qty, prices &amp; stock alerts</span>';
-    }
-  }
-  if (modeBar) modeBar.classList.toggle('record-mode', !!isRecord);
+  // Highlight the active label
+  const modeBar     = document.getElementById('item-mode-toggle');
+  const optRecord   = document.getElementById('mode-opt-record');
+  const optTrack    = document.getElementById('mode-opt-track');
+  if (optRecord) optRecord.classList.toggle('mode-opt-active', !!isRecord);
+  if (optTrack)  optTrack.classList.toggle('mode-opt-active', !isRecord);
+  if (modeBar)   modeBar.classList.toggle('record-mode', !!isRecord);
 
   // Show/hide qty field and record note
   const qtyField   = document.getElementById('f-qty')?.closest('.add-field');
@@ -9626,6 +9619,7 @@ window.dayStartOver = dayStartOver;
 initDB();
 updateFirebaseEnvUI();
 setTimeout(initFirebase, 800);
+setItemMode(true);   // default: Record Only
 
 // ── Debounced sync (pull remote, then push local) ───────────
 let _autoSyncTimer = null;

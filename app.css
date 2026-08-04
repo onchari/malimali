@@ -620,31 +620,27 @@
 /* 2 and 3 column grids */
 .add-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .add-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.add-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
-/* Sell price range row (min acceptable price) */
-.add-sell-range-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-  padding: 8px 10px;
-  background: rgba(245,158,11,.07);
-  border: 1px dashed #f59e0b;
+/* Sell price max/min labels */
+.sell-lbl-max { color: var(--accent2) !important; }
+.sell-lbl-min { color: #d97706 !important; }
+.sell-lbl-tag {
+  display: inline-block;
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 5px;
   border-radius: 8px;
+  background: rgba(30,122,62,.12);
+  color: var(--accent2);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  vertical-align: middle;
 }
-.sell-range-label {
-  font-size: 12px;
-  font-weight: 700;
+.sell-lbl-tag-min {
+  background: rgba(245,158,11,.15);
   color: #92400e;
-  white-space: nowrap;
-  flex-shrink: 0;
 }
-.sell-range-input {
-  width: 100px !important;
-  flex-shrink: 0;
-  border-color: #f59e0b !important;
-}
-.sell-range-input:focus { border-color: #d97706 !important; }
 
 /* Profit preview */
 .add-profit-pill {
@@ -3790,25 +3786,20 @@ body.photo-lightbox-open { overflow: hidden; }
   transform: translateX(30px);
 }
 
-/* Label text next to toggle */
-.add-mode-desc {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-.add-mode-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-}
-.add-mode-title i { margin-right: 4px; }
-.add-mode-sub {
-  font-size: 10.5px;
+/* Side labels for the toggle */
+.mode-opt {
+  font-size: 12px;
+  font-weight: 600;
   color: var(--muted);
+  transition: color .2s;
+  white-space: nowrap;
 }
-/* Record Only state */
-.add-mode-bar.record-mode .add-mode-title { color: #92400e; }
+.mode-opt i { margin-right: 3px; font-size: 11px; }
+.mode-opt-active { color: var(--text); font-weight: 800; }
+#mode-opt-record.mode-opt-active { color: #92400e; }
+#mode-opt-track.mode-opt-active  { color: var(--accent); }
+
+/* Record Only bar tint */
 .add-mode-bar.record-mode { background: #fffbeb; border-color: #f59e0b; }
 
 /* Record mode note in pricing section */

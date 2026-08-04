@@ -691,16 +691,18 @@
 
   <div class="add-flow">
 
-  <!-- Item mode toggle: Track Stock ↔ Record Only -->
+  <!-- Item mode toggle: Record Only (default) ↔ Track Stock -->
   <div id="item-mode-toggle" class="add-mode-bar">
-    <label class="ios-toggle" for="mode-toggle-input" title="Toggle between Track Stock and Record Only">
+    <div class="mode-opt" id="mode-opt-record">
+      <i class="fa-solid fa-file-lines"></i> Record Only
+    </div>
+    <label class="ios-toggle" for="mode-toggle-input" title="Record Only / Track Stock">
       <input type="checkbox" id="mode-toggle-input" onchange="setItemMode(!this.checked)">
       <span class="ios-toggle-track"><span class="ios-toggle-on-label">ON</span></span>
       <span class="ios-toggle-thumb"></span>
     </label>
-    <div class="add-mode-desc" id="mode-label-text">
-      <span class="add-mode-title"><i class="fa-solid fa-boxes-stacked"></i> Track Stock</span>
-      <span class="add-mode-sub">Qty, prices &amp; stock alerts</span>
+    <div class="mode-opt" id="mode-opt-track">
+      <i class="fa-solid fa-boxes-stacked"></i> Track Stock
     </div>
   </div>
 
@@ -854,8 +856,8 @@
     </div>
     <div class="add-section add-section-inset">
 
-      <!-- Qty · Buy · Sell (max) in one row -->
-      <div class="add-row-3">
+      <!-- Row 1: Qty + Buy price -->
+      <div class="add-row-2">
         <div class="add-field">
           <label class="add-field-lbl">Qty</label>
           <input class="add-input add-center add-mono" id="f-qty" type="number"
@@ -871,26 +873,25 @@
                  oninput="updateProfitPreview()">
           <span id="bp-cur" style="display:none;">KES</span>
         </div>
+      </div>
+
+      <!-- Row 2: Sell max + Sell min (both optional) -->
+      <div class="add-row-2" style="margin-top:8px;">
         <div class="add-field">
-          <label class="add-field-lbl">Sell ↑ max</label>
+          <label class="add-field-lbl sell-lbl-max">Sell price <span class="sell-lbl-tag">max</span></label>
           <input class="add-input add-center" id="f-sell" type="number"
                  placeholder="0" min="0" inputmode="decimal"
                  aria-label="Sell price (highest)"
                  oninput="updateProfitPreview()">
           <span id="sp-cur" style="display:none;">KES</span>
         </div>
-      </div>
-
-      <!-- Sell price floor (optional) -->
-      <div class="add-sell-range-row" id="f-sell-min-row">
-        <span class="sell-range-label">
-          Sell ↓ min
-          <span style="opacity:.6;font-weight:400;"> — lowest you'll accept (0 = no floor)</span>
-        </span>
-        <input class="add-input add-center add-mono sell-range-input" id="f-sell-min" type="number"
-               placeholder="0" min="0" inputmode="decimal"
-               aria-label="Minimum sell price"
-               oninput="updateProfitPreview()">
+        <div class="add-field" id="f-sell-min-row">
+          <label class="add-field-lbl sell-lbl-min">Min sell <span class="sell-lbl-tag sell-lbl-tag-min">floor</span></label>
+          <input class="add-input add-center" id="f-sell-min" type="number"
+                 placeholder="0" min="0" inputmode="decimal"
+                 aria-label="Minimum sell price"
+                 oninput="updateProfitPreview()">
+        </div>
       </div>
 
       <!-- Profit preview pill -->
