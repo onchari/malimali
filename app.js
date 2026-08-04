@@ -568,22 +568,11 @@ function applyAddFormFootwearUI(isShoe) {
     return;
   }
   if (modeToggle) modeToggle.style.removeProperty('display');
-  // Record Only: size selection is never needed regardless of category
-  if (isShoe && !_addFormIsRecord) {
-    if (shoePanel)  shoePanel.style.removeProperty('display');
-    if (stdPricing) stdPricing.style.display = 'none';
-    if (sizeField)  sizeField.style.display = 'none';
-    renderShoeGroupButtons();
-    prepareShoeSizePickerUI();
-    showShoePricingPanel();
-    initShoeCollectiveSummaryListeners();
-    updateShoeCollectiveSummary();
-  } else {
-    if (shoePanel)  shoePanel.style.display = 'none';
-    if (stdPricing) stdPricing.style.removeProperty('display');
-    // For footwear in Record Only mode hide size field too — sizes not relevant
-    if (sizeField)  sizeField.style.display = (isShoe && _addFormIsRecord) ? 'none' : '';
-  }
+  // Shoe size panel is never shown in the add form — footwear saved as standard items
+  if (shoePanel)  shoePanel.style.display = 'none';
+  if (stdPricing) stdPricing.style.removeProperty('display');
+  // Hide the text size/variant field for footwear (sizes tracked externally)
+  if (sizeField)  sizeField.style.display = isShoe ? 'none' : '';
 }
 
 function _sortTypes(a, b) {
@@ -3315,8 +3304,8 @@ async function saveItem() {
     // Determine Record Only mode early — affects both shoe and standard paths
     const isRecord = !!_addFormIsRecord;
 
-    // SHOE MODE — skipped for Record Only (no sizes needed for record items)
-    if (isFootwearType(type) && !editIdRaw && !isRecord) {
+    // SHOE MODE — disabled; footwear now saved as standard items
+    if (false && isFootwearType(type) && !editIdRaw && !isRecord) {
       const savedCount = await saveShoeItems(code, name, type);
       if (!savedCount) return;
       if (_wishStockingFromId) {
