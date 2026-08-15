@@ -2342,6 +2342,16 @@ function getItemPhoto(itemId) {
   return localStorage.getItem('item_photo_' + itemId) || null;
 }
 
+function buildItemListThumb(itemId, typeObj) {
+  const photo = getItemPhoto(itemId);
+  const bg = (typeObj && typeObj.color) || 'var(--surface2)';
+  const emoji = (typeObj && typeObj.emoji) || '📦';
+  if (photo) {
+    return '<div class="item-photo-wrap"><img src="' + photo + '" alt="" class="item-photo-img"></div>';
+  }
+  return '<div class="item-photo-wrap item-photo-fallback" style="background:' + bg + ';"><span>' + emoji + '</span></div>';
+}
+
 async function setItemPhoto(itemId, dataUrl) {
   if (!dataUrl) return;
   try {
@@ -3780,7 +3790,7 @@ async function renderList() {
         cards.push(`
           <div class="item-card item-card-shoe-header" onclick="openSheet(${item.id})">
             <div class="item-top">
-              <div class="item-icon" style="background:${t.color || 'var(--surface2)'};">${t.emoji}</div>
+              ${buildItemListThumb(item.id, t)}
               <div class="item-body">
                 <div class="item-code">${escapeHtml(item.code)}</div>
                 <div class="item-name">${escapeHtml(item.name || '')}</div>
@@ -3873,7 +3883,7 @@ async function renderList() {
         cards.push(`
           <div class="item-card" onclick="openSheet(${item.id})">
             <div class="item-top">
-              <div class="item-icon" style="background:${t.color||'var(--surface2)'};">${t.emoji}</div>
+              ${buildItemListThumb(item.id, t)}
               <div class="item-body">
                 <div class="item-code">${escapeHtml(item.code)}</div>
                 <div class="item-name">${escapeHtml(item.name||'')}</div>
@@ -3994,7 +4004,7 @@ async function renderList() {
             <div class="item-card type-group-child-row${ci.qty<=0?' shoe-out-card':''}" onclick="openSheet(${ci.id})">
               ${ci.qty<=0?'<div class="out-of-stock-overlay"><span>OUT OF STOCK - RESTOCK</span></div>':''}
               <div class="item-top">
-                <div class="item-icon" style="background:${ct.color||'var(--surface2)'};">${ct.emoji||'📦'}</div>
+                ${buildItemListThumb(ci.id, ct)}
                 <div class="item-body">
                   <div class="item-code">${escapeHtml(ci.code)}${(ci.variant||ci.size)?' - '+escapeHtml(ci.variant||ci.size):''}</div>
                   <div class="item-name">${escapeHtml(ci.name||'')}</div>
@@ -4027,7 +4037,7 @@ async function renderList() {
         <div class="item-card${isRec ? ' item-card-record' : (item.qty<=0?' shoe-out-card':'')}" onclick="openSheet(${item.id})">
           ${!isRec && item.qty<=0 ? '<div class="out-of-stock-overlay"><span>OUT OF STOCK - RESTOCK</span></div>' : ''}
           <div class="item-top">
-            <div class="item-icon" style="background:${t.color||'var(--surface2)'};">${t.emoji}</div>
+            ${buildItemListThumb(item.id, t)}
             <div class="item-body">
               <div class="item-code">${escapeHtml(item.code)}${(item.variant||item.size)?' - '+escapeHtml(item.variant||item.size):''}</div>
               <div class="item-name">${escapeHtml(item.name||'')}</div>
