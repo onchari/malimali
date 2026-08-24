@@ -4157,31 +4157,72 @@ body.photo-lightbox-open { overflow: hidden; }
   border-top: 2px solid var(--border);
   background: var(--surface2);
 }
-/* Action group inside each sale row */
-.hist-action-group {
-  display: flex;
-  gap: 4px;
-  justify-content: flex-end;
-  flex-wrap: nowrap;
+/* Clickable sale rows */
+.hist-clickable-row { cursor: pointer; transition: background .1s; }
+.hist-clickable-row:active { background: var(--bg2); }
+.hist-td-chevron { text-align: right; color: var(--muted); font-size: 10px; padding-right: 10px; }
+
+/* ── Sale detail sheet ───────────────────────────────────────────── */
+.sds-info-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px;
+  margin-bottom: 14px;
 }
-.hist-act-btn {
-  width: 28px; height: 28px;
-  border-radius: 7px;
-  border: 1px solid transparent;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  cursor: pointer;
-  transition: background .12s, color .12s;
+.sds-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.sds-item-name { font-size: 17px; font-weight: 900; color: var(--text); }
+.sds-item-code { font-size: 12px; color: var(--accent); font-family: var(--mono); margin-top: 2px; }
+.sds-item-badge {
+  font-size: 10px; font-weight: 800;
+  padding: 3px 10px; border-radius: 12px;
+  text-transform: uppercase; letter-spacing: .5px;
   flex-shrink: 0;
 }
-.hist-act-edit { background: rgba(30,122,62,.1); border-color: rgba(30,122,62,.25); color: var(--accent); }
-.hist-act-edit:active { background: var(--accent); color: white; }
-.hist-act-add  { background: rgba(0,122,255,.08); border-color: rgba(0,122,255,.2); color: #0a84ff; }
-.hist-act-add:active  { background: #0a84ff; color: white; }
-.hist-act-del  { background: rgba(220,38,38,.08); border-color: rgba(220,38,38,.2); color: var(--red); }
-.hist-act-del:active  { background: var(--red); color: white; }
+.sds-pm-cash   { background: rgba(30,122,62,.12); color: var(--green); }
+.sds-pm-mpesa  { background: rgba(0,122,255,.1);  color: #0a84ff; }
+.sds-pm-till   { background: rgba(245,158,11,.12);color: #92400e; }
+.sds-pm-credit { background: rgba(220,38,38,.1);  color: var(--red); }
+.sds-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.sds-stat { text-align: center; background: var(--surface); border-radius: 8px; padding: 8px 4px; }
+.sds-stat-val { font-size: 13px; font-weight: 900; font-family: var(--mono); color: var(--text); }
+.sds-stat-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+.sds-date-row { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.sds-edit-title {
+  font-size: 12px; font-weight: 800; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .5px;
+  margin-bottom: 10px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+/* Action buttons */
+.sds-btn {
+  padding: 14px;
+  border-radius: var(--r);
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity .15s;
+}
+.sds-btn:active { opacity: .75; }
+.sds-btn-edit { background: rgba(30,122,62,.1); color: var(--accent); border: 1.5px solid rgba(30,122,62,.3); }
+.sds-btn-add  { background: rgba(0,122,255,.08); color: #0a84ff;      border: 1.5px solid rgba(0,122,255,.25); }
+.sds-btn-del  { background: rgba(220,38,38,.08); color: var(--red);   border: 1.5px solid rgba(220,38,38,.25); width: 100%; }
 
 #payment-method-section,
 #sm-payment-btns,

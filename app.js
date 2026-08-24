@@ -10056,7 +10056,7 @@ function _fmtNum(n) {
   return (parseFloat(n) || 0).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-// ── Tabular sale record renderer: No | Item | Buy | Sell | Profit | Action ──
+// ── Tabular sale record renderer — each row is clickable ──────────
 function _histTable(sales, totalBuy, totalSell, totalProfit) {
   const rows = sales.map((s, i) => {
     const qty    = s.qty || 1;
@@ -10064,45 +10064,32 @@ function _histTable(sales, totalBuy, totalSell, totalProfit) {
     const sell   = (s.actualPrice || s.sellPrice || 0) * qty;
     const profit = s.profit || 0;
     const rawName = (s.itemName || s.itemCode || 'Item') +
-      (s.itemSize ? ' - Sz ' + s.itemSize : '') +
+      (s.itemSize ? ' · Sz ' + s.itemSize : '') +
       (qty > 1 ? ' ×' + qty : '');
-    const name = escapeHtml(rawName);
-
-    const actions = s.id ? `
-      <div class="hist-action-group">
-        <button type="button" onclick="openEditSaleSheet(${s.id})" title="Edit sale" class="hist-act-btn hist-act-edit">
-          <i class="fa-solid fa-pen"></i>
-        </button>
-        <button type="button" onclick="saleAddToInventory(${s.id})" title="Add to inventory" class="hist-act-btn hist-act-add">
-          <i class="fa-solid fa-box-archive"></i>
-        </button>
-        <button type="button" onclick="deleteSale(${s.id})" title="Delete sale" class="hist-act-btn hist-act-del">
-          <i class="fa-solid fa-trash"></i>
-        </button>
-      </div>` : '';
-
-    return '<tr>' +
-      '<td>' + (i + 1) + '</td>' +
-      '<td>' + name + '</td>' +
-      '<td>' + _fmtNum(buy) + '</td>' +
-      '<td>' + _fmtNum(sell) + '</td>' +
-      '<td class="' + (profit >= 0 ? 'hp-pos' : 'hp-neg') + '">' + _fmtNum(profit) + '</td>' +
-      '<td class="hist-td-action">' + actions + '</td>' +
-    '</tr>';
+    const name    = escapeHtml(rawName);
+    const click   = s.id ? `onclick="openSaleDetail(${s.id})"` : '';
+    const profCls = profit >= 0 ? 'hp-pos' : 'hp-neg';
+    return `<tr class="hist-clickable-row" ${click} title="Tap to view details">` +
+      `<td>${i + 1}</td>` +
+      `<td>${name}</td>` +
+      `<td>${_fmtNum(buy)}</td>` +
+      `<td>${_fmtNum(sell)}</td>` +
+      `<td class="${profCls}">${_fmtNum(profit)}</td>` +
+      `<td class="hist-td-chevron"><i class="fa-solid fa-chevron-right"></i></td>` +
+    `</tr>`;
   }).join('');
 
-  const totalsRow = '<tr class="hist-totals">' +
-    '<td></td>' +
-    '<td>TOTAL</td>' +
-    '<td>' + _fmtNum(totalBuy) + '</td>' +
-    '<td>' + _fmtNum(totalSell) + '</td>' +
-    '<td class="' + (totalProfit >= 0 ? 'hp-pos' : 'hp-neg') + '">' + _fmtNum(totalProfit) + '</td>' +
-    '<td></td>' +
-  '</tr>';
+  const totalsRow = `<tr class="hist-totals">` +
+    `<td></td><td>TOTAL</td>` +
+    `<td>${_fmtNum(totalBuy)}</td>` +
+    `<td>${_fmtNum(totalSell)}</td>` +
+    `<td class="${totalProfit >= 0 ? 'hp-pos' : 'hp-neg'}">${_fmtNum(totalProfit)}</td>` +
+    `<td></td>` +
+  `</tr>`;
 
   return '<div class="hist-table-wrap"><table class="hist-table">' +
-    '<colgroup><col style="width:5%"><col style="width:30%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:26%"></colgroup>' +
-    '<thead><tr><th>#</th><th>Item</th><th>Buy</th><th>Sold</th><th>Profit</th><th>Action</th></tr></thead>' +
+    '<colgroup><col style="width:5%"><col style="width:38%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:12%"></colgroup>' +
+    '<thead><tr><th>#</th><th>Item</th><th>Buy</th><th>Sold</th><th>Profit</th><th></th></tr></thead>' +
     '<tbody>' + rows + '</tbody>' +
     '<tfoot>' + totalsRow + '</tfoot>' +
   '</table></div>';
@@ -10120,32 +10107,84 @@ function toggleHistDay(safeId) {
 }
 window.toggleHistDay = toggleHistDay;
 
-// ── Edit Sale ─────────────────────────────────────────────────────
-async function openEditSaleSheet(saleId) {
+// ══════════════════════════════════════════════════════════════════
+// SALE DETAIL SHEET
+// ══════════════════════════════════════════════════════════════════
+
+async function openSaleDetail(saleId) {
   const sale = await dbGet('sales', saleId);
   if (!sale) { toast('Sale not found', 'err'); return; }
-  document.getElementById('ess-id').value         = saleId;
-  document.getElementById('ess-item-name').textContent = sale.itemName || sale.itemCode || '—';
-  document.getElementById('ess-item-code').textContent = sale.itemCode || '';
-  document.getElementById('ess-qty').value         = sale.qty || 1;
-  document.getElementById('ess-price').value       = sale.actualPrice || sale.sellPrice || 0;
-  const pmEl = document.getElementById('ess-payment');
-  if (pmEl) pmEl.value = sale.paymentMethod || 'cash';
-  document.getElementById('edit-sale-sheet').classList.add('open');
-}
-window.openEditSaleSheet = openEditSaleSheet;
 
-function closeEditSaleSheet() {
-  document.getElementById('edit-sale-sheet').classList.remove('open');
-}
-window.closeEditSaleSheet = closeEditSaleSheet;
+  document.getElementById('sds-id').value = saleId;
 
-async function saveEditSale() {
-  const id    = parseInt(document.getElementById('ess-id').value);
-  const qty   = parseInt(document.getElementById('ess-qty').value) || 1;
-  const price = parseFloat(document.getElementById('ess-price').value) || 0;
-  const pm    = document.getElementById('ess-payment').value || 'cash';
-  if (!id) return;
+  // Populate view
+  const qty   = sale.qty || 1;
+  const price = sale.actualPrice || sale.sellPrice || 0;
+  const buy   = sale.buyPrice || 0;
+  const profit= sale.profit || qty * (price - buy);
+  const dateStr = sale.date
+    ? new Date(sale.date).toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })
+    : (sale.businessDate || '—');
+
+  document.getElementById('sds-name').textContent    = sale.itemName || '—';
+  document.getElementById('sds-code').textContent    = sale.itemCode || '';
+  document.getElementById('sds-qty').textContent     = fmtN(qty);
+  document.getElementById('sds-price').textContent   = fmt(price);
+  document.getElementById('sds-revenue').textContent = fmt(qty * price);
+  const profEl = document.getElementById('sds-profit');
+  profEl.textContent  = (profit >= 0 ? '+' : '') + fmt(profit);
+  profEl.style.color  = profit >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('sds-date').textContent = dateStr;
+
+  const pm = (sale.paymentMethod || 'cash').toUpperCase();
+  const pmBadge = document.getElementById('sds-payment-badge');
+  pmBadge.textContent = pm;
+  pmBadge.className = 'sds-item-badge sds-pm-' + (sale.paymentMethod || 'cash').toLowerCase();
+
+  // Pre-fill edit form
+  document.getElementById('sds-edit-qty').value   = qty;
+  document.getElementById('sds-edit-price').value = price;
+  const pmSel = document.getElementById('sds-edit-payment');
+  if (pmSel) pmSel.value = sale.paymentMethod || 'cash';
+
+  // Reset to view mode
+  document.getElementById('sds-edit-form').style.display = 'none';
+  document.getElementById('sds-view').style.display      = 'block';
+  document.getElementById('sds-actions').style.display   = 'flex';
+
+  document.getElementById('sale-detail-sheet').classList.add('open');
+}
+window.openSaleDetail = openSaleDetail;
+
+function closeSaleDetailSheet() {
+  document.getElementById('sale-detail-sheet').classList.remove('open');
+}
+window.closeSaleDetailSheet = closeSaleDetailSheet;
+
+function toggleSaleEditForm() {
+  const form = document.getElementById('sds-edit-form');
+  const view = document.getElementById('sds-view');
+  const acts = document.getElementById('sds-actions');
+  const showing = form.style.display !== 'none';
+  form.style.display = showing ? 'none' : 'block';
+  view.style.display = 'block';
+  // Hide action buttons while editing to reduce clutter
+  if (!showing) acts.style.display = 'none';
+  else          acts.style.display = 'flex';
+}
+window.toggleSaleEditForm = toggleSaleEditForm;
+
+function discardSaleEdit() {
+  document.getElementById('sds-edit-form').style.display = 'none';
+  document.getElementById('sds-actions').style.display   = 'flex';
+}
+window.discardSaleEdit = discardSaleEdit;
+
+async function saveSaleEdit() {
+  const id    = parseInt(document.getElementById('sds-id').value);
+  const qty   = parseInt(document.getElementById('sds-edit-qty').value)   || 1;
+  const price = parseFloat(document.getElementById('sds-edit-price').value) || 0;
+  const pm    = document.getElementById('sds-edit-payment').value || 'cash';
   if (qty <= 0)  { toast('Qty must be at least 1', 'err'); return; }
   if (price < 0) { toast('Price cannot be negative', 'err'); return; }
   const sale = await dbGet('sales', id);
@@ -10160,34 +10199,47 @@ async function saveEditSale() {
   sale.updatedAt     = new Date().toISOString();
   await dbPut('sales', sale);
   fbSyncSale(sale);
-  closeEditSaleSheet();
+  closeSaleDetailSheet();
   await renderHistoryPage();
   renderDashboard();
   toast('Sale updated', 'ok');
 }
-window.saveEditSale = saveEditSale;
+window.saveSaleEdit = saveSaleEdit;
 
-// ── Add sold item to inventory ────────────────────────────────────
-async function saleAddToInventory(saleId) {
-  const sale = await dbGet('sales', saleId);
-  if (!sale) { toast('Sale not found', 'err'); return; }
-  showPage('add');
-  // Pre-fill add form with sale details
-  await new Promise(r => setTimeout(r, 80)); // wait for page to render
-  const _defaultType = types.find(t => t.name === (sale.itemType || '') && isCategoryActive(t))
-    ? (sale.itemType || '') : (types.find(t => t.name === 'General' && isCategoryActive(t)) ? 'General' : '');
-  setAddFormType(_defaultType, { skipTypeChange: false });
-  await new Promise(r => setTimeout(r, 60));
-  const codeEl = document.getElementById('f-code');
-  const nameEl = document.getElementById('f-name');
-  const buyEl  = document.getElementById('f-buy');
-  if (codeEl) codeEl.value = sale.itemCode || '';
-  if (nameEl) nameEl.value = sale.itemName || '';
-  if (buyEl)  buyEl.value  = sale.buyPrice  || '';
-  updateProfitPreview();
-  toast('Form pre-filled — review and save', '');
+async function deleteSaleFromDetail() {
+  const id = parseInt(document.getElementById('sds-id').value);
+  if (!id) return;
+  const sale = await dbGet('sales', id);
+  const label = sale ? (sale.itemName || sale.itemCode || 'this sale') : 'this sale';
+  if (!confirm('Delete sale of "' + label + '"?\n\nThis cannot be undone.')) return;
+  await deleteSale(id);
+  closeSaleDetailSheet();
 }
-window.saleAddToInventory = saleAddToInventory;
+window.deleteSaleFromDetail = deleteSaleFromDetail;
+
+async function saleAddToInventoryFromDetail() {
+  const id = parseInt(document.getElementById('sds-id').value);
+  const sale = await dbGet('sales', id);
+  if (!sale) { toast('Sale not found', 'err'); return; }
+  closeSaleDetailSheet();
+  showPage('add');
+  await new Promise(r => setTimeout(r, 100));
+  // Match type or default to General
+  const matchType = types.find(t => t.name === sale.itemType && isCategoryActive(t));
+  const useType   = matchType ? sale.itemType : (types.find(t => t.name === 'General' && isCategoryActive(t)) ? 'General' : '');
+  setAddFormType(useType, { skipTypeChange: false });
+  await new Promise(r => setTimeout(r, 80));
+  const el = id => document.getElementById(id);
+  if (el('f-code')) el('f-code').value = sale.itemCode || '';
+  if (el('f-name')) el('f-name').value = sale.itemName || '';
+  if (el('f-buy'))  el('f-buy').value  = sale.buyPrice > 0 ? sale.buyPrice : '';
+  if (el('f-sell')) el('f-sell').value = sale.sellPrice > 0 ? sale.sellPrice : '';
+  updateProfitPreview();
+  // Default to Record Only (already the default)
+  setItemMode(true);
+  toast('Form pre-filled — add more info and save', '');
+}
+window.saleAddToInventoryFromDetail = saleAddToInventoryFromDetail;
 
 function renderAllShoeGroupCards() {
   const groups = getShoeGroups();
