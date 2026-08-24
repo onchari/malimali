@@ -3376,9 +3376,11 @@ async function saveItem() {
       await dbPut('items', saved);
       if (_addFormPhotoData) await setItemPhoto(saved.id, _addFormPhotoData);
       fbSyncItem(saved);
+      await _backfillSalesForItem(saved);  // keep itemId in sync with any code changes
       clearForm();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
       renderList();renderDashboard();updateHeader();scheduleSync();
+      try { await renderHistoryPage(); } catch(_) {}
       toast('Item updated!','ok');showPage('list');
     }else{
       const newId=await dbAdd('items',item);item.id=newId;
@@ -3391,9 +3393,12 @@ async function saveItem() {
       }
       await recordStockInvestment(item, qty * buy, qty, 'New stock');
       fbSyncItem(item);
+      // Link any existing sales with this code to the new item ID
+      const _backfilled = await _backfillSalesForItem(item);
       clearForm();clearAddFormPhoto();
       allItems=await dbAll('items');await enrichShoeItems(allItems);
       renderList();renderDashboard();updateHeader();scheduleSync();
+      if (_backfilled > 0) { try { await renderHistoryPage(); } catch(_) {} }
       showPage('list');
       showSplash(name,sell,profit);
     }
@@ -10105,6 +10110,31 @@ function _histTable(sales, totalBuy, totalSell, totalProfit) {
 }
 window.renderHistoryPage = renderHistoryPage;
 
+/**
+ * After a new item is saved, find every sale that shares the same itemCode
+ * but hasn't been linked to this item's ID yet, and update them.
+ * This makes itemCode the stable cross-system key — itemId is kept in sync.
+ */
+async function _backfillSalesForItem(item) {
+  if (!item || !item.code || !item.id) return 0;
+  const allSales = await dbAll('sales');
+  const toFix = allSales.filter(s =>
+    s.itemCode === item.code && s.itemId !== item.id
+  );
+  if (!toFix.length) return 0;
+  for (const sale of toFix) {
+    sale.itemId    = item.id;
+    // Also ensure itemName and itemType are current
+    if (item.name) sale.itemName = item.name;
+    if (item.type) sale.itemType = item.type;
+    sale.updatedAt = new Date().toISOString();
+    await dbPut('sales', sale);
+    fbSyncSale(sale);
+  }
+  console.log(`[BACKFILL] Linked ${toFix.length} sale(s) to item ${item.code} (id=${item.id})`);
+  return toFix.length;
+}
+
 // ── History day collapse/expand ────────────────────────────────────
 function toggleHistDay(safeId) {
   const body = document.getElementById('hist-body-' + safeId);
@@ -10255,9 +10285,8 @@ async function saleAddToInventoryFromDetail() {
   if (el('f-buy'))  el('f-buy').value  = sale.buyPrice > 0 ? sale.buyPrice : '';
   if (el('f-sell')) el('f-sell').value = sale.sellPrice > 0 ? sale.sellPrice : '';
   updateProfitPreview();
-  // Default to Record Only (already the default)
-  setItemMode(true);
-  toast('Form pre-filled — add more info and save', '');
+  setItemMode(true);   // Default to Record Only
+  toast('Pre-filled from sale — save to link across system', '');
 }
 window.saleAddToInventoryFromDetail = saleAddToInventoryFromDetail;
 
