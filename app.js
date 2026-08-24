@@ -10018,11 +10018,16 @@ async function renderHistoryPage() {
                   { weekday:'short', day:'numeric', month:'short', year:'numeric' });
     const profColor = day.profit >= 0 ? 'var(--green)' : 'var(--red)';
     const rows  = [...day.sales].sort((a,b) => new Date(b.date) - new Date(a.date));
+    const safeId = date.replace(/-/g,'');
+    const saleWord = day.sales.length === 1 ? 'sale' : 'sales';
 
     return `
       <div class="hist-day-card">
-        <div class="hist-day-header">
-          <div class="hist-day-date">${label}</div>
+        <div class="hist-day-header hist-day-toggle" onclick="toggleHistDay('${safeId}')" style="cursor:pointer;">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+            <div class="hist-day-date">${label}</div>
+            <span class="hist-day-count">${day.sales.length} ${saleWord}</span>
+          </div>
           <div class="hist-day-stats">
             <div class="hist-day-stat">
               <div class="hist-day-stat-val">${fmt(day.revenue)}</div>
@@ -10030,15 +10035,18 @@ async function renderHistoryPage() {
             </div>
             <div class="hist-day-stat">
               <div class="hist-day-stat-val" style="color:${profColor};">${fmt(day.profit)}</div>
-              <div class="hist-day-stat-lbl">Profit Realized</div>
+              <div class="hist-day-stat-lbl">Profit</div>
             </div>
             <div class="hist-day-stat">
               <div class="hist-day-stat-val">${fmtN(day.qty)}</div>
-              <div class="hist-day-stat-lbl">Items Sold</div>
+              <div class="hist-day-stat-lbl">Pcs</div>
             </div>
           </div>
+          <span class="hist-day-chevron" id="hist-chev-${safeId}">▶</span>
         </div>
-        ${_histTable(rows, day.cost, day.revenue, day.profit)}
+        <div id="hist-body-${safeId}" style="display:none;">
+          ${_histTable(rows, day.cost, day.revenue, day.profit)}
+        </div>
       </div>`;
   }).join('');
 }
@@ -10048,31 +10056,42 @@ function _fmtNum(n) {
   return (parseFloat(n) || 0).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-// ── Tabular sale record renderer: No | Item | Buying Price | Price Sold | Profit ──
+// ── Tabular sale record renderer: No | Item | Buy | Sell | Profit | Action ──
 function _histTable(sales, totalBuy, totalSell, totalProfit) {
   const rows = sales.map((s, i) => {
-    const qty = s.qty || 1;
-    const buy = (s.buyPrice || 0) * qty;
-    const sell = (s.actualPrice || s.sellPrice || 0) * qty;
+    const qty    = s.qty || 1;
+    const buy    = (s.buyPrice || 0) * qty;
+    const sell   = (s.actualPrice || s.sellPrice || 0) * qty;
     const profit = s.profit || 0;
     const rawName = (s.itemName || s.itemCode || 'Item') +
       (s.itemSize ? ' - Sz ' + s.itemSize : '') +
-      (qty > 1 ? ' (×' + qty + ')' : '');
+      (qty > 1 ? ' ×' + qty : '');
     const name = escapeHtml(rawName);
-    const delBtn = s.id
-      ? `<button type="button" onclick="deleteSale(${s.id})" title="Delete sale" class="hist-row-del"><i class="fa-solid fa-trash"></i></button>`
-      : '';
+
+    const actions = s.id ? `
+      <div class="hist-action-group">
+        <button type="button" onclick="openEditSaleSheet(${s.id})" title="Edit sale" class="hist-act-btn hist-act-edit">
+          <i class="fa-solid fa-pen"></i>
+        </button>
+        <button type="button" onclick="saleAddToInventory(${s.id})" title="Add to inventory" class="hist-act-btn hist-act-add">
+          <i class="fa-solid fa-box-archive"></i>
+        </button>
+        <button type="button" onclick="deleteSale(${s.id})" title="Delete sale" class="hist-act-btn hist-act-del">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </div>` : '';
+
     return '<tr>' +
       '<td>' + (i + 1) + '</td>' +
       '<td>' + name + '</td>' +
       '<td>' + _fmtNum(buy) + '</td>' +
       '<td>' + _fmtNum(sell) + '</td>' +
       '<td class="' + (profit >= 0 ? 'hp-pos' : 'hp-neg') + '">' + _fmtNum(profit) + '</td>' +
-      '<td class="hist-td-action">' + delBtn + '</td>' +
+      '<td class="hist-td-action">' + actions + '</td>' +
     '</tr>';
   }).join('');
 
-  const totalsRow = '<tr>' +
+  const totalsRow = '<tr class="hist-totals">' +
     '<td></td>' +
     '<td>TOTAL</td>' +
     '<td>' + _fmtNum(totalBuy) + '</td>' +
@@ -10082,13 +10101,93 @@ function _histTable(sales, totalBuy, totalSell, totalProfit) {
   '</tr>';
 
   return '<div class="hist-table-wrap"><table class="hist-table">' +
-    '<colgroup><col style="width:7%"><col style="width:37%"><col style="width:16%"><col style="width:16%"><col style="width:16%"><col style="width:8%"></colgroup>' +
-    '<thead><tr><th>No</th><th>Item</th><th>BUY (KES)</th><th>SELL (KES)</th><th>Profit (KES)</th><th></th></tr></thead>' +
+    '<colgroup><col style="width:5%"><col style="width:30%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:26%"></colgroup>' +
+    '<thead><tr><th>#</th><th>Item</th><th>Buy</th><th>Sold</th><th>Profit</th><th>Action</th></tr></thead>' +
     '<tbody>' + rows + '</tbody>' +
     '<tfoot>' + totalsRow + '</tfoot>' +
   '</table></div>';
 }
 window.renderHistoryPage = renderHistoryPage;
+
+// ── History day collapse/expand ────────────────────────────────────
+function toggleHistDay(safeId) {
+  const body = document.getElementById('hist-body-' + safeId);
+  const chev = document.getElementById('hist-chev-' + safeId);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (chev) chev.textContent = open ? '▶' : '▼';
+}
+window.toggleHistDay = toggleHistDay;
+
+// ── Edit Sale ─────────────────────────────────────────────────────
+async function openEditSaleSheet(saleId) {
+  const sale = await dbGet('sales', saleId);
+  if (!sale) { toast('Sale not found', 'err'); return; }
+  document.getElementById('ess-id').value         = saleId;
+  document.getElementById('ess-item-name').textContent = sale.itemName || sale.itemCode || '—';
+  document.getElementById('ess-item-code').textContent = sale.itemCode || '';
+  document.getElementById('ess-qty').value         = sale.qty || 1;
+  document.getElementById('ess-price').value       = sale.actualPrice || sale.sellPrice || 0;
+  const pmEl = document.getElementById('ess-payment');
+  if (pmEl) pmEl.value = sale.paymentMethod || 'cash';
+  document.getElementById('edit-sale-sheet').classList.add('open');
+}
+window.openEditSaleSheet = openEditSaleSheet;
+
+function closeEditSaleSheet() {
+  document.getElementById('edit-sale-sheet').classList.remove('open');
+}
+window.closeEditSaleSheet = closeEditSaleSheet;
+
+async function saveEditSale() {
+  const id    = parseInt(document.getElementById('ess-id').value);
+  const qty   = parseInt(document.getElementById('ess-qty').value) || 1;
+  const price = parseFloat(document.getElementById('ess-price').value) || 0;
+  const pm    = document.getElementById('ess-payment').value || 'cash';
+  if (!id) return;
+  if (qty <= 0)  { toast('Qty must be at least 1', 'err'); return; }
+  if (price < 0) { toast('Price cannot be negative', 'err'); return; }
+  const sale = await dbGet('sales', id);
+  if (!sale) { toast('Sale not found', 'err'); return; }
+  const buy = sale.buyPrice || 0;
+  sale.qty           = qty;
+  sale.actualPrice   = price;
+  sale.sellPrice     = price;
+  sale.paymentMethod = pm;
+  sale.revenue       = qty * price;
+  sale.profit        = qty * (price - buy);
+  sale.updatedAt     = new Date().toISOString();
+  await dbPut('sales', sale);
+  fbSyncSale(sale);
+  closeEditSaleSheet();
+  await renderHistoryPage();
+  renderDashboard();
+  toast('Sale updated', 'ok');
+}
+window.saveEditSale = saveEditSale;
+
+// ── Add sold item to inventory ────────────────────────────────────
+async function saleAddToInventory(saleId) {
+  const sale = await dbGet('sales', saleId);
+  if (!sale) { toast('Sale not found', 'err'); return; }
+  showPage('add');
+  // Pre-fill add form with sale details
+  await new Promise(r => setTimeout(r, 80)); // wait for page to render
+  const _defaultType = types.find(t => t.name === (sale.itemType || '') && isCategoryActive(t))
+    ? (sale.itemType || '') : (types.find(t => t.name === 'General' && isCategoryActive(t)) ? 'General' : '');
+  setAddFormType(_defaultType, { skipTypeChange: false });
+  await new Promise(r => setTimeout(r, 60));
+  const codeEl = document.getElementById('f-code');
+  const nameEl = document.getElementById('f-name');
+  const buyEl  = document.getElementById('f-buy');
+  if (codeEl) codeEl.value = sale.itemCode || '';
+  if (nameEl) nameEl.value = sale.itemName || '';
+  if (buyEl)  buyEl.value  = sale.buyPrice  || '';
+  updateProfitPreview();
+  toast('Form pre-filled — review and save', '');
+}
+window.saleAddToInventory = saleAddToInventory;
 
 function renderAllShoeGroupCards() {
   const groups = getShoeGroups();

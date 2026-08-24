@@ -2374,6 +2374,51 @@
   </div>
 </div>
 
+<!-- ── EDIT SALE SHEET ─────────────────────────────────────────── -->
+<div class="sheet-overlay" id="edit-sale-sheet">
+  <div class="sheet" style="max-height:85vh;overflow-y:auto;">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Edit Sale</div>
+    <input type="hidden" id="ess-id">
+
+    <div style="margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:4px;">ITEM</div>
+      <div id="ess-item-name" style="font-size:15px;font-weight:800;color:var(--text);"></div>
+      <div id="ess-item-code" style="font-size:12px;color:var(--muted);font-family:var(--mono);"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">QTY SOLD</label>
+        <input type="number" id="ess-qty" class="add-input add-center add-mono" min="1" inputmode="numeric" placeholder="1">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">PRICE SOLD</label>
+        <input type="number" id="ess-price" class="add-input add-center" min="0" inputmode="decimal" placeholder="0">
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">PAYMENT METHOD</label>
+      <select id="ess-payment" class="add-select" style="width:100%;">
+        <option value="cash">Cash</option>
+        <option value="mpesa">M-Pesa</option>
+        <option value="till">Till</option>
+        <option value="credit">Credit</option>
+      </select>
+    </div>
+
+    <button class="btn-primary" onclick="saveEditSale()" style="width:100%;padding:14px;">
+      <i class="fa-solid fa-floppy-disk"></i> Save Changes
+    </button>
+    <button onclick="closeEditSaleSheet()" style="width:100%;margin-top:8px;padding:12px;
+      border:1.5px solid var(--border);border-radius:var(--r);background:transparent;
+      font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;">
+      Cancel
+    </button>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

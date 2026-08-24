@@ -4150,22 +4150,38 @@ body.photo-lightbox-open { overflow: hidden; }
 }
 .hist-table td.hp-pos { color: var(--green); }
 .hist-table td.hp-neg { color: var(--red); }
-.hist-table td.hist-td-action { padding: 4px 8px; text-align: center; }
+.hist-table td.hist-td-action { padding: 4px 6px; vertical-align: middle; }
 .hist-table tfoot td {
   font-weight: 800;
   border-bottom: none;
   border-top: 2px solid var(--border);
   background: var(--surface2);
 }
-.hist-row-del {
-  background: none;
-  border: none;
-  color: var(--red);
-  cursor: pointer;
-  font-size: 11px;
-  padding: 2px 4px;
-  vertical-align: middle;
+/* Action group inside each sale row */
+.hist-action-group {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
 }
+.hist-act-btn {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+  flex-shrink: 0;
+}
+.hist-act-edit { background: rgba(30,122,62,.1); border-color: rgba(30,122,62,.25); color: var(--accent); }
+.hist-act-edit:active { background: var(--accent); color: white; }
+.hist-act-add  { background: rgba(0,122,255,.08); border-color: rgba(0,122,255,.2); color: #0a84ff; }
+.hist-act-add:active  { background: #0a84ff; color: white; }
+.hist-act-del  { background: rgba(220,38,38,.08); border-color: rgba(220,38,38,.2); color: var(--red); }
+.hist-act-del:active  { background: var(--red); color: white; }
 
 #payment-method-section,
 #sm-payment-btns,
@@ -4187,16 +4203,28 @@ body.photo-lightbox-open { overflow: hidden; }
   overflow: hidden;
 }
 .hist-day-header {
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 12px 14px;
   background: var(--surface2);
   border-bottom: 1px solid var(--border);
+  user-select: none;
+  -webkit-user-select: none;
 }
-.hist-day-date { font-size: 16px; font-weight: 800; color: var(--text); }
-.hist-day-stats { display: flex; justify-content: space-between; gap: 8px; }
-.hist-day-stat { text-align: left; }
-.hist-day-stat-val { font-size: 14px; font-weight: 900; font-family: var(--mono); color: var(--text); }
-.hist-day-stat-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; margin-top: 1px; }
+.hist-day-toggle:active { background: var(--bg2); }
+.hist-day-date { font-size: 14px; font-weight: 800; color: var(--text); white-space: nowrap; }
+.hist-day-count {
+  font-size: 10px; font-weight: 700;
+  background: var(--bg2); color: var(--muted);
+  padding: 2px 7px; border-radius: 10px;
+  white-space: nowrap;
+}
+.hist-day-stats { display: flex; gap: 10px; margin-left: auto; }
+.hist-day-stat { text-align: right; }
+.hist-day-stat-val { font-size: 12px; font-weight: 900; font-family: var(--mono); color: var(--text); }
+.hist-day-stat-lbl { font-size: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; margin-top: 1px; }
+.hist-day-chevron { font-size: 11px; color: var(--muted); flex-shrink: 0; margin-left: 4px; }
 
 /* ── Out of stock diagonal overlay on list cards ───────────── */
 .shoe-out-card, .item-card.shoe-out-card {
