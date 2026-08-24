@@ -1974,14 +1974,11 @@ async function renderCategorySettings() {
     await normalizeTypeRecords();
     renderAllTypeDropdowns();
     renderShoeGroupSettings();
-    // Populate saved Gemini key into settings input
+    // Populate saved Gemini key status
+    const saved = getGeminiKey();
     const keyInp = document.getElementById('gemini-api-key-input');
-    const keySt  = document.getElementById('gemini-key-status');
-    if (keyInp) {
-      const saved = getGeminiKey();
-      keyInp.value = saved ? saved.slice(0,6) + '••••••••••••••' : '';
-      if (keySt) keySt.textContent = saved ? '✓ Key saved — AI Assistant is active' : '';
-    }
+    if (keyInp) keyInp.value = saved ? saved.slice(0,8) + '••••••••••••' : '';
+    _aiUpdateKeyUI(!!saved);
     const list = document.getElementById('categories-list');
     if (!list) return;
     if (!types.length) {
@@ -9224,14 +9221,36 @@ function getGeminiKey() { return localStorage.getItem(KEY_GEMINI) || ''; }
 function saveGeminiKey() {
   const val = (document.getElementById('gemini-api-key-input')?.value || '').trim();
   if (!val) { toast('Paste your Gemini API key first', 'err'); return; }
+  if (!val.startsWith('AIza')) { toast('Key should start with "AIza" — check you copied the full key', 'err'); return; }
   localStorage.setItem(KEY_GEMINI, val);
-  const st = document.getElementById('gemini-key-status');
-  if (st) st.textContent = '✓ Key saved';
-  // show FAB once key is present
+  _aiUpdateKeyUI(true);
   _aiShowFab();
-  toast('AI key saved — AI Assistant is ready', 'ok');
+  toast('AI key saved — tap ✦ button to use AI', 'ok');
 }
 window.saveGeminiKey = saveGeminiKey;
+
+function clearGeminiKey() {
+  if (!confirm('Remove the Gemini API key? AI features will be disabled.')) return;
+  localStorage.removeItem(KEY_GEMINI);
+  const inp = document.getElementById('gemini-api-key-input');
+  if (inp) inp.value = '';
+  _aiUpdateKeyUI(false);
+  _aiShowFab();
+  toast('API key removed', '');
+}
+window.clearGeminiKey = clearGeminiKey;
+
+function _aiUpdateKeyUI(hasKey) {
+  const st  = document.getElementById('gemini-key-status');
+  const dot = document.getElementById('gemini-key-dot');
+  if (st) {
+    st.textContent  = hasKey ? '✓ Active — AI Assistant is ready' : '';
+    st.style.color  = hasKey ? 'var(--green)' : 'var(--muted)';
+  }
+  if (dot) {
+    dot.className = 'ai-set-dot ' + (hasKey ? 'ai-set-dot-on' : 'ai-set-dot-off');
+  }
+}
 
 function _aiShowFab() {
   const fab = document.getElementById('ai-fab');

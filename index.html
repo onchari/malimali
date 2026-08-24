@@ -1095,29 +1095,46 @@
 
   <!-- ── AI Assistant ───────────────────────────────────────── -->
   <div class="sec-label">AI Assistant</div>
-  <div class="card settings-card" style="padding:16px;">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-      <span style="font-size:22px;">✦</span>
-      <div>
-        <div style="font-size:14px;font-weight:800;">Google Gemini Flash</div>
-        <div style="font-size:11px;color:var(--muted);">Free · 1M tokens/day · Get key at aistudio.google.com</div>
+  <div class="card settings-card ai-settings-card">
+
+    <!-- Header -->
+    <div class="ai-set-header">
+      <div class="ai-set-icon">✦</div>
+      <div class="ai-set-info">
+        <div class="ai-set-title">Google Gemini Flash</div>
+        <div class="ai-set-sub">Free AI · 1 million tokens/day</div>
       </div>
+      <div id="gemini-key-dot" class="ai-set-dot ai-set-dot-off"></div>
     </div>
-    <label class="add-field-lbl" style="display:block;margin-bottom:6px;">Gemini API Key</label>
-    <div style="display:flex;gap:8px;">
-      <input type="password" id="gemini-api-key-input" class="add-input"
-             placeholder="AIza…" autocomplete="off" spellcheck="false"
-             style="flex:1;font-family:var(--mono);font-size:13px;">
-      <button onclick="saveGeminiKey()" class="btn-primary" style="padding:10px 16px;white-space:nowrap;">
-        Save
+
+    <!-- Key input -->
+    <div class="ai-set-field">
+      <label class="add-field-lbl">API Key <span style="font-weight:400;color:var(--muted);">(starts with AIza…)</span></label>
+      <input type="password" id="gemini-api-key-input" class="add-input ai-set-input"
+             placeholder="Paste your Gemini API key here"
+             autocomplete="off" spellcheck="false">
+    </div>
+
+    <!-- Status -->
+    <div id="gemini-key-status" class="ai-set-status"></div>
+
+    <!-- Buttons -->
+    <div class="ai-set-btns">
+      <button onclick="saveGeminiKey()" class="ai-set-save">
+        <i class="fa-solid fa-floppy-disk"></i> Save Key
+      </button>
+      <button onclick="clearGeminiKey()" class="ai-set-clear">
+        <i class="fa-solid fa-trash"></i> Remove
       </button>
     </div>
-    <div id="gemini-key-status" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
-    <div style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.6;">
-      Key is stored locally on this device only. Never sent anywhere except Google's API.
-      <a href="https://aistudio.google.com/app/apikey" target="_blank"
-         style="color:var(--accent);font-weight:700;">Get free key →</a>
+
+    <!-- Help link -->
+    <div class="ai-set-help">
+      <i class="fa-solid fa-circle-info"></i>
+      Key stored on this device only — never shared.
+      <a href="https://aistudio.google.com/app/apikey" target="_blank">Get free key →</a>
     </div>
+
   </div>
 
   <!-- ── System & updates ───────────────────────────────────── -->
