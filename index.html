@@ -1441,10 +1441,13 @@
     <div class="search-wrap" style="margin-bottom:10px;">
       <span class="s-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
       <input class="search-input" id="sell-search"
-             placeholder="Search item by name or code..."
-             oninput="searchSell()"
-             autocomplete="off" spellcheck="false"
-             style="font-size:17px;font-weight:700;">
+             placeholder="Search by name, code, type…"
+             oninput="onSellSearch(this.value)"
+             autocomplete="off" spellcheck="false">
+      <button id="sell-search-clear" class="search-clear-btn" onclick="clearSellSearch()"
+              style="display:none;" aria-label="Clear">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
     </div>
     <div id="sell-results"></div>
   </div>
