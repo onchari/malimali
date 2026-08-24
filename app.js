@@ -1974,6 +1974,14 @@ async function renderCategorySettings() {
     await normalizeTypeRecords();
     renderAllTypeDropdowns();
     renderShoeGroupSettings();
+    // Populate saved Gemini key into settings input
+    const keyInp = document.getElementById('gemini-api-key-input');
+    const keySt  = document.getElementById('gemini-key-status');
+    if (keyInp) {
+      const saved = getGeminiKey();
+      keyInp.value = saved ? saved.slice(0,6) + '••••••••••••••' : '';
+      if (keySt) keySt.textContent = saved ? '✓ Key saved — AI Assistant is active' : '';
+    }
     const list = document.getElementById('categories-list');
     if (!list) return;
     if (!types.length) {
@@ -9447,7 +9455,14 @@ async function aiSendQuestion() {
 }
 window.aiSendQuestion = aiSendQuestion;
 
-// ── Init: show FAB if key exists ───────────────────────────────────
+// ── Init: always show FAB (dims when no key, active when key set) ──
+function _aiShowFab() {
+  const fab = document.getElementById('ai-fab');
+  if (!fab) return;
+  fab.style.display = 'flex';
+  fab.style.opacity = getGeminiKey() ? '1' : '0.5';
+  fab.title = getGeminiKey() ? 'AI Assistant' : 'AI Assistant — add API key in Settings';
+}
 setTimeout(_aiShowFab, 500);
 
 // ══════════════════════════════════════════════════════════════════
