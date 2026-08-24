@@ -1093,6 +1093,33 @@
      ============================================================== -->
 <div class="page" id="page-settings">
 
+  <!-- ── AI Assistant ───────────────────────────────────────── -->
+  <div class="sec-label">AI Assistant</div>
+  <div class="card settings-card" style="padding:16px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <span style="font-size:22px;">✦</span>
+      <div>
+        <div style="font-size:14px;font-weight:800;">Google Gemini Flash</div>
+        <div style="font-size:11px;color:var(--muted);">Free · 1M tokens/day · Get key at aistudio.google.com</div>
+      </div>
+    </div>
+    <label class="add-field-lbl" style="display:block;margin-bottom:6px;">Gemini API Key</label>
+    <div style="display:flex;gap:8px;">
+      <input type="password" id="gemini-api-key-input" class="add-input"
+             placeholder="AIza…" autocomplete="off" spellcheck="false"
+             style="flex:1;font-family:var(--mono);font-size:13px;">
+      <button onclick="saveGeminiKey()" class="btn-primary" style="padding:10px 16px;white-space:nowrap;">
+        Save
+      </button>
+    </div>
+    <div id="gemini-key-status" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
+    <div style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.6;">
+      Key is stored locally on this device only. Never sent anywhere except Google's API.
+      <a href="https://aistudio.google.com/app/apikey" target="_blank"
+         style="color:var(--accent);font-weight:700;">Get free key →</a>
+    </div>
+  </div>
+
   <!-- ── System & updates ───────────────────────────────────── -->
   <div class="sec-label">System &amp; updates</div>
   <p class="settings-hint">Follow the steps in order. Updates change app code only - your items, sales, and finances are kept.</p>
@@ -1999,6 +2026,83 @@
      toast(msg, type) in app.js drives this - type: 'ok' | 'err' | ''
      ============================================================== -->
 <div class="toast" id="toast"></div>
+
+<!-- ── FLOATING AI BUTTON ─────────────────────────────────────── -->
+<button id="ai-fab" class="ai-fab" onclick="openAIPanel()" title="AI Assistant"
+        style="display:none;">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+  </svg>
+</button>
+
+<!-- ── AI ASSISTANT PANEL ─────────────────────────────────────── -->
+<div class="ai-panel-overlay" id="ai-panel-overlay" style="display:none;" onclick="closeAIPanel()"></div>
+<div class="ai-panel" id="ai-panel" style="display:none;">
+  <div class="ai-panel-header">
+    <div class="ai-panel-title">
+      <span class="ai-panel-icon">✦</span> AI Assistant
+      <span class="ai-powered-by">Gemini Flash · Free</span>
+    </div>
+    <button class="ai-panel-close" onclick="closeAIPanel()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+
+  <!-- No key warning -->
+  <div id="ai-no-key" class="ai-no-key" style="display:none;">
+    <i class="fa-solid fa-key"></i>
+    <div>Add your free Gemini API key in <strong>Settings → AI</strong> to enable this feature.</div>
+    <button onclick="closeAIPanel();showPage('settings');" class="ai-setup-btn">Open Settings</button>
+  </div>
+
+  <!-- Quick actions -->
+  <div id="ai-actions" class="ai-actions">
+    <button class="ai-action-card" onclick="aiRestockScan()">
+      <div class="ai-action-icon" style="background:rgba(30,122,62,.12);color:var(--accent);">
+        <i class="fa-solid fa-boxes-stacked"></i>
+      </div>
+      <div class="ai-action-body">
+        <div class="ai-action-title">Restock Scanner</div>
+        <div class="ai-action-sub">Find all sold items missing from inventory</div>
+      </div>
+      <i class="fa-solid fa-chevron-right" style="color:var(--muted);font-size:11px;"></i>
+    </button>
+    <button class="ai-action-card" onclick="aiInsights()">
+      <div class="ai-action-icon" style="background:rgba(245,158,11,.12);color:#d97706;">
+        <i class="fa-solid fa-chart-line"></i>
+      </div>
+      <div class="ai-action-body">
+        <div class="ai-action-title">Business Insights</div>
+        <div class="ai-action-sub">Analyse sales patterns &amp; performance</div>
+      </div>
+      <i class="fa-solid fa-chevron-right" style="color:var(--muted);font-size:11px;"></i>
+    </button>
+    <button class="ai-action-card" onclick="aiAskMode()">
+      <div class="ai-action-icon" style="background:rgba(0,122,255,.1);color:#0a84ff;">
+        <i class="fa-solid fa-comments"></i>
+      </div>
+      <div class="ai-action-body">
+        <div class="ai-action-title">Ask Anything</div>
+        <div class="ai-action-sub">Free-form questions about your business</div>
+      </div>
+      <i class="fa-solid fa-chevron-right" style="color:var(--muted);font-size:11px;"></i>
+    </button>
+  </div>
+
+  <!-- Chat / result area -->
+  <div id="ai-chat" class="ai-chat" style="display:none;">
+    <button class="ai-back-btn" onclick="aiBack()"><i class="fa-solid fa-arrow-left"></i> Back</button>
+    <div id="ai-chat-title" class="ai-chat-title"></div>
+    <div id="ai-chat-body" class="ai-chat-body"></div>
+    <div id="ai-ask-input-row" class="ai-ask-row" style="display:none;">
+      <input type="text" id="ai-ask-input" class="ai-ask-input"
+             placeholder="Ask about your inventory or sales…"
+             onkeydown="if(event.key==='Enter') aiSendQuestion()">
+      <button onclick="aiSendQuestion()" class="ai-send-btn">
+        <i class="fa-solid fa-paper-plane"></i>
+      </button>
+    </div>
+  </div>
+</div>
 
 
 <!-- ==============================================================

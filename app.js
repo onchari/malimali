@@ -5262,65 +5262,132 @@ async function _legacySearchSell() {
   } catch(e) { console.error("[searchSell]", e); toast("Error: " + e.message, "err"); }
 }
 
+let _sellSearchTimer = null;
+
+function onSellSearch(val) {
+  const clearBtn = document.getElementById('sell-search-clear');
+  if (clearBtn) clearBtn.style.display = val ? 'flex' : 'none';
+  clearTimeout(_sellSearchTimer);
+  _sellSearchTimer = setTimeout(() => searchSell(), 120);
+}
+window.onSellSearch = onSellSearch;
+
+function clearSellSearch() {
+  const inp = document.getElementById('sell-search');
+  const btn = document.getElementById('sell-search-clear');
+  if (inp) inp.value = '';
+  if (btn) btn.style.display = 'none';
+  searchSell();
+}
+window.clearSellSearch = clearSellSearch;
+
 async function searchSell() {
   try {
-    const q = (document.getElementById('sell-search')?.value || '').trim().toLowerCase();
+    const raw = (document.getElementById('sell-search')?.value || '').trim();
+    const q   = raw.toLowerCase();
     const results = document.getElementById('sell-results');
     if (!results) return;
-    const items = await dbAll('items');
+
+    // Use global allItems (same source as dashboard + inventory)
+    const items = allItems.length ? allItems : await dbAll('items');
+    await enrichShoeItems(items);
     const sizes = await dbAll('shoe_sizes');
+
     const rows = [];
 
     items.forEach(item => {
+      const score = q ? _gscScore(item, q) : 1;
+      if (q && score === 0) return;
+
       const t = getTypeObj(item.type);
-      const hay = [item.name, item.code, item.size, item.variant, item.type].join(' ').toLowerCase();
+
       if (item.isShoe) {
         sizes.filter(sz => sz.itemCode === item.code && (sz.qty || 0) > 0).forEach(sz => {
-          const sizeHay = (hay + ' ' + sz.size + ' ' + (sz.sizeGroup || '')).toLowerCase();
-          if (q && !sizeHay.includes(q)) return;
-          const price = sz.sellPrice || item.sellPrice || item.sell || 0;
-          const buy = sz.buyPrice || item.buyPrice || item.buy || 0;
-          rows.push({ item, t, label: item.name || item.code, meta: item.code + ' - Size ' + sz.size, qty: sz.qty || 0, price, profit: price - buy, action: 'openSellShoeModal(' + item.id + ',' + sz.size + ')', extraTag: '<span class="tag tag-gray">Size ' + escapeHtml(sz.size) + '</span>' });
+          // Also score against size number
+          const szScore = q
+            ? Math.max(score, String(sz.size).includes(q) ? 20 : 0)
+            : 1;
+          if (q && szScore === 0) return;
+          const price  = sz.sellPrice || item.sellPrice || item.sell || 0;
+          const buy    = sz.buyPrice  || item.buyPrice  || item.buy  || 0;
+          rows.push({ item, t, score: szScore,
+            label: item.name || item.code,
+            meta:  item.code + ' · Size ' + sz.size,
+            qty:   sz.qty || 0, price, profit: price - buy,
+            isRec: false,
+            action: `openSellShoeModal(${item.id},${sz.size})`,
+            extraTag: `<span class="tag tag-gray">Sz ${escapeHtml(String(sz.size))}</span>` });
         });
         return;
       }
-      if ((item.qty || 0) <= 0) return;
-      if (q && !hay.includes(q)) return;
-      const price = item.sellPrice || item.sell || 0;
-      const buy = item.buyPrice || item.buy || 0;
-      rows.push({ item, t, label: item.name || item.code, meta: item.code + (item.size || item.variant ? ' - ' + (item.size || item.variant) : ''), qty: item.qty || 0, price, profit: price - buy, action: 'openSellModal(' + item.id + ')', extraTag: '' });
+
+      // Standard + Record Only items
+      const sellable = item.isRecord || (item.qty || 0) > 0;
+      if (!sellable) return;
+
+      const price  = item.sellPrice || item.sell || 0;
+      const buy    = item.buyPrice  || item.buy  || 0;
+      const meta   = item.code + ((item.variant || item.size) ? ' · ' + (item.variant || item.size) : '');
+      rows.push({ item, t, score,
+        label: item.name || item.code,
+        meta,
+        qty:   item.qty || 0, price, profit: price - buy,
+        isRec: !!item.isRecord,
+        action: `openSellModal(${item.id})`,
+        extraTag: item.isRecord ? '<span class="tag tag-record">RECORD</span>' : '' });
     });
 
-    rows.sort((a, b) => (a.label || '').localeCompare(b.label || ''));
-    const visibleRows = rows.slice(0, 120);
-    const offStockButton = '<button onclick="openOffStockSale()" class="stock-add-wish-btn" style="margin-bottom:12px;background:#1d4ed8;"><i class="fa-solid fa-plus"></i> Sell item not in stock</button>';
-    if (!visibleRows.length) {
-      results.innerHTML = '<div class="empty" style="padding:24px 0;"><div class="e-icon" style="font-size:36px;">Search</div><p>No available stock found.</p></div>' + offStockButton;
+    // Sort: by score desc (with query) or alphabetically (no query)
+    rows.sort((a, b) => q ? (b.score - a.score) : (a.label || '').localeCompare(b.label || ''));
+
+    const offStockBtn = '<button onclick="openOffStockSale()" class="stock-add-wish-btn" ' +
+      'style="margin-bottom:12px;background:#1d4ed8;">' +
+      '<i class="fa-solid fa-plus"></i> Sell item not in stock</button>';
+
+    if (!rows.length) {
+      results.innerHTML = `<div class="empty" style="padding:24px 0;">
+        <div class="e-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
+        <p>${q ? 'No items match "' + escapeHtml(raw) + '"' : 'No sellable items in stock.'}</p>
+      </div>` + offStockBtn;
       return;
     }
-    results.innerHTML = offStockButton + visibleRows.map(row => {
-      const stockColor = row.qty <= 3 ? 'var(--amber)' : 'var(--green)';
-      return '<div class="item-card" onclick="' + row.action + '" style="margin-bottom:10px;cursor:pointer;">' +
-        '<div class="item-top">' +
-          '<div class="item-icon" style="background:' + (row.t.color || 'var(--surface2)') + ';">' + row.t.emoji + '</div>' +
-          '<div class="item-body">' +
-            '<div class="item-code">' + escapeHtml(row.meta) + '</div>' +
-            '<div class="item-name">' + escapeHtml(row.label || '') + '</div>' +
-            '<div class="item-tags">' +
-              '<span class="tag tag-cyan">' + escapeHtml(row.item.type || '') + '</span>' +
-              row.extraTag +
-              '<span class="tag" style="background:' + (row.qty <= 3 ? 'var(--amber-light)' : 'var(--green-light)') + ';color:' + stockColor + ';">' + row.qty + ' pcs</span>' +
-            '</div>' +
-          '</div>' +
-          '<div class="item-right">' +
-            '<div style="font-size:18px;font-weight:800;font-family:var(--mono);color:var(--accent2);">' + fmt(row.price) + '</div>' +
-            '<div style="font-size:11px;color:' + (row.profit >= 0 ? 'var(--green)' : 'var(--red)') + ';font-family:var(--mono);margin-top:3px;">' + (row.profit >= 0 ? '+' : '') + fmt(row.profit) + ' profit</div>' +
-            '<div style="margin-top:8px;background:var(--accent);color:white;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;text-align:center;">Sell</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
+
+    results.innerHTML = offStockBtn + rows.slice(0, 120).map(row => {
+      const qty       = row.qty;
+      const isRec     = row.isRec;
+      const stockLbl  = isRec ? '∞' : qty + ' pcs';
+      const stockCls  = isRec ? 'var(--amber)' : qty <= LOW_STOCK_LEVEL ? 'var(--amber)' : 'var(--green)';
+      const bgCls     = isRec ? 'var(--amber-light,#fffbeb)' : qty <= LOW_STOCK_LEVEL ? 'var(--amber-light)' : 'var(--green-light)';
+      const sellMin   = row.item.sellPriceMin || 0;
+      const priceStr  = sellMin > 0 && sellMin < row.price
+        ? fmt(sellMin) + ' – ' + fmt(row.price)
+        : fmt(row.price);
+
+      return `<div class="item-card${isRec ? ' item-card-record' : ''}" onclick="${row.action}"
+          style="margin-bottom:8px;cursor:pointer;">
+        <div class="item-top">
+          <div class="item-icon" style="background:${row.t.color||'var(--surface2)'};">${row.t.emoji}</div>
+          <div class="item-body">
+            <div class="item-code">${escapeHtml(row.meta)}</div>
+            <div class="item-name">${escapeHtml(row.label||'')}</div>
+            <div class="item-tags">
+              <span class="tag tag-cyan">${escapeHtml(row.item.type||'')}</span>
+              ${row.extraTag}
+              <span class="tag" style="background:${bgCls};color:${stockCls};">${stockLbl}</span>
+            </div>
+          </div>
+          <div class="item-right">
+            <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--accent2);">${priceStr}</div>
+            <div style="font-size:11px;color:${row.profit>=0?'var(--green)':'var(--red)'};font-family:var(--mono);margin-top:3px;">
+              ${row.profit>=0?'+':''}${fmt(row.profit)} profit
+            </div>
+            <div style="margin-top:8px;background:var(--accent);color:white;border-radius:8px;
+              padding:5px 12px;font-size:12px;font-weight:700;text-align:center;">Sell</div>
+          </div>
+        </div>
+      </div>`;
     }).join('');
-  } catch(e) { console.error("[searchSell]", e); toast("Error: " + e.message, "err"); }
+  } catch(e) { console.error('[searchSell]', e); toast('Error: ' + e.message, 'err'); }
 }
 
 function selectPayment(method) {
@@ -9138,6 +9205,250 @@ function toggleShoeGroup(code) {
   renderList();
 }
 window.toggleShoeGroup = toggleShoeGroup;
+
+// ══════════════════════════════════════════════════════════════════
+// AI ASSISTANT  —  Google Gemini Flash (free)
+// ══════════════════════════════════════════════════════════════════
+const KEY_GEMINI = 'mg_gemini_key';
+
+function getGeminiKey() { return localStorage.getItem(KEY_GEMINI) || ''; }
+
+function saveGeminiKey() {
+  const val = (document.getElementById('gemini-api-key-input')?.value || '').trim();
+  if (!val) { toast('Paste your Gemini API key first', 'err'); return; }
+  localStorage.setItem(KEY_GEMINI, val);
+  const st = document.getElementById('gemini-key-status');
+  if (st) st.textContent = '✓ Key saved';
+  // show FAB once key is present
+  _aiShowFab();
+  toast('AI key saved — AI Assistant is ready', 'ok');
+}
+window.saveGeminiKey = saveGeminiKey;
+
+function _aiShowFab() {
+  const fab = document.getElementById('ai-fab');
+  if (fab) fab.style.display = getGeminiKey() ? 'flex' : 'none';
+}
+
+/** Calls Gemini Flash and returns the text response */
+async function _callGemini(userPrompt, systemPrompt) {
+  const key = getGeminiKey();
+  if (!key) { toast('Add Gemini API key in Settings → AI', 'err'); return null; }
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=' + key;
+  const body = {
+    system_instruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ parts: [{ text: userPrompt }] }],
+    generationConfig: { temperature: 0.4, maxOutputTokens: 1500 }
+  };
+  const res  = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'Gemini error');
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+// ── Panel open/close ───────────────────────────────────────────────
+function openAIPanel() {
+  const panel   = document.getElementById('ai-panel');
+  const overlay = document.getElementById('ai-panel-overlay');
+  const noKey   = document.getElementById('ai-no-key');
+  const actions = document.getElementById('ai-actions');
+  const chat    = document.getElementById('ai-chat');
+  if (!panel) return;
+  panel.style.display   = 'flex';
+  overlay.style.display = 'block';
+  chat.style.display    = 'none';
+  const hasKey = !!getGeminiKey();
+  if (noKey)   noKey.style.display   = hasKey ? 'none' : 'block';
+  if (actions) actions.style.display = hasKey ? 'flex'  : 'none';
+}
+window.openAIPanel = openAIPanel;
+
+function closeAIPanel() {
+  document.getElementById('ai-panel').style.display   = 'none';
+  document.getElementById('ai-panel-overlay').style.display = 'none';
+}
+window.closeAIPanel = closeAIPanel;
+
+function aiBack() {
+  document.getElementById('ai-chat').style.display    = 'none';
+  document.getElementById('ai-actions').style.display = 'flex';
+}
+window.aiBack = aiBack;
+
+function aiAskMode() {
+  document.getElementById('ai-actions').style.display   = 'none';
+  document.getElementById('ai-chat').style.display      = 'flex';
+  document.getElementById('ai-chat-title').textContent  = '💬 Ask Anything';
+  document.getElementById('ai-ask-input-row').style.display = 'flex';
+  document.getElementById('ai-chat-body').innerHTML = '<div class="ai-msg ai-msg-ai">Ask me anything about your inventory, sales, pricing or business performance. I have access to your data.</div>';
+}
+window.aiAskMode = aiAskMode;
+
+function _aiShowLoading(title) {
+  document.getElementById('ai-actions').style.display   = 'none';
+  document.getElementById('ai-chat').style.display      = 'flex';
+  document.getElementById('ai-chat-title').textContent  = title;
+  document.getElementById('ai-ask-input-row').style.display = 'none';
+  document.getElementById('ai-chat-body').innerHTML =
+    '<div class="ai-loading"><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span> Thinking…</div>';
+}
+
+function _aiShowResult(html, showInput) {
+  document.getElementById('ai-chat-body').innerHTML = html;
+  if (showInput) document.getElementById('ai-ask-input-row').style.display = 'flex';
+}
+
+// ── Build compact context string from current data ─────────────────
+async function _aiContext() {
+  const items = allItems.length ? allItems : await dbAll('items');
+  const sales = await dbAll('sales');
+  const today = todayDateStr();
+
+  const topItems = [...items].sort((a,b)=>(b.sellPrice||0)-(a.sellPrice||0)).slice(0,30);
+  const last30sales = sales.filter(s=>{
+    const d = s.businessDate || (s.date||'').slice(0,10);
+    return d >= today.slice(0,7)+'-01';
+  }).slice(-200);
+
+  const itemsSummary = topItems.map(i=>
+    `${i.code}|${i.name}|${i.type}|buy:${i.buyPrice||0}|sell:${i.sellPrice||0}|qty:${i.qty||0}|${i.isRecord?'RECORD':''}`
+  ).join('\n');
+
+  const salesSummary = last30sales.map(s=>
+    `${s.businessDate||s.date?.slice(0,10)}|${s.itemCode}|${s.itemName}|qty:${s.qty||1}|rev:${s.revenue||0}|profit:${s.profit||0}`
+  ).join('\n');
+
+  return `SHOP: Mandela General Stores
+TODAY: ${today}
+INVENTORY (${items.length} items):\n${itemsSummary}
+RECENT SALES (last 30 days):\n${salesSummary}`;
+}
+
+// ── Feature 1: Restock Scanner ─────────────────────────────────────
+async function aiRestockScan() {
+  _aiShowLoading('📦 Restock Scanner');
+  try {
+    const items    = allItems.length ? allItems : await dbAll('items');
+    const allSales = await dbAll('sales');
+    const itemCodes = new Set(items.map(i => i.code));
+
+    // Group sales of items NOT in inventory
+    const missing = {};
+    allSales.forEach(s => {
+      if (!s.itemCode || itemCodes.has(s.itemCode)) return;
+      if (!missing[s.itemCode]) missing[s.itemCode] = { code: s.itemCode, name: s.itemName || s.itemCode, sales: 0, revenue: 0, lastSold: '' };
+      missing[s.itemCode].sales   += (s.qty || 1);
+      missing[s.itemCode].revenue += (s.revenue || 0);
+      if (s.businessDate > missing[s.itemCode].lastSold) missing[s.itemCode].lastSold = s.businessDate || '';
+    });
+
+    const list = Object.values(missing).sort((a,b) => b.revenue - a.revenue);
+
+    if (!list.length) {
+      _aiShowResult('<div class="ai-msg ai-msg-ai">✅ All items sold in your history are already in your inventory. Nothing missing!</div>');
+      return;
+    }
+
+    const prompt = `You are an inventory advisor for a small retail shop.
+Items sold but NOT in inventory (code | name | times sold | revenue):
+${list.map(x=>`${x.code} | ${x.name} | ${x.sales}x | KES ${x.revenue}`).join('\n')}
+
+For each item: suggest a short restocking note (1 line). Format as JSON array: [{"code":"..","name":"..","suggestion":".."}]`;
+
+    const sys = 'You are a concise retail inventory advisor. Respond only with valid JSON.';
+    const aiText = await _callGemini(prompt, sys);
+
+    let suggestions = [];
+    try { suggestions = JSON.parse(aiText.replace(/```json?/g,'').replace(/```/g,'').trim()); } catch(_) { suggestions = []; }
+
+    const cards = list.map((x, i) => {
+      const sug = suggestions.find(s => s.code === x.code)?.suggestion || '';
+      return `<div class="ai-restock-card">
+        <div class="ai-restock-main">
+          <div class="ai-restock-name">${escapeHtml(x.name)}</div>
+          <div class="ai-restock-code">${escapeHtml(x.code)}</div>
+          ${sug ? '<div class="ai-restock-sug">' + escapeHtml(sug) + '</div>' : ''}
+        </div>
+        <div class="ai-restock-stats">
+          <span>${x.sales}× sold</span>
+          <span>KES ${fmt(x.revenue)}</span>
+        </div>
+        <button class="ai-restock-add" onclick="aiAddToInventory('${escapeHtml(x.code)}','${escapeHtml(x.name)}')">
+          <i class="fa-solid fa-plus"></i> Add
+        </button>
+      </div>`;
+    }).join('');
+
+    _aiShowResult(`<div class="ai-msg ai-msg-ai" style="margin-bottom:10px;">Found <strong>${list.length}</strong> items sold but not in inventory. Tap <strong>Add</strong> to add any to your stock.</div>${cards}`);
+  } catch(e) { _aiShowResult('<div class="ai-msg ai-msg-err">Error: ' + escapeHtml(e.message) + '</div>'); }
+}
+window.aiRestockScan = aiRestockScan;
+
+function aiAddToInventory(code, name) {
+  closeAIPanel();
+  showPage('add');
+  setTimeout(async () => {
+    const _defaultType = types.find(t => t.name === 'General' && isCategoryActive(t)) ? 'General' : '';
+    setAddFormType(_defaultType, { skipTypeChange: false });
+    await new Promise(r => setTimeout(r, 80));
+    const el = id => document.getElementById(id);
+    if (el('f-code')) el('f-code').value = code;
+    if (el('f-name')) el('f-name').value = name;
+    setItemMode(true);
+    toast('Pre-filled — add buy price and save', '');
+  }, 100);
+}
+window.aiAddToInventory = aiAddToInventory;
+
+// ── Feature 2: Insights ────────────────────────────────────────────
+async function aiInsights() {
+  _aiShowLoading('📊 Business Insights');
+  try {
+    const ctx    = await _aiContext();
+    const prompt = ctx + '\n\nAnalyse this business data and give:\n1. Top 3 best-selling items\n2. Top 3 highest-profit items\n3. Items not selling (qty > 0 but 0 sales)\n4. 2-3 actionable recommendations for the shop owner\nKeep it concise and practical.';
+    const sys    = 'You are a friendly business advisor for a small Kenyan retail shop. Be concise, use bullet points, mention specific item names and numbers. Use KES for currency.';
+    const text   = await _callGemini(prompt, sys);
+    // Convert markdown-ish to HTML
+    const html = text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+                     .replace(/\*(.*?)\*/g,'<em>$1</em>')
+                     .replace(/^#+\s(.+)/gm,'<div class="ai-section-head">$1</div>')
+                     .replace(/\n/g,'<br>');
+    _aiShowResult('<div class="ai-msg ai-msg-ai">' + html + '</div>');
+  } catch(e) { _aiShowResult('<div class="ai-msg ai-msg-err">Error: ' + escapeHtml(e.message) + '</div>'); }
+}
+window.aiInsights = aiInsights;
+
+// ── Feature 3: Ask anything ────────────────────────────────────────
+async function aiSendQuestion() {
+  const inp = document.getElementById('ai-ask-input');
+  const q   = (inp?.value || '').trim();
+  if (!q) return;
+  if (inp) inp.value = '';
+
+  const body = document.getElementById('ai-chat-body');
+  body.innerHTML += '<div class="ai-msg ai-msg-user">' + escapeHtml(q) + '</div>';
+  body.innerHTML += '<div class="ai-loading" id="ai-inline-loading"><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span></div>';
+  body.scrollTop = body.scrollHeight;
+
+  try {
+    const ctx  = await _aiContext();
+    const prompt = ctx + '\n\nUser question: ' + q;
+    const sys  = 'You are a helpful business assistant for Mandela General Stores, a small Kenyan retail shop. Use the inventory and sales data provided. Be concise and practical. Use KES for currency.';
+    const text = await _callGemini(prompt, sys);
+    const el   = document.getElementById('ai-inline-loading');
+    if (el) el.remove();
+    const html = text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+    body.innerHTML += '<div class="ai-msg ai-msg-ai">' + html + '</div>';
+    body.scrollTop = body.scrollHeight;
+  } catch(e) {
+    const el = document.getElementById('ai-inline-loading');
+    if (el) el.textContent = 'Error: ' + e.message;
+  }
+}
+window.aiSendQuestion = aiSendQuestion;
+
+// ── Init: show FAB if key exists ───────────────────────────────────
+setTimeout(_aiShowFab, 500);
 
 // ══════════════════════════════════════════════════════════════════
 // GLOBAL SEARCH  (dashboard quick-find + inventory enhancement)
