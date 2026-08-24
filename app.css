@@ -4160,7 +4160,22 @@ body.photo-lightbox-open { overflow: hidden; }
 /* Clickable sale rows */
 .hist-clickable-row { cursor: pointer; transition: background .1s; }
 .hist-clickable-row:active { background: var(--bg2); }
-.hist-td-chevron { text-align: right; color: var(--muted); font-size: 10px; padding-right: 10px; }
+.hist-td-chevron { text-align: center; padding: 4px 8px; vertical-align: middle; }
+
+/* Inventory status circle badge */
+.inv-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.inv-circle-found   { background: rgba(30,122,62,.15); color: var(--green); border: 1.5px solid var(--green); }
+.inv-circle-missing { background: rgba(220,38,38,.1);  color: var(--red);   border: 1.5px solid var(--red); }
 
 /* ── Sale detail sheet ───────────────────────────────────────────── */
 .sds-info-card {

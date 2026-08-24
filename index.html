@@ -2378,7 +2378,15 @@
 <div class="sheet-overlay" id="sale-detail-sheet">
   <div class="sheet" style="max-height:88vh;overflow-y:auto;padding-bottom:12px;">
     <div class="sheet-handle"></div>
-    <div class="sheet-title">Sale Record</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div class="sheet-title" style="margin:0;">Sale Record</div>
+      <button onclick="closeSaleDetailSheet()" aria-label="Close"
+              style="width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);
+                     background:var(--bg2);color:var(--muted);font-size:16px;cursor:pointer;
+                     display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
     <input type="hidden" id="sds-id">
 
     <!-- ── Info card ─────────────────────────────────────── -->

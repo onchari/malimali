@@ -7878,8 +7878,8 @@ async function deleteSale(saleId) {
     await _deleteLocalRevenueForSale(saleId);
   }
   await dbDelete('sales', saleId);
+  await refreshUI();
   refreshSalesViews();
-  renderDashboard();
   renderFinancePage();
   toast('Sale record deleted', '');
   } catch(e) { console.error("[deleteSale]", e); toast("Error: " + e.message, "err"); }
@@ -9916,6 +9916,9 @@ async function renderHistoryPage() {
 
   UI.setText('hist-today-date', todayFull);
 
+  // Ensure allItems is fresh so inventory status badges are accurate
+  if (!allItems.length) allItems = await dbAll('items');
+
   const allSales = await dbAll('sales');
 
   // ── Today ──────────────────────────────────────────────────
@@ -10069,13 +10072,19 @@ function _histTable(sales, totalBuy, totalSell, totalProfit) {
     const name    = escapeHtml(rawName);
     const click   = s.id ? `onclick="openSaleDetail(${s.id})"` : '';
     const profCls = profit >= 0 ? 'hp-pos' : 'hp-neg';
+    const inInv   = allItems.some(item =>
+      (s.itemId   && item.id   === s.itemId)   ||
+      (s.itemCode && item.code === s.itemCode));
+    const invBadge = inInv
+      ? '<span class="inv-circle inv-circle-found" title="In inventory">✓</span>'
+      : '<span class="inv-circle inv-circle-missing" title="Not in inventory">✕</span>';
     return `<tr class="hist-clickable-row" ${click} title="Tap to view details">` +
       `<td>${i + 1}</td>` +
       `<td>${name}</td>` +
       `<td>${_fmtNum(buy)}</td>` +
       `<td>${_fmtNum(sell)}</td>` +
       `<td class="${profCls}">${_fmtNum(profit)}</td>` +
-      `<td class="hist-td-chevron"><i class="fa-solid fa-chevron-right"></i></td>` +
+      `<td class="hist-td-chevron">${invBadge}</td>` +
     `</tr>`;
   }).join('');
 
@@ -10200,8 +10209,9 @@ async function saveSaleEdit() {
   await dbPut('sales', sale);
   fbSyncSale(sale);
   closeSaleDetailSheet();
+  await refreshUI();
   await renderHistoryPage();
-  renderDashboard();
+  try { await renderSellPage(); } catch(_) {}
   toast('Sale updated', 'ok');
 }
 window.saveSaleEdit = saveSaleEdit;
@@ -10211,9 +10221,19 @@ async function deleteSaleFromDetail() {
   if (!id) return;
   const sale = await dbGet('sales', id);
   const label = sale ? (sale.itemName || sale.itemCode || 'this sale') : 'this sale';
-  if (!confirm('Delete sale of "' + label + '"?\n\nThis cannot be undone.')) return;
-  await deleteSale(id);
+  if (!confirm('⚠ Delete sale of "' + label + '"?\n\nThis cannot be undone.')) return;
   closeSaleDetailSheet();
+  // Skip deleteSale's own confirm — already confirmed above
+  if (sale) {
+    _rememberDeletedSale(sale);
+    await fbDeleteSale(sale);
+    await _deleteLocalRevenueForSale(id);
+  }
+  await dbDelete('sales', id);
+  await refreshUI();
+  refreshSalesViews();
+  renderFinancePage();
+  toast('Sale deleted', '');
 }
 window.deleteSaleFromDetail = deleteSaleFromDetail;
 
