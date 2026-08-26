@@ -10602,52 +10602,60 @@ async function _backfillSalesForItem(item) {
   return toFix.length;
 }
 
-// ── History day expand / collapse ─────────────────────────────────
+// ── History day drill-down: hide grid, show full day detail ────────
 let _expandedHistDay = null;
 
 function expandHistDay(safeId) {
+  const grid = document.querySelector('.hist-days-grid');
   const area = document.getElementById('hist-expanded-area');
-  if (!area) return;
+  if (!area || !grid) return;
 
-  // Deselect all cards
-  document.querySelectorAll('.hdc').forEach(c => c.classList.remove('hdc-selected'));
-
+  // Collapse if same card tapped again
   if (_expandedHistDay === safeId) {
-    // Toggle off
-    _expandedHistDay = null;
-    area.style.display = 'none';
-    area.innerHTML = '';
+    collapseHistDay();
     return;
   }
-
   _expandedHistDay = safeId;
-  const card = document.getElementById('hdc-' + safeId);
-  if (card) card.classList.add('hdc-selected');
 
-  // Find the date from safeId (format: YYYYMMDD → YYYY-MM-DD)
   const date = safeId.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
   const day  = (window._histByDate || {})[date];
-  if (!day) { area.style.display = 'none'; return; }
+  if (!day) return;
 
-  const dt    = new Date(date + 'T12:00:00');
-  const label = dt.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-  const rows  = [...day.sales].sort((a,b) => new Date(b.date) - new Date(a.date));
+  const dt       = new Date(date + 'T12:00:00');
+  const label    = dt.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  const rows     = [...day.sales].sort((a,b) => new Date(b.date) - new Date(a.date));
+  const profColor = day.profit >= 0 ? 'var(--green)' : 'var(--red)';
 
   area.innerHTML = `
-    <div class="hist-expanded-title">
-      <span>${label}</span>
-      <button onclick="expandHistDay('${safeId}')" class="hist-expanded-close">
-        <i class="fa-solid fa-xmark"></i>
+    <div class="hist-drill-header">
+      <button class="hist-drill-back" onclick="collapseHistDay()">
+        <i class="fa-solid fa-arrow-left"></i> All days
       </button>
+      <div class="hist-drill-title">${label}</div>
+      <div class="hist-drill-summary">
+        <div class="hist-drill-stat"><div class="hist-drill-val">${fmt(day.revenue)}</div><div class="hist-drill-lbl">Revenue</div></div>
+        <div class="hist-drill-stat"><div class="hist-drill-val">${fmt(day.cost)}</div><div class="hist-drill-lbl">Cost</div></div>
+        <div class="hist-drill-stat"><div class="hist-drill-val" style="color:${profColor};">${fmt(day.profit)}</div><div class="hist-drill-lbl">Profit</div></div>
+        <div class="hist-drill-stat"><div class="hist-drill-val">${fmtN(day.qty)}</div><div class="hist-drill-lbl">Pcs</div></div>
+      </div>
     </div>
     ${_histTable(rows, day.cost, day.revenue, day.profit)}`;
-  area.style.display = 'block';
-  // Scroll the expanded area into view
-  setTimeout(() => area.scrollIntoView({ behavior:'smooth', block:'nearest' }), 80);
-}
-window.expandHistDay  = expandHistDay;
 
-// Keep toggleHistDay as alias for any existing refs
+  // Hide the grid, show detail
+  grid.style.display = 'none';
+  area.style.display = 'block';
+}
+window.expandHistDay = expandHistDay;
+
+function collapseHistDay() {
+  _expandedHistDay = null;
+  const grid = document.querySelector('.hist-days-grid');
+  const area = document.getElementById('hist-expanded-area');
+  if (grid) grid.style.display = 'grid';
+  if (area) { area.style.display = 'none'; area.innerHTML = ''; }
+}
+window.collapseHistDay = collapseHistDay;
+
 function toggleHistDay(safeId) { expandHistDay(safeId); }
 window.toggleHistDay = toggleHistDay;
 
