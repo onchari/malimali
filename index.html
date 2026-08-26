@@ -1137,6 +1137,40 @@
 
   </div>
 
+  <!-- ── Units of Measurement ──────────────────────────────── -->
+  <div class="sec-label">Units of Measurement</div>
+  <div class="card settings-card" style="padding:16px;">
+
+    <div class="units-header">
+      <div>
+        <div style="font-size:14px;font-weight:800;">Stock Units</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">
+          Tap to toggle · <span id="units-active-count" style="color:var(--accent);font-weight:700;"></span>
+        </div>
+      </div>
+      <button onclick="resetUnitsToDefault()" class="units-reset-btn" title="Reset to defaults">
+        <i class="fa-solid fa-rotate-left"></i>
+      </button>
+    </div>
+
+    <!-- Unit chips -->
+    <div id="units-chip-list" class="units-chip-list"></div>
+
+    <!-- Add custom unit -->
+    <div class="units-add-row">
+      <input type="text" id="unit-add-abbr" class="add-input units-add-abbr"
+             placeholder="Abbr" maxlength="6" autocomplete="off" spellcheck="false"
+             onkeydown="if(event.key==='Enter') document.getElementById('unit-add-name').focus()">
+      <input type="text" id="unit-add-name" class="add-input units-add-name"
+             placeholder="Full name" maxlength="20" autocomplete="off" spellcheck="false"
+             onkeydown="if(event.key==='Enter') addCustomUnit()">
+      <button onclick="addCustomUnit()" class="units-add-btn" title="Add unit">
+        <i class="fa-solid fa-plus"></i>
+      </button>
+    </div>
+
+  </div>
+
   <!-- ── System & updates ───────────────────────────────────── -->
   <div class="sec-label">System &amp; updates</div>
   <p class="settings-hint">Follow the steps in order. Updates change app code only - your items, sales, and finances are kept.</p>

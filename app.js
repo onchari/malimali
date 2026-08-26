@@ -1269,7 +1269,7 @@ function showPage(id) {
   if (id === 'day') { updateDayLiveStats(); renderDaySessionsList(); renderDayState(); }
   if (id === 'sell') showSalesTab(_activeSalesTab);
   if (id === 'finance')  { renderFinancePage(); }
-  if (id === 'settings') { renderCategorySettings(); }
+  if (id === 'settings') { renderCategorySettings(); renderUnitsSettings(); }
   if (id === 'add') setTimeout(() => setItemMode(_addFormIsRecord), 0);
 }
 
@@ -9215,6 +9215,114 @@ window.toggleShoeGroup = toggleShoeGroup;
 // AI ASSISTANT  —  Google Gemini Flash (free)
 // ══════════════════════════════════════════════════════════════════
 const KEY_GEMINI = 'mg_gemini_key';
+const KEY_UNITS  = 'mg_units';
+
+// ══════════════════════════════════════════════════════════════════
+// UNITS OF MEASUREMENT
+// ══════════════════════════════════════════════════════════════════
+
+const DEFAULT_UNITS = [
+  { abbr: 'Pcs',  name: 'Pieces',       active: true  },
+  { abbr: 'Pkt',  name: 'Packet',       active: true  },
+  { abbr: 'Box',  name: 'Box',          active: true  },
+  { abbr: 'Ctn',  name: 'Carton',       active: true  },
+  { abbr: 'Dzn',  name: 'Dozen',        active: true  },
+  { abbr: 'Pr',   name: 'Pair',         active: true  },
+  { abbr: 'Set',  name: 'Set',          active: true  },
+  { abbr: 'Bdl',  name: 'Bundle',       active: false },
+  { abbr: 'Roll', name: 'Roll',         active: false },
+  { abbr: 'Btl',  name: 'Bottle',       active: true  },
+  { abbr: 'Can',  name: 'Can',          active: false },
+  { abbr: 'Bag',  name: 'Bag',          active: true  },
+  { abbr: 'Sack', name: 'Sack',         active: false },
+  { abbr: 'Kg',   name: 'Kilogram',     active: true  },
+  { abbr: 'g',    name: 'Gram',         active: false },
+  { abbr: 'L',    name: 'Litre',        active: true  },
+  { abbr: 'ml',   name: 'Millilitre',   active: false },
+  { abbr: 'm',    name: 'Metre',        active: false },
+  { abbr: 'cm',   name: 'Centimetre',   active: false },
+  { abbr: 'm²',   name: 'Square metre', active: false },
+  { abbr: 'm³',   name: 'Cubic metre',  active: false },
+  { abbr: 'Hr',   name: 'Hour',         active: false },
+  { abbr: 'Day',  name: 'Day',          active: false },
+];
+
+/** Returns the current units array (from localStorage, or defaults) */
+function getUnits() {
+  try {
+    const saved = localStorage.getItem(KEY_UNITS);
+    return saved ? JSON.parse(saved) : [...DEFAULT_UNITS];
+  } catch(_) { return [...DEFAULT_UNITS]; }
+}
+
+/** Returns only active units */
+function getActiveUnits() {
+  return getUnits().filter(u => u.active);
+}
+window.getActiveUnits = getActiveUnits;
+
+function _saveUnits(units) {
+  localStorage.setItem(KEY_UNITS, JSON.stringify(units));
+}
+
+function toggleUnit(abbr) {
+  const units = getUnits();
+  const u = units.find(x => x.abbr === abbr);
+  if (u) u.active = !u.active;
+  _saveUnits(units);
+  renderUnitsSettings();
+}
+window.toggleUnit = toggleUnit;
+
+function resetUnitsToDefault() {
+  if (!confirm('Reset units to the default list?')) return;
+  _saveUnits([...DEFAULT_UNITS]);
+  renderUnitsSettings();
+  toast('Units reset to defaults', 'ok');
+}
+window.resetUnitsToDefault = resetUnitsToDefault;
+
+function addCustomUnit() {
+  const abbr = (document.getElementById('unit-add-abbr')?.value || '').trim();
+  const name = (document.getElementById('unit-add-name')?.value || '').trim();
+  if (!abbr) { toast('Enter abbreviation (e.g. Pkt)', 'err'); return; }
+  if (!name) { toast('Enter full name (e.g. Packet)', 'err'); return; }
+  const units = getUnits();
+  if (units.find(u => u.abbr.toLowerCase() === abbr.toLowerCase())) {
+    toast('"' + abbr + '" already exists', 'err'); return;
+  }
+  units.push({ abbr, name, active: true, custom: true });
+  _saveUnits(units);
+  document.getElementById('unit-add-abbr').value = '';
+  document.getElementById('unit-add-name').value = '';
+  renderUnitsSettings();
+  toast('Unit added', 'ok');
+}
+window.addCustomUnit = addCustomUnit;
+
+function removeCustomUnit(abbr) {
+  if (!confirm('Remove "' + abbr + '" unit?')) return;
+  const units = getUnits().filter(u => u.abbr !== abbr);
+  _saveUnits(units);
+  renderUnitsSettings();
+}
+window.removeCustomUnit = removeCustomUnit;
+
+function renderUnitsSettings() {
+  const container = document.getElementById('units-chip-list');
+  if (!container) return;
+  const units = getUnits();
+  container.innerHTML = units.map(u => `
+    <div class="unit-chip ${u.active ? 'unit-chip-on' : ''}" onclick="toggleUnit('${escapeHtml(u.abbr)}')">
+      <span class="unit-chip-abbr">${escapeHtml(u.abbr)}</span>
+      <span class="unit-chip-name">${escapeHtml(u.name)}</span>
+      ${u.custom ? `<button type="button" class="unit-chip-del" onclick="event.stopPropagation();removeCustomUnit('${escapeHtml(u.abbr)}')" title="Remove">×</button>` : ''}
+    </div>`).join('');
+  // Update active count
+  const countEl = document.getElementById('units-active-count');
+  if (countEl) countEl.textContent = units.filter(u => u.active).length + ' active';
+}
+window.renderUnitsSettings = renderUnitsSettings;
 
 function getGeminiKey() { return localStorage.getItem(KEY_GEMINI) || ''; }
 
@@ -10383,6 +10491,10 @@ async function renderHistoryPage() {
           </div>
           <div class="hist-day-stats">
             <div class="hist-day-stat">
+              <div class="hist-day-stat-val">${fmt(day.cost)}</div>
+              <div class="hist-day-stat-lbl">Cost</div>
+            </div>
+            <div class="hist-day-stat">
               <div class="hist-day-stat-val">${fmt(day.revenue)}</div>
               <div class="hist-day-stat-lbl">Revenue</div>
             </div>
@@ -10409,9 +10521,13 @@ function _fmtNum(n) {
   return (parseFloat(n) || 0).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-// ── Tabular sale record renderer — each row is clickable ──────────
+// ── Tabular sale record renderer — totals pinned top, newest first ─
 function _histTable(sales, totalBuy, totalSell, totalProfit) {
-  const rows = sales.map((s, i) => {
+  // Newest first — oldest at bottom
+  const sorted = [...sales].sort((a, b) => new Date(b.date||0) - new Date(a.date||0));
+  const n = sorted.length;
+
+  const detailRows = sorted.map((s, i) => {
     const qty    = s.qty || 1;
     const buy    = (s.buyPrice || 0) * qty;
     const sell   = (s.actualPrice || s.sellPrice || 0) * qty;
@@ -10419,18 +10535,17 @@ function _histTable(sales, totalBuy, totalSell, totalProfit) {
     const rawName = (s.itemName || s.itemCode || 'Item') +
       (s.itemSize ? ' · Sz ' + s.itemSize : '') +
       (qty > 1 ? ' ×' + qty : '');
-    const name    = escapeHtml(rawName);
     const click   = s.id ? `onclick="openSaleDetail(${s.id})"` : '';
     const profCls = profit >= 0 ? 'hp-pos' : 'hp-neg';
     const inInv   = allItems.some(item =>
-      (s.itemId   && item.id   === s.itemId)   ||
-      (s.itemCode && item.code === s.itemCode));
+      (s.itemId && item.id === s.itemId) || (s.itemCode && item.code === s.itemCode));
     const invBadge = inInv
       ? '<span class="inv-circle inv-circle-found" title="In inventory">✓</span>'
       : '<span class="inv-circle inv-circle-missing" title="Not in inventory">✕</span>';
-    return `<tr class="hist-clickable-row" ${click} title="Tap to view details">` +
-      `<td>${i + 1}</td>` +
-      `<td>${name}</td>` +
+    // Row number: 1 = most recent (top), n = oldest (bottom)
+    return `<tr class="hist-clickable-row" ${click}>` +
+      `<td class="hist-num">${i + 1}</td>` +
+      `<td>${escapeHtml(rawName)}</td>` +
       `<td>${_fmtNum(buy)}</td>` +
       `<td>${_fmtNum(sell)}</td>` +
       `<td class="${profCls}">${_fmtNum(profit)}</td>` +
@@ -10438,20 +10553,29 @@ function _histTable(sales, totalBuy, totalSell, totalProfit) {
     `</tr>`;
   }).join('');
 
-  const totalsRow = `<tr class="hist-totals">` +
-    `<td></td><td>TOTAL</td>` +
-    `<td>${_fmtNum(totalBuy)}</td>` +
-    `<td>${_fmtNum(totalSell)}</td>` +
-    `<td class="${totalProfit >= 0 ? 'hp-pos' : 'hp-neg'}">${_fmtNum(totalProfit)}</td>` +
-    `<td></td>` +
-  `</tr>`;
+  // Totals row — pinned at TOP below header
+  const profCls = totalProfit >= 0 ? 'hp-pos' : 'hp-neg';
+  const totalsRow =
+    `<tr class="hist-totals-top">` +
+      `<td class="hist-num" style="color:var(--muted);font-size:9px;">${n}</td>` +
+      `<td style="font-weight:800;color:var(--muted);font-size:11px;letter-spacing:.3px;">TOTALS</td>` +
+      `<td>${_fmtNum(totalBuy)}</td>` +
+      `<td>${_fmtNum(totalSell)}</td>` +
+      `<td class="${profCls}">${_fmtNum(totalProfit)}</td>` +
+      `<td></td>` +
+    `</tr>`;
 
-  return '<div class="hist-table-wrap"><table class="hist-table">' +
-    '<colgroup><col style="width:5%"><col style="width:38%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:12%"></colgroup>' +
-    '<thead><tr><th>#</th><th>Item</th><th>Buy</th><th>Sold</th><th>Profit</th><th></th></tr></thead>' +
-    '<tbody>' + rows + '</tbody>' +
-    '<tfoot>' + totalsRow + '</tfoot>' +
-  '</table></div>';
+  return `<div class="hist-table-wrap"><table class="hist-table hist-table-lined">` +
+    `<thead><tr>` +
+      `<th class="hist-num">#</th>` +
+      `<th>Item</th>` +
+      `<th>Cost</th>` +
+      `<th>Revenue</th>` +
+      `<th>Profit</th>` +
+      `<th></th>` +
+    `</tr></thead>` +
+    `<tbody>${totalsRow}${detailRows}</tbody>` +
+  `</table></div>`;
 }
 window.renderHistoryPage = renderHistoryPage;
 

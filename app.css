@@ -2,6 +2,79 @@
    AI ASSISTANT
    ================================================================ */
 
+/* ── Units of Measurement ───────────────────────────────────────── */
+.units-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.units-reset-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1.5px solid var(--border); background: var(--bg2);
+  color: var(--muted); font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.units-reset-btn:active { background: var(--border); }
+
+.units-chip-list {
+  display: flex; flex-wrap: wrap; gap: 7px;
+  margin-bottom: 14px;
+}
+.unit-chip {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg2);
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+  min-width: 52px;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.unit-chip:active { opacity: .75; }
+.unit-chip-on {
+  background: rgba(30,122,62,.1);
+  border-color: var(--accent);
+}
+.unit-chip-abbr {
+  font-size: 13px; font-weight: 900;
+  font-family: var(--mono);
+  color: var(--text);
+}
+.unit-chip-on .unit-chip-abbr { color: var(--accent); }
+.unit-chip-name {
+  font-size: 9px; color: var(--muted);
+  text-align: center; margin-top: 2px;
+  white-space: nowrap;
+}
+.unit-chip-del {
+  position: absolute; top: -5px; right: -5px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--red); color: white;
+  border: none; font-size: 10px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+
+.units-add-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 40px;
+  gap: 6px;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.units-add-abbr  { text-align: center; font-family: var(--mono); font-weight: 700; }
+.units-add-name  {}
+.units-add-btn {
+  width: 40px; height: 40px; border-radius: 8px;
+  background: var(--accent); color: white;
+  border: none; font-size: 15px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.units-add-btn:active { opacity: .8; }
+
 /* ── AI Settings card ───────────────────────────────────────────── */
 .ai-settings-card { padding: 16px !important; }
 
@@ -4363,52 +4436,76 @@ body.photo-lightbox-open { overflow: hidden; }
 .hist-stat-val.green { color: #86efac; }
 .hist-stat-lbl   { font-size: 9px; color: rgba(255,255,255,.65); text-transform: uppercase; letter-spacing: .3px; }
 
-.hist-table-wrap { width: 100%; }
+.hist-table-wrap { width: 100%; overflow-x: auto; }
 .hist-table {
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 11px;
 }
+/* Column line separators */
+.hist-table-lined th,
+.hist-table-lined td {
+  border-right: 1px solid var(--border);
+}
+.hist-table-lined th:last-child,
+.hist-table-lined td:last-child { border-right: none; }
+
 .hist-table th,
 .hist-table td {
-  padding: 6px 4px;
-  text-align: left;
+  padding: 7px 5px;
+  text-align: right;
   border-bottom: 1px solid var(--border);
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
+/* First col (#) and second col (Item) left-aligned */
+.hist-table th:nth-child(1), .hist-table td:nth-child(1),
+.hist-table th:nth-child(2), .hist-table td:nth-child(2) { text-align: left; }
+
 .hist-table th {
-  font-size: 8px;
-  font-weight: 700;
+  font-size: 9px;
+  font-weight: 800;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: .2px;
+  letter-spacing: .3px;
   background: var(--surface2);
-  white-space: normal;
+  white-space: nowrap;
+  padding: 8px 5px;
 }
 .hist-table td {
   font-family: var(--mono);
+  font-size: 12px;
   color: var(--text);
 }
+/* Item name cell — sans serif */
 .hist-table td:nth-child(2) {
   font-family: var(--sans);
+  font-size: 11px;
   white-space: normal;
   word-break: break-word;
 }
-.hist-table td.hp-pos { color: var(--green); }
-.hist-table td.hp-neg { color: var(--red); }
-.hist-table td.hist-td-action { padding: 4px 6px; vertical-align: middle; }
-.hist-table tfoot td {
-  font-weight: 800;
-  border-bottom: none;
-  border-top: 2px solid var(--border);
+.hist-num { width: 28px; color: var(--muted) !important; font-size: 10px !important; }
+.hist-table td.hp-pos { color: var(--green); font-weight: 800; }
+.hist-table td.hp-neg { color: var(--red);   font-weight: 800; }
+
+/* Totals row — pinned at top, distinct background */
+.hist-totals-top td {
   background: var(--surface2);
+  border-bottom: 2px solid var(--border);
+  font-weight: 900;
+  font-size: 12px;
 }
+.hist-totals-top td:nth-child(2) {
+  font-family: var(--sans);
+  font-size: 9px;
+  letter-spacing: .5px;
+}
+
 /* Clickable sale rows */
 .hist-clickable-row { cursor: pointer; transition: background .1s; }
 .hist-clickable-row:active { background: var(--bg2); }
-.hist-td-chevron { text-align: center; padding: 4px 8px; vertical-align: middle; }
+.hist-td-chevron { text-align: center !important; padding: 4px 6px; vertical-align: middle; width: 28px; }
 
 /* Inventory status circle badge */
 .inv-circle {
