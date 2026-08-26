@@ -10482,15 +10482,15 @@ async function renderHistoryPage() {
       <div class="pr-day-figures">
         <div class="pr-fig">
           <div class="pr-fig-lbl">Sales</div>
-          <div class="pr-fig-val pr-col-blue">${fmt(day.revenue)}</div>
+          <div class="pr-fig-val pr-col-blue">${_fmtNum(day.revenue)}</div>
         </div>
         <div class="pr-fig">
           <div class="pr-fig-lbl">Cost</div>
-          <div class="pr-fig-val pr-col-orange">${fmt(day.cost)}</div>
+          <div class="pr-fig-val pr-col-orange">${_fmtNum(day.cost)}</div>
         </div>
         <div class="pr-fig">
           <div class="pr-fig-lbl">Earning</div>
-          <div class="pr-fig-val" style="color:${earningColor};font-weight:900;font-family:var(--mono);">${fmt(day.profit)}</div>
+          <div class="pr-fig-val" style="color:${earningColor};font-weight:900;font-family:var(--mono);">${_fmtNum(day.profit)}</div>
         </div>
       </div>
     </div>`;
@@ -10515,7 +10515,7 @@ async function renderHistoryPage() {
         <div class="pr-sum-icon" style="background:rgba(22,163,74,.12);color:#16a34a;"><i class="fa-solid fa-wallet"></i></div>
         <div class="pr-sum-body">
           <div class="pr-sum-lbl">Revenue</div>
-          <div class="pr-sum-val pr-col-green">${fmt(periodRev)}</div>
+          <div class="pr-sum-val pr-col-green">${_fmtNum(periodRev)}</div>
           <div class="pr-sum-sub">Total revenue</div>
         </div>
       </div>
@@ -10523,7 +10523,7 @@ async function renderHistoryPage() {
         <div class="pr-sum-icon" style="background:rgba(249,115,22,.12);color:#f97316;"><i class="fa-solid fa-cart-shopping"></i></div>
         <div class="pr-sum-body">
           <div class="pr-sum-lbl">Cost (BP)</div>
-          <div class="pr-sum-val pr-col-orange">${fmt(periodCost)}</div>
+          <div class="pr-sum-val pr-col-orange">${_fmtNum(periodCost)}</div>
           <div class="pr-sum-sub">Total cost</div>
         </div>
       </div>
@@ -10531,7 +10531,7 @@ async function renderHistoryPage() {
         <div class="pr-sum-icon" style="background:rgba(255,255,255,.2);color:white;"><i class="fa-solid fa-chart-bar"></i></div>
         <div class="pr-sum-body">
           <div class="pr-sum-lbl" style="color:rgba(255,255,255,.8);">Earning</div>
-          <div class="pr-sum-val" style="color:white;font-size:22px;">${fmt(periodProf)}</div>
+          <div class="pr-sum-val" style="color:white;font-size:22px;">${_fmtNum(periodProf)}</div>
           <div class="pr-sum-sub" style="color:rgba(255,255,255,.7);">Net earning</div>
         </div>
       </div>
