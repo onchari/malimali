@@ -4614,7 +4614,143 @@ body.photo-lightbox-open { overflow: hidden; }
   text-transform: uppercase;
 }
 
-/* ── Day mini-card grid (3 per row) ─────────────────────────────── */
+/* ================================================================
+   PAST RECORDS — redesigned layout
+   ================================================================ */
+
+/* Page header */
+.pr-page-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+}
+.pr-page-header-left { display: flex; align-items: center; gap: 12px; }
+.pr-page-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  background: rgba(22,163,74,.12); color: #16a34a;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.pr-page-title { font-size: 20px; font-weight: 900; color: var(--text); }
+.pr-page-sub   { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.pr-date-badge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 10px;
+  border: 1.5px solid var(--border); background: var(--surface);
+  font-size: 12px; font-weight: 600; color: var(--text);
+  white-space: nowrap;
+}
+
+/* 5 summary cards */
+.pr-sum-row {
+  display: grid;
+  grid-template-columns: repeat(5,1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.pr-sum-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 12px;
+  display: flex; align-items: flex-start; gap: 10px;
+}
+.pr-sum-highlight {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+.pr-sum-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.pr-sum-body { flex: 1; min-width: 0; }
+.pr-sum-lbl { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.pr-sum-val { font-size: 18px; font-weight: 900; font-family: var(--mono); }
+.pr-sum-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+/* Colours */
+.pr-col-green  { color: #16a34a !important; }
+.pr-col-orange { color: #f97316 !important; }
+.pr-col-blue   { color: #2563eb !important; }
+
+/* Daily breakdown header */
+.pr-breakdown-hdr {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 12px; gap: 8px;
+}
+.pr-breakdown-title { font-size: 16px; font-weight: 900; color: var(--text); }
+.pr-breakdown-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.pr-legend { display: flex; align-items: center; gap: 10px; padding-top: 4px; }
+.pr-legend-item { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 3px; }
+
+/* 5-per-row day cards */
+.pr-days-grid {
+  display: grid;
+  grid-template-columns: repeat(5,1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.pr-day-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 10px;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+  user-select: none; -webkit-user-select: none;
+}
+.pr-day-card:active { background: var(--bg2); }
+.pr-day-header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  flex-wrap: wrap; gap: 2px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.pr-day-date  { font-size: 12px; color: var(--text); }
+.pr-day-date strong { font-size: 13px; }
+.pr-day-meta  { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.pr-day-figures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+.pr-fig { text-align: center; }
+.pr-fig-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .2px; margin-bottom: 3px; }
+.pr-fig-val { font-size: 13px; font-weight: 900; font-family: var(--mono); }
+
+/* Insights footer */
+.pr-insights {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-top: 4px;
+}
+.pr-insights-icon {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: #16a34a; color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.pr-insights-body { flex: 1; min-width: 0; }
+.pr-insights-title { font-size: 14px; font-weight: 800; color: var(--text); }
+.pr-insights-text  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.pr-export-btn {
+  display: flex; align-items: center; gap: 7px;
+  padding: 10px 16px; border-radius: 10px;
+  border: 1.5px solid var(--accent);
+  background: transparent; color: var(--accent);
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  white-space: nowrap; flex-shrink: 0;
+}
+.pr-export-btn:active { background: var(--accent); color: white; }
+
+/* Responsive: 2-col on very small screens */
+@media (max-width: 480px) {
+  .pr-sum-row    { grid-template-columns: repeat(2,1fr); }
+  .pr-days-grid  { grid-template-columns: repeat(2,1fr); }
+  .pr-sum-row .pr-sum-card:nth-child(3) { grid-column: 1 / -1; }
+}
+
+/* ── Day mini-card grid (3 per row) — kept for backwards compat ─── */
 .hist-days-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

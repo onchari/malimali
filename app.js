@@ -10449,69 +10449,140 @@ async function renderHistoryPage() {
   const periodSales= datesSorted.reduce((s,d) => s + byDate[d].sales.length, 0);
   const pMargin    = periodRev > 0 ? (periodProf / periodRev * 100).toFixed(1) : '0.0';
 
-  const summaryHtml = `
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;">
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 6px;text-align:center;">
-        <div style="font-size:11px;font-weight:900;font-family:var(--mono);color:var(--accent2);">${fmt(periodRev)}</div>
-        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Revenue</div>
-      </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 6px;text-align:center;">
-        <div style="font-size:11px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmt(periodCost)}</div>
-        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Cost (BP)</div>
-      </div>
-      <div style="background:var(--green-light);border:1px solid var(--green);border-radius:var(--r);padding:10px 6px;text-align:center;">
-        <div style="font-size:11px;font-weight:900;font-family:var(--mono);color:var(--green);">${fmt(periodProf)}</div>
-        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Profit</div>
-      </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 6px;text-align:center;">
-        <div style="font-size:11px;font-weight:900;font-family:var(--mono);color:var(--text);">${pMargin}%</div>
-        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Margin</div>
-      </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 6px;text-align:center;">
-        <div style="font-size:11px;font-weight:900;font-family:var(--mono);color:var(--text);">${periodSales}</div>
-        <div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px;">Sales</div>
-      </div>
-    </div>`;
+  // Date range label
+  const firstDate = datesSorted[datesSorted.length - 1];
+  const lastDate  = datesSorted[0];
+  const fmtDR = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB',{ day:'numeric', month:'short', year:'numeric' });
+  const dateRangeLabel = firstDate === lastDate ? fmtDR(firstDate) : fmtDR(firstDate) + ' – ' + fmtDR(lastDate);
+
+  // Insights — best day by revenue
+  const bestRevDay  = datesSorted.reduce((best,d) => byDate[d].revenue > (byDate[best]?.revenue||0) ? d : best, datesSorted[0]);
+  const bestRevInfo = byDate[bestRevDay];
+  const bestRevDt   = new Date(bestRevDay + 'T12:00:00').toLocaleDateString('en-GB',{ weekday:'short', day:'numeric', month:'short' });
+  const insightText = `Your best day was ${bestRevDt} with ${fmt(bestRevInfo.revenue)} in sales and ${fmt(bestRevInfo.profit)} in earning.`;
 
   // Store byDate for click access
   window._histByDate = byDate;
 
-  const miniCards = datesSorted.map(date => {
-    const day      = byDate[date];
-    const safeId   = date.replace(/-/g,'');
-    const dt       = new Date(date + 'T12:00:00');
-    const dayName  = dt.toLocaleDateString('en-GB', { weekday:'short' });
-    const dayNum   = dt.getDate();
-    const month    = dt.toLocaleDateString('en-GB', { month:'short' });
-    const profColor = day.profit >= 0 ? 'var(--green)' : 'var(--red)';
+  // Day cards (5 per row)
+  const dayCards = datesSorted.map(date => {
+    const day    = byDate[date];
+    const safeId = date.replace(/-/g,'');
+    const dt     = new Date(date + 'T12:00:00');
+    const wday   = dt.toLocaleDateString('en-GB', { weekday:'short' });
+    const dnum   = dt.getDate();
+    const mon    = dt.toLocaleDateString('en-GB', { month:'short' });
+    const earningColor = day.profit >= 0 ? '#16a34a' : '#dc2626';
 
-    return `<div class="hdc" id="hdc-${safeId}" onclick="expandHistDay('${safeId}')">
-      <div class="hdc-date">
-        <span class="hdc-weekday">${dayName}</span>
-        <span class="hdc-day">${dayNum}</span>
-        <span class="hdc-month">${month}</span>
+    return `<div class="pr-day-card" onclick="expandHistDay('${safeId}')">
+      <div class="pr-day-header">
+        <span class="pr-day-date"><strong>${wday} ${dnum}</strong> ${mon}</span>
+        <span class="pr-day-meta">${day.sales.length} sales • ${fmtN(day.qty)} pcs</span>
       </div>
-      <div class="hdc-sub">${day.sales.length} sales · ${fmtN(day.qty)} pcs</div>
-      <div class="hdc-figures">
-        <div class="hdc-fig">
-          <div class="hdc-fig-val">${fmt(day.revenue)}</div>
-          <div class="hdc-fig-lbl">Sales</div>
+      <div class="pr-day-figures">
+        <div class="pr-fig">
+          <div class="pr-fig-lbl">Sales</div>
+          <div class="pr-fig-val pr-col-blue">${fmt(day.revenue)}</div>
         </div>
-        <div class="hdc-fig">
-          <div class="hdc-fig-val">${fmt(day.cost)}</div>
-          <div class="hdc-fig-lbl">Cost</div>
+        <div class="pr-fig">
+          <div class="pr-fig-lbl">Cost</div>
+          <div class="pr-fig-val pr-col-orange">${fmt(day.cost)}</div>
         </div>
-        <div class="hdc-fig">
-          <div class="hdc-fig-val" style="color:${profColor};">${fmt(day.profit)}</div>
-          <div class="hdc-fig-lbl">Profit</div>
+        <div class="pr-fig">
+          <div class="pr-fig-lbl">Earning</div>
+          <div class="pr-fig-val" style="color:${earningColor};font-weight:900;font-family:var(--mono);">${fmt(day.profit)}</div>
         </div>
       </div>
     </div>`;
   }).join('');
 
-  recList.innerHTML = summaryHtml +
-    `<div class="hist-days-grid">${miniCards}</div>` +
-    `<div id="hist-expanded-area" class="hist-expanded-area" style="display:none;"></div>`;
+  recList.innerHTML = `
+    <!-- Page header -->
+    <div class="pr-page-header">
+      <div class="pr-page-header-left">
+        <div class="pr-page-icon"><i class="fa-solid fa-chart-line"></i></div>
+        <div>
+          <div class="pr-page-title">Past Records</div>
+          <div class="pr-page-sub">Overview of your performance for the selected period</div>
+        </div>
+      </div>
+      <div class="pr-date-badge"><i class="fa-regular fa-calendar"></i> ${dateRangeLabel}</div>
+    </div>
+
+    <!-- 5 summary cards -->
+    <div class="pr-sum-row">
+      <div class="pr-sum-card">
+        <div class="pr-sum-icon" style="background:rgba(22,163,74,.12);color:#16a34a;"><i class="fa-solid fa-wallet"></i></div>
+        <div class="pr-sum-body">
+          <div class="pr-sum-lbl">Revenue</div>
+          <div class="pr-sum-val pr-col-green">${fmt(periodRev)}</div>
+          <div class="pr-sum-sub">Total revenue</div>
+        </div>
+      </div>
+      <div class="pr-sum-card">
+        <div class="pr-sum-icon" style="background:rgba(249,115,22,.12);color:#f97316;"><i class="fa-solid fa-cart-shopping"></i></div>
+        <div class="pr-sum-body">
+          <div class="pr-sum-lbl">Cost (BP)</div>
+          <div class="pr-sum-val pr-col-orange">${fmt(periodCost)}</div>
+          <div class="pr-sum-sub">Total cost</div>
+        </div>
+      </div>
+      <div class="pr-sum-card pr-sum-highlight">
+        <div class="pr-sum-icon" style="background:rgba(255,255,255,.2);color:white;"><i class="fa-solid fa-chart-bar"></i></div>
+        <div class="pr-sum-body">
+          <div class="pr-sum-lbl" style="color:rgba(255,255,255,.8);">Earning</div>
+          <div class="pr-sum-val" style="color:white;font-size:22px;">${fmt(periodProf)}</div>
+          <div class="pr-sum-sub" style="color:rgba(255,255,255,.7);">Net earning</div>
+        </div>
+      </div>
+      <div class="pr-sum-card">
+        <div class="pr-sum-icon" style="background:rgba(22,163,74,.12);color:#16a34a;font-size:18px;font-weight:900;">%</div>
+        <div class="pr-sum-body">
+          <div class="pr-sum-lbl">Margin</div>
+          <div class="pr-sum-val pr-col-green">${pMargin}%</div>
+          <div class="pr-sum-sub">Profit margin</div>
+        </div>
+      </div>
+      <div class="pr-sum-card">
+        <div class="pr-sum-icon" style="background:rgba(37,99,235,.1);color:#2563eb;"><i class="fa-solid fa-users"></i></div>
+        <div class="pr-sum-body">
+          <div class="pr-sum-lbl">Sales</div>
+          <div class="pr-sum-val pr-col-blue">${periodSales}</div>
+          <div class="pr-sum-sub">Total sales</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Daily breakdown header -->
+    <div class="pr-breakdown-hdr">
+      <div>
+        <div class="pr-breakdown-title">Daily Breakdown</div>
+        <div class="pr-breakdown-sub">Detailed performance per day</div>
+      </div>
+      <div class="pr-legend">
+        <span class="pr-legend-item"><span style="color:#16a34a;font-size:10px;">●</span> Earning</span>
+        <span class="pr-legend-item"><span style="color:#f97316;font-size:10px;">●</span> Cost</span>
+        <span class="pr-legend-item"><span style="color:#2563eb;font-size:10px;">●</span> Sales</span>
+      </div>
+    </div>
+
+    <!-- 5-per-row day cards -->
+    <div class="pr-days-grid">${dayCards}</div>
+
+    <!-- Expanded detail area -->
+    <div id="hist-expanded-area" class="hist-expanded-area" style="display:none;"></div>
+
+    <!-- Insights + export -->
+    <div class="pr-insights">
+      <div class="pr-insights-icon"><i class="fa-solid fa-lightbulb"></i></div>
+      <div class="pr-insights-body">
+        <div class="pr-insights-title">Insights</div>
+        <div class="pr-insights-text">${insightText}</div>
+      </div>
+      <button class="pr-export-btn" onclick="exportSalesReport()">
+        <i class="fa-solid fa-download"></i> Export Report
+      </button>
+    </div>`;
 }
 
 // Money formatted for a table cell (no currency prefix - shown once in the header instead)
@@ -10646,6 +10717,27 @@ function expandHistDay(safeId) {
   area.style.display = 'block';
 }
 window.expandHistDay = expandHistDay;
+
+async function exportSalesReport() {
+  const allSales = await dbAll('sales');
+  const rows = [['Date','Item','Code','Qty','Buy Price','Revenue','Profit','Payment']];
+  [...allSales].sort((a,b)=>(b.businessDate||'').localeCompare(a.businessDate||'')).forEach(s=>{
+    rows.push([
+      s.businessDate || (s.date||'').slice(0,10),
+      s.itemName || '', s.itemCode || '',
+      s.qty||1, s.buyPrice||0,
+      s.revenue||0, s.profit||0, s.paymentMethod||'cash'
+    ]);
+  });
+  const csv  = rows.map(r => r.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href:url, download:'sales-report.csv' });
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('Report downloaded', 'ok');
+}
+window.exportSalesReport = exportSalesReport;
 
 function collapseHistDay() {
   _expandedHistDay = null;
