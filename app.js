@@ -10459,7 +10459,7 @@ async function renderHistoryPage() {
   const bestRevDay  = datesSorted.reduce((best,d) => byDate[d].revenue > (byDate[best]?.revenue||0) ? d : best, datesSorted[0]);
   const bestRevInfo = byDate[bestRevDay];
   const bestRevDt   = new Date(bestRevDay + 'T12:00:00').toLocaleDateString('en-GB',{ weekday:'short', day:'numeric', month:'short' });
-  const insightText = `Your best day was ${bestRevDt} with ${fmt(bestRevInfo.revenue)} in sales and ${fmt(bestRevInfo.profit)} in earning.`;
+  const insightText = `Your best day was ${bestRevDt} with ${_fmtNum(bestRevInfo.revenue)} in sales and ${_fmtNum(bestRevInfo.profit)} in earning.`;
 
   // Store byDate for click access
   window._histByDate = byDate;
@@ -10669,7 +10669,7 @@ async function _backfillSalesForItem(item) {
 let _expandedHistDay = null;
 
 function expandHistDay(safeId) {
-  const grid = document.querySelector('.hist-days-grid');
+  const grid = document.querySelector('.pr-days-grid');
   const area = document.getElementById('hist-expanded-area');
   if (!area || !grid) return;
 
@@ -10696,9 +10696,9 @@ function expandHistDay(safeId) {
       </button>
       <div class="hist-drill-title">${label}</div>
       <div class="hist-drill-summary">
-        <div class="hist-drill-stat"><div class="hist-drill-val">${fmt(day.revenue)}</div><div class="hist-drill-lbl">Revenue</div></div>
-        <div class="hist-drill-stat"><div class="hist-drill-val">${fmt(day.cost)}</div><div class="hist-drill-lbl">Cost</div></div>
-        <div class="hist-drill-stat"><div class="hist-drill-val" style="color:${profColor};">${fmt(day.profit)}</div><div class="hist-drill-lbl">Profit</div></div>
+        <div class="hist-drill-stat"><div class="hist-drill-val">${_fmtNum(day.revenue)}</div><div class="hist-drill-lbl">Revenue</div></div>
+        <div class="hist-drill-stat"><div class="hist-drill-val">${_fmtNum(day.cost)}</div><div class="hist-drill-lbl">Cost</div></div>
+        <div class="hist-drill-stat"><div class="hist-drill-val" style="color:${profColor};">${_fmtNum(day.profit)}</div><div class="hist-drill-lbl">Profit</div></div>
         <div class="hist-drill-stat"><div class="hist-drill-val">${fmtN(day.qty)}</div><div class="hist-drill-lbl">Pcs</div></div>
       </div>
     </div>
@@ -10733,7 +10733,7 @@ window.exportSalesReport = exportSalesReport;
 
 function collapseHistDay() {
   _expandedHistDay = null;
-  const grid = document.querySelector('.hist-days-grid');
+  const grid = document.querySelector('.pr-days-grid');
   const area = document.getElementById('hist-expanded-area');
   if (grid) grid.style.display = 'grid';
   if (area) { area.style.display = 'none'; area.innerHTML = ''; }

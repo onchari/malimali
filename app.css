@@ -4712,7 +4712,7 @@ body.photo-lightbox-open { overflow: hidden; }
 .pr-day-meta  { font-size: 10px; color: var(--muted); white-space: nowrap; }
 .pr-day-figures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
 .pr-fig { text-align: center; }
-.pr-fig-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .2px; margin-bottom: 3px; }
+.pr-fig-lbl { font-size: 9px; color: var(--muted); letter-spacing: .1px; margin-bottom: 3px; }
 .pr-fig-val { font-size: 13px; font-weight: 900; font-family: var(--mono); }
 
 /* Insights footer */
