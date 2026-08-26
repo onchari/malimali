@@ -9506,7 +9506,7 @@ For each item: suggest a short restocking note (1 line). Format as JSON array: [
         </div>
         <div class="ai-restock-stats">
           <span>${x.sales}× sold</span>
-          <span>KES ${fmt(x.revenue)}</span>
+          <span>${fmt(x.revenue)}</span>
         </div>
         <button class="ai-restock-add" onclick="aiAddToInventory('${escapeHtml(x.code)}','${escapeHtml(x.name)}')">
           <i class="fa-solid fa-plus"></i> Add
@@ -10533,14 +10533,6 @@ async function renderHistoryPage() {
           <div class="pr-sum-lbl" style="color:rgba(255,255,255,.8);">Earning</div>
           <div class="pr-sum-val" style="color:white;font-size:22px;">${fmt(periodProf)}</div>
           <div class="pr-sum-sub" style="color:rgba(255,255,255,.7);">Net earning</div>
-        </div>
-      </div>
-      <div class="pr-sum-card">
-        <div class="pr-sum-icon" style="background:rgba(22,163,74,.12);color:#16a34a;font-size:18px;font-weight:900;">%</div>
-        <div class="pr-sum-body">
-          <div class="pr-sum-lbl">Margin</div>
-          <div class="pr-sum-val pr-col-green">${pMargin}%</div>
-          <div class="pr-sum-sub">Profit margin</div>
         </div>
       </div>
       <div class="pr-sum-card">

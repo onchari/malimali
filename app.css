@@ -4640,10 +4640,10 @@ body.photo-lightbox-open { overflow: hidden; }
   white-space: nowrap;
 }
 
-/* 5 summary cards */
+/* 4 summary cards */
 .pr-sum-row {
   display: grid;
-  grid-template-columns: repeat(5,1fr);
+  grid-template-columns: repeat(4,1fr);
   gap: 8px;
   margin-bottom: 20px;
 }
@@ -4743,11 +4743,24 @@ body.photo-lightbox-open { overflow: hidden; }
 }
 .pr-export-btn:active { background: var(--accent); color: white; }
 
-/* Responsive: 2-col on very small screens */
-@media (max-width: 480px) {
-  .pr-sum-row    { grid-template-columns: repeat(2,1fr); }
-  .pr-days-grid  { grid-template-columns: repeat(2,1fr); }
-  .pr-sum-row .pr-sum-card:nth-child(3) { grid-column: 1 / -1; }
+/* Mobile responsive */
+@media (max-width: 600px) {
+  /* Summary: 2 per row, earning card full width */
+  .pr-sum-row { grid-template-columns: 1fr 1fr; }
+  .pr-sum-highlight { grid-column: 1 / -1; flex-direction: row; align-items: center; }
+  /* Day cards: 2 per row on mobile */
+  .pr-days-grid { grid-template-columns: repeat(2,1fr); }
+  /* Compact summary card on mobile */
+  .pr-sum-card { padding: 10px 8px; gap: 7px; }
+  .pr-sum-icon { width: 32px; height: 32px; font-size: 13px; }
+  .pr-sum-val  { font-size: 15px; }
+  /* Day card compact */
+  .pr-day-card { padding: 10px 8px; }
+  .pr-fig-val  { font-size: 12px; }
+  /* Header stacks */
+  .pr-page-header { flex-direction: column; }
+  .pr-insights    { flex-wrap: wrap; }
+  .pr-export-btn  { width: 100%; justify-content: center; }
 }
 
 /* ── Day mini-card grid (3 per row) — kept for backwards compat ─── */
