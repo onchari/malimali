@@ -4688,27 +4688,34 @@ body.photo-lightbox-open { overflow: hidden; }
   margin-top: 1px;
 }
 
-/* Expanded table area */
+/* Drill-down expanded area */
 .hist-expanded-area {
   background: var(--surface);
-  border: 1.5px solid var(--accent);
-  border-radius: 12px;
+  border-radius: 0;
   overflow: hidden;
-  margin-bottom: 10px;
 }
-.hist-expanded-title {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 14px;
+.hist-drill-header {
+  padding: 12px 14px;
   background: var(--surface2);
   border-bottom: 1px solid var(--border);
-  font-size: 13px; font-weight: 800; color: var(--text);
 }
-.hist-expanded-close {
-  width: 28px; height: 28px; border-radius: 50%;
-  border: 1.5px solid var(--border); background: var(--bg);
-  color: var(--muted); font-size: 12px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+.hist-drill-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: none;
+  color: var(--accent); font-size: 13px; font-weight: 700;
+  cursor: pointer; padding: 0; margin-bottom: 8px;
 }
+.hist-drill-back:active { opacity: .7; }
+.hist-drill-title {
+  font-size: 15px; font-weight: 900; color: var(--text);
+  margin-bottom: 10px;
+}
+.hist-drill-summary {
+  display: grid; grid-template-columns: repeat(4,1fr); gap: 6px;
+}
+.hist-drill-stat { text-align: center; }
+.hist-drill-val  { font-size: 13px; font-weight: 900; font-family: var(--mono); color: var(--text); }
+.hist-drill-lbl  { font-size: 9px; color: var(--muted); text-transform: uppercase; margin-top: 1px; }
 
 /* Keep old class refs harmless */
 .hist-day-card  { margin-bottom: 10px; }
