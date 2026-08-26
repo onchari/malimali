@@ -4475,8 +4475,16 @@ body.photo-lightbox-open { overflow: hidden; }
 }
 .hist-table td {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text);
+}
+/* Figure cells (cols 3-5): tighter padding, smaller font */
+.hist-table td:nth-child(3),
+.hist-table td:nth-child(4),
+.hist-table td:nth-child(5) {
+  font-size: 11px;
+  padding: 7px 3px;
+  white-space: nowrap;
 }
 /* Item name cell — sans serif */
 .hist-table td:nth-child(2) {
@@ -4485,7 +4493,17 @@ body.photo-lightbox-open { overflow: hidden; }
   white-space: normal;
   word-break: break-word;
 }
-.hist-num { width: 28px; color: var(--muted) !important; font-size: 10px !important; }
+/* Column widths:  #(narrow) | Item(wide) | Cost | Revenue | Profit | inv(narrow) */
+.hist-table colgroup,
+.hist-table col { }
+.hist-table th:nth-child(1), .hist-table td:nth-child(1) { width: 22px;  }   /* # */
+.hist-table th:nth-child(2), .hist-table td:nth-child(2) { width: auto;  }   /* Item — takes remaining */
+.hist-table th:nth-child(3), .hist-table td:nth-child(3) { width: 62px; }    /* Cost */
+.hist-table th:nth-child(4), .hist-table td:nth-child(4) { width: 68px; }    /* Revenue */
+.hist-table th:nth-child(5), .hist-table td:nth-child(5) { width: 58px; }    /* Profit */
+.hist-table th:nth-child(6), .hist-table td:nth-child(6) { width: 26px; }    /* inv circle */
+
+.hist-num { color: var(--muted) !important; font-size: 10px !important; }
 .hist-table td.hp-pos { color: var(--green); font-weight: 800; }
 .hist-table td.hp-neg { color: var(--red);   font-weight: 800; }
 
