@@ -10473,47 +10473,45 @@ async function renderHistoryPage() {
       </div>
     </div>`;
 
-  recList.innerHTML = summaryHtml + datesSorted.map(date => {
-    const day   = byDate[date];
-    const label = new Date(date + 'T12:00:00').toLocaleDateString('en-GB',
-                  { weekday:'short', day:'numeric', month:'short', year:'numeric' });
-    const profColor = day.profit >= 0 ? 'var(--green)' : 'var(--red)';
-    const rows  = [...day.sales].sort((a,b) => new Date(b.date) - new Date(a.date));
-    const safeId = date.replace(/-/g,'');
-    const saleWord = day.sales.length === 1 ? 'sale' : 'sales';
+  // Store byDate for click access
+  window._histByDate = byDate;
 
-    return `
-      <div class="hist-day-card">
-        <div class="hist-day-header hist-day-toggle" onclick="toggleHistDay('${safeId}')" style="cursor:pointer;">
-          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
-            <div class="hist-day-date">${label}</div>
-            <span class="hist-day-count">${day.sales.length} ${saleWord}</span>
-          </div>
-          <div class="hist-day-stats">
-            <div class="hist-day-stat">
-              <div class="hist-day-stat-val">${fmt(day.cost)}</div>
-              <div class="hist-day-stat-lbl">Cost</div>
-            </div>
-            <div class="hist-day-stat">
-              <div class="hist-day-stat-val">${fmt(day.revenue)}</div>
-              <div class="hist-day-stat-lbl">Revenue</div>
-            </div>
-            <div class="hist-day-stat">
-              <div class="hist-day-stat-val" style="color:${profColor};">${fmt(day.profit)}</div>
-              <div class="hist-day-stat-lbl">Profit</div>
-            </div>
-            <div class="hist-day-stat">
-              <div class="hist-day-stat-val">${fmtN(day.qty)}</div>
-              <div class="hist-day-stat-lbl">Pcs</div>
-            </div>
-          </div>
-          <span class="hist-day-chevron" id="hist-chev-${safeId}">▶</span>
+  const miniCards = datesSorted.map(date => {
+    const day      = byDate[date];
+    const safeId   = date.replace(/-/g,'');
+    const dt       = new Date(date + 'T12:00:00');
+    const dayName  = dt.toLocaleDateString('en-GB', { weekday:'short' });
+    const dayNum   = dt.getDate();
+    const month    = dt.toLocaleDateString('en-GB', { month:'short' });
+    const profColor = day.profit >= 0 ? 'var(--green)' : 'var(--red)';
+
+    return `<div class="hdc" id="hdc-${safeId}" onclick="expandHistDay('${safeId}')">
+      <div class="hdc-date">
+        <span class="hdc-weekday">${dayName}</span>
+        <span class="hdc-day">${dayNum}</span>
+        <span class="hdc-month">${month}</span>
+      </div>
+      <div class="hdc-sub">${day.sales.length} sales · ${fmtN(day.qty)} pcs</div>
+      <div class="hdc-figures">
+        <div class="hdc-fig">
+          <div class="hdc-fig-val">${fmt(day.revenue)}</div>
+          <div class="hdc-fig-lbl">Sales</div>
         </div>
-        <div id="hist-body-${safeId}" style="display:none;">
-          ${_histTable(rows, day.cost, day.revenue, day.profit)}
+        <div class="hdc-fig">
+          <div class="hdc-fig-val">${fmt(day.cost)}</div>
+          <div class="hdc-fig-lbl">Cost</div>
         </div>
-      </div>`;
+        <div class="hdc-fig">
+          <div class="hdc-fig-val" style="color:${profColor};">${fmt(day.profit)}</div>
+          <div class="hdc-fig-lbl">Profit</div>
+        </div>
+      </div>
+    </div>`;
   }).join('');
+
+  recList.innerHTML = summaryHtml +
+    `<div class="hist-days-grid">${miniCards}</div>` +
+    `<div id="hist-expanded-area" class="hist-expanded-area" style="display:none;"></div>`;
 }
 
 // Money formatted for a table cell (no currency prefix - shown once in the header instead)
@@ -10604,15 +10602,53 @@ async function _backfillSalesForItem(item) {
   return toFix.length;
 }
 
-// ── History day collapse/expand ────────────────────────────────────
-function toggleHistDay(safeId) {
-  const body = document.getElementById('hist-body-' + safeId);
-  const chev = document.getElementById('hist-chev-' + safeId);
-  if (!body) return;
-  const open = body.style.display !== 'none';
-  body.style.display = open ? 'none' : 'block';
-  if (chev) chev.textContent = open ? '▶' : '▼';
+// ── History day expand / collapse ─────────────────────────────────
+let _expandedHistDay = null;
+
+function expandHistDay(safeId) {
+  const area = document.getElementById('hist-expanded-area');
+  if (!area) return;
+
+  // Deselect all cards
+  document.querySelectorAll('.hdc').forEach(c => c.classList.remove('hdc-selected'));
+
+  if (_expandedHistDay === safeId) {
+    // Toggle off
+    _expandedHistDay = null;
+    area.style.display = 'none';
+    area.innerHTML = '';
+    return;
+  }
+
+  _expandedHistDay = safeId;
+  const card = document.getElementById('hdc-' + safeId);
+  if (card) card.classList.add('hdc-selected');
+
+  // Find the date from safeId (format: YYYYMMDD → YYYY-MM-DD)
+  const date = safeId.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+  const day  = (window._histByDate || {})[date];
+  if (!day) { area.style.display = 'none'; return; }
+
+  const dt    = new Date(date + 'T12:00:00');
+  const label = dt.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  const rows  = [...day.sales].sort((a,b) => new Date(b.date) - new Date(a.date));
+
+  area.innerHTML = `
+    <div class="hist-expanded-title">
+      <span>${label}</span>
+      <button onclick="expandHistDay('${safeId}')" class="hist-expanded-close">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    ${_histTable(rows, day.cost, day.revenue, day.profit)}`;
+  area.style.display = 'block';
+  // Scroll the expanded area into view
+  setTimeout(() => area.scrollIntoView({ behavior:'smooth', block:'nearest' }), 80);
 }
+window.expandHistDay  = expandHistDay;
+
+// Keep toggleHistDay as alias for any existing refs
+function toggleHistDay(safeId) { expandHistDay(safeId); }
 window.toggleHistDay = toggleHistDay;
 
 // ══════════════════════════════════════════════════════════════════

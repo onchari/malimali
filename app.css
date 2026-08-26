@@ -4614,36 +4614,107 @@ body.photo-lightbox-open { overflow: hidden; }
   text-transform: uppercase;
 }
 
-.hist-day-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  margin-bottom: 10px;
-  overflow: hidden;
-}
-.hist-day-header {
-  display: flex;
-  align-items: center;
+/* ── Day mini-card grid (3 per row) ─────────────────────────────── */
+.hist-days-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  padding: 12px 14px;
-  background: var(--surface2);
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.hdc {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 8px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
   user-select: none;
   -webkit-user-select: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
-.hist-day-toggle:active { background: var(--bg2); }
-.hist-day-date { font-size: 14px; font-weight: 800; color: var(--text); white-space: nowrap; }
-.hist-day-count {
+.hdc:active  { background: var(--bg2); }
+.hdc-selected {
+  border-color: var(--accent);
+  background: rgba(30,122,62,.06);
+}
+
+/* Date header inside card */
+.hdc-date {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+.hdc-weekday {
+  font-size: 9px; font-weight: 700;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .4px;
+}
+.hdc-day {
+  font-size: 16px; font-weight: 900;
+  color: var(--text); font-family: var(--mono);
+  line-height: 1;
+}
+.hdc-month {
   font-size: 10px; font-weight: 700;
-  background: var(--bg2); color: var(--muted);
-  padding: 2px 7px; border-radius: 10px;
-  white-space: nowrap;
+  color: var(--muted);
 }
-.hist-day-stats { display: flex; gap: 10px; margin-left: auto; }
-.hist-day-stat { text-align: right; }
-.hist-day-stat-val { font-size: 12px; font-weight: 900; font-family: var(--mono); color: var(--text); }
-.hist-day-stat-lbl { font-size: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; margin-top: 1px; }
-.hist-day-chevron { font-size: 11px; color: var(--muted); flex-shrink: 0; margin-left: 4px; }
+
+/* Sales · Pcs subtitle */
+.hdc-sub {
+  font-size: 9px; color: var(--muted);
+  font-weight: 600; margin-top: -2px;
+}
+
+/* 3 figure columns */
+.hdc-figures {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.hdc-fig { text-align: center; }
+.hdc-fig-val {
+  font-size: 11px; font-weight: 900;
+  font-family: var(--mono); color: var(--text);
+  white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hdc-fig-lbl {
+  font-size: 8px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .2px;
+  margin-top: 1px;
+}
+
+/* Expanded table area */
+.hist-expanded-area {
+  background: var(--surface);
+  border: 1.5px solid var(--accent);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.hist-expanded-title {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px; font-weight: 800; color: var(--text);
+}
+.hist-expanded-close {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 1.5px solid var(--border); background: var(--bg);
+  color: var(--muted); font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Keep old class refs harmless */
+.hist-day-card  { margin-bottom: 10px; }
+.hist-day-date  { font-size: 14px; font-weight: 800; }
+.hist-day-count { font-size: 10px; }
+.hist-day-chevron { font-size: 11px; }
 
 /* ── Out of stock diagonal overlay on list cards ───────────── */
 .shoe-out-card, .item-card.shoe-out-card {
