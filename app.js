@@ -6334,6 +6334,53 @@ function getDeviceId() {
 function _getSyncVersion()  { return parseInt(localStorage.getItem(KEY_SYNC_VERSION) || '0'); }
 function _setSyncVersion(v) { localStorage.setItem(KEY_SYNC_VERSION, String(v)); }
 
+/**
+ * Update the sync dot next to the username.
+ * orange = local not pushed  yellow = cloud ahead  purple = in sync
+ */
+async function updateSyncDot() {
+  const dot = document.getElementById('sync-dot');
+  if (!dot) return;
+
+  if (!fbReady || !fbDb || !navigator.onLine) {
+    dot.dataset.state = 'offline';
+    dot.title = 'Offline — changes saved locally';
+    return;
+  }
+
+  try {
+    // 1. Local items without fbId → not yet pushed to cloud
+    const localItems = allItems.length ? allItems : await dbAll('items');
+    const unsynced = localItems.filter(i => !i.fbId);
+    if (unsynced.length) {
+      dot.dataset.state = 'ahead';
+      dot.title = `${unsynced.length} local item(s) not yet synced to cloud`;
+      return;
+    }
+
+    // 2. Cloud version ahead of local → pull needed
+    const { doc, getDoc } = await waitForFbImports();
+    const snap = await getDoc(doc(fbDb, '_sync_meta', 'global'));
+    if (snap.exists()) {
+      const cloudV = snap.data().version || 0;
+      const localV = _getSyncVersion();
+      if (cloudV > localV) {
+        dot.dataset.state = 'behind';
+        dot.title = `Cloud v${cloudV} has updates not yet on this device (local v${localV})`;
+        return;
+      }
+    }
+
+    // 3. All in sync
+    dot.dataset.state = 'synced';
+    dot.title = 'All data in sync';
+  } catch(e) {
+    dot.dataset.state = 'offline';
+    dot.title = 'Sync check failed';
+  }
+}
+window.updateSyncDot = updateSyncDot;
+
 /** Atomically increment the global sync version in Firestore after any write. */
 async function bumpSyncVersion() {
   if (!fbReady || !fbDb) return;
@@ -6345,6 +6392,7 @@ async function bumpSyncVersion() {
       updatedAt: new Date().toISOString(),
       device:    getDeviceId()
     }, { merge: true });
+    updateSyncDot();
   } catch(e) { /* non-critical */ }
 }
 
@@ -6375,7 +6423,8 @@ async function _subscribeSyncMeta() {
             _setSyncVersion(cloudVersion);
             await refreshUI({ sync: false });
             setFbStatus('on');
-          } catch(e) { console.warn('[SYNC] auto-pull failed:', e.message); setFbStatus('error'); }
+            updateSyncDot();
+          } catch(e) { console.warn('[SYNC] auto-pull failed:', e.message); setFbStatus('error'); updateSyncDot(); }
         }
       }
     }, err => console.warn('[SYNC] meta listener error:', err.message));
@@ -6769,6 +6818,7 @@ async function initFirebase() {
     await normalizeSyncIds();
     await forcePushToFirebase(true);
     await _subscribeSyncMeta();   // watch for cross-device changes
+    updateSyncDot();
 
     // Heartbeat: every 60 s check if this device is behind cloud version
     clearInterval(window._syncHeartbeat);

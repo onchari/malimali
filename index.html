@@ -199,6 +199,9 @@
   <span id="low-stock-badge" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;margin-right:6px;cursor:pointer;" onclick="goDashNav('stock')"></span>
   <div id="user-menu-wrap" style="position:relative;flex-shrink:0;display:none;">
 
+    <!-- Sync status dot — sits next to username -->
+    <span id="sync-dot" class="sync-dot" title="Checking sync…"></span>
+
     <!-- Pill button shows username; click opens dropdown -->
     <button class="user-pill" id="user-pill"
             onclick="toggleUserMenu()"
@@ -1533,31 +1536,9 @@
   <!-- History: today summary + past records -->
   <div id="sales-slot-history" class="ops-slot">
     <div class="hist-today-header">
-      <div>
-        <div class="hist-today-date" id="hist-today-date"></div>
-        <div class="hist-today-sub">Today's activity</div>
-      </div>
-      <div class="hist-today-stats">
-        <div class="hist-stat">
-          <div class="hist-stat-val" id="hist-today-revenue">0</div>
-          <div class="hist-stat-lbl">Revenue</div>
-        </div>
-        <div class="hist-stat">
-          <div class="hist-stat-val" id="hist-today-cost">0</div>
-          <div class="hist-stat-lbl">Cost</div>
-        </div>
-        <div class="hist-stat">
-          <div class="hist-stat-val green" id="hist-today-profit">0</div>
-          <div class="hist-stat-lbl">Profit</div>
-        </div>
-        <div class="hist-stat">
-          <div class="hist-stat-val" id="hist-today-sales">0</div>
-          <div class="hist-stat-lbl">Sales</div>
-        </div>
-      </div>
+      <div class="hist-today-date" id="hist-today-date"></div>
     </div>
 
-    <div class="sec-label" style="margin-top:4px;">Today's Sales</div>
     <div id="hist-today-list" style="padding:0 0 8px;"></div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0 6px;">
