@@ -3183,7 +3183,7 @@ body[data-firebase-env="development"]::before {
   display: inline-block;
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: #9ca3af;          /* gray = unknown/loading */
+  background: #dc2626;          /* red = offline/unknown until proven connected */
   flex-shrink: 0;
   vertical-align: middle;
   margin-right: 4px;
@@ -3193,7 +3193,7 @@ body[data-firebase-env="development"]::before {
 .sync-dot[data-state="synced"]  { background: #7c3aed; box-shadow: 0 0 5px #7c3aed88; }
 .sync-dot[data-state="behind"]  { background: #eab308; box-shadow: 0 0 5px #eab30888; }
 .sync-dot[data-state="ahead"]   { background: #f97316; box-shadow: 0 0 5px #f9731688; }
-.sync-dot[data-state="offline"] { background: #9ca3af; box-shadow: none; }
+.sync-dot[data-state="offline"] { background: #dc2626; box-shadow: 0 0 5px #dc262688; }
 
 .user-pill {
   display: inline-flex; align-items: center; gap: 6px;
