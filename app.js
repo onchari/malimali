@@ -6334,49 +6334,50 @@ function getDeviceId() {
 function _getSyncVersion()  { return parseInt(localStorage.getItem(KEY_SYNC_VERSION) || '0'); }
 function _setSyncVersion(v) { localStorage.setItem(KEY_SYNC_VERSION, String(v)); }
 
+// Last cloud version received from _subscribeSyncMeta listener (no getDoc needed)
+let _cloudSyncVersion = 0;
+
 /**
  * Update the sync dot next to the username.
- * orange = local not pushed  yellow = cloud ahead  purple = in sync
+ * Uses only local state — no Firestore reads needed.
+ * red=offline  orange=local ahead  yellow=cloud ahead  purple=in sync
  */
 async function updateSyncDot() {
   const dot = document.getElementById('sync-dot');
   if (!dot) return;
 
-  if (!fbReady || !fbDb || !navigator.onLine) {
+  // Not connected at all
+  if (!navigator.onLine || !fbReady || !fbDb) {
     dot.dataset.state = 'offline';
-    dot.title = 'Offline — changes saved locally';
+    dot.title = navigator.onLine ? 'Firebase not connected' : 'No internet connection';
     return;
   }
 
   try {
-    // 1. Local items without fbId → not yet pushed to cloud
+    // 1. Any local items without fbId → not yet pushed
     const localItems = allItems.length ? allItems : await dbAll('items');
-    const unsynced = localItems.filter(i => !i.fbId);
+    const unsynced = localItems.filter(i => i.id && !i.fbId);
     if (unsynced.length) {
       dot.dataset.state = 'ahead';
-      dot.title = `${unsynced.length} local item(s) not yet synced to cloud`;
+      dot.title = unsynced.length + ' local item(s) not yet synced to cloud';
       return;
     }
 
-    // 2. Cloud version ahead of local → pull needed
-    const { doc, getDoc } = await waitForFbImports();
-    const snap = await getDoc(doc(fbDb, '_sync_meta', 'global'));
-    if (snap.exists()) {
-      const cloudV = snap.data().version || 0;
-      const localV = _getSyncVersion();
-      if (cloudV > localV) {
-        dot.dataset.state = 'behind';
-        dot.title = `Cloud v${cloudV} has updates not yet on this device (local v${localV})`;
-        return;
-      }
+    // 2. Cloud version (cached from onSnapshot) is ahead of local
+    const localV = _getSyncVersion();
+    if (_cloudSyncVersion > localV) {
+      dot.dataset.state = 'behind';
+      dot.title = 'Cloud v' + _cloudSyncVersion + ' not yet pulled (local v' + localV + ')';
+      return;
     }
 
-    // 3. All in sync
+    // 3. All good
     dot.dataset.state = 'synced';
-    dot.title = 'All data in sync';
+    dot.title = 'All data in sync (v' + localV + ')';
   } catch(e) {
-    dot.dataset.state = 'offline';
-    dot.title = 'Sync check failed';
+    // Check failed but Firebase is connected — don't show red
+    dot.dataset.state = 'synced';
+    dot.title = 'In sync (check incomplete)';
   }
 }
 window.updateSyncDot = updateSyncDot;
@@ -6404,28 +6405,32 @@ async function _subscribeSyncMeta() {
     const metaRef = doc(fbDb, '_sync_meta', 'global');
 
     // Initialise local version from current cloud state
-    const snap = await getDoc(metaRef);
-    if (snap.exists()) _setSyncVersion(snap.data().version || 0);
+    try {
+      const snap = await getDoc(metaRef);
+      if (snap.exists()) {
+        _cloudSyncVersion = snap.data().version || 0;
+        _setSyncVersion(_cloudSyncVersion);
+      }
+    } catch(e) { /* _sync_meta may not exist yet */ }
 
     onSnap(metaRef, async cloudSnap => {
       if (!cloudSnap.exists()) return;
       const cloudVersion = cloudSnap.data().version || 0;
       const cloudDevice  = cloudSnap.data().device  || '';
+      _cloudSyncVersion  = cloudVersion;            // cache for updateSyncDot
       const localVersion = _getSyncVersion();
 
-      // Only pull if cloud is ahead AND the write came from a different device
+      // Pull whenever cloud is ahead from another device — no _localWriting gate
       if (cloudVersion > localVersion && cloudDevice !== getDeviceId()) {
-        console.log(`[SYNC] Cloud v${cloudVersion} > local v${localVersion} (from ${cloudDevice}) — auto-pull`);
+        console.log(`[SYNC] Cloud v${cloudVersion} > local v${localVersion} (from ${cloudDevice}) — pulling`);
         setFbStatus('syncing');
-        if (!_localWriting) {
-          try {
-            await pullFromFirebase(true);
-            _setSyncVersion(cloudVersion);
-            await refreshUI({ sync: false });
-            setFbStatus('on');
-            updateSyncDot();
-          } catch(e) { console.warn('[SYNC] auto-pull failed:', e.message); setFbStatus('error'); updateSyncDot(); }
-        }
+        try {
+          await pullFromFirebase(true);
+          _setSyncVersion(cloudVersion);
+          await refreshUI({ sync: false });
+          setFbStatus('on');
+          updateSyncDot();
+        } catch(e) { console.warn('[SYNC] auto-pull failed:', e.message); setFbStatus('error'); updateSyncDot(); }
       }
     }, err => console.warn('[SYNC] meta listener error:', err.message));
   } catch(e) { console.warn('[SYNC] _subscribeSyncMeta:', e.message); }
@@ -6956,11 +6961,9 @@ async function fbSyncItem(item) {
     const { doc, setDoc } = await waitForFbImports();
     await ensureItemFbId(item);
     const data = sanitiseForFirestore({...item, updatedAt: new Date().toISOString() });
-    _localWriting = true;
     await setDoc(fbDoc('items', item.fbId), data);
-    setTimeout(() => { _localWriting = false; }, 400);
     bumpSyncVersion();
-  } catch(e) { _localWriting = false; console.error('[SYNC] fbSyncItem error:', e.message); }
+  } catch(e) { console.error('[SYNC] fbSyncItem error:', e.message); }
 }
 
 async function fbDeleteItem(fbId) {
@@ -6980,11 +6983,9 @@ async function fbSyncSale(sale) {
       if (sale.id) await dbPut('sales', sale);
     }
     const data = sanitiseForFirestore({...sale });
-    _localWriting = true;
     await setDoc(fbDoc('sales', sale.fbId), data);
-    setTimeout(() => { _localWriting = false; }, 400);
     bumpSyncVersion();
-  } catch(e) { _localWriting = false; console.error('[SYNC] fbSyncSale error:', e.message); }
+  } catch(e) { console.error('[SYNC] fbSyncSale error:', e.message); }
 }
 
 function sanitiseForFirestore(obj){
@@ -7212,7 +7213,7 @@ async function forcePushToFirebase(silent = false) {
     if (!silent) toast('Sync error: ' + e.message, 'err');
     console.error('[SYNC] push error:', e);
   } finally {
-    setTimeout(() => { _localWriting = false; }, 400);
+    _localWriting = false;
   }
 }
 
@@ -10415,7 +10416,9 @@ window.dayStartOver = dayStartOver;
 initDB();
 updateFirebaseEnvUI();
 setTimeout(initFirebase, 800);
-setTimeout(() => setItemMode(true), 0);  // default: Record Only — runs after all sync init
+setTimeout(() => setItemMode(true), 0);
+// Update sync dot 3s after startup — Firebase should be connected by then
+setTimeout(updateSyncDot, 3000);
 
 // ── Debounced sync (pull remote, then push local) ───────────
 let _autoSyncTimer = null;
@@ -10423,16 +10426,28 @@ let _syncRunning = false;
 function scheduleSync() {
   if (!navigator.onLine || !fbReady || !fbDb) return;
   clearTimeout(_autoSyncTimer);
-  // Push local changes; incoming changes are handled by onSnapshot listeners
   _autoSyncTimer = setTimeout(async () => {
     if (_syncRunning) return;
     _syncRunning = true;
     try {
-      await forcePushToFirebase(true);
-      bumpSyncVersion();
+      // Only push items that genuinely have no fbId yet (unsynced local records).
+      // Individual fbSyncItem/Sale calls already handle normal writes — this is
+      // a safety net for records created while offline.
+      const items = await dbAll('items');
+      const unsyncedItems = items.filter(i => !i.fbId);
+      if (unsyncedItems.length > 0) {
+        console.log('[SYNC] scheduleSync: pushing', unsyncedItems.length, 'unsynced item(s)');
+        for (const item of unsyncedItems) fbSyncItem(item);
+      }
+      const sales = await dbAll('sales');
+      const unsyncedSales = sales.filter(s => !s.fbId);
+      if (unsyncedSales.length > 0) {
+        console.log('[SYNC] scheduleSync: pushing', unsyncedSales.length, 'unsynced sale(s)');
+        for (const sale of unsyncedSales) fbSyncSale(sale);
+      }
     } catch (_) { /* intentionally ignored */ }
-    finally { _syncRunning = false; }
-  }, 800);
+    finally { _syncRunning = false; updateSyncDot(); }
+  }, 2000);
 }
 
 // ═══════════════════════════════════════════════════════════
