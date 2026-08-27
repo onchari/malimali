@@ -4453,55 +4453,47 @@ body.photo-lightbox-open { overflow: hidden; }
 
 .hist-table th,
 .hist-table td {
-  padding: 7px 5px;
-  text-align: right;
+  padding: 4px 4px;        /* compact rows */
+  text-align: left;
   border-bottom: 1px solid var(--border);
-  word-wrap: break-word;
-  overflow-wrap: break-word;
+  white-space: nowrap;     /* never wrap — prevents vertical text */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-/* First col (#) and second col (Item) left-aligned */
-.hist-table th:nth-child(1), .hist-table td:nth-child(1),
-.hist-table th:nth-child(2), .hist-table td:nth-child(2) { text-align: left; }
+/* All columns left-aligned by default above */
 
 .hist-table th {
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: .3px;
   background: var(--surface2);
-  white-space: nowrap;
-  padding: 8px 5px;
+  padding: 5px 4px;
 }
 .hist-table td {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text);
+  line-height: 1.3;
 }
-/* Figure cells (cols 3-5): tighter padding, smaller font */
-.hist-table td:nth-child(3),
-.hist-table td:nth-child(4),
-.hist-table td:nth-child(5) {
-  font-size: 11px;
-  padding: 7px 3px;
-  white-space: nowrap;
-}
-/* Item name cell — sans serif */
+/* Item name — sans serif, can wrap slightly */
 .hist-table td:nth-child(2) {
   font-family: var(--sans);
   font-size: 11px;
-  white-space: normal;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0;            /* forces ellipsis within table-layout:fixed */
 }
-/* Column widths:  #(narrow) | Item(wide) | Cost | Revenue | Profit | inv(narrow) */
-.hist-table colgroup,
-.hist-table col { }
-.hist-table th:nth-child(1), .hist-table td:nth-child(1) { width: 22px;  }   /* # */
-.hist-table th:nth-child(2), .hist-table td:nth-child(2) { width: auto;  }   /* Item — takes remaining */
-.hist-table th:nth-child(3), .hist-table td:nth-child(3) { width: 62px; }    /* Cost */
-.hist-table th:nth-child(4), .hist-table td:nth-child(4) { width: 68px; }    /* Revenue */
-.hist-table th:nth-child(5), .hist-table td:nth-child(5) { width: 58px; }    /* Profit */
-.hist-table th:nth-child(6), .hist-table td:nth-child(6) { width: 26px; }    /* inv circle */
+
+/* Column widths — sized to content, not pixels that cause wrapping */
+.hist-table th:nth-child(1), .hist-table td:nth-child(1) { width: 24px;  min-width: 24px;  }  /* # */
+.hist-table th:nth-child(2), .hist-table td:nth-child(2) { width: auto;                    }  /* Item */
+.hist-table th:nth-child(3), .hist-table td:nth-child(3) { width: 66px;  min-width: 66px;  }  /* Cost */
+.hist-table th:nth-child(4), .hist-table td:nth-child(4) { width: 72px;  min-width: 72px;  }  /* Revenue */
+.hist-table th:nth-child(5), .hist-table td:nth-child(5) { width: 64px;  min-width: 64px;  }  /* Profit */
+.hist-table th:nth-child(6), .hist-table td:nth-child(6) { width: 18px;  min-width: 18px;  }  /* inv icon */
 
 .hist-num { color: var(--muted) !important; font-size: 10px !important; }
 .hist-table td.hp-pos { color: var(--green); font-weight: 800; }
@@ -4526,19 +4518,10 @@ body.photo-lightbox-open { overflow: hidden; }
 .hist-td-chevron { text-align: center !important; padding: 4px 6px; vertical-align: middle; width: 28px; }
 
 /* Inventory status circle badge */
-.inv-circle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px; height: 20px;
-  border-radius: 50%;
-  font-size: 10px;
-  font-weight: 900;
-  line-height: 1;
-  flex-shrink: 0;
-}
-.inv-circle-found   { background: rgba(30,122,62,.15); color: var(--green); border: 1.5px solid var(--green); }
-.inv-circle-missing { background: rgba(220,38,38,.1);  color: var(--red);   border: 1.5px solid var(--red); }
+/* Plain tick/cross — no circle, no border */
+.inv-circle         { font-size: 11px; font-weight: 900; }
+.inv-circle-found   { color: var(--green); }
+.inv-circle-missing { color: var(--red); opacity: .6; }
 
 /* ── Sale detail sheet ───────────────────────────────────────────── */
 .sds-info-card {

@@ -6599,7 +6599,6 @@ async function initFirebase() {
 
     // ── items listener ───────────────────────────────────────────
     fbUnsub = onSnapshot(fbCol('items'), async snap => {
-      if (_localWriting) return;
       const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
       if (!changes.length) return;
       const localItems = await dbAll('items');
@@ -6629,7 +6628,6 @@ async function initFirebase() {
 
     // ── sales listener ───────────────────────────────────────────
     window._fbUnsubSales = onSnapshot(fbCol('sales'), async snap => {
-      if (_localWriting) return;
       const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
       if (!changes.length) return;
       const localSales = await dbAll('sales');
@@ -6652,7 +6650,6 @@ async function initFirebase() {
 
     // ── finances listener ────────────────────────────────────────
     window._fbUnsubFin = onSnapshot(fbCol('finances'), async snap => {
-      if (_localWriting) return;
       const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
       if (!changes.length) return;
       const localFin = await dbAll('finances');
@@ -6681,7 +6678,6 @@ async function initFirebase() {
     // ── wishlist listener ────────────────────────────────────────
     if (db.objectStoreNames.contains('wishlist')) {
       window._fbUnsubWish = onSnapshot(fbCol('wishlist'), async snap => {
-        if (_localWriting) return;
         const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
         if (!changes.length) return;
         const localWish = await dbAll('wishlist');
@@ -6708,7 +6704,6 @@ async function initFirebase() {
 
     // ── shoe_sizes listener ──────────────────────────────────────
     window._fbUnsubSz = onSnapshot(fbCol('shoe_sizes'), async snap => {
-      if (_localWriting) return;
       const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
       if (!changes.length) return;
       const localSizes = await dbAll('shoe_sizes');
@@ -6739,7 +6734,6 @@ async function initFirebase() {
 
     // ── business_days listener ───────────────────────────────────
     window._fbUnsubBd = onSnapshot(fbCol('business_days'), async snap => {
-      if (_localWriting) return;
       const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
       if (!changes.length) return;
       const localBd = await dbAll('business_days');
@@ -6775,6 +6769,25 @@ async function initFirebase() {
     await normalizeSyncIds();
     await forcePushToFirebase(true);
     await _subscribeSyncMeta();   // watch for cross-device changes
+
+    // Heartbeat: every 60 s check if this device is behind cloud version
+    clearInterval(window._syncHeartbeat);
+    window._syncHeartbeat = setInterval(async () => {
+      if (!fbReady || !fbDb || !navigator.onLine) return;
+      try {
+        const { doc, getDoc } = await waitForFbImports();
+        const snap = await getDoc(doc(fbDb, '_sync_meta', 'global'));
+        if (!snap.exists()) return;
+        const cloudV = snap.data().version || 0;
+        if (cloudV > _getSyncVersion()) {
+          console.log('[SYNC] Heartbeat: behind cloud v' + cloudV + ' — pulling');
+          await pullFromFirebase(true);
+          _setSyncVersion(cloudV);
+          await refreshUI({ sync: false });
+          setFbStatus('on');
+        }
+      } catch(e) { /* non-critical */ }
+    }, 60000);
 
   } catch(e) {
     setFbStatus('error');
@@ -10792,12 +10805,6 @@ function expandHistDay(safeId) {
         <i class="fa-solid fa-arrow-left"></i> All days
       </button>
       <div class="hist-drill-title">${label}</div>
-      <div class="hist-drill-summary">
-        <div class="hist-drill-stat"><div class="hist-drill-val">${_fmtNum(day.revenue)}</div><div class="hist-drill-lbl">Revenue</div></div>
-        <div class="hist-drill-stat"><div class="hist-drill-val">${_fmtNum(day.cost)}</div><div class="hist-drill-lbl">Cost</div></div>
-        <div class="hist-drill-stat"><div class="hist-drill-val" style="color:${profColor};">${_fmtNum(day.profit)}</div><div class="hist-drill-lbl">Profit</div></div>
-        <div class="hist-drill-stat"><div class="hist-drill-val">${fmtN(day.qty)}</div><div class="hist-drill-lbl">Pcs</div></div>
-      </div>
     </div>
     ${_histTable(rows, day.cost, day.revenue, day.profit)}`;
 
