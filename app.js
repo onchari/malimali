@@ -3388,6 +3388,8 @@ async function saveItem() {
       try { await renderHistoryPage(); } catch(_) {}
       toast('Item updated!','ok');showPage('list');
     }else{
+      // Pre-assign fbId so it's stored in IndexedDB immediately — prevents stale allItems
+      item.fbId = stableItemFbId(item);
       const newId=await dbAdd('items',item);item.id=newId;
       if (_addFormPhotoData) await setItemPhoto(newId, _addFormPhotoData);
       if (_wishStockingFromId) {
@@ -5747,6 +5749,8 @@ async function confirmSale() {
   await dbPut('items', item);
 
   // ── Record sale ────────────────────────────────────────────────
+  // Pre-assign fbId so IndexedDB stores it immediately
+  sale.fbId = stableSaleFbId(sale);
   const newSaleId = await dbAdd('sales', sale);
   sale.id = newSaleId;
   fbSyncItem(item);
@@ -6354,8 +6358,8 @@ async function updateSyncDot() {
   }
 
   try {
-    // 1. Any local items without fbId → not yet pushed
-    const localItems = allItems.length ? allItems : await dbAll('items');
+    // 1. Always read fresh from DB — allItems in memory may be stale
+    const localItems = await dbAll('items');
     const unsynced = localItems.filter(i => i.id && !i.fbId);
     if (unsynced.length) {
       dot.dataset.state = 'ahead';
@@ -6820,10 +6824,10 @@ async function initFirebase() {
     setFbStatus('on');
     toast('Firebase connected (' + getFirebaseEnvConfig().label + ')', 'ok');
     await pullFromFirebase(true);
-    await normalizeSyncIds();
+    await normalizeSyncIds();     // ensures all local records have fbIds
     await forcePushToFirebase(true);
     await _subscribeSyncMeta();   // watch for cross-device changes
-    updateSyncDot();
+    await updateSyncDot();        // reflect true state after full init
 
     // Heartbeat: every 60 s check if this device is behind cloud version
     clearInterval(window._syncHeartbeat);
@@ -6962,8 +6966,13 @@ async function fbSyncItem(item) {
     await ensureItemFbId(item);
     const data = sanitiseForFirestore({...item, updatedAt: new Date().toISOString() });
     await setDoc(fbDoc('items', item.fbId), data);
+    _pushFailCount = Math.max(0, _pushFailCount - 1);
     bumpSyncVersion();
-  } catch(e) { console.error('[SYNC] fbSyncItem error:', e.message); }
+  } catch(e) {
+    _pushFailCount++;
+    console.error('[SYNC] fbSyncItem failed (' + _pushFailCount + '):', e.message);
+    updateSyncDot();
+  }
 }
 
 async function fbDeleteItem(fbId) {
