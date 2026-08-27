@@ -6314,18 +6314,112 @@ let _localWriting = false; // prevents echo: set true when we write to Firestore
 let syncQueue = [];
 let isSyncing = false;
 
+// ══════════════════════════════════════════════════════════════════
+// SYNC VERSION SYSTEM
+// Every Firestore write bumps a global version counter.
+// Each device tracks the last version it processed.
+// When cloud version > local version (from another device) → auto-pull.
+// ══════════════════════════════════════════════════════════════════
+const KEY_DEVICE_ID    = 'mg_device_id';
+const KEY_SYNC_VERSION = 'mg_sync_version';
+
+function getDeviceId() {
+  let id = localStorage.getItem(KEY_DEVICE_ID);
+  if (!id) {
+    id = 'dev_' + Math.random().toString(36).slice(2,7) + Date.now().toString(36).slice(-4);
+    localStorage.setItem(KEY_DEVICE_ID, id);
+  }
+  return id;
+}
+function _getSyncVersion()  { return parseInt(localStorage.getItem(KEY_SYNC_VERSION) || '0'); }
+function _setSyncVersion(v) { localStorage.setItem(KEY_SYNC_VERSION, String(v)); }
+
+/** Atomically increment the global sync version in Firestore after any write. */
+async function bumpSyncVersion() {
+  if (!fbReady || !fbDb) return;
+  try {
+    const { doc, setDoc, increment } = await waitForFbImports();
+    const metaRef = doc(fbDb, '_sync_meta', 'global');
+    await setDoc(metaRef, {
+      version:   increment(1),
+      updatedAt: new Date().toISOString(),
+      device:    getDeviceId()
+    }, { merge: true });
+  } catch(e) { /* non-critical */ }
+}
+
+/** Subscribe to _sync_meta — when another device bumps the version, pull immediately. */
+async function _subscribeSyncMeta() {
+  if (!fbReady || !fbDb) return;
+  try {
+    const { doc, getDoc, onSnapshot: onSnap } = await waitForFbImports();
+    const metaRef = doc(fbDb, '_sync_meta', 'global');
+
+    // Initialise local version from current cloud state
+    const snap = await getDoc(metaRef);
+    if (snap.exists()) _setSyncVersion(snap.data().version || 0);
+
+    onSnap(metaRef, async cloudSnap => {
+      if (!cloudSnap.exists()) return;
+      const cloudVersion = cloudSnap.data().version || 0;
+      const cloudDevice  = cloudSnap.data().device  || '';
+      const localVersion = _getSyncVersion();
+
+      // Only pull if cloud is ahead AND the write came from a different device
+      if (cloudVersion > localVersion && cloudDevice !== getDeviceId()) {
+        console.log(`[SYNC] Cloud v${cloudVersion} > local v${localVersion} (from ${cloudDevice}) — auto-pull`);
+        setFbStatus('syncing');
+        if (!_localWriting) {
+          try {
+            await pullFromFirebase(true);
+            _setSyncVersion(cloudVersion);
+            await refreshUI({ sync: false });
+            setFbStatus('on');
+          } catch(e) { console.warn('[SYNC] auto-pull failed:', e.message); setFbStatus('error'); }
+        }
+      }
+    }, err => console.warn('[SYNC] meta listener error:', err.message));
+  } catch(e) { console.warn('[SYNC] _subscribeSyncMeta:', e.message); }
+}
+
+/** Called when device comes back online — check version and pull if behind. */
+async function _onComeOnline() {
+  if (!fbReady || !fbDb) { try { await initFirebase(); } catch(_) {} return; }
+  setFbStatus('syncing');
+  try {
+    const { doc, getDoc } = await waitForFbImports();
+    const snap = await getDoc(doc(fbDb, '_sync_meta', 'global'));
+    if (snap.exists()) {
+      const cloudVersion = snap.data().version || 0;
+      if (cloudVersion > _getSyncVersion()) {
+        await pullFromFirebase(true);
+        _setSyncVersion(cloudVersion);
+        await refreshUI({ sync: false });
+      }
+    }
+    await forcePushToFirebase(true);
+    setFbStatus('on');
+    toast('Online — sync complete', 'ok');
+  } catch(e) { setFbStatus('error'); }
+}
+window.addEventListener('online',  () => _onComeOnline());
+window.addEventListener('offline', () => { toast('Offline — changes saved locally', ''); });
+
 function setFbStatus(status) {
   const dot = document.getElementById('fb-status-dot');
   const txt = document.getElementById('fb-status-text');
   const colors = { off:'var(--muted)', connecting:'var(--amber)', on:'var(--green)', error:'var(--red)', syncing:'#3b82f6' };
   const now = new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const envLabel = FIREBASE_ENVIRONMENTS[getFirebaseEnv()]?.label || '';
+  const syncV = _getSyncVersion();
+  const vStr  = syncV > 0 ? ' · v' + syncV : '';
+  const devId = getDeviceId();
   const labels = {
-    off: 'Not connected',
-    connecting: 'Connecting to Firebase...',
-    on:  'Connected (' + envLabel + ') - Last sync ' + now,
-    error: 'Sync error - tap Reconnect in Settings',
-    syncing: 'Syncing...'
+    off:       'Not connected',
+    connecting:'Connecting to Firebase...',
+    on:        'Synced (' + envLabel + ')' + vStr + ' · ' + devId + ' · ' + now,
+    error:     'Sync error - tap Reconnect in Settings',
+    syncing:   'Syncing' + vStr + '...'
   };
   if (dot) { dot.style.background = colors[status]; dot.style.boxShadow = status==='on' ? '0 0 6px var(--green)' : 'none'; }
   if (txt) txt.textContent = labels[status];
@@ -6680,6 +6774,7 @@ async function initFirebase() {
     await pullFromFirebase(true);
     await normalizeSyncIds();
     await forcePushToFirebase(true);
+    await _subscribeSyncMeta();   // watch for cross-device changes
 
   } catch(e) {
     setFbStatus('error');
@@ -6800,8 +6895,8 @@ async function fbSyncItem(item) {
     const data = sanitiseForFirestore({...item, updatedAt: new Date().toISOString() });
     _localWriting = true;
     await setDoc(fbDoc('items', item.fbId), data);
-    // Reset write lock after Firestore echo window
-    setTimeout(() => { _localWriting = false; }, 2000);
+    setTimeout(() => { _localWriting = false; }, 400);
+    bumpSyncVersion();
   } catch(e) { _localWriting = false; console.error('[SYNC] fbSyncItem error:', e.message); }
 }
 
@@ -6824,7 +6919,8 @@ async function fbSyncSale(sale) {
     const data = sanitiseForFirestore({...sale });
     _localWriting = true;
     await setDoc(fbDoc('sales', sale.fbId), data);
-    setTimeout(() => { _localWriting = false; }, 2000);
+    setTimeout(() => { _localWriting = false; }, 400);
+    bumpSyncVersion();
   } catch(e) { _localWriting = false; console.error('[SYNC] fbSyncSale error:', e.message); }
 }
 
@@ -7053,7 +7149,7 @@ async function forcePushToFirebase(silent = false) {
     if (!silent) toast('Sync error: ' + e.message, 'err');
     console.error('[SYNC] push error:', e);
   } finally {
-    setTimeout(() => { _localWriting = false; }, 2000);
+    setTimeout(() => { _localWriting = false; }, 400);
   }
 }
 
@@ -10264,15 +10360,16 @@ let _syncRunning = false;
 function scheduleSync() {
   if (!navigator.onLine || !fbReady || !fbDb) return;
   clearTimeout(_autoSyncTimer);
+  // Push local changes; incoming changes are handled by onSnapshot listeners
   _autoSyncTimer = setTimeout(async () => {
     if (_syncRunning) return;
     _syncRunning = true;
     try {
-      await pullFromFirebase(true);
       await forcePushToFirebase(true);
+      bumpSyncVersion();
     } catch (_) { /* intentionally ignored */ }
     finally { _syncRunning = false; }
-  }, 2000);
+  }, 800);
 }
 
 // ═══════════════════════════════════════════════════════════
