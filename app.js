@@ -6807,8 +6807,11 @@ async function initFirebase() {
       }, err => {
         console.error('[FB] items listener error:', err.message);
         setFbStatus('error');
-        // Auto-restart after 3 s
-        setTimeout(() => { if (fbReady && fbDb) _startItemsListener(); }, 3000);
+        setTimeout(async () => {
+          if (!fbReady || !fbDb) return;
+          _startItemsListener();
+          try { await pullFromFirebase(true); await refreshUI({sync:false}); setFbStatus('on'); updateSyncDot(); } catch(_) {}
+        }, 3000);
       });
     }
     _startItemsListener();
@@ -6838,7 +6841,12 @@ async function initFirebase() {
         updateSyncDot();
       }, err => {
         console.error('[FB] sales listener error:', err.message);
-        setTimeout(() => { if (fbReady && fbDb) _startSalesListener(); }, 3000);
+        setFbStatus('error');
+        setTimeout(async () => {
+          if (!fbReady || !fbDb) return;
+          _startSalesListener();
+          try { await pullFromFirebase(true); await refreshUI({sync:false}); setFbStatus('on'); updateSyncDot(); } catch(_) {}
+        }, 3000);
       });
     }
     _startSalesListener();
