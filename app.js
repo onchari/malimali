@@ -6314,8 +6314,10 @@ window.clearAppCacheAndReload = clearAppCacheAndReload;
 // ===== FIREBASE SYNC =====
 let fbApp = null, fbDb = null, fbUnsub = null;
 let fbReady = false;
-let _localWriting = false;
-let _pushFailCount = 0;   // tracks consecutive Firestore write failures
+let _localWriting   = false;
+let _pushFailCount  = 0;     // consecutive Firestore write failures
+let _lastSyncError  = null;  // last error message for diagnostics
+let _pushRetryTimer = null;  // retry timer after push failure
 let syncQueue = [];
 let isSyncing = false;
 
@@ -6984,11 +6986,16 @@ async function fbSyncItem(item) {
     const data = sanitiseForFirestore({...item, updatedAt: new Date().toISOString() });
     await setDoc(fbDoc('items', item.fbId), data);
     _pushFailCount = Math.max(0, _pushFailCount - 1);
+    _lastSyncError = null;
     bumpSyncVersion();
   } catch(e) {
     _pushFailCount++;
+    _lastSyncError = e.message;
     console.error('[SYNC] fbSyncItem failed (' + _pushFailCount + '):', e.message);
     updateSyncDot();
+    // Retry after 5 s rather than waiting 60 s heartbeat
+    clearTimeout(_pushRetryTimer);
+    _pushRetryTimer = setTimeout(() => runForceSync(true), 5000);
   }
 }
 
@@ -7014,8 +7021,11 @@ async function fbSyncSale(sale) {
     bumpSyncVersion();
   } catch(e) {
     _pushFailCount++;
+    _lastSyncError = e.message;
     console.error('[SYNC] fbSyncSale failed (' + _pushFailCount + '):', e.message);
     updateSyncDot();
+    clearTimeout(_pushRetryTimer);
+    _pushRetryTimer = setTimeout(() => runForceSync(true), 5000);
   }
 }
 
