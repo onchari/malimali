@@ -6567,7 +6567,20 @@ async function _onComeOnline() {
   } catch(e) { setFbStatus('error'); }
 }
 window.addEventListener('online',  () => _onComeOnline());
-window.addEventListener('offline', () => { toast('Offline — changes saved locally', ''); });
+window.addEventListener('offline', () => { toast('Offline — changes saved locally', ''); updateSyncDot(); });
+
+/** When the app returns from background/screen-off, catch up on missed changes */
+async function _onVisibilityChange() {
+  if (document.visibilityState !== 'visible') return;
+  if (!fbReady || !fbDb || !navigator.onLine) return;
+  try {
+    await pullFromFirebase(true);
+    await refreshUI({ sync: false });
+    setFbStatus('on');
+    await updateSyncDot();
+  } catch(e) { /* non-critical */ }
+}
+window._onVisibilityChange = _onVisibilityChange;
 
 function setFbStatus(status) {
   const dot = document.getElementById('fb-status-dot');
@@ -6761,181 +6774,227 @@ async function initFirebase() {
     window._fbUnsubSz = null;
     window._fbUnsubBd = null;
 
-    // ── items listener ───────────────────────────────────────────
-    fbUnsub = onSnapshot(fbCol('items'), async snap => {
-      const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
-      if (!changes.length) return;
-      const localItems = await dbAll('items');
-      const byFbId = Object.fromEntries(localItems.filter(i=>i.fbId).map(i=>[i.fbId,i]));
-      const byCode = Object.fromEntries(localItems.filter(i=>i.code).map(i=>[i.code,i]));
-      let changed = false;
-      for (const c of changes) {
-        const data = {...c.doc.data(), fbId: c.doc.id };
-        delete data.id;
-        if (c.type === 'removed') {
-          const loc = byFbId[c.doc.id];
-          if (loc) { await dbDelete('items', loc.id); changed = true; }
-        } else {
-          const ex = byFbId[c.doc.id] || byCode[data.code];
-          if (ex) { data.id = ex.id; await dbPut('items', data); }
-          else    { try { await dbAdd('items', data); } catch(_) { /* intentionally ignored */ } }
-          changed = true;
-        }
-      }
-      if (changed) {
-        allItems = await dbAll('items');
-        await enrichShoeItems(allItems);
-        renderList(); renderDashboard(); updateHeader();
-        setFbStatus('on');
-      }
-    }, err => { setFbStatus('error'); console.error('[FB] items listener:', err.message); });
-
-    // ── sales listener ───────────────────────────────────────────
-    window._fbUnsubSales = onSnapshot(fbCol('sales'), async snap => {
-      const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
-      if (!changes.length) return;
-      const localSales = await dbAll('sales');
-      const byFbId = Object.fromEntries(localSales.filter(s=>s.fbId).map(s=>[s.fbId,s]));
-      for (const c of changes) {
-        const data = {...c.doc.data(), fbId: c.doc.id };
-        delete data.id;
-        if (c.type === 'removed') {
-          const loc = byFbId[c.doc.id];
-          if (loc) await dbDelete('sales', loc.id);
-        } else {
-          const ex = byFbId[c.doc.id] || localSales.find(s => _salesMatch(s, data));
-          if (ex) { data.id = ex.id; await dbPut('sales', data); }
-          else    { try { await dbAdd('sales', data); } catch(_) { /* intentionally ignored */ } }
-        }
-      }
-      try { if (activeDay) updateDayLiveStats(); } catch(_) { /* intentionally ignored */ }
-      try { renderDashboard(); } catch(_) { /* intentionally ignored */ }
-    }, err => { console.error('[FB] sales listener:', err.message); });
-
-    // ── finances listener ────────────────────────────────────────
-    window._fbUnsubFin = onSnapshot(fbCol('finances'), async snap => {
-      const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
-      if (!changes.length) return;
-      const localFin = await dbAll('finances');
-      const byFbId = Object.fromEntries(localFin.filter(f => f.fbId).map(f => [f.fbId, f]));
-      let changed = false;
-      for (const c of changes) {
-        const data = {...c.doc.data(), fbId: c.doc.id };
-        delete data.id;
-        if (c.type === 'removed') {
-          const loc = byFbId[c.doc.id];
-          if (loc) { await dbDelete('finances', loc.id); changed = true; }
-        } else {
-          if (_isDeletedFinanceRemote(c.doc.id, data)) continue;
-          const ex = byFbId[c.doc.id] || localFin.find(f => _financeRecordsMatch(f, data));
-          if (ex) { data.id = ex.id; await dbPut('finances', data); }
-          else { try { await dbAdd('finances', data); } catch(_) { /* intentionally ignored */ } }
-          changed = true;
-        }
-      }
-      if (changed) {
-        try { renderFinancePage(); } catch(_) { /* intentionally ignored */ }
-        try { renderDashboard(); } catch(_) { /* intentionally ignored */ }
-      }
-    }, err => { console.error('[FB] finances listener:', err.message); });
-
-    // ── wishlist listener ────────────────────────────────────────
-    if (db.objectStoreNames.contains('wishlist')) {
-      window._fbUnsubWish = onSnapshot(fbCol('wishlist'), async snap => {
+    // ── items listener (self-healing) ────────────────────────────
+    function _startItemsListener() {
+      if (fbUnsub) { try { fbUnsub(); } catch(_) {} }
+      fbUnsub = onSnapshot(fbCol('items'), async snap => {
         const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
         if (!changes.length) return;
-        const localWish = await dbAll('wishlist');
-        const byFbId = Object.fromEntries(localWish.filter(w => w.fbId).map(w => [w.fbId, w]));
+        const localItems = await dbAll('items');
+        const byFbId = Object.fromEntries(localItems.filter(i=>i.fbId).map(i=>[i.fbId,i]));
+        const byCode = Object.fromEntries(localItems.filter(i=>i.code).map(i=>[i.code,i]));
         let changed = false;
         for (const c of changes) {
           const data = {...c.doc.data(), fbId: c.doc.id };
           delete data.id;
           if (c.type === 'removed') {
             const loc = byFbId[c.doc.id];
-            if (loc) { await dbDelete('wishlist', loc.id); changed = true; }
+            if (loc) { await dbDelete('items', loc.id); changed = true; }
           } else {
-            const ex = byFbId[c.doc.id];
-            if (ex) { data.id = ex.id; await dbPut('wishlist', data); }
-            else { try { await dbAdd('wishlist', data); } catch(_) { /* intentionally ignored */ } }
+            const ex = byFbId[c.doc.id] || byCode[data.code];
+            if (ex) { data.id = ex.id; await dbPut('items', data); }
+            else    { try { await dbAdd('items', data); } catch(_) {} }
             changed = true;
           }
         }
         if (changed) {
-          try { renderWishlistPage(); } catch(_) { /* intentionally ignored */ }
+          allItems = await dbAll('items');
+          await enrichShoeItems(allItems);
+          renderList(); renderDashboard(); updateHeader();
+          setFbStatus('on');
+          updateSyncDot();
         }
-      }, err => { console.error('[FB] wishlist listener:', err.message); });
+      }, err => {
+        console.error('[FB] items listener error:', err.message);
+        setFbStatus('error');
+        // Auto-restart after 3 s
+        setTimeout(() => { if (fbReady && fbDb) _startItemsListener(); }, 3000);
+      });
     }
+    _startItemsListener();
 
-    // ── shoe_sizes listener ──────────────────────────────────────
-    window._fbUnsubSz = onSnapshot(fbCol('shoe_sizes'), async snap => {
-      const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
-      if (!changes.length) return;
-      const localSizes = await dbAll('shoe_sizes');
-      const byFbId = Object.fromEntries(localSizes.filter(s => s.fbId).map(s => [s.fbId, s]));
-      const byCS = Object.fromEntries(localSizes.filter(s => s.codeSize).map(s => [s.codeSize, s]));
-      let changed = false;
-      for (const c of changes) {
-        const data = {...c.doc.data(), fbId: c.doc.id };
-        delete data.id;
-        if (c.type === 'removed') {
-          const loc = byFbId[c.doc.id];
-          if (loc) { await dbDelete('shoe_sizes', loc.id); changed = true; }
-        } else {
-          const ex = byFbId[c.doc.id] || byCS[data.codeSize];
-          if (ex) { data.id = ex.id; await dbPut('shoe_sizes', data); }
-          else { try { await dbAdd('shoe_sizes', data); } catch(_) { /* intentionally ignored */ } }
-          changed = true;
-        }
-      }
-      if (changed) {
-        allItems = await dbAll('items');
-        await enrichShoeItems(allItems);
-        renderList();
-        renderDashboard();
-        updateHeader();
-      }
-    }, err => { console.error('[FB] shoe_sizes listener:', err.message); });
-
-    // ── business_days listener ───────────────────────────────────
-    window._fbUnsubBd = onSnapshot(fbCol('business_days'), async snap => {
-      const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
-      if (!changes.length) return;
-      const localBd = await dbAll('business_days');
-      const byFbId = Object.fromEntries(localBd.filter(b => b.fbId).map(b => [b.fbId, b]));
-      const byDate = Object.fromEntries(localBd.map(b => [(b.businessDate || b.business_date), b]));
-      let changed = false;
-      for (const c of changes) {
-        const data = {...c.doc.data(), fbId: c.doc.id };
-        delete data.id;
-        const dateKey = data.businessDate || data.business_date;
-        if (c.type === 'removed') {
-          const loc = byFbId[c.doc.id] || (dateKey ? byDate[dateKey] : null);
-          if (loc) { await dbDelete('business_days', loc.id); changed = true; }
-        } else {
-          const ex = byFbId[c.doc.id] || (dateKey ? byDate[dateKey] : null);
-          if (ex) { data.id = ex.id; await dbPut('business_days', data); }
-          else { try { await dbAdd('business_days', data); } catch(_) { /* intentionally ignored */ } }
-          changed = true;
-          if (activeDay && ex && ex.id === activeDay.id) {
-            activeDay = await dbGet('business_days', ex.id);
+    // ── sales listener (self-healing) ────────────────────────────
+    function _startSalesListener() {
+      if (window._fbUnsubSales) { try { window._fbUnsubSales(); } catch(_) {} }
+      window._fbUnsubSales = onSnapshot(fbCol('sales'), async snap => {
+        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        if (!changes.length) return;
+        const localSales = await dbAll('sales');
+        const byFbId = Object.fromEntries(localSales.filter(s=>s.fbId).map(s=>[s.fbId,s]));
+        for (const c of changes) {
+          const data = {...c.doc.data(), fbId: c.doc.id };
+          delete data.id;
+          if (c.type === 'removed') {
+            const loc = byFbId[c.doc.id];
+            if (loc) await dbDelete('sales', loc.id);
+          } else {
+            const ex = byFbId[c.doc.id] || localSales.find(s => _salesMatch(s, data));
+            if (ex) { data.id = ex.id; await dbPut('sales', data); }
+            else    { try { await dbAdd('sales', data); } catch(_) {} }
           }
         }
+        try { if (activeDay) updateDayLiveStats(); } catch(_) {}
+        try { renderDashboard(); } catch(_) {}
+        updateSyncDot();
+      }, err => {
+        console.error('[FB] sales listener error:', err.message);
+        setTimeout(() => { if (fbReady && fbDb) _startSalesListener(); }, 3000);
+      });
+    }
+    _startSalesListener();
+
+    // ── finances listener (self-healing) ─────────────────────────
+    function _startFinListener() {
+      if (window._fbUnsubFin) { try { window._fbUnsubFin(); } catch(_) {} }
+      window._fbUnsubFin = onSnapshot(fbCol('finances'), async snap => {
+        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        if (!changes.length) return;
+        const localFin = await dbAll('finances');
+        const byFbId = Object.fromEntries(localFin.filter(f => f.fbId).map(f => [f.fbId, f]));
+        let changed = false;
+        for (const c of changes) {
+          const data = {...c.doc.data(), fbId: c.doc.id };
+          delete data.id;
+          if (c.type === 'removed') {
+            const loc = byFbId[c.doc.id];
+            if (loc) { await dbDelete('finances', loc.id); changed = true; }
+          } else {
+            if (_isDeletedFinanceRemote(c.doc.id, data)) continue;
+            const ex = byFbId[c.doc.id] || localFin.find(f => _financeRecordsMatch(f, data));
+            if (ex) { data.id = ex.id; await dbPut('finances', data); }
+            else { try { await dbAdd('finances', data); } catch(_) {} }
+            changed = true;
+          }
+        }
+        if (changed) {
+          try { renderFinancePage(); } catch(_) {}
+          try { renderDashboard(); } catch(_) {}
+        }
+      }, err => {
+        console.error('[FB] finances listener error:', err.message);
+        setTimeout(() => { if (fbReady && fbDb) _startFinListener(); }, 3000);
+      });
+    }
+    _startFinListener();
+
+    // ── wishlist listener (self-healing) ─────────────────────────
+    if (db.objectStoreNames.contains('wishlist')) {
+      function _startWishListener() {
+        if (window._fbUnsubWish) { try { window._fbUnsubWish(); } catch(_) {} }
+        window._fbUnsubWish = onSnapshot(fbCol('wishlist'), async snap => {
+          const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+          if (!changes.length) return;
+          const localWish = await dbAll('wishlist');
+          const byFbId = Object.fromEntries(localWish.filter(w => w.fbId).map(w => [w.fbId, w]));
+          let changed = false;
+          for (const c of changes) {
+            const data = {...c.doc.data(), fbId: c.doc.id };
+            delete data.id;
+            if (c.type === 'removed') {
+              const loc = byFbId[c.doc.id];
+              if (loc) { await dbDelete('wishlist', loc.id); changed = true; }
+            } else {
+              const ex = byFbId[c.doc.id];
+              if (ex) { data.id = ex.id; await dbPut('wishlist', data); }
+              else { try { await dbAdd('wishlist', data); } catch(_) {} }
+              changed = true;
+            }
+          }
+          if (changed) try { renderWishlistPage(); } catch(_) {}
+        }, err => {
+          console.error('[FB] wishlist listener error:', err.message);
+          setTimeout(() => { if (fbReady && fbDb) _startWishListener(); }, 3000);
+        });
       }
-      if (changed) {
-        try { renderDayState(); } catch(_) { /* intentionally ignored */ }
-        try { renderDaySessionsList(); } catch(_) { /* intentionally ignored */ }
-      }
-    }, err => { console.error('[FB] business_days listener:', err.message); });
+      _startWishListener();
+    }
+
+    // ── shoe_sizes listener (self-healing) ────────────────────────
+    function _startSzListener() {
+      if (window._fbUnsubSz) { try { window._fbUnsubSz(); } catch(_) {} }
+      window._fbUnsubSz = onSnapshot(fbCol('shoe_sizes'), async snap => {
+        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        if (!changes.length) return;
+        const localSizes = await dbAll('shoe_sizes');
+        const byFbId = Object.fromEntries(localSizes.filter(s => s.fbId).map(s => [s.fbId, s]));
+        const byCS   = Object.fromEntries(localSizes.filter(s => s.codeSize).map(s => [s.codeSize, s]));
+        let changed = false;
+        for (const c of changes) {
+          const data = {...c.doc.data(), fbId: c.doc.id };
+          delete data.id;
+          if (c.type === 'removed') {
+            const loc = byFbId[c.doc.id];
+            if (loc) { await dbDelete('shoe_sizes', loc.id); changed = true; }
+          } else {
+            const ex = byFbId[c.doc.id] || byCS[data.codeSize];
+            if (ex) { data.id = ex.id; await dbPut('shoe_sizes', data); }
+            else { try { await dbAdd('shoe_sizes', data); } catch(_) {} }
+            changed = true;
+          }
+        }
+        if (changed) {
+          allItems = await dbAll('items');
+          await enrichShoeItems(allItems);
+          renderList(); renderDashboard(); updateHeader();
+        }
+      }, err => {
+        console.error('[FB] shoe_sizes listener error:', err.message);
+        setTimeout(() => { if (fbReady && fbDb) _startSzListener(); }, 3000);
+      });
+    }
+    _startSzListener();
+
+    // ── business_days listener (self-healing) ────────────────────
+    function _startBdListener() {
+      if (window._fbUnsubBd) { try { window._fbUnsubBd(); } catch(_) {} }
+      window._fbUnsubBd = onSnapshot(fbCol('business_days'), async snap => {
+        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        if (!changes.length) return;
+        const localBd = await dbAll('business_days');
+        const byFbId  = Object.fromEntries(localBd.filter(b => b.fbId).map(b => [b.fbId, b]));
+        const byDate  = Object.fromEntries(localBd.map(b => [(b.businessDate || b.business_date), b]));
+        let changed = false;
+        for (const c of changes) {
+          const data = {...c.doc.data(), fbId: c.doc.id };
+          delete data.id;
+          const dateKey = data.businessDate || data.business_date;
+          if (c.type === 'removed') {
+            const loc = byFbId[c.doc.id] || (dateKey ? byDate[dateKey] : null);
+            if (loc) { await dbDelete('business_days', loc.id); changed = true; }
+          } else {
+            const ex = byFbId[c.doc.id] || (dateKey ? byDate[dateKey] : null);
+            if (ex) { data.id = ex.id; await dbPut('business_days', data); }
+            else { try { await dbAdd('business_days', data); } catch(_) {} }
+            changed = true;
+            if (activeDay && ex && ex.id === activeDay.id) {
+              activeDay = await dbGet('business_days', ex.id);
+            }
+          }
+        }
+        if (changed) {
+          try { renderDayState(); } catch(_) {}
+          try { renderDaySessionsList(); } catch(_) {}
+        }
+      }, err => {
+        console.error('[FB] business_days listener error:', err.message);
+        setTimeout(() => { if (fbReady && fbDb) _startBdListener(); }, 3000);
+      });
+    }
+    _startBdListener();
 
     setFbStatus('on');
     toast('Firebase connected (' + getFirebaseEnvConfig().label + ')', 'ok');
     await pullFromFirebase(true);
-    await normalizeSyncIds();     // ensures all local records have fbIds
+    await normalizeSyncIds();
     await forcePushToFirebase(true);
-    await _subscribeSyncMeta();   // watch for cross-device changes
-    await updateSyncDot();        // reflect true state after full init
+    await _subscribeSyncMeta();
+    await updateSyncDot();
 
-    // Heartbeat: every 60 s check if this device is behind cloud version
+    // Page visibility: when app comes back from background, pull fresh data
+    document.removeEventListener('visibilitychange', _onVisibilityChange);
+    document.addEventListener('visibilitychange', _onVisibilityChange);
+
+    // Heartbeat: every 60 s pull + sync dot update
     clearInterval(window._syncHeartbeat);
     window._syncHeartbeat = setInterval(async () => {
       if (!fbReady || !fbDb || !navigator.onLine) return;
