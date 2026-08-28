@@ -6314,7 +6314,8 @@ window.clearAppCacheAndReload = clearAppCacheAndReload;
 // ===== FIREBASE SYNC =====
 let fbApp = null, fbDb = null, fbUnsub = null;
 let fbReady = false;
-let _localWriting = false; // prevents echo: set true when we write to Firestore
+let _localWriting = false;
+let _pushFailCount = 0;   // tracks consecutive Firestore write failures
 let syncQueue = [];
 let isSyncing = false;
 
@@ -6358,7 +6359,14 @@ async function updateSyncDot() {
   }
 
   try {
-    // 1. Always read fresh from DB — allItems in memory may be stale
+    // 1. Push failures tracked — show orange immediately
+    if (_pushFailCount > 0) {
+      dot.dataset.state = 'ahead';
+      dot.title = _pushFailCount + ' write(s) failed to reach cloud — will retry';
+      return;
+    }
+
+    // 2. Items without fbId haven't been pushed yet
     const localItems = await dbAll('items');
     const unsynced = localItems.filter(i => i.id && !i.fbId);
     if (unsynced.length) {
@@ -6367,7 +6375,7 @@ async function updateSyncDot() {
       return;
     }
 
-    // 2. Cloud version (cached from onSnapshot) is ahead of local
+    // 3. Cloud version ahead — need to pull
     const localV = _getSyncVersion();
     if (_cloudSyncVersion > localV) {
       dot.dataset.state = 'behind';
@@ -6375,13 +6383,12 @@ async function updateSyncDot() {
       return;
     }
 
-    // 3. All good
+    // 4. All good
     dot.dataset.state = 'synced';
     dot.title = 'All data in sync (v' + localV + ')';
   } catch(e) {
-    // Check failed but Firebase is connected — don't show red
     dot.dataset.state = 'synced';
-    dot.title = 'In sync (check incomplete)';
+    dot.title = 'In sync';
   }
 }
 window.updateSyncDot = updateSyncDot;
@@ -6834,6 +6841,15 @@ async function initFirebase() {
     window._syncHeartbeat = setInterval(async () => {
       if (!fbReady || !fbDb || !navigator.onLine) return;
       try {
+        // Auto-retry if previous writes failed
+        if (_pushFailCount > 0) {
+          console.log('[SYNC] Heartbeat: retrying ' + _pushFailCount + ' failed push(es)');
+          _pushFailCount = 0;
+          await forcePushToFirebase(true);
+          await updateSyncDot();
+          return;
+        }
+        // Check if cloud is ahead
         const { doc, getDoc } = await waitForFbImports();
         const snap = await getDoc(doc(fbDb, '_sync_meta', 'global'));
         if (!snap.exists()) return;
@@ -6845,6 +6861,7 @@ async function initFirebase() {
           await refreshUI({ sync: false });
           setFbStatus('on');
         }
+        await updateSyncDot();
       } catch(e) { /* non-critical */ }
     }, 60000);
 
@@ -6993,8 +7010,13 @@ async function fbSyncSale(sale) {
     }
     const data = sanitiseForFirestore({...sale });
     await setDoc(fbDoc('sales', sale.fbId), data);
+    _pushFailCount = Math.max(0, _pushFailCount - 1);
     bumpSyncVersion();
-  } catch(e) { console.error('[SYNC] fbSyncSale error:', e.message); }
+  } catch(e) {
+    _pushFailCount++;
+    console.error('[SYNC] fbSyncSale failed (' + _pushFailCount + '):', e.message);
+    updateSyncDot();
+  }
 }
 
 function sanitiseForFirestore(obj){
@@ -7359,7 +7381,7 @@ async function pullFromFirebase(silent = false) {
     console.error('[SYNC] Pull error:', e);
     if (!silent) toast('Pull failed: ' + e.message, 'err');
   } finally {
-    setTimeout(() => { _localWriting = false; }, 1500);
+    _localWriting = false;
   }
 }
 
