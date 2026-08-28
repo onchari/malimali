@@ -6364,7 +6364,7 @@ async function updateSyncDot() {
     // 1. Push failures tracked — show orange immediately
     if (_pushFailCount > 0) {
       dot.dataset.state = 'ahead';
-      dot.title = _pushFailCount + ' write(s) failed to reach cloud — will retry';
+      dot.title = _pushFailCount + ' push failure(s)' + (_lastSyncError ? ': ' + _lastSyncError : '') + ' — tap ↑↓ Sync to retry';
       return;
     }
 
@@ -6394,6 +6394,36 @@ async function updateSyncDot() {
   }
 }
 window.updateSyncDot = updateSyncDot;
+
+/** Manual force-sync: push ALL local data to cloud then pull, with diagnostics */
+async function runForceSync(silent = false) {
+  if (!navigator.onLine) { toast('No internet connection', 'err'); return; }
+  if (!fbReady || !fbDb) {
+    toast('Firebase not connected — check Settings', 'err');
+    return;
+  }
+  if (!silent) {
+    setFbStatus('syncing');
+    toast('Syncing…', '');
+  }
+  try {
+    // Push every local record to cloud (covers failed individual pushes)
+    await forcePushToFirebase(true);
+    // Pull any cloud changes this device missed
+    await pullFromFirebase(true);
+    _pushFailCount = 0;
+    _lastSyncError = null;
+    await refreshUI({ sync: false });
+    setFbStatus('on');
+    if (!silent) toast('Sync complete ✓', 'ok');
+  } catch(e) {
+    _lastSyncError = e.message;
+    if (!silent) toast('Sync failed: ' + e.message, 'err');
+    console.error('[SYNC] runForceSync failed:', e);
+  }
+  await updateSyncDot();
+}
+window.runForceSync = runForceSync;
 
 /** Atomically increment the global sync version in Firestore after any write. */
 async function bumpSyncVersion() {
