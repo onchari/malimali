@@ -3178,22 +3178,91 @@ body[data-firebase-env="development"]::before {
   font-size: 13px; font-weight: 600;
   margin-bottom: 14px; display: none; text-align: center;
 }
-/* Sync status dot next to username */
-.sync-dot {
-  display: inline-block;
+/* ── Sync badge next to username ─────────────────────────────────── */
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.2);
+  cursor: pointer;
+  margin-right: 4px;
+  transition: background .15s;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sync-badge:active { background: rgba(255,255,255,.22); }
+.sync-badge-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #dc2626;
+  flex-shrink: 0;
+  transition: background .3s, box-shadow .3s;
+}
+.sync-badge-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255,255,255,.9);
+  white-space: nowrap;
+}
+
+/* Dot colours driven by data-state on the badge wrapper */
+.sync-badge[data-state="synced"]  .sync-badge-dot { background: #7c3aed; box-shadow: 0 0 4px #7c3aed99; }
+.sync-badge[data-state="behind"]  .sync-badge-dot { background: #eab308; box-shadow: 0 0 4px #eab30899; }
+.sync-badge[data-state="ahead"]   .sync-badge-dot { background: #f97316; box-shadow: 0 0 4px #f9731699; }
+.sync-badge[data-state="offline"] .sync-badge-dot { background: #dc2626; box-shadow: 0 0 4px #dc262699; }
+
+/* ── Sync status bar (below header) ──────────────────────────────── */
+.sync-status-bar {
+  display: none;                /* shown by setFbStatus / openSyncPanel */
+  background: #1a3a2e;
+  padding: 6px 14px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.ssb-left {
+  display: flex; align-items: center; gap: 8px;
+  flex: 1; min-width: 0;
+}
+.ssb-dot {
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: #dc2626;          /* red = offline/unknown until proven connected */
+  background: #9ca3af;
   flex-shrink: 0;
-  vertical-align: middle;
-  margin-right: 4px;
-  transition: background .4s, box-shadow .4s;
-  cursor: default;
+  transition: background .3s, box-shadow .3s;
 }
-.sync-dot[data-state="synced"]  { background: #7c3aed; box-shadow: 0 0 5px #7c3aed88; }
-.sync-dot[data-state="behind"]  { background: #eab308; box-shadow: 0 0 5px #eab30888; }
-.sync-dot[data-state="ahead"]   { background: #f97316; box-shadow: 0 0 5px #f9731688; }
-.sync-dot[data-state="offline"] { background: #dc2626; box-shadow: 0 0 5px #dc262688; }
+.ssb-dot[data-state="synced"]  { background: #7c3aed; box-shadow: 0 0 5px #7c3aed88; }
+.ssb-dot[data-state="behind"]  { background: #eab308; box-shadow: 0 0 5px #eab30888; }
+.ssb-dot[data-state="ahead"]   { background: #f97316; box-shadow: 0 0 5px #f9731688; }
+.ssb-dot[data-state="offline"] { background: #dc2626; box-shadow: 0 0 5px #dc262688; }
+.ssb-text {
+  font-size: 11px;
+  color: rgba(255,255,255,.8);
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ssb-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.ssb-btn {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 700;
+  padding: 4px 10px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.35);
+  background: rgba(255,255,255,.12);
+  color: white; cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s;
+}
+.ssb-btn:active { background: rgba(255,255,255,.28); }
+.ssb-btn-push    { border-color: #f9731688; background: rgba(249,115,22,.18); }
+.ssb-btn-pull    { border-color: #eab30888; background: rgba(234,179, 8,.18); }
+.ssb-btn-sync    { border-color: rgba(124,58,237,.5); background: rgba(124,58,237,.18); }
+.ssb-btn-offline { border-color: rgba(220,38,38,.5);  background: rgba(220,38,38,.18); }
 
 .user-pill {
   display: inline-flex; align-items: center; gap: 6px;
