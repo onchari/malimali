@@ -6368,10 +6368,13 @@ async function updateSyncDot() {
     const btnPull    = document.getElementById('ssb-btn-pull');
     const btnSync    = document.getElementById('ssb-btn-sync');
     const btnOffline = document.getElementById('ssb-btn-offline');
+    // Refresh button always visible (hidden only when offline — use Reconnect instead)
     if (btnPush)    btnPush.style.display    = (state === 'ahead')   ? 'flex' : 'none';
     if (btnPull)    btnPull.style.display    = (state === 'behind')  ? 'flex' : 'none';
     if (btnSync)    btnSync.style.display    = (state !== 'offline') ? 'flex' : 'none';
     if (btnOffline) btnOffline.style.display = (state === 'offline') ? 'flex' : 'none';
+    // Highlight Refresh in red when there's an error
+    if (btnSync) btnSync.style.borderColor = (state === 'error') ? 'rgba(220,38,38,.6)' : '';
   }
 
   // Offline / not connected
@@ -6595,7 +6598,7 @@ function setFbStatus(status) {
     off:       'Not connected',
     connecting:'Connecting to Firebase...',
     on:        'Synced (' + envLabel + ')' + vStr + ' · ' + devId + ' · ' + now,
-    error:     'Sync error - tap Reconnect in Settings',
+    error:     'Sync error — tap Refresh to pull & push all data',
     syncing:   'Syncing' + vStr + '...'
   };
   if (dot) { dot.style.background = colors[status]; dot.style.boxShadow = status==='on' ? '0 0 6px var(--green)' : 'none'; }
@@ -6880,7 +6883,12 @@ async function initFirebase() {
         }
       }, err => {
         console.error('[FB] finances listener error:', err.message);
-        setTimeout(() => { if (fbReady && fbDb) _startFinListener(); }, 3000);
+        setFbStatus('error');
+        setTimeout(async () => {
+          if (!fbReady || !fbDb) return;
+          _startFinListener();
+          try { await pullFromFirebase(true); await refreshUI({sync:false}); setFbStatus('on'); updateSyncDot(); } catch(_) {}
+        }, 3000);
       });
     }
     _startFinListener();
@@ -6911,7 +6919,7 @@ async function initFirebase() {
           if (changed) try { renderWishlistPage(); } catch(_) {}
         }, err => {
           console.error('[FB] wishlist listener error:', err.message);
-          setTimeout(() => { if (fbReady && fbDb) _startWishListener(); }, 3000);
+          setTimeout(async () => { if (!fbReady||!fbDb) return; _startWishListener(); try { await pullFromFirebase(true); await refreshUI({sync:false}); setFbStatus('on'); updateSyncDot(); } catch(_) {} }, 3000);
         });
       }
       _startWishListener();
@@ -6947,7 +6955,7 @@ async function initFirebase() {
         }
       }, err => {
         console.error('[FB] shoe_sizes listener error:', err.message);
-        setTimeout(() => { if (fbReady && fbDb) _startSzListener(); }, 3000);
+        setTimeout(async () => { if (!fbReady||!fbDb) return; _startSzListener(); try { await pullFromFirebase(true); await refreshUI({sync:false}); setFbStatus('on'); updateSyncDot(); } catch(_) {} }, 3000);
       });
     }
     _startSzListener();
@@ -6985,7 +6993,7 @@ async function initFirebase() {
         }
       }, err => {
         console.error('[FB] business_days listener error:', err.message);
-        setTimeout(() => { if (fbReady && fbDb) _startBdListener(); }, 3000);
+        setTimeout(async () => { if (!fbReady||!fbDb) return; _startBdListener(); try { await pullFromFirebase(true); await refreshUI({sync:false}); setFbStatus('on'); updateSyncDot(); } catch(_) {} }, 3000);
       });
     }
     _startBdListener();
