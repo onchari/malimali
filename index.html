@@ -199,8 +199,11 @@
   <span id="low-stock-badge" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;margin-right:6px;cursor:pointer;" onclick="goDashNav('stock')"></span>
   <div id="user-menu-wrap" style="position:relative;flex-shrink:0;display:none;">
 
-    <!-- Sync status dot — sits next to username -->
-    <span id="sync-dot" class="sync-dot" title="Checking sync…"></span>
+    <!-- Sync status badge — dot + short label next to username -->
+    <span id="sync-dot" class="sync-badge" onclick="openSyncPanel()" title="Tap to manage sync">
+      <span class="sync-badge-dot"></span>
+      <span id="sync-badge-label" class="sync-badge-label">Sync</span>
+    </span>
 
     <!-- Pill button shows username; click opens dropdown -->
     <button class="user-pill" id="user-pill"
@@ -248,24 +251,29 @@
      Auto-hides 5 s after status becomes "Live".
      setFbStatus() in app.js controls this.
      ============================================================== -->
-<div id="sync-bar"
-     style="display:none;background:#1a6b36;padding:4px 12px;
-            display:flex;align-items:center;justify-content:space-between;gap:8px;">
-  <div style="display:flex;align-items:center;gap:7px;flex:1;min-width:0;">
-    <div id="sync-bar-dot"
-         style="width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;"></div>
-    <span id="sync-bar-text"
-          style="font-size:11px;color:rgba(255,255,255,0.85);font-family:var(--mono);
-                 overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+<!-- ── SYNC STATUS BAR ──────────────────────────────────────────── -->
+<div id="sync-bar" class="sync-status-bar">
+  <!-- Left: dot + status label -->
+  <div class="ssb-left">
+    <span id="sync-bar-dot" class="ssb-dot"></span>
+    <span id="sync-bar-text" class="ssb-text"></span>
   </div>
-  <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-    <span id="sync-bar-time"
-          style="font-size:10px;color:rgba(255,255,255,0.55);font-family:var(--mono);"></span>
-    <button id="force-sync-btn" onclick="runForceSync()"
-            style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;
-                   border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);
-                   color:white;cursor:pointer;white-space:nowrap;">
-      ↑↓ Sync
+  <!-- Right: context-sensitive action buttons -->
+  <div id="ssb-actions" class="ssb-actions">
+    <button id="ssb-btn-push" class="ssb-btn ssb-btn-push" onclick="syncPushOnly()"
+            style="display:none;">
+      <i class="fa-solid fa-cloud-arrow-up"></i> Push
+    </button>
+    <button id="ssb-btn-pull" class="ssb-btn ssb-btn-pull" onclick="syncPullOnly()"
+            style="display:none;">
+      <i class="fa-solid fa-cloud-arrow-down"></i> Pull
+    </button>
+    <button id="ssb-btn-sync" class="ssb-btn ssb-btn-sync" onclick="runForceSync()">
+      <i class="fa-solid fa-rotate"></i> Sync All
+    </button>
+    <button id="ssb-btn-offline" class="ssb-btn ssb-btn-offline" onclick="retryConnection()"
+            style="display:none;">
+      <i class="fa-solid fa-wifi"></i> Reconnect
     </button>
   </div>
 </div>

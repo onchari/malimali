@@ -6350,50 +6350,117 @@ let _cloudSyncVersion = 0;
  * red=offline  orange=local ahead  yellow=cloud ahead  purple=in sync
  */
 async function updateSyncDot() {
-  const dot = document.getElementById('sync-dot');
-  if (!dot) return;
+  const badge    = document.getElementById('sync-dot');
+  const badgeLbl = document.getElementById('sync-badge-label');
+  const barDot   = document.getElementById('sync-bar-dot');
+  const barText  = document.getElementById('sync-bar-text');
 
-  // Not connected at all
-  if (!navigator.onLine || !fbReady || !fbDb) {
-    dot.dataset.state = 'offline';
-    dot.title = navigator.onLine ? 'Firebase not connected' : 'No internet connection';
+  // Helper — apply state to all sync UI elements at once
+  function _applySyncState(state, label, barMsg) {
+    // Badge next to username
+    if (badge) badge.dataset.state = state;
+    if (badgeLbl) badgeLbl.textContent = label;
+    // Sync bar
+    if (barDot) barDot.dataset.state = state;
+    if (barText) barText.textContent = barMsg;
+    // Context buttons
+    const btnPush    = document.getElementById('ssb-btn-push');
+    const btnPull    = document.getElementById('ssb-btn-pull');
+    const btnSync    = document.getElementById('ssb-btn-sync');
+    const btnOffline = document.getElementById('ssb-btn-offline');
+    if (btnPush)    btnPush.style.display    = (state === 'ahead')   ? 'flex' : 'none';
+    if (btnPull)    btnPull.style.display    = (state === 'behind')  ? 'flex' : 'none';
+    if (btnSync)    btnSync.style.display    = (state !== 'offline') ? 'flex' : 'none';
+    if (btnOffline) btnOffline.style.display = (state === 'offline') ? 'flex' : 'none';
+  }
+
+  // Offline / not connected
+  if (!navigator.onLine) {
+    _applySyncState('offline', 'Offline', 'No internet — changes saved locally');
+    return;
+  }
+  if (!fbReady || !fbDb) {
+    _applySyncState('offline', 'Not connected', 'Firebase not connected — tap Reconnect');
     return;
   }
 
   try {
-    // 1. Push failures tracked — show orange immediately
+    // 1. Push failures
     if (_pushFailCount > 0) {
-      dot.dataset.state = 'ahead';
-      dot.title = _pushFailCount + ' push failure(s)' + (_lastSyncError ? ': ' + _lastSyncError : '') + ' — tap ↑↓ Sync to retry';
+      const errMsg = _lastSyncError ? _lastSyncError : 'unknown error';
+      _applySyncState('ahead', 'Push failed', _pushFailCount + ' write(s) failed: ' + errMsg + ' — tap Push to retry');
       return;
     }
 
-    // 2. Items without fbId haven't been pushed yet
+    // 2. Unsynced local items (no fbId)
     const localItems = await dbAll('items');
-    const unsynced = localItems.filter(i => i.id && !i.fbId);
+    const unsynced   = localItems.filter(i => i.id && !i.fbId);
     if (unsynced.length) {
-      dot.dataset.state = 'ahead';
-      dot.title = unsynced.length + ' local item(s) not yet synced to cloud';
+      _applySyncState('ahead', 'Not pushed', unsynced.length + ' local item(s) not yet in cloud — tap Push');
       return;
     }
 
-    // 3. Cloud version ahead — need to pull
+    // 3. Cloud ahead of local
     const localV = _getSyncVersion();
     if (_cloudSyncVersion > localV) {
-      dot.dataset.state = 'behind';
-      dot.title = 'Cloud v' + _cloudSyncVersion + ' not yet pulled (local v' + localV + ')';
+      _applySyncState('behind', 'Pull needed', 'Cloud has newer data (v' + _cloudSyncVersion + ') — tap Pull');
       return;
     }
 
-    // 4. All good
-    dot.dataset.state = 'synced';
-    dot.title = 'All data in sync (v' + localV + ')';
+    // 4. All in sync
+    const now = new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    _applySyncState('synced', 'Synced', 'All data in sync (v' + localV + ') · ' + now);
   } catch(e) {
-    dot.dataset.state = 'synced';
-    dot.title = 'In sync';
+    _applySyncState('synced', 'Synced', 'In sync');
   }
 }
 window.updateSyncDot = updateSyncDot;
+
+/** Push only — upload local changes to cloud */
+async function syncPushOnly() {
+  if (!navigator.onLine || !fbReady || !fbDb) { toast('Not connected', 'err'); return; }
+  setFbStatus('syncing');
+  try {
+    await forcePushToFirebase(true);
+    _pushFailCount = 0; _lastSyncError = null;
+    setFbStatus('on');
+    toast('Pushed to cloud ✓', 'ok');
+  } catch(e) { toast('Push failed: ' + e.message, 'err'); }
+  await updateSyncDot();
+}
+window.syncPushOnly = syncPushOnly;
+
+/** Pull only — download cloud changes to this device */
+async function syncPullOnly() {
+  if (!navigator.onLine || !fbReady || !fbDb) { toast('Not connected', 'err'); return; }
+  setFbStatus('syncing');
+  try {
+    await pullFromFirebase(true);
+    await refreshUI({ sync: false });
+    setFbStatus('on');
+    toast('Pulled from cloud ✓', 'ok');
+  } catch(e) { toast('Pull failed: ' + e.message, 'err'); }
+  await updateSyncDot();
+}
+window.syncPullOnly = syncPullOnly;
+
+/** Retry Firebase connection when offline */
+async function retryConnection() {
+  toast('Reconnecting…', '');
+  try { await initFirebase(); }
+  catch(e) { toast('Connection failed: ' + e.message, 'err'); }
+}
+window.retryConnection = retryConnection;
+
+/** Open the sync bar visibly (for badge tap) */
+function openSyncPanel() {
+  const bar = document.getElementById('sync-bar');
+  if (bar) {
+    bar.style.display = 'flex';
+    updateSyncDot();
+  }
+}
+window.openSyncPanel = openSyncPanel;
 
 /** Manual force-sync: push ALL local data to cloud then pull, with diagnostics */
 async function runForceSync(silent = false) {
