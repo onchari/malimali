@@ -1337,12 +1337,14 @@ body {
   box-shadow: none;
   position: relative;
 }
-/* Alternating row stripe */
 .item-card:nth-child(even) { background: #f7faf7; }
 .item-card:last-child        { border-bottom: none; }
 .item-card:active            { background: #e8f5ed; }
 
-.item-top { display: flex; align-items: center; gap: 10px; }
+/* ── Compact card variant ────────────────────────────────────────── */
+.item-card-compact { padding: 7px 12px; }
+
+.item-top { display: flex; align-items: center; gap: 9px; }
 .item-icon {
   width: 30px; height: 30px;
   border-radius: 6px;
@@ -1350,7 +1352,47 @@ body {
   font-size: 15px;
   flex-shrink: 0;
 }
+.item-card-compact .item-icon { width: 26px; height: 26px; font-size: 14px; border-radius: 5px; }
+
 .item-body { flex: 1; min-width: 0; }
+
+/* Compact row 1: code · name on one line */
+.ic-row1 {
+  display: flex; align-items: baseline; gap: 5px;
+  overflow: hidden;
+}
+.ic-code {
+  font-size: 12px; font-weight: 800;
+  font-family: var(--mono); color: var(--text);
+  white-space: nowrap; flex-shrink: 0;
+}
+.ic-name {
+  font-size: 11px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Compact row 2: type · dot · stock · sold */
+.ic-row2 {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 2px; flex-wrap: nowrap; overflow: hidden;
+}
+.ic-type  { font-size: 9px; color: var(--muted); white-space: nowrap; }
+.ic-dot   { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.ic-stock { font-size: 10px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.ic-sold  { font-size: 9px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ic-badge-rec {
+  font-size: 8px; font-weight: 800; letter-spacing: .3px;
+  background: #fef3c7; color: #92400e;
+  padding: 0px 4px; border-radius: 4px;
+  text-transform: uppercase; white-space: nowrap;
+}
+
+/* Right side: price + buy */
+.item-right { text-align: right; flex-shrink: 0; }
+.ic-price  { font-size: 13px; font-weight: 900; font-family: var(--mono); color: var(--accent2); }
+.ic-buy    { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-top: 1px; }
+
+/* Legacy (used by shoe/variant rows) */
 .item-name { font-size: 10px; font-weight: 500; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item-code { font-size: 13px; font-weight: 800; font-family: var(--mono); color: var(--text); }
 .item-header-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }

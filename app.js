@@ -4035,24 +4035,27 @@ async function renderList() {
       const sellPrice  = item.sellPrice || item.sell || 0;
       const buyPrice   = item.buyPrice  || item.buy  || 0;
 
+      const stockDot = isRec ? '#f59e0b' : item.qty === 0 ? 'var(--red)' : item.qty <= LOW_STOCK_LEVEL ? '#f59e0b' : 'var(--green)';
       cards.push(`
-        <div class="item-card${isRec ? ' item-card-record' : (item.qty<=0?' shoe-out-card':'')}" onclick="openSheet(${item.id})">
-          ${!isRec && item.qty<=0 ? '<div class="out-of-stock-overlay"><span>OUT OF STOCK - RESTOCK</span></div>' : ''}
+        <div class="item-card item-card-compact${isRec ? ' item-card-record' : (item.qty<=0?' shoe-out-card':'')}" onclick="openSheet(${item.id})">
           <div class="item-top">
             <div class="item-icon" style="background:${t.color||'var(--surface2)'};">${t.emoji}</div>
             <div class="item-body">
-              <div class="item-code">${escapeHtml(item.code)}${(item.variant||item.size)?' - '+escapeHtml(item.variant||item.size):''}</div>
-              <div class="item-name">${escapeHtml(item.name||'')}</div>
-              <div class="item-tags">
-                <span class="tag tag-cyan">${escapeHtml(item.type)}</span>
-                ${isRec ? '<span class="tag tag-record">RECORD</span>' : ''}
-                <span class="tag tag-gray">${soldQty} sold</span>
-                <span class="tag ${stockColor}">${stockLabel}</span>
+              <div class="ic-row1">
+                <span class="ic-code">${escapeHtml(item.code)}${(item.variant||item.size)?' · '+escapeHtml(item.variant||item.size):''}</span>
+                <span class="ic-name">${escapeHtml(item.name||'')}</span>
+              </div>
+              <div class="ic-row2">
+                <span class="ic-type">${escapeHtml(item.type)}</span>
+                ${isRec ? '<span class="ic-badge ic-badge-rec">RECORD</span>' : ''}
+                <span class="ic-dot" style="background:${stockDot};"></span>
+                <span class="ic-stock">${stockLabel}</span>
+                ${soldQty > 0 ? '<span class="ic-sold">· ' + soldQty + ' sold</span>' : ''}
               </div>
             </div>
             <div class="item-right">
-              <div style="font-size:13px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(sellPrice)}</div>
-              <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px;">Buy: ${fmt(buyPrice)}</div>
+              <div class="ic-price">${fmt(sellPrice)}</div>
+              ${buyPrice > 0 ? '<div class="ic-buy">Buy ' + fmt(buyPrice) + '</div>' : ''}
             </div>
           </div>
         </div>`);
