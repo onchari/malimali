@@ -11744,3 +11744,357 @@ function renderShoeSummary() {
     setSaveBtnLabel('Save ' + sorted.length + ' size' + (sorted.length > 1 ? 's' : ''));
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+// PHOTO IMPORT MODULE — Import inventory from a handwritten stock photo
+// ═══════════════════════════════════════════════════════════
+
+var _piExtractedRows = [];
+var _piImageDataUrl = '';
+
+function openPhotoImport() {
+  _piExtractedRows = [];
+  _piImageDataUrl = '';
+  var sheet = document.getElementById('photo-import-sheet');
+  if (!sheet) return;
+  _piShowStep('capture');
+  var prevWrap = document.getElementById('pi-preview-wrap');
+  if (prevWrap) prevWrap.style.display = 'none';
+  var img = document.getElementById('pi-image-preview');
+  if (img) img.src = '';
+  sheet.classList.add('active');
+}
+
+function closePhotoImport() {
+  var sheet = document.getElementById('photo-import-sheet');
+  if (sheet) sheet.classList.remove('active');
+}
+
+function _piShowStep(step) {
+  var steps = ['capture', 'loading', 'preview', 'importing'];
+  for (var i = 0; i < steps.length; i++) {
+    var el = document.getElementById('pi-step-' + steps[i]);
+    if (el) el.style.display = (steps[i] === step) ? '' : 'none';
+  }
+}
+
+function onPhotoImportFileSelected(input) {
+  if (!input || !input.files || !input.files[0]) return;
+  var file = input.files[0];
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    _piImageDataUrl = e.target.result;
+    var img = document.getElementById('pi-image-preview');
+    if (img) img.src = _piImageDataUrl;
+    var prevWrap = document.getElementById('pi-preview-wrap');
+    if (prevWrap) prevWrap.style.display = '';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function extractFromPhoto() {
+  if (!_piImageDataUrl) {
+    toast('Please select an image first', 'err');
+    return;
+  }
+  var key = getGeminiKey();
+  if (!key) {
+    toast('Add your Gemini API key in Settings first', 'err');
+    return;
+  }
+
+  _piShowStep('loading');
+
+  try {
+    var base64Match = _piImageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!base64Match) throw new Error('Invalid image format');
+    var mimeType = base64Match[1];
+    var base64Data = base64Match[2];
+
+    var prompt = 'Look at this handwritten stock list image. Extract all inventory items you can see. ' +
+      'Return ONLY a valid JSON array (no markdown, no code fences, no explanation) where each element has these fields: ' +
+      '"name" (string, product name), "code" (string, short product code or abbreviation, uppercase, max 12 chars), ' +
+      '"category" (string, product category if visible, else empty string), ' +
+      '"qty" (number, quantity, default 0 if not visible), ' +
+      '"buyPrice" (number, buying/cost price, default 0 if not visible), ' +
+      '"sellPrice" (number, selling price, default 0 if not visible). ' +
+      'Return an empty array [] if no items are found. Output only the JSON array.';
+
+    var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=' + key;
+
+    var body = {
+      contents: [{
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: mimeType, data: base64Data } }
+        ]
+      }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
+    };
+
+    var response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      var errText = await response.text();
+      throw new Error('Gemini API error ' + response.status + ': ' + errText.slice(0, 200));
+    }
+
+    var data = await response.json();
+    var rawText = '';
+    try {
+      rawText = data.candidates[0].content.parts[0].text || '';
+    } catch (_e) {
+      throw new Error('Unexpected Gemini response format');
+    }
+
+    // Strip markdown code fences if present
+    rawText = rawText.trim();
+    rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+
+    var parsed = JSON.parse(rawText);
+    if (!Array.isArray(parsed)) throw new Error('AI did not return an array');
+
+    _piExtractedRows = parsed.map(function(r) {
+      return {
+        name:      String(r.name || '').trim(),
+        code:      String(r.code || '').trim().toUpperCase(),
+        category:  String(r.category || '').trim(),
+        qty:       parseFloat(r.qty) || 0,
+        buyPrice:  parseFloat(r.buyPrice) || 0,
+        sellPrice: parseFloat(r.sellPrice) || 0
+      };
+    });
+
+    if (_piExtractedRows.length === 0) {
+      toast('No items found in image. Try a clearer photo.', 'err');
+      _piShowStep('capture');
+      return;
+    }
+
+    _piRenderPreviewTable();
+    _piShowStep('preview');
+
+  } catch (err) {
+    console.error('[PhotoImport] extractFromPhoto error:', err);
+    toast('AI extraction failed: ' + (err.message || 'Unknown error'), 'err');
+    _piShowStep('capture');
+  }
+}
+
+function _piRenderPreviewTable() {
+  var tbody = document.getElementById('pi-preview-tbody');
+  if (!tbody) return;
+
+  var badge = document.getElementById('pi-count-badge');
+  if (badge) badge.textContent = _piExtractedRows.length + ' item' + (_piExtractedRows.length !== 1 ? 's' : '');
+
+  // Build category options from global types array
+  var catOptions = '<option value="">— None —</option>';
+  var sortedTypes = (types || []).slice().sort(function(a, b) {
+    return (a.name || '').localeCompare(b.name || '');
+  });
+  for (var ti = 0; ti < sortedTypes.length; ti++) {
+    var t = sortedTypes[ti];
+    catOptions += '<option value="' + escapeHtml(t.name) + '">' +
+      escapeHtml((t.emoji || '') + ' ' + t.name) + '</option>';
+  }
+
+  var html = '';
+  for (var i = 0; i < _piExtractedRows.length; i++) {
+    var row = _piExtractedRows[i];
+    var catSel = catOptions.replace(
+      'value="' + escapeHtml(row.category) + '"',
+      'value="' + escapeHtml(row.category) + '" selected'
+    );
+    html += '<tr id="pi-row-' + i + '">' +
+      '<td><input class="pi-cell" type="text" value="' + escapeHtml(row.name) + '"' +
+        ' onchange="_piUpdateRow(' + i + ',\'name\',this.value)" placeholder="Item name"></td>' +
+      '<td><input class="pi-cell pi-mono" type="text" value="' + escapeHtml(row.code) + '"' +
+        ' onchange="_piUpdateRow(' + i + ',\'code\',this.value)" placeholder="CODE" style="text-transform:uppercase;"></td>' +
+      '<td><select class="pi-select" onchange="_piUpdateRow(' + i + ',\'category\',this.value)">' +
+        catSel + '</select></td>' +
+      '<td class="pi-num"><input class="pi-cell pi-num" type="number" value="' + row.qty + '" min="0"' +
+        ' onchange="_piUpdateRow(' + i + ',\'qty\',this.value)"></td>' +
+      '<td class="pi-num"><input class="pi-cell pi-num" type="number" value="' + row.buyPrice + '" min="0"' +
+        ' onchange="_piUpdateRow(' + i + ',\'buyPrice\',this.value)"></td>' +
+      '<td class="pi-num"><input class="pi-cell pi-num" type="number" value="' + row.sellPrice + '" min="0"' +
+        ' onchange="_piUpdateRow(' + i + ',\'sellPrice\',this.value)"></td>' +
+      '<td><button class="pi-del-btn" onclick="_piDeleteRow(' + i + ')" title="Remove row">' +
+        '<i class="fa-solid fa-trash-can"></i></button></td>' +
+      '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+function _piUpdateRow(i, field, value) {
+  if (!_piExtractedRows[i]) return;
+  if (field === 'qty' || field === 'buyPrice' || field === 'sellPrice') {
+    _piExtractedRows[i][field] = parseFloat(value) || 0;
+  } else {
+    _piExtractedRows[i][field] = String(value || '').trim();
+  }
+}
+
+function _piDeleteRow(i) {
+  _piExtractedRows.splice(i, 1);
+  _piRenderPreviewTable();
+}
+
+function piAddRow() {
+  _piExtractedRows.push({ name: '', code: '', category: '', qty: 0, buyPrice: 0, sellPrice: 0 });
+  _piRenderPreviewTable();
+  // Scroll to new row
+  var tbody = document.getElementById('pi-preview-tbody');
+  if (tbody) {
+    var rows = tbody.querySelectorAll('tr');
+    if (rows.length) rows[rows.length - 1].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+async function importPhotoItems() {
+  // Collect current input values from DOM (user may have typed without triggering onchange)
+  var tbody = document.getElementById('pi-preview-tbody');
+  if (tbody) {
+    var domRows = tbody.querySelectorAll('tr[id^="pi-row-"]');
+    for (var di = 0; di < domRows.length; di++) {
+      var inputs = domRows[di].querySelectorAll('input, select');
+      var idx = parseInt(domRows[di].id.replace('pi-row-', ''), 10);
+      if (isNaN(idx) || !_piExtractedRows[idx]) continue;
+      var fields = ['name', 'code', 'category', 'qty', 'buyPrice', 'sellPrice'];
+      for (var fi = 0; fi < inputs.length && fi < fields.length; fi++) {
+        var val = inputs[fi].value;
+        var fld = fields[fi];
+        if (fld === 'qty' || fld === 'buyPrice' || fld === 'sellPrice') {
+          _piExtractedRows[idx][fld] = parseFloat(val) || 0;
+        } else {
+          _piExtractedRows[idx][fld] = String(val || '').trim();
+        }
+      }
+    }
+  }
+
+  // Validate rows
+  var valid = [];
+  var skipped = 0;
+  for (var vi = 0; vi < _piExtractedRows.length; vi++) {
+    var r = _piExtractedRows[vi];
+    if (!r.name || !r.code) { skipped++; continue; }
+    valid.push(r);
+  }
+
+  if (valid.length === 0) {
+    toast('No valid rows (name + code required for each item)', 'err');
+    return;
+  }
+
+  _piShowStep('importing');
+
+  var imported = 0;
+  var restocked = 0;
+  var errors = 0;
+
+  for (var ii = 0; ii < valid.length; ii++) {
+    var row = valid[ii];
+
+    // Update progress UI
+    var pct = Math.round(((ii + 1) / valid.length) * 100);
+    var fill = document.getElementById('pi-progress-fill');
+    var label = document.getElementById('pi-progress-label');
+    if (fill) fill.style.width = pct + '%';
+    if (label) label.textContent = 'Importing ' + (ii + 1) + ' of ' + valid.length + ': ' + escapeHtml(row.name);
+
+    try {
+      var buy = parseFloat(row.buyPrice) || 0;
+      var sell = parseFloat(row.sellPrice) || 0;
+      var qty = parseFloat(row.qty) || 0;
+      var profit = sell - buy;
+
+      // Check if item with this code already exists
+      var existing = null;
+      for (var ei = 0; ei < allItems.length; ei++) {
+        if ((allItems[ei].code || '').trim().toUpperCase() === row.code.toUpperCase()) {
+          existing = allItems[ei];
+          break;
+        }
+      }
+
+      if (existing) {
+        // Restock existing item
+        existing.qty = (parseFloat(existing.qty) || 0) + qty;
+        if (buy > 0) existing.buyPrice = buy;
+        if (sell > 0) existing.sellPrice = sell;
+        if (buy > 0 && sell > 0) existing.profit = profit;
+        existing.updatedAt = new Date().toISOString();
+        await dbPut('items', existing);
+        await recordStockInvestment(existing, qty * buy, qty, 'Photo import restock');
+        fbSyncItem(existing);
+        restocked++;
+      } else {
+        // Create new item
+        var now = new Date().toISOString();
+        var newItem = {
+          code:       row.code.toUpperCase(),
+          name:       row.name,
+          type:       row.category || '',
+          category:   row.category || '',
+          buyPrice:   buy,
+          sellPrice:  sell,
+          profit:     profit,
+          qty:        qty,
+          isRecord:   false,
+          isShoe:     false,
+          hasVariants:false,
+          variant:    '',
+          createdAt:  now,
+          updatedAt:  now
+        };
+        newItem.fbId = stableItemFbId(newItem);
+        var newId = await dbAdd('items', newItem);
+        newItem.id = newId;
+        await markWishlistStockedForItem(newItem);
+        await recordStockInvestment(newItem, qty * buy, qty, 'Photo import');
+        fbSyncItem(newItem);
+        imported++;
+      }
+    } catch (rowErr) {
+      console.error('[PhotoImport] Row error for', row.code, rowErr);
+      errors++;
+    }
+  }
+
+  // Refresh app state
+  allItems = await dbAll('items');
+  await enrichShoeItems(allItems);
+  renderList();
+  renderDashboard();
+  updateHeader();
+  scheduleSync();
+
+  closePhotoImport();
+
+  var msg = '';
+  if (imported > 0) msg += imported + ' new item' + (imported !== 1 ? 's' : '') + ' added. ';
+  if (restocked > 0) msg += restocked + ' item' + (restocked !== 1 ? 's' : '') + ' restocked. ';
+  if (skipped > 0) msg += skipped + ' row' + (skipped !== 1 ? 's' : '') + ' skipped (missing name/code). ';
+  if (errors > 0) msg += errors + ' error' + (errors !== 1 ? 's' : '') + '.';
+
+  if (errors > 0 && imported === 0 && restocked === 0) {
+    toast(msg.trim() || 'Import failed', 'err');
+  } else {
+    toast(msg.trim() || 'Import complete', 'ok');
+  }
+}
+
+// Window exports for photo import
+window.openPhotoImport = openPhotoImport;
+window.closePhotoImport = closePhotoImport;
+window.onPhotoImportFileSelected = onPhotoImportFileSelected;
+window.extractFromPhoto = extractFromPhoto;
+window._piUpdateRow = _piUpdateRow;
+window._piDeleteRow = _piDeleteRow;
+window.piAddRow = piAddRow;
+window.importPhotoItems = importPhotoItems;

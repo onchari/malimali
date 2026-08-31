@@ -5527,3 +5527,282 @@ body.photo-lightbox-open { overflow: hidden; }
   font-size: 11px;
   color: var(--muted);
 }
+
+/* ============================================================
+   PHOTO IMPORT FEATURE
+   ============================================================ */
+.import-photo-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  background: transparent;
+  border: 2px dashed #22c55e;
+  border-radius: 10px;
+  color: #16a34a;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+.import-photo-btn:hover {
+  background: #f0fdf4;
+  border-color: #16a34a;
+}
+.pi-camera-btn,
+.pi-gallery-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  justify-content: center;
+  padding: 12px 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  transition: background 0.15s;
+}
+.pi-camera-btn:hover,
+.pi-gallery-btn:hover {
+  background: var(--hover);
+}
+.pi-image-preview {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  margin-bottom: 12px;
+  background: #f8fafc;
+}
+.pi-extract-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 13px;
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.pi-extract-btn:hover {
+  background: #6d28d9;
+}
+.pi-loading-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+.pi-spinner {
+  width: 44px;
+  height: 44px;
+  border: 4px solid var(--border);
+  border-top-color: #7c3aed;
+  border-radius: 50%;
+  animation: pi-spin 0.8s linear infinite;
+}
+@keyframes pi-spin {
+  to { transform: rotate(360deg); }
+}
+.pi-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.pi-count-badge {
+  background: #ede9fe;
+  color: #7c3aed;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 20px;
+}
+.pi-table-wrap {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: auto;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  max-height: 50vh;
+}
+.pi-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 520px;
+}
+.pi-table th {
+  background: var(--card);
+  padding: 7px 8px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1.5px solid var(--border);
+  white-space: nowrap;
+}
+.pi-table td {
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.pi-table tr:last-child td {
+  border-bottom: none;
+}
+.pi-cell {
+  width: 100%;
+  padding: 6px 7px;
+  border: 1.5px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color 0.12s, background 0.12s;
+  box-sizing: border-box;
+}
+.pi-cell:focus {
+  outline: none;
+  border-color: #7c3aed;
+  background: var(--card);
+}
+.pi-mono {
+  font-family: 'Courier New', Courier, monospace;
+  text-transform: uppercase;
+}
+.pi-num {
+  text-align: right;
+  width: 68px;
+}
+.pi-select {
+  width: 100%;
+  padding: 6px 7px;
+  border: 1.5px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.pi-select:focus {
+  outline: none;
+  border-color: #7c3aed;
+  background: var(--card);
+}
+.pi-del-btn {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 15px;
+  transition: background 0.12s;
+}
+.pi-del-btn:hover {
+  background: #fef2f2;
+}
+.pi-preview-footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 6px;
+  flex-wrap: wrap;
+}
+.pi-add-row-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.pi-add-row-btn:hover {
+  background: var(--hover);
+}
+.pi-cancel-btn {
+  margin-left: auto;
+  padding: 9px 16px;
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.pi-cancel-btn:hover {
+  background: var(--hover);
+}
+.pi-import-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.pi-import-btn:hover {
+  background: #15803d;
+}
+.pi-importing-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+.pi-progress-track {
+  width: 100%;
+  max-width: 300px;
+  height: 10px;
+  background: var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.pi-progress-fill {
+  height: 100%;
+  background: #16a34a;
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+.pi-progress-label {
+  font-size: 13px;
+  color: var(--muted);
+}
