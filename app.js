@@ -7307,34 +7307,52 @@ function _isDeletedSaleRemote(fbId, sale) {
   );
 }
 
-/** Remove duplicate sales — keeps the record with the lowest id (first recorded) */
+/**
+ * Remove duplicate sales from LOCAL IndexedDB AND Firestore cloud.
+ * Keeps the record with an fbId (or lowest id). Deletes the rest everywhere.
+ */
 async function deduplicateSales() {
   const all = await dbAll('sales');
-  const seen = new Map();   // signature → winning record
-  const toDelete = [];
+  const seen = new Map();     // signature → winning record
+  const losers = [];          // {id, fbId} — duplicates to delete
 
   for (const sale of all) {
     const sig = _saleSignature(sale);
     if (!sig) continue;
     if (seen.has(sig)) {
-      // Keep the one with an fbId, or the lower id (older record)
       const winner = seen.get(sig);
       if (!winner.fbId && sale.fbId) {
-        // Current 'sale' is better — delete the previous winner instead
-        toDelete.push(winner.id);
+        // Current 'sale' is better keeper → demote previous winner
+        losers.push(winner);
         seen.set(sig, sale);
       } else {
-        toDelete.push(sale.id);
+        losers.push(sale);
       }
     } else {
       seen.set(sig, sale);
     }
   }
 
-  if (!toDelete.length) return 0;
-  for (const id of toDelete) await dbDelete('sales', id);
-  console.log('[DEDUP] Removed ' + toDelete.length + ' duplicate sale(s)');
-  return toDelete.length;
+  if (!losers.length) return 0;
+
+  for (const loser of losers) {
+    // 1. Delete from local IndexedDB
+    await dbDelete('sales', loser.id);
+
+    // 2. Delete from Firestore cloud (if it has an fbId)
+    if (loser.fbId && fbReady && fbDb) {
+      try {
+        const { doc, deleteDoc } = await waitForFbImports();
+        await deleteDoc(doc(fbDb, fbColName('sales'), loser.fbId));
+      } catch(e) { console.warn('[DEDUP] cloud delete failed for', loser.fbId, e.message); }
+    }
+
+    // 3. Mark as deleted so pull doesn't re-create it
+    if (loser.fbId) _rememberDeletedSale(loser);
+  }
+
+  console.log('[DEDUP] Removed ' + losers.length + ' duplicate sale(s) from local + cloud');
+  return losers.length;
 }
 window.deduplicateSales = deduplicateSales;
 
