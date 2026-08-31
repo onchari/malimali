@@ -6480,10 +6480,13 @@ async function runForceSync(silent = false) {
     toast('Syncing…', '');
   }
   try {
-    // Push every local record to cloud (covers failed individual pushes)
-    await forcePushToFirebase(true);
-    // Pull any cloud changes this device missed
+    // Pull first (get authoritative cloud state)
     await pullFromFirebase(true);
+    // Remove any duplicates caused by previous sync races
+    const dupsRemoved = await deduplicateSales();
+    if (dupsRemoved > 0) console.log('[SYNC] Removed ' + dupsRemoved + ' duplicate sale(s)');
+    // Push local records not yet in cloud
+    await forcePushToFirebase(true);
     _pushFailCount = 0;
     _lastSyncError = null;
     await refreshUI({ sync: false });
@@ -7004,6 +7007,7 @@ async function initFirebase() {
     setFbStatus('on');
     toast('Firebase connected (' + getFirebaseEnvConfig().label + ')', 'ok');
     await pullFromFirebase(true);
+    await deduplicateSales();     // remove any duplicates from previous sync bugs
     await normalizeSyncIds();
     await forcePushToFirebase(true);
     await _subscribeSyncMeta();
@@ -7303,6 +7307,37 @@ function _isDeletedSaleRemote(fbId, sale) {
   );
 }
 
+/** Remove duplicate sales — keeps the record with the lowest id (first recorded) */
+async function deduplicateSales() {
+  const all = await dbAll('sales');
+  const seen = new Map();   // signature → winning record
+  const toDelete = [];
+
+  for (const sale of all) {
+    const sig = _saleSignature(sale);
+    if (!sig) continue;
+    if (seen.has(sig)) {
+      // Keep the one with an fbId, or the lower id (older record)
+      const winner = seen.get(sig);
+      if (!winner.fbId && sale.fbId) {
+        // Current 'sale' is better — delete the previous winner instead
+        toDelete.push(winner.id);
+        seen.set(sig, sale);
+      } else {
+        toDelete.push(sale.id);
+      }
+    } else {
+      seen.set(sig, sale);
+    }
+  }
+
+  if (!toDelete.length) return 0;
+  for (const id of toDelete) await dbDelete('sales', id);
+  console.log('[DEDUP] Removed ' + toDelete.length + ' duplicate sale(s)');
+  return toDelete.length;
+}
+window.deduplicateSales = deduplicateSales;
+
 function _salesMatch(local, remote) {
   if (!local || !remote) return false;
   if (local.fbId && remote.fbId && local.fbId === remote.fbId) return true;
@@ -7468,7 +7503,7 @@ async function pullFromFirebase(silent = false) {
     }
     console.log('[SYNC] Items: added=' + itemsAdded + ' updated=' + itemsUpdated);
 
-    // Pull sales - batch local load
+    // Pull sales — match by fbId first, then signature to prevent duplicates
     const saleSnap = await getDocs(fbCol('sales'));
     const localSales = await dbAll('sales');
     const salesByFbId = Object.fromEntries(localSales.filter(s=>s.fbId).map(s=>[s.fbId,s]));
@@ -7480,9 +7515,12 @@ async function pullFromFirebase(silent = false) {
         deleteDoc(fbDoc('sales', d.id)).catch(() => {});
         continue;
       }
-      const existing = salesByFbId[d.id];
+      // Match by fbId first, then by content signature (prevents duplicate creation)
+      const existing = salesByFbId[d.id] || localSales.find(s => _salesMatch(s, data));
       if (existing) {
         data.id = existing.id;
+        // Update local fbId if it was missing
+        if (!existing.fbId) salesByFbId[d.id] = { ...existing, fbId: d.id };
         await dbPut('sales', data);
         salesUpdated++;
       } else {
