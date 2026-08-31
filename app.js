@@ -11784,10 +11784,11 @@ function onPhotoImportFileSelected(input) {
   var reader = new FileReader();
   reader.onload = function(e) {
     _piImageDataUrl = e.target.result;
+    // Show thumbnail briefly on capture step
     var img = document.getElementById('pi-image-preview');
-    if (img) img.src = _piImageDataUrl;
-    var prevWrap = document.getElementById('pi-preview-wrap');
-    if (prevWrap) prevWrap.style.display = '';
+    if (img) { img.src = _piImageDataUrl; img.style.display = 'block'; }
+    // Auto-extract — no extra button tap needed
+    extractFromPhoto();
   };
   reader.readAsDataURL(file);
 }
@@ -11804,6 +11805,9 @@ async function extractFromPhoto() {
   }
 
   _piShowStep('loading');
+  // Show photo thumbnail in loading screen for context
+  var thumb = document.getElementById('pi-loading-thumb');
+  if (thumb && _piImageDataUrl) { thumb.src = _piImageDataUrl; thumb.style.display = 'block'; }
 
   try {
     var base64Match = _piImageDataUrl.match(/^data:([^;]+);base64,(.+)$/);

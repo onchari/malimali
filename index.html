@@ -520,7 +520,7 @@
 
   <!-- Import from Photo button -->
   <button class="import-photo-btn" onclick="openPhotoImport()">
-    <i class="fa-solid fa-camera"></i> Import from Photo
+    <i class="fa-solid fa-camera"></i> Add Stock from Photo
   </button>
 
   <!-- Search bar -->
@@ -2630,53 +2630,50 @@
   <div class="sheet" style="max-height:96vh;display:flex;flex-direction:column;">
     <div class="sheet-handle"></div>
 
-    <!-- STEP 1: Capture / upload image -->
+    <!-- STEP 1: Capture — single button, auto-extracts on pick -->
     <div id="pi-step-capture">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <div class="sheet-title">Import from Photo</div>
-        <button class="stock-icon-btn" onclick="closePhotoImport()" title="Close">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 14px 0;">
+        <div class="sheet-title" style="margin:0;">Add Stock from Photo</div>
+        <button onclick="closePhotoImport()" style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg2);color:var(--muted);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
-      <p style="font-size:13px;color:var(--muted);margin:0 0 14px;">
-        Take or upload a photo of your handwritten stock list. Gemini AI will read the items for you.
-      </p>
-      <div style="display:flex;gap:10px;margin-bottom:16px;">
-        <label class="pi-camera-btn">
-          <i class="fa-solid fa-camera"></i> Camera
-          <input type="file" accept="image/*" capture="environment" style="display:none;"
-                 onchange="onPhotoImportFileSelected(this)">
+      <div class="pi-capture-area">
+        <div class="pi-capture-hint">
+          <i class="fa-solid fa-lightbulb" style="color:#f59e0b;"></i>
+          Take a photo of your handwritten stock list — AI reads it automatically
+        </div>
+        <!-- Single file input — OS shows camera/gallery choice -->
+        <input type="file" id="pi-file-input" accept="image/*"
+               style="display:none;" onchange="onPhotoImportFileSelected(this)">
+        <label for="pi-file-input" class="pi-pick-btn">
+          <i class="fa-solid fa-camera"></i> Take or Choose Photo
         </label>
-        <label class="pi-gallery-btn">
-          <i class="fa-solid fa-image"></i> Gallery
-          <input type="file" accept="image/*" style="display:none;"
-                 onchange="onPhotoImportFileSelected(this)">
-        </label>
-      </div>
-      <div id="pi-preview-wrap" style="display:none;">
-        <img id="pi-image-preview" class="pi-image-preview" alt="Stock list preview">
-        <button class="pi-extract-btn" onclick="extractFromPhoto()">
-          <i class="fa-solid fa-wand-magic-sparkles"></i> Extract Items with AI
-        </button>
+        <img id="pi-image-preview" class="pi-image-preview" alt="Stock list" style="display:none;">
       </div>
     </div>
 
-    <!-- STEP 2: Loading (AI processing) -->
+    <!-- STEP 2: Loading (auto-triggered, no extra tap needed) -->
     <div id="pi-step-loading" style="display:none;">
       <div class="pi-loading-area">
+        <img id="pi-loading-thumb" style="width:80px;height:80px;object-fit:cover;border-radius:10px;opacity:.6;margin-bottom:4px;">
         <div class="pi-spinner"></div>
-        <div style="font-size:14px;color:var(--muted);margin-top:14px;">Reading your stock list...</div>
+        <div class="pi-loading-title">Reading your list…</div>
+        <div class="pi-loading-sub">AI is identifying the items</div>
       </div>
     </div>
 
     <!-- STEP 3: Preview / edit extracted rows -->
     <div id="pi-step-preview" style="display:none;flex:1;overflow:hidden;display:none;flex-direction:column;">
       <div class="pi-preview-header">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div class="sheet-title" style="margin:0;">Review Items</div>
-          <span class="pi-count-badge" id="pi-count-badge">0 items</span>
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="sheet-title" style="margin:0;">Check & Import</div>
+            <span class="pi-count-badge" id="pi-count-badge">0 items</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Fix any errors, then tap Import</div>
         </div>
-        <button class="stock-icon-btn" onclick="closePhotoImport()" title="Close">
+        <button onclick="closePhotoImport()" style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg2);color:var(--muted);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>

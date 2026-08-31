@@ -5552,61 +5552,52 @@ body.photo-lightbox-open { overflow: hidden; }
   background: #f0fdf4;
   border-color: #16a34a;
 }
-.pi-camera-btn,
-.pi-gallery-btn {
+/* Single photo pick button */
+.pi-pick-btn {
   display: flex;
   align-items: center;
-  gap: 7px;
-  flex: 1;
   justify-content: center;
-  padding: 12px 10px;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
+  gap: 10px;
+  width: 100%;
+  padding: 18px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 800;
   cursor: pointer;
-  border: 1.5px solid var(--border);
-  background: var(--card);
-  color: var(--text);
-  transition: background 0.15s;
+  border: 2px dashed var(--accent);
+  background: rgba(30,122,62,.06);
+  color: var(--accent);
+  transition: background .15s;
 }
-.pi-camera-btn:hover,
-.pi-gallery-btn:hover {
-  background: var(--hover);
+.pi-pick-btn:active { background: rgba(30,122,62,.14); }
+.pi-pick-btn i { font-size: 22px; }
+
+.pi-capture-hint {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.4;
 }
+
 .pi-image-preview {
   width: 100%;
-  max-height: 220px;
-  object-fit: contain;
+  max-height: 160px;
+  object-fit: cover;
   border-radius: 10px;
   border: 1.5px solid var(--border);
-  margin-bottom: 12px;
-  background: #f8fafc;
+  margin-top: 8px;
 }
-.pi-extract-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  padding: 13px;
-  background: #7c3aed;
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.pi-extract-btn:hover {
-  background: #6d28d9;
-}
+
 .pi-loading-area {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
+  padding: 40px 20px;
+  gap: 12px;
 }
 .pi-spinner {
   width: 44px;
