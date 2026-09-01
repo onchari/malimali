@@ -7035,75 +7035,70 @@ async function initFirebase() {
     }
     _startBdListener();
 
-    // ── customers listener (self-healing) ────────────────────────
-    if (db.objectStoreNames.contains('customers')) {
-      function _startCustListener() {
-        if (window._fbUnsubCust) { try { window._fbUnsubCust(); } catch(_) {} }
-        window._fbUnsubCust = onSnapshot(fbCol('customers'), async snap => {
-          const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
-          if (!changes.length) return;
-          const local   = await dbAll('customers');
-          const byFbId  = Object.fromEntries(local.filter(c => c.fbId).map(c => [c.fbId, c]));
-          const byId    = Object.fromEntries(local.filter(c => c.customerId).map(c => [c.customerId, c]));
-          let changed = false;
-          for (const c of changes) {
-            const data = {...c.doc.data(), fbId: c.doc.id}; delete data.id;
-            if (c.type === 'removed') {
-              const ex = byFbId[c.doc.id];
-              if (ex) { await dbDelete('customers', ex.id); changed = true; }
-            } else {
-              const ex = byFbId[c.doc.id] || byId[data.customerId];
-              if (ex) { data.id = ex.id; await dbPut('customers', data); }
-              else { try { await dbAdd('customers', data); } catch(_) {} }
-              changed = true;
-            }
+    // ── customers listener (self-healing) — use window refs for restart
+    window._startCustListener = function() {
+      if (window._fbUnsubCust) { try { window._fbUnsubCust(); } catch(_) {} }
+      if (!db.objectStoreNames.contains('customers')) return;
+      window._fbUnsubCust = onSnapshot(fbCol('customers'), async snap => {
+        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        if (!changes.length) return;
+        const local   = await dbAll('customers');
+        const byFbId  = Object.fromEntries(local.filter(c => c.fbId).map(c => [c.fbId, c]));
+        const byId    = Object.fromEntries(local.filter(c => c.customerId).map(c => [c.customerId, c]));
+        let changed = false;
+        for (const c of changes) {
+          const data = {...c.doc.data(), fbId: c.doc.id}; delete data.id;
+          if (c.type === 'removed') {
+            const ex = byFbId[c.doc.id];
+            if (ex) { await dbDelete('customers', ex.id); changed = true; }
+          } else {
+            const ex = byFbId[c.doc.id] || byId[data.customerId];
+            if (ex) { data.id = ex.id; await dbPut('customers', data); }
+            else { try { await dbAdd('customers', data); } catch(_) {} }
+            changed = true;
           }
-          if (changed) try { renderCustomerList(''); } catch(_) {}
-        }, err => {
-          console.error('[FB] customers listener error:', err.message);
-          setTimeout(async () => { if (!fbReady||!fbDb) return; _startCustListener(); }, 3000);
-        });
-      }
-      _startCustListener();
-    }
+        }
+        if (changed) try { renderCustomerList(''); } catch(_) {}
+      }, err => {
+        console.error('[FB] customers listener error:', err.message);
+        setTimeout(() => { if (fbReady && fbDb) window._startCustListener(); }, 3000);
+      });
+    };
+    if (db.objectStoreNames.contains('customers')) window._startCustListener();
 
-    // ── customer_txns listener (self-healing) ─────────────────────
-    if (db.objectStoreNames.contains('customer_txns')) {
-      function _startCustTxnListener() {
-        if (window._fbUnsubCustTxn) { try { window._fbUnsubCustTxn(); } catch(_) {} }
-        window._fbUnsubCustTxn = onSnapshot(fbCol('customer_txns'), async snap => {
-          const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
-          if (!changes.length) return;
-          const local  = await dbAll('customer_txns');
-          const byFbId = Object.fromEntries(local.filter(t => t.fbId).map(t => [t.fbId, t]));
-          let changed = false;
-          for (const c of changes) {
-            const data = {...c.doc.data(), fbId: c.doc.id}; delete data.id;
-            if (c.type === 'removed') {
-              const ex = byFbId[c.doc.id];
-              if (ex) { await dbDelete('customer_txns', ex.id); changed = true; }
-            } else {
-              const ex = byFbId[c.doc.id];
-              if (ex) { data.id = ex.id; await dbPut('customer_txns', data); }
-              else { try { await dbAdd('customer_txns', data); } catch(_) {} }
-              changed = true;
-            }
+    // ── customer_txns listener (self-healing)
+    window._startCustTxnListener = function() {
+      if (window._fbUnsubCustTxn) { try { window._fbUnsubCustTxn(); } catch(_) {} }
+      if (!db.objectStoreNames.contains('customer_txns')) return;
+      window._fbUnsubCustTxn = onSnapshot(fbCol('customer_txns'), async snap => {
+        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        if (!changes.length) return;
+        const local  = await dbAll('customer_txns');
+        const byFbId = Object.fromEntries(local.filter(t => t.fbId).map(t => [t.fbId, t]));
+        let changed = false;
+        for (const c of changes) {
+          const data = {...c.doc.data(), fbId: c.doc.id}; delete data.id;
+          if (c.type === 'removed') {
+            const ex = byFbId[c.doc.id];
+            if (ex) { await dbDelete('customer_txns', ex.id); changed = true; }
+          } else {
+            const ex = byFbId[c.doc.id];
+            if (ex) { data.id = ex.id; await dbPut('customer_txns', data); }
+            else { try { await dbAdd('customer_txns', data); } catch(_) {} }
+            changed = true;
           }
-          // Recalculate balances for affected customers
-          if (changed) {
-            const custIds = [...new Set(changes.map(c => c.doc.data().customerId).filter(Boolean))];
-            for (const cid of custIds) {
-              try { await _recalcBalance(cid); } catch(_) {}
-            }
-            try { renderCustomerList(''); } catch(_) {}
-          }
-        }, err => {
-          console.error('[FB] customer_txns listener error:', err.message);
-          setTimeout(async () => { if (!fbReady||!fbDb) return; _startCustTxnListener(); }, 3000);
-        });
-      }
-      _startCustTxnListener();
-    }
+        }
+        if (changed) {
+          const custIds = [...new Set(changes.map(c => c.doc.data().customerId).filter(Boolean))];
+          for (const cid of custIds) { try { await _recalcBalance(cid); } catch(_) {} }
+          try { renderCustomerList(''); } catch(_) {}
+        }
+      }, err => {
+        console.error('[FB] customer_txns listener error:', err.message);
+        setTimeout(() => { if (fbReady && fbDb) window._startCustTxnListener(); }, 3000);
+      });
+    };
+    if (db.objectStoreNames.contains('customer_txns')) window._startCustTxnListener();
 
     setFbStatus('on');
     toast('Firebase connected (' + getFirebaseEnvConfig().label + ')', 'ok');
@@ -12713,51 +12708,58 @@ async function _renderCustomerLedger(customerId) {
     const typeLabel = t.type === 'item' ? (t.itemName || 'Item') :
                       t.type === 'return' ? 'Return: ' + (t.itemName || '') :
                       'Payment' + (t.paymentMethod ? ' · ' + t.paymentMethod : '');
-    const detail = t.type === 'item' ? ` ×${t.qty||1} @ ${_fmtNum(t.unitPrice||0)}` : '';
-    const actions = t.id ? `
-      <div style="display:flex;gap:3px;justify-content:center;">
-        <button onclick="openEditCustTxn(${t.id})" title="Edit"
-          style="width:24px;height:24px;border-radius:5px;border:1px solid var(--border);
-                 background:var(--bg2);color:var(--muted);cursor:pointer;font-size:10px;
-                 display:flex;align-items:center;justify-content:center;">
+    // Compact: merge description + date, debit/credit in one Amount column with sign
+    const qty   = t.qty || 1;
+    const price = t.unitPrice || 0;
+    const detail = (t.type !== 'payment' && qty > 0 && price > 0) ? ` ×${qty} @ ${_fmtNum(price)}` : '';
+    const amtVal   = debit > 0 ? _fmtNum(debit) : credit > 0 ? _fmtNum(credit) : '';
+    const amtColor = debit > 0 ? '#dc2626' : '#16a34a';
+    const amtSign  = debit > 0 ? '+' : '−';
+    const actions  = t.id ? `
+      <div style="display:flex;gap:2px;">
+        <button onclick="openEditCustTxn(${t.id})" title="Edit" class="cust-row-btn">
           <i class="fa-solid fa-pen"></i>
         </button>
-        <button onclick="deleteCustTxn(${t.id})" title="Delete"
-          style="width:24px;height:24px;border-radius:5px;border:1px solid rgba(220,38,38,.3);
-                 background:rgba(220,38,38,.06);color:#dc2626;cursor:pointer;font-size:10px;
-                 display:flex;align-items:center;justify-content:center;">
+        <button onclick="deleteCustTxn(${t.id})" title="Delete" class="cust-row-btn cust-row-del">
           <i class="fa-solid fa-trash"></i>
         </button>
       </div>` : '';
     return `<tr class="cust-ledger-row">
       <td class="cust-ledger-date">${t.date || ''}</td>
-      <td class="cust-ledger-desc">${escapeHtml(typeLabel)}${escapeHtml(detail)}${t.note ? '<br><span style="font-size:10px;color:var(--muted);font-style:italic;">' + escapeHtml(t.note) + '</span>' : ''}</td>
-      <td class="cust-ledger-num" style="color:#dc2626;">${debit  > 0 ? _fmtNum(debit)  : ''}</td>
-      <td class="cust-ledger-num" style="color:#16a34a;">${credit > 0 ? _fmtNum(credit) : ''}</td>
-      <td class="cust-ledger-num" style="color:${balColor};font-weight:900;">${_fmtNum(Math.abs(runningBal))}${runningBal < 0 ? ' Cr' : ''}</td>
-      <td style="padding:4px 4px;vertical-align:middle;">${actions}</td>
+      <td class="cust-ledger-desc">
+        ${escapeHtml(typeLabel)}${escapeHtml(detail)}
+        ${t.note ? '<div class="cust-txn-note">' + escapeHtml(t.note) + '</div>' : ''}
+      </td>
+      <td class="cust-ledger-num" style="color:${amtColor};white-space:nowrap;">${amtSign}${amtVal}</td>
+      <td class="cust-ledger-num" style="color:${balColor};font-weight:900;white-space:nowrap;">${_fmtNum(Math.abs(runningBal))}${runningBal < 0 ? ' Cr' : ''}</td>
+      <td style="padding:2px;vertical-align:middle;width:52px;">${actions}</td>
     </tr>`;
   }).join('');
 
   const finalBal = runningBal;
   const finalColor = finalBal > 0 ? '#dc2626' : '#16a34a';
-  el.innerHTML = summaryHtml + `<div style="overflow-x:auto;">
-    <table class="cust-ledger-table cust-ledger-lined">
+  el.innerHTML = summaryHtml + `<table class="cust-ledger-table cust-ledger-lined" style="table-layout:fixed;width:100%;">
+      <colgroup>
+        <col style="width:74px;">
+        <col style="width:auto;">
+        <col style="width:72px;">
+        <col style="width:72px;">
+        <col style="width:52px;">
+      </colgroup>
       <thead><tr>
-        <th>Date</th><th>Description</th>
-        <th class="cust-ledger-num">Debit</th>
-        <th class="cust-ledger-num">Credit</th>
+        <th>Date</th>
+        <th>Description</th>
+        <th class="cust-ledger-num">Amount</th>
         <th class="cust-ledger-num">Balance</th>
         <th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr style="border-top:2px solid var(--border);">
-        <td colspan="4" style="padding:8px 6px;font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);">Balance carried forward</td>
-        <td class="cust-ledger-num" style="font-weight:900;color:${finalColor};font-size:13px;">${finalBal > 0 ? _fmtNum(finalBal) + ' Dr' : finalBal < 0 ? _fmtNum(Math.abs(finalBal)) + ' Cr' : 'Nil'}</td>
+        <td colspan="3" style="padding:8px 6px;font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);">Balance c/f</td>
+        <td class="cust-ledger-num" style="font-weight:900;color:${finalColor};font-size:12px;">${finalBal > 0 ? _fmtNum(finalBal) + ' Dr' : finalBal < 0 ? _fmtNum(Math.abs(finalBal)) + ' Cr' : 'Nil'}</td>
         <td></td>
       </tr></tfoot>
-    </table>
-  </div>`;
+    </table>`;
 }
 
 // _renderCustomerHistory replaced by _renderCustomerLedger above

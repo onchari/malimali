@@ -5937,18 +5937,28 @@ body.photo-lightbox-open { overflow: hidden; }
 }
 
 /* ── Customer Ledger Table ───────────────────────────────────────── */
-.cust-ledger-table { width:100%; border-collapse:collapse; font-size:12px; }
-.cust-ledger-table thead th { background:var(--surface2); padding:7px 5px; font-size:9px; font-weight:800; text-transform:uppercase; color:var(--muted); border-bottom:2px solid var(--border); text-align:left; position:sticky; top:0; z-index:1; }
-.cust-ledger-row td { padding:7px 5px; border-bottom:1px solid var(--border); vertical-align:top; }
-.cust-ledger-date { font-size:10px; color:var(--muted); white-space:nowrap; min-width:58px; }
-.cust-ledger-desc { font-size:12px; color:var(--text); }
-.cust-ledger-num  { text-align:right; font-family:var(--mono); white-space:nowrap; font-size:12px; }
-.cust-ledger-table tfoot td { padding:8px 5px; font-size:11px; background:var(--surface2); }
+.cust-ledger-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
+.cust-ledger-table thead th { background:var(--surface2); padding:6px 5px; font-size:9px; font-weight:800; text-transform:uppercase; color:var(--muted); border-bottom:2px solid var(--border); text-align:left; position:sticky; top:0; z-index:1; white-space:nowrap; overflow:hidden; }
+.cust-ledger-row td { padding:6px 5px; border-bottom:1px solid var(--border); vertical-align:top; }
+.cust-ledger-row:active { background:var(--bg2); }
+.cust-ledger-date { font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden; }
+.cust-ledger-desc { font-size:12px; color:var(--text); overflow:hidden; word-break:break-word; }
+.cust-txn-note    { font-size:10px; color:var(--muted); font-style:italic; margin-top:1px; }
+.cust-ledger-num  { text-align:right; font-family:var(--mono); white-space:nowrap; font-size:12px; overflow:hidden; }
+.cust-ledger-table tfoot td { padding:7px 5px; font-size:10px; background:var(--surface2); }
 /* Column separator lines */
 .cust-ledger-lined th,
 .cust-ledger-lined td { border-right:1px solid var(--border); }
 .cust-ledger-lined th:last-child,
 .cust-ledger-lined td:last-child { border-right:none; }
+/* Row action buttons */
+.cust-row-btn {
+  width:22px; height:22px; border-radius:4px;
+  border:1px solid var(--border); background:var(--bg2);
+  color:var(--muted); cursor:pointer; font-size:9px;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.cust-row-del { border-color:rgba(220,38,38,.3); background:rgba(220,38,38,.05); color:#dc2626; }
 
 /* ── Customers Module ──────────────────────────────────────────────── */
 
