@@ -10885,6 +10885,14 @@ async function renderHistoryPage() {
     ceiling = new Date(firstThisMonth.toISOString().split('T')[0] + 'T00:00:00');
   }
 
+  // Active payment filter
+  const _histPay = window._histPayFilter || 'all';
+  // Item search filter
+  const _histSearch = (document.getElementById('hist-item-search')?.value || '').toLowerCase().trim();
+  // Update search clear button visibility
+  const _hscBtn = document.getElementById('hist-search-clear');
+  if (_hscBtn) _hscBtn.style.display = _histSearch ? 'flex' : 'none';
+
   const byDate = {};
   allSales.forEach(s => {
     const d = s.businessDate || s.date?.slice(0,10) || today;
@@ -10892,12 +10900,26 @@ async function renderHistoryPage() {
     const dTime = new Date(d + 'T12:00:00');
     if (cutoff  && dTime < cutoff)  return;
     if (ceiling && dTime >= ceiling) return;
-    if (!byDate[d]) byDate[d] = { sales:[], revenue:0, profit:0, cost:0, qty:0 };
+    // Payment filter
+    if (_histPay !== 'all') {
+      const pm = (s.paymentMethod || 'cash').toLowerCase();
+      if (pm !== _histPay) return;
+    }
+    // Item name/code search
+    if (_histSearch) {
+      const nameMatch = (s.itemName || '').toLowerCase().includes(_histSearch);
+      const codeMatch = (s.itemCode || '').toLowerCase().includes(_histSearch);
+      if (!nameMatch && !codeMatch) return;
+    }
+    if (!byDate[d]) byDate[d] = { sales:[], revenue:0, profit:0, cost:0, qty:0, hours:{} };
     byDate[d].sales.push(s);
     byDate[d].revenue += (s.revenue || 0);
     byDate[d].profit  += (s.profit  || 0);
     byDate[d].cost    += ((s.revenue||0) - (s.profit||0));
     byDate[d].qty     += (s.qty || 0);
+    // Track hourly distribution for sparkline (0-23)
+    const hr = s.date ? new Date(s.date).getHours() : 12;
+    byDate[d].hours[hr] = (byDate[d].hours[hr] || 0) + (s.revenue || 0);
   });
 
   const datesSorted = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
@@ -10931,7 +10953,30 @@ async function renderHistoryPage() {
   // Store byDate for click access
   window._histByDate = byDate;
 
-  // Day cards (5 per row)
+  // Helper: build a 6-bar sparkline SVG from hourly data
+  function _sparkline(hours) {
+    const slots = [
+      [5,9,'Morning'], [9,12,'Late morning'], [12,15,'Afternoon'],
+      [15,18,'Eve'], [18,22,'Night'], [22,5,'Late night']
+    ];
+    const vals = slots.map(([from, to]) => {
+      let v = 0;
+      for (let h = from; h !== to; h = (h + 1) % 24) v += (hours[h] || 0);
+      return v;
+    });
+    const max = Math.max(...vals, 1);
+    const bars = vals.map((v, i) => {
+      const h = Math.round((v / max) * 20) || 1;
+      const x = i * 9 + 1;
+      return `<rect x="${x}" y="${22 - h}" width="7" height="${h}" rx="1" fill="${v > 0 ? '#16a34a' : '#e5e7eb'}"/>`;
+    }).join('');
+    return `<svg width="56" height="24" viewBox="0 0 56 24" class="hdc-spark">${bars}</svg>`;
+  }
+
+  // Running total for cumulative profit
+  let runningProfit = 0;
+
+  // Day cards (5 per row), newest first
   const dayCards = datesSorted.map(date => {
     const day    = byDate[date];
     const safeId = date.replace(/-/g,'');
@@ -10940,8 +10985,12 @@ async function renderHistoryPage() {
     const dnum   = dt.getDate();
     const mon    = dt.toLocaleDateString('en-GB', { month:'short' });
     const earningColor = day.profit >= 0 ? '#16a34a' : '#dc2626';
+    const isBest = date === bestRevDay && datesSorted.length > 1;
+    runningProfit += day.profit;
+    const spark = _sparkline(day.hours || {});
 
-    return `<div class="pr-day-card" onclick="expandHistDay('${safeId}')">
+    return `<div class="pr-day-card${isBest ? ' hdc-best' : ''}" onclick="expandHistDay('${safeId}')">
+      ${isBest ? '<div class="hdc-best-badge">★ Best day</div>' : ''}
       <div class="pr-day-header">
         <span class="pr-day-date"><strong>${wday} ${dnum}</strong> ${mon}</span>
         <span class="pr-day-meta">${day.sales.length} sales • ${fmtN(day.qty)} pcs</span>
@@ -10959,6 +11008,12 @@ async function renderHistoryPage() {
           <div class="pr-fig-lbl">Earning</div>
           <div class="pr-fig-val" style="color:${earningColor};font-weight:900;font-family:var(--mono);">${_fmtNum(day.profit)}</div>
         </div>
+      </div>
+      <div class="hdc-footer">
+        ${spark}
+        <span class="hdc-running" style="color:${runningProfit>=0?'#16a34a':'#dc2626'};">
+          Σ ${_fmtNum(runningProfit)}
+        </span>
       </div>
     </div>`;
   }).join('');
@@ -11172,25 +11227,54 @@ function expandHistDay(safeId) {
 window.expandHistDay = expandHistDay;
 
 async function exportSalesReport() {
+  // Export only the currently visible period + filters
   const allSales = await dbAll('sales');
+  const filterVal = document.getElementById('hist-period-filter')?.value || 'all';
+  const today = todayDateStr();
+  const _histPay = window._histPayFilter || 'all';
+  const _histSearch = (document.getElementById('hist-item-search')?.value || '').toLowerCase().trim();
+
+  const filtered = [...allSales].filter(s => {
+    const d = s.businessDate || (s.date||'').slice(0,10);
+    if (filterVal === 'today') { if (d !== today) return false; }
+    else if (filterVal === 'yesterday') {
+      const y = new Date(); y.setDate(y.getDate()-1);
+      if (d !== y.toISOString().split('T')[0]) return false;
+    } else if (filterVal !== 'all') {
+      // reuse same logic — just approximate by checking if in visible byDate
+      if (!window._histByDate?.[d] && d !== today) return false;
+    }
+    if (_histPay !== 'all' && (s.paymentMethod||'cash').toLowerCase() !== _histPay) return false;
+    if (_histSearch && !(s.itemName||'').toLowerCase().includes(_histSearch) && !(s.itemCode||'').toLowerCase().includes(_histSearch)) return false;
+    return true;
+  }).sort((a,b)=>(b.businessDate||'').localeCompare(a.businessDate||''));
+
+  const periodLabel = filterVal.replace('_',' ');
   const rows = [['Date','Item','Code','Qty','Buy Price','Revenue','Profit','Payment']];
-  [...allSales].sort((a,b)=>(b.businessDate||'').localeCompare(a.businessDate||'')).forEach(s=>{
-    rows.push([
-      s.businessDate || (s.date||'').slice(0,10),
-      s.itemName || '', s.itemCode || '',
-      s.qty||1, s.buyPrice||0,
-      s.revenue||0, s.profit||0, s.paymentMethod||'cash'
-    ]);
-  });
+  filtered.forEach(s => rows.push([
+    s.businessDate || (s.date||'').slice(0,10),
+    s.itemName || '', s.itemCode || '',
+    s.qty||1, s.buyPrice||0, s.revenue||0, s.profit||0, s.paymentMethod||'cash'
+  ]));
   const csv  = rows.map(r => r.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
   const blob = new Blob([csv], { type:'text/csv' });
   const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement('a'), { href:url, download:'sales-report.csv' });
+  const a    = Object.assign(document.createElement('a'), { href:url, download:'sales-'+periodLabel+'.csv' });
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
-  toast('Report downloaded', 'ok');
+  toast(filtered.length + ' records exported', 'ok');
 }
 window.exportSalesReport = exportSalesReport;
+
+/** Payment method chip selector */
+function histSetPay(method) {
+  window._histPayFilter = method;
+  document.querySelectorAll('.hist-pay-chip').forEach(b => {
+    b.classList.toggle('active', b.dataset.pay === method);
+  });
+  renderHistoryPage();
+}
+window.histSetPay = histSetPay;
 
 function collapseHistDay() {
   _expandedHistDay = null;

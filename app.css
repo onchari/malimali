@@ -4881,6 +4881,50 @@ body.photo-lightbox-open { overflow: hidden; }
   gap: 8px;
   margin-bottom: 10px;
 }
+/* ── History controls bar ────────────────────────────────────────── */
+.hist-controls { padding: 4px 0 6px; display: flex; flex-direction: column; gap: 8px; }
+.hist-controls-row1 { display: flex; align-items: center; justify-content: space-between; }
+.hist-period-sel { width: auto; height: 34px; font-size: 12px; padding: 0 28px 0 8px; }
+.hist-search-wrap { margin: 0 !important; }
+.hist-pay-chips { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+.hist-pay-chip {
+  font-size: 11px; font-weight: 700;
+  padding: 4px 11px; border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--bg); color: var(--muted);
+  cursor: pointer; white-space: nowrap;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.hist-pay-chip.active {
+  background: var(--accent); border-color: var(--accent); color: white;
+}
+
+/* ── Day card: best-day highlight ────────────────────────────────── */
+.pr-day-card { position: relative; }
+.hdc-best {
+  border: 2px solid #f59e0b !important;
+  background: #fffbeb !important;
+}
+.hdc-best-badge {
+  position: absolute; top: -8px; left: 10px;
+  font-size: 9px; font-weight: 800;
+  background: #f59e0b; color: white;
+  padding: 1px 7px; border-radius: 10px;
+  letter-spacing: .3px;
+}
+
+/* ── Sparkline + running total footer ────────────────────────────── */
+.hdc-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 6px; padding-top: 5px;
+  border-top: 1px solid var(--border);
+}
+.hdc-spark { display: block; flex-shrink: 0; }
+.hdc-running {
+  font-size: 9px; font-weight: 800;
+  font-family: var(--mono); white-space: nowrap;
+}
+
 .hdc {
   background: var(--surface);
   border: 1.5px solid var(--border);
