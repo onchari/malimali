@@ -10856,42 +10856,49 @@ async function renderHistoryPage() {
   // navigating here from a dashboard card shows the matching range.
   const filterEl  = UI.el('hist-period-filter');
   const filterVal = filterEl ? filterEl.value : 'today';
-  let cutoff = null;
-  let ceiling = null;  // upper bound (exclusive) for prev periods
+
+  // Timezone-safe date helper — uses local calendar, no UTC conversion
+  function _localDateStr(offsetDays) {
+    const [y, m, d] = today.split('-').map(Number);
+    const dt = new Date(y, m - 1, d + offsetDays);
+    return dt.getFullYear() + '-' +
+      String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+      String(dt.getDate()).padStart(2, '0');
+  }
+  function _monthStr(yearOffset, monthOffset) {
+    const [y, m] = today.split('-').map(Number);
+    const dt = new Date(y, m - 1 + monthOffset + yearOffset * 12, 1);
+    return dt.getFullYear() + '-' +
+      String(dt.getMonth() + 1).padStart(2, '0') + '-01';
+  }
+
+  // cutoffStr / ceilingStr are YYYY-MM-DD strings; compare directly (sorts correctly)
+  let cutoffStr  = null;   // include dates >= cutoffStr
+  let ceilingStr = null;   // include dates <  ceilingStr (exclusive upper bound)
 
   if (filterVal === 'today') {
-    cutoff = null;   // Today's sales go to the top section; past records shows all prior days
+    cutoffStr = null;   // All past days shown; today is in the top section
   } else if (filterVal === 'yesterday') {
-    const d = new Date(); d.setDate(d.getDate() - 1);
-    const yDate = d.toISOString().split('T')[0];
-    cutoff   = new Date(yDate + 'T00:00:00');
-    ceiling  = new Date(today + 'T00:00:00');
+    cutoffStr  = _localDateStr(-1);   // yesterday
+    ceilingStr = today;               // exclude today
   } else if (filterVal === 'week') {
-    const d = new Date(); d.setDate(d.getDate() - 6);
-    cutoff = new Date(d.toISOString().split('T')[0] + 'T00:00:00');
+    cutoffStr  = _localDateStr(-6);   // 7 days including today
   } else if (filterVal === 'prev_week') {
-    const end = new Date(); end.setDate(end.getDate() - 7);
-    const start = new Date(end); start.setDate(start.getDate() - 6);
-    cutoff  = new Date(start.toISOString().split('T')[0] + 'T00:00:00');
-    ceiling = new Date(end.toISOString().split('T')[0] + 'T23:59:59');
+    cutoffStr  = _localDateStr(-13);  // 7 days ending 7 days ago
+    ceilingStr = _localDateStr(-6);
   } else if (filterVal === 'month') {
-    const d = new Date(); d.setDate(1);
-    cutoff = new Date(d.toISOString().split('T')[0] + 'T00:00:00');
+    cutoffStr  = _monthStr(0, 0);     // 1st of this month
   } else if (filterVal === 'prev_month') {
-    const now = new Date();
-    const firstThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const firstPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    cutoff  = new Date(firstPrevMonth.toISOString().split('T')[0] + 'T00:00:00');
-    ceiling = new Date(firstThisMonth.toISOString().split('T')[0] + 'T00:00:00');
+    cutoffStr  = _monthStr(0, -1);    // 1st of previous month
+    ceilingStr = _monthStr(0, 0);     // 1st of this month (exclusive)
   }
 
   const byDate = {};
   allSales.forEach(s => {
-    const d = s.businessDate || s.date?.slice(0,10) || today;
-    if (d === today) return;
-    const dTime = new Date(d + 'T12:00:00');
-    if (cutoff  && dTime < cutoff)  return;
-    if (ceiling && dTime >= ceiling) return;
+    const d = s.businessDate || (s.date ? s.date.slice(0, 10) : null) || today;
+    if (d === today) return;           // today goes to the top section
+    if (cutoffStr  && d < cutoffStr)  return;
+    if (ceilingStr && d >= ceilingStr) return;
     if (!byDate[d]) byDate[d] = { sales:[], revenue:0, profit:0, cost:0, qty:0, hours:{} };
     byDate[d].sales.push(s);
     byDate[d].revenue += (s.revenue || 0);
