@@ -11076,6 +11076,12 @@ async function renderHistoryPage() {
         <i class="fa-solid fa-download"></i> Export Report
       </button>
     </div>`;
+
+  // Auto-expand today's card when "Today" filter is selected
+  if (filterVal === 'today' && byDate[today]) {
+    _expandedHistDay = null;  // reset so expandHistDay doesn't collapse
+    setTimeout(() => expandHistDay(today.replace(/-/g, '')), 0);
+  }
 }
 
 // Money formatted for a table cell (no currency prefix - shown once in the header instead)
@@ -11188,14 +11194,34 @@ function expandHistDay(safeId) {
   const dt       = new Date(date + 'T12:00:00');
   const label    = dt.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
   const rows     = [...day.sales].sort((a,b) => new Date(b.date) - new Date(a.date));
-  const profColor = day.profit >= 0 ? 'var(--green)' : 'var(--red)';
+  const profColor = day.profit >= 0 ? '#16a34a' : '#dc2626';
+  const totalPcs  = rows.reduce((s, r) => s + (r.qty || 1), 0);
+  const isToday   = date === todayDateStr();
 
   area.innerHTML = `
     <div class="hist-drill-header">
-      <button class="hist-drill-back" onclick="collapseHistDay()">
+      ${!isToday ? `<button class="hist-drill-back" onclick="collapseHistDay()">
         <i class="fa-solid fa-arrow-left"></i> All days
-      </button>
+      </button>` : ''}
       <div class="hist-drill-title">${label}</div>
+    </div>
+    <div class="hist-day-stats-row">
+      <div class="hdsr-card">
+        <div class="hdsr-val pr-col-blue">${_fmtNum(day.revenue)}</div>
+        <div class="hdsr-lbl">Revenue</div>
+      </div>
+      <div class="hdsr-card">
+        <div class="hdsr-val pr-col-orange">${_fmtNum(day.cost)}</div>
+        <div class="hdsr-lbl">Cost</div>
+      </div>
+      <div class="hdsr-card hdsr-card-earn">
+        <div class="hdsr-val" style="color:${profColor};">${_fmtNum(day.profit)}</div>
+        <div class="hdsr-lbl">Earning</div>
+      </div>
+      <div class="hdsr-card">
+        <div class="hdsr-val">${fmtN(totalPcs)}</div>
+        <div class="hdsr-lbl">Sold</div>
+      </div>
     </div>
     ${_histTable(rows, day.cost, day.revenue, day.profit)}`;
 

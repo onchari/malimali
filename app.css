@@ -5003,6 +5003,36 @@ body.photo-lightbox-open { overflow: hidden; }
   margin-top: 1px;
 }
 
+/* ── Today/drill-down 4-stat row ─────────────────────────────────── */
+.hist-day-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.hdsr-card {
+  background: var(--surface);
+  padding: 10px 8px;
+  text-align: center;
+}
+.hdsr-val {
+  font-size: 15px;
+  font-weight: 900;
+  font-family: var(--mono);
+  color: var(--text);
+  line-height: 1;
+}
+.hdsr-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  margin-top: 3px;
+}
+.hdsr-card-earn { background: rgba(22,163,74,.05); }
+
 /* Drill-down expanded area */
 .hist-expanded-area {
   background: var(--surface);
