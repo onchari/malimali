@@ -4899,14 +4899,25 @@ body.photo-lightbox-open { overflow: hidden; }
   background: var(--accent); border-color: var(--accent); color: white;
 }
 
-/* ── Day card: best-day highlight ────────────────────────────────── */
+/* ── Day card: today + best-day highlights ───────────────────────── */
 .pr-day-card { position: relative; }
+.hdc-today {
+  border: 2px solid var(--accent) !important;
+  background: rgba(30,122,62,.04) !important;
+}
+.hdc-today-badge {
+  position: absolute; top: -8px; left: 10px;
+  font-size: 9px; font-weight: 800;
+  background: var(--accent); color: white;
+  padding: 1px 7px; border-radius: 10px;
+  letter-spacing: .3px;
+}
 .hdc-best {
   border: 2px solid #f59e0b !important;
   background: #fffbeb !important;
 }
 .hdc-best-badge {
-  position: absolute; top: -8px; left: 10px;
+  position: absolute; top: -8px; right: 10px;
   font-size: 9px; font-weight: 800;
   background: #f59e0b; color: white;
   padding: 1px 7px; border-radius: 10px;

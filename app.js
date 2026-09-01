@@ -10817,47 +10817,15 @@ window.onTypeChange = onTypeChange;
 
 async function renderHistoryPage() {
   const today     = todayDateStr();
-  const todayFull = new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-
-  UI.setText('hist-today-date', todayFull);
-
-  // Ensure allItems is fresh so inventory status badges are accurate
+  // Ensure allItems is fresh for inventory status badges
   if (!allItems.length) allItems = await dbAll('items');
 
   const allSales = await dbAll('sales');
 
-  // ── Today ──────────────────────────────────────────────────
-  const todaySales = allSales.filter(s => (s.businessDate || s.date?.slice(0,10)) === today);
-  const todayRev   = todaySales.reduce((s,x) => s + (x.revenue||0), 0);
-  const todayProf  = todaySales.reduce((s,x) => s + (x.profit||0),  0);
-  const todayCost  = todayRev - todayProf;
-
-  UI.setText('hist-today-revenue', fmt(todayRev));
-  UI.setText('hist-today-cost',    fmt(todayCost));
-  UI.setText('hist-today-profit',  fmt(todayProf));
-  UI.setText('hist-today-sales',   todaySales.length);
-
-  // Today - profit tile colour
-  const profEl = document.getElementById('hist-today-profit');
-  if (profEl) profEl.style.color = todayProf >= 0 ? 'var(--green)' : 'var(--red)';
-
-  const todayList = UI.el('hist-today-list');
-  if (todayList) {
-    if (!todaySales.length) {
-      todayList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No sales today yet.</div>';
-    } else {
-      const rows = [...todaySales].sort((a,b) => new Date(b.date) - new Date(a.date));
-      todayList.innerHTML = _histTable(rows, todayCost, todayRev, todayProf);
-    }
-  }
-
-  // ── Past records ───────────────────────────────────────────
-  // Uses the same period vocabulary as the dashboard period selector, so
-  // navigating here from a dashboard card shows the matching range.
   const filterEl  = UI.el('hist-period-filter');
   const filterVal = filterEl ? filterEl.value : 'today';
 
-  // Timezone-safe date helper — uses local calendar, no UTC conversion
+  // ── Timezone-safe local date helpers (no UTC shift) ────────────
   function _localDateStr(offsetDays) {
     const [y, m, d] = today.split('-').map(Number);
     const dt = new Date(y, m - 1, d + offsetDays);
@@ -10865,38 +10833,59 @@ async function renderHistoryPage() {
       String(dt.getMonth() + 1).padStart(2, '0') + '-' +
       String(dt.getDate()).padStart(2, '0');
   }
-  function _monthStr(yearOffset, monthOffset) {
+  function _monthStr(yearOff, monthOff) {
     const [y, m] = today.split('-').map(Number);
-    const dt = new Date(y, m - 1 + monthOffset + yearOffset * 12, 1);
+    const dt = new Date(y, m - 1 + monthOff + yearOff * 12, 1);
     return dt.getFullYear() + '-' +
       String(dt.getMonth() + 1).padStart(2, '0') + '-01';
   }
 
-  // cutoffStr / ceilingStr are YYYY-MM-DD strings; compare directly (sorts correctly)
-  let cutoffStr  = null;   // include dates >= cutoffStr
-  let ceilingStr = null;   // include dates <  ceilingStr (exclusive upper bound)
+  // ── Filter ranges ──────────────────────────────────────────────
+  // cutoffStr  = earliest date to include (d >= cutoffStr)
+  // ceilingStr = exclusive upper bound    (d <  ceilingStr)
+  // includeToday = whether today's records appear in this view
+  let cutoffStr    = null;
+  let ceilingStr   = null;
+  let includeToday = false;
+  let rangeLabel   = 'Records';
 
   if (filterVal === 'today') {
-    cutoffStr = _monthStr(0, 0);   // 1st of current month → yesterday (today is in top section)
-  } else if (filterVal === 'yesterday') {
-    cutoffStr  = _localDateStr(-1);   // yesterday
-    ceilingStr = today;               // exclude today
+    cutoffStr    = today;           // only today (00:00 → now)
+    ceilingStr   = null;
+    includeToday = true;
+    rangeLabel   = new Date().toLocaleDateString('en-GB',
+      { weekday:'long', day:'numeric', month:'long', year:'numeric' });
   } else if (filterVal === 'week') {
-    cutoffStr  = _localDateStr(-6);   // 7 days including today
+    cutoffStr    = _localDateStr(-6); // 7 days incl. today
+    includeToday = true;
+    rangeLabel   = _localDateStr(-6) + ' – ' + today;
   } else if (filterVal === 'prev_week') {
-    cutoffStr  = _localDateStr(-7);   // 7 days ending yesterday (today excluded by top section)
-    ceilingStr = null;
+    cutoffStr    = _localDateStr(-7); // 7 days before today
+    ceilingStr   = today;             // today excluded
+    rangeLabel   = _localDateStr(-7) + ' – ' + _localDateStr(-1);
   } else if (filterVal === 'month') {
-    cutoffStr  = _monthStr(0, 0);     // 1st of this month
+    cutoffStr    = _monthStr(0, 0);   // 1st of this month → today
+    includeToday = true;
+    rangeLabel   = _monthStr(0, 0) + ' – ' + today;
   } else if (filterVal === 'prev_month') {
-    cutoffStr  = _monthStr(0, -1);    // 1st of previous month
-    ceilingStr = _monthStr(0, 0);     // 1st of this month (exclusive)
+    cutoffStr    = _localDateStr(-29); // rolling 30 days incl. today
+    includeToday = true;
+    rangeLabel   = _localDateStr(-29) + ' – ' + today;
+  } else if (filterVal === 'all') {
+    cutoffStr    = null;
+    includeToday = true;
+    rangeLabel   = 'All records';
   }
+
+  // Show date range label
+  const rangeEl = document.getElementById('hist-range-label');
+  if (rangeEl) rangeEl.textContent = rangeLabel;
 
   const byDate = {};
   allSales.forEach(s => {
     const d = s.businessDate || (s.date ? s.date.slice(0, 10) : null) || today;
-    if (d === today) return;           // today goes to the top section
+    if (d === today && !includeToday) return;    // skip today unless filter includes it
+    if (d > today) return;                        // never show future records
     if (cutoffStr  && d < cutoffStr)  return;
     if (ceilingStr && d >= ceilingStr) return;
     if (!byDate[d]) byDate[d] = { sales:[], revenue:0, profit:0, cost:0, qty:0, hours:{} };
@@ -10973,12 +10962,14 @@ async function renderHistoryPage() {
     const dnum   = dt.getDate();
     const mon    = dt.toLocaleDateString('en-GB', { month:'short' });
     const earningColor = day.profit >= 0 ? '#16a34a' : '#dc2626';
-    const isBest = date === bestRevDay && datesSorted.length > 1;
+    const isBest  = date === bestRevDay && datesSorted.length > 1;
+    const isToday = date === today;
     runningProfit += day.profit;
     const spark = _sparkline(day.hours || {});
 
-    return `<div class="pr-day-card${isBest ? ' hdc-best' : ''}" onclick="expandHistDay('${safeId}')">
-      ${isBest ? '<div class="hdc-best-badge">★ Best day</div>' : ''}
+    return `<div class="pr-day-card${isBest ? ' hdc-best' : ''}${isToday ? ' hdc-today' : ''}" onclick="expandHistDay('${safeId}')">
+      ${isBest  ? '<div class="hdc-best-badge">★ Best day</div>' : ''}
+      ${isToday ? '<div class="hdc-today-badge">Today</div>' : ''}
       <div class="pr-day-header">
         <span class="pr-day-date"><strong>${wday} ${dnum}</strong> ${mon}</span>
         <span class="pr-day-meta">${day.sales.length} sales • ${fmtN(day.qty)} pcs</span>

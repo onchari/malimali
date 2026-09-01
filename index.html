@@ -1555,27 +1555,19 @@
     <div id="sell-results"></div>
   </div>
 
-  <!-- History: today summary + past records -->
+  <!-- History: unified filter view -->
   <div id="sales-slot-history" class="ops-slot">
-    <div class="hist-today-header">
-      <div class="hist-today-date" id="hist-today-date"></div>
-    </div>
-
-    <div id="hist-today-list" style="padding:0 0 8px;"></div>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0 6px;">
-      <span class="sec-label" style="padding:0;margin:0;">Past Records</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0 8px;">
+      <span class="sec-label" style="padding:0;margin:0;" id="hist-range-label">Records</span>
       <select id="hist-period-filter" class="add-select" style="width:auto;height:34px;font-size:12px;padding:0 28px 0 8px;" onchange="renderHistoryPage()">
-        <option value="today" selected>Today</option>
-        <option value="yesterday">Yesterday</option>
-        <option value="week">This Week</option>
+        <option value="today"     selected>Today</option>
+        <option value="week">Past 1 Week</option>
         <option value="prev_week">Previous Week</option>
         <option value="month">This Month</option>
-        <option value="prev_month">Previous Month</option>
+        <option value="prev_month">Past 1 Month</option>
         <option value="all">All Time</option>
       </select>
     </div>
-
     <div id="hist-records-list" style="padding:0 0 80px;"></div>
   </div>
 
