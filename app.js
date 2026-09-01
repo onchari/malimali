@@ -12276,14 +12276,14 @@ async function _nextCustomerId() {
 
 // ── Add Customer sheet ─────────────────────────────────────────────
 async function openAddCustomerSheet() {
-  const sheet = document.getElementById('add-customer-sheet');
-  if (!sheet) return;
-  sheet.querySelector('#cust-form-name').value = '';
-  sheet.querySelector('#cust-form-phone').value = '';
-  sheet.querySelector('#cust-form-location').value = '';
-  sheet.querySelector('#cust-form-notes').value = '';
-  sheet.classList.add('open');
-  setTimeout(() => sheet.querySelector('#cust-form-name').focus(), 120);
+  const overlay = document.getElementById('add-customer-sheet');
+  if (!overlay) return;
+  const n = document.getElementById('cust-form-name');
+  const p = document.getElementById('cust-form-phone');
+  if (n) n.value = '';
+  if (p) p.value = '';
+  overlay.classList.add('open');
+  setTimeout(() => { if (n) n.focus(); }, 120);
 }
 window.openAddCustomerSheet = openAddCustomerSheet;
 
@@ -12545,17 +12545,14 @@ async function _renderCustomerHistory(customerId) {
 
 // ── Add Item to Customer ───────────────────────────────────────────
 async function openCustItemSheet() {
-  const sheet = document.getElementById('cust-item-sheet');
-  if (!sheet) return;
-  sheet.querySelector('#cust-item-name').value    = '';
-  sheet.querySelector('#cust-item-variant').value = '';
-  sheet.querySelector('#cust-item-size').value    = '';
-  sheet.querySelector('#cust-item-qty').value     = '1';
-  sheet.querySelector('#cust-item-price').value   = '';
-  sheet.querySelector('#cust-item-note').value    = '';
-  sheet.querySelector('#cust-item-date').value    = todayDateStr();
-  sheet.classList.add('open');
-  setTimeout(() => sheet.querySelector('#cust-item-name').focus(), 120);
+  ['cust-item-name','cust-item-variant','cust-item-size','cust-item-price','cust-item-note'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const qty  = document.getElementById('cust-item-qty');  if (qty)  qty.value  = '1';
+  const date = document.getElementById('cust-item-date'); if (date) date.value = todayDateStr();
+  const overlay = document.getElementById('cust-item-sheet');
+  if (overlay) overlay.classList.add('open');
+  setTimeout(() => { const n = document.getElementById('cust-item-name'); if (n) n.focus(); }, 120);
 }
 window.openCustItemSheet = openCustItemSheet;
 
@@ -12605,14 +12602,13 @@ window.saveCustItem = saveCustItem;
 
 // ── Record Payment ─────────────────────────────────────────────────
 async function openCustPaymentSheet() {
-  const sheet = document.getElementById('cust-payment-sheet');
-  if (!sheet) return;
-  sheet.querySelector('#cust-pay-amount').value  = '';
-  sheet.querySelector('#cust-pay-method').value  = 'Cash';
-  sheet.querySelector('#cust-pay-note').value    = '';
-  sheet.querySelector('#cust-pay-date').value    = todayDateStr();
-  sheet.classList.add('open');
-  setTimeout(() => sheet.querySelector('#cust-pay-amount').focus(), 120);
+  const a = document.getElementById('cust-pay-amount'); if (a) a.value = '';
+  const m = document.getElementById('cust-pay-method'); if (m) m.value = 'Cash';
+  const n = document.getElementById('cust-pay-note');   if (n) n.value = '';
+  const d = document.getElementById('cust-pay-date');   if (d) d.value = todayDateStr();
+  const overlay = document.getElementById('cust-payment-sheet');
+  if (overlay) overlay.classList.add('open');
+  setTimeout(() => { if (a) a.focus(); }, 120);
 }
 window.openCustPaymentSheet = openCustPaymentSheet;
 

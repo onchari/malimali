@@ -2720,199 +2720,240 @@
      PAGE: CUSTOMERS  (id="page-customers")
      Credit tracking, balances, transaction history
      ============================================================== -->
+<!-- ── CUSTOMERS PAGE ──────────────────────────────────────────── -->
 <div class="page" id="page-customers">
-  <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;padding:14px 14px 0;">
-    <div class="page-title" style="font-size:18px;font-weight:900;">Customers</div>
-    <button class="btn-primary" onclick="openAddCustomerSheet()" style="font-size:13px;padding:8px 14px;">
-      <i class="fa-solid fa-plus"></i> Add Customer
+
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 14px 8px;">
+    <div style="font-size:18px;font-weight:900;">Customers</div>
+    <button onclick="openAddCustomerSheet()"
+            style="display:flex;align-items:center;gap:6px;background:var(--accent);color:white;
+                   border:none;border-radius:var(--r);padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;">
+      <i class="fa-solid fa-plus"></i> Add
     </button>
   </div>
 
-  <!-- Search bar -->
-  <div style="padding:10px 14px 0;position:relative;display:flex;align-items:center;gap:8px;">
-    <div style="flex:1;position:relative;">
-      <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;"></i>
-      <input type="text" id="cust-search-input" placeholder="Search by name or phone…"
-        oninput="onCustomerSearch(this.value)"
-        style="width:100%;padding:9px 36px 9px 32px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;">
-    </div>
-    <button id="cust-search-clear" onclick="document.getElementById('cust-search-input').value='';onCustomerSearch('');"
-      style="display:none;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--bg2);border:none;cursor:pointer;color:var(--muted);flex-shrink:0;">
+  <div class="search-wrap" style="margin:0 12px 8px;">
+    <span class="s-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+    <input class="search-input" id="cust-search-input" placeholder="Search name or phone…"
+           autocomplete="off" oninput="onCustomerSearch(this.value)">
+    <button id="cust-search-clear" class="search-clear-btn"
+            onclick="document.getElementById('cust-search-input').value='';onCustomerSearch('');"
+            style="display:none;" aria-label="Clear">
       <i class="fa-solid fa-xmark"></i>
     </button>
   </div>
 
-  <!-- Customer list -->
-  <div id="customer-list" style="margin-top:10px;overflow-y:auto;">
-    <div class="empty-state" style="padding:40px 20px;text-align:center;color:var(--muted);">
-      <i class="fa-solid fa-users" style="font-size:32px;margin-bottom:10px;display:block;opacity:.3;"></i>
-      <div>No customers yet. Tap <strong>+ Add Customer</strong> to get started.</div>
-    </div>
-  </div>
+  <div id="customer-list"></div>
+
 </div><!-- /page-customers -->
 
 
-<!-- ==============================================================
-     SHEET: ADD CUSTOMER
-     ============================================================== -->
-<div class="sheet" id="add-customer-sheet">
-  <div class="sheet-header">
-    <div class="sheet-title">New Customer</div>
-    <button class="sheet-close" onclick="closeAddCustomerSheet()"><i class="fa-solid fa-xmark"></i></button>
-  </div>
-  <div class="sheet-body">
-    <div class="form-group">
-      <label class="form-label">Name <span style="color:var(--red);">*</span></label>
-      <input type="text" id="cust-form-name" class="form-input" placeholder="Customer name">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Phone</label>
-      <input type="tel" id="cust-form-phone" class="form-input" placeholder="07xx xxx xxx">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Location</label>
-      <input type="text" id="cust-form-location" class="form-input" placeholder="Area / estate">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Notes</label>
-      <textarea id="cust-form-notes" class="form-input" rows="3" placeholder="Any notes…" style="resize:vertical;"></textarea>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
-      <button class="btn-secondary" onclick="closeAddCustomerSheet()">Cancel</button>
-      <button class="btn-primary" onclick="saveNewCustomer()">Save Customer</button>
-    </div>
-  </div>
-</div>
-
-
-<!-- ==============================================================
-     SHEET: CUSTOMER DETAIL (full-screen overlay)
-     ============================================================== -->
-<div class="sheet sheet-full" id="customer-detail-sheet">
-  <div class="cust-detail-hdr">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;">
-      <div>
-        <div class="cust-detail-name" id="cust-detail-name">Customer</div>
-        <div class="cust-detail-id" id="cust-detail-id"></div>
-      </div>
-      <button onclick="closeCustomerDetail()" style="background:rgba(255,255,255,.15);border:none;border-radius:50%;width:32px;height:32px;color:white;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+<!-- ── ADD CUSTOMER ────────────────────────────────────────────── -->
+<div class="sheet-overlay" id="add-customer-sheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div class="sheet-title" style="margin:0;">New Customer</div>
+      <button onclick="closeAddCustomerSheet()"
+              style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);
+                     background:var(--bg2);color:var(--muted);font-size:13px;cursor:pointer;
+                     display:flex;align-items:center;justify-content:center;">
         <i class="fa-solid fa-xmark"></i>
       </button>
     </div>
-    <div class="cust-detail-bal-lbl" style="margin-top:10px;">Outstanding Balance</div>
-    <div class="cust-detail-bal" id="cust-detail-bal">Ksh 0</div>
-  </div>
 
-  <!-- Tabs -->
-  <div class="cust-tabs">
-    <button class="cust-tab active" data-tab="overview" onclick="showCustomerTab('overview')">Overview</button>
-    <button class="cust-tab" data-tab="items"    onclick="showCustomerTab('items')">Items</button>
-    <button class="cust-tab" data-tab="payments" onclick="showCustomerTab('payments')">Payments</button>
-    <button class="cust-tab" data-tab="history"  onclick="showCustomerTab('history')">History</button>
-  </div>
-
-  <!-- Tab content -->
-  <div style="flex:1;overflow-y:auto;">
-    <div class="cust-tab-pane" data-tab="overview" id="cust-tab-overview"></div>
-    <div class="cust-tab-pane" data-tab="items"    id="cust-tab-items"    style="display:none;"></div>
-    <div class="cust-tab-pane" data-tab="payments" id="cust-tab-payments" style="display:none;"></div>
-    <div class="cust-tab-pane" data-tab="history"  id="cust-tab-history"  style="display:none;"></div>
-  </div>
-
-  <!-- Action buttons -->
-  <div class="cust-actions">
-    <button class="cust-act-item" onclick="openCustItemSheet()">
-      <i class="fa-solid fa-box"></i> Add Item
-    </button>
-    <button class="cust-act-pay" onclick="openCustPaymentSheet()">
-      <i class="fa-solid fa-coins"></i> Record Payment
-    </button>
-  </div>
-</div>
-
-
-<!-- ==============================================================
-     SHEET: ADD ITEM TO CUSTOMER
-     ============================================================== -->
-<div class="sheet" id="cust-item-sheet">
-  <div class="sheet-header">
-    <div class="sheet-title">Add Item</div>
-    <button class="sheet-close" onclick="closeCustItemSheet()"><i class="fa-solid fa-xmark"></i></button>
-  </div>
-  <div class="sheet-body">
-    <div class="form-group">
-      <label class="form-label">Item Name <span style="color:var(--red);">*</span></label>
-      <input type="text" id="cust-item-name" class="form-input" placeholder="e.g. Men's Shirt">
+    <div style="margin-bottom:12px;">
+      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">
+        NAME <span style="color:var(--red);">*</span>
+      </label>
+      <input type="text" id="cust-form-name" class="add-input"
+             placeholder="Customer name" autocomplete="off">
     </div>
+    <div style="margin-bottom:20px;">
+      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">
+        PHONE NUMBER
+      </label>
+      <input type="tel" id="cust-form-phone" class="add-input"
+             placeholder="07xx xxx xxx" autocomplete="off">
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-      <div class="form-group">
-        <label class="form-label">Variant / Colour</label>
-        <input type="text" id="cust-item-variant" class="form-input" placeholder="e.g. Blue">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Size</label>
-        <input type="text" id="cust-item-size" class="form-input" placeholder="e.g. XL / 42">
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-      <div class="form-group">
-        <label class="form-label">Qty <span style="color:var(--red);">*</span></label>
-        <input type="number" id="cust-item-qty" class="form-input" value="1" min="0.01" step="any">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Unit Price (Ksh) <span style="color:var(--red);">*</span></label>
-        <input type="number" id="cust-item-price" class="form-input" placeholder="0" min="0" step="any">
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Note</label>
-      <input type="text" id="cust-item-note" class="form-input" placeholder="Optional note">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Date</label>
-      <input type="date" id="cust-item-date" class="form-input">
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
-      <button class="btn-secondary" onclick="closeCustItemSheet()">Cancel</button>
-      <button class="btn-primary" onclick="saveCustItem()">Save Item</button>
+      <button onclick="closeAddCustomerSheet()"
+              style="padding:13px;border-radius:var(--r);border:1.5px solid var(--border);
+                     background:transparent;font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;">
+        Cancel
+      </button>
+      <button onclick="saveNewCustomer()"
+              style="padding:13px;border-radius:var(--r);border:none;background:var(--accent);
+                     color:white;font-size:14px;font-weight:800;cursor:pointer;">
+        Save
+      </button>
     </div>
   </div>
 </div>
 
 
-<!-- ==============================================================
-     SHEET: RECORD PAYMENT
-     ============================================================== -->
-<div class="sheet" id="cust-payment-sheet">
-  <div class="sheet-header">
-    <div class="sheet-title">Record Payment</div>
-    <button class="sheet-close" onclick="closeCustPaymentSheet()"><i class="fa-solid fa-xmark"></i></button>
-  </div>
-  <div class="sheet-body">
-    <div class="form-group">
-      <label class="form-label">Amount (Ksh) <span style="color:var(--red);">*</span></label>
-      <input type="number" id="cust-pay-amount" class="form-input" placeholder="0" min="0.01" step="any">
+<!-- ── CUSTOMER DETAIL (full-screen) ──────────────────────────── -->
+<div class="sheet-overlay" id="customer-detail-sheet" style="align-items:stretch;">
+  <div style="display:flex;flex-direction:column;width:100%;max-width:480px;
+              max-height:100vh;background:var(--surface);overflow:hidden;margin:auto;">
+
+    <!-- Green header -->
+    <div class="cust-detail-hdr">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+        <div>
+          <div class="cust-detail-name" id="cust-detail-name">Customer</div>
+          <div class="cust-detail-id" id="cust-detail-id"></div>
+        </div>
+        <button onclick="closeCustomerDetail()"
+                style="background:rgba(255,255,255,.2);border:none;border-radius:50%;
+                       width:32px;height:32px;color:white;cursor:pointer;font-size:16px;
+                       display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div style="margin-top:10px;font-size:11px;opacity:.8;">Outstanding Balance</div>
+      <div class="cust-detail-bal" id="cust-detail-bal">Ksh 0</div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Payment Method</label>
-      <select id="cust-pay-method" class="form-input">
+
+    <!-- Tabs -->
+    <div class="cust-tabs">
+      <button class="cust-tab active" data-tab="overview" onclick="showCustomerTab('overview')">Overview</button>
+      <button class="cust-tab"        data-tab="items"    onclick="showCustomerTab('items')">Items</button>
+      <button class="cust-tab"        data-tab="payments" onclick="showCustomerTab('payments')">Payments</button>
+      <button class="cust-tab"        data-tab="history"  onclick="showCustomerTab('history')">History</button>
+    </div>
+
+    <!-- Tab content -->
+    <div style="flex:1;overflow-y:auto;min-height:0;">
+      <div class="cust-tab-pane" data-tab="overview" id="cust-tab-overview"></div>
+      <div class="cust-tab-pane" data-tab="items"    id="cust-tab-items"    style="display:none;"></div>
+      <div class="cust-tab-pane" data-tab="payments" id="cust-tab-payments" style="display:none;"></div>
+      <div class="cust-tab-pane" data-tab="history"  id="cust-tab-history"  style="display:none;"></div>
+    </div>
+
+    <!-- Actions -->
+    <div class="cust-actions">
+      <button class="cust-act-item" onclick="openCustItemSheet()">
+        <i class="fa-solid fa-box"></i> Add Item
+      </button>
+      <button class="cust-act-pay" onclick="openCustPaymentSheet()">
+        <i class="fa-solid fa-coins"></i> Record Payment
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── ADD ITEM TO CUSTOMER ────────────────────────────────────── -->
+<div class="sheet-overlay" id="cust-item-sheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div class="sheet-title" style="margin:0;">Add Item</div>
+      <button onclick="closeCustItemSheet()"
+              style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);
+                     background:var(--bg2);color:var(--muted);font-size:13px;cursor:pointer;
+                     display:flex;align-items:center;justify-content:center;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <label class="add-field-lbl">Item Name <span style="color:var(--red);">*</span></label>
+      <input type="text" id="cust-item-name" class="add-input" placeholder="e.g. Men's Shirt" autocomplete="off">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+      <div>
+        <label class="add-field-lbl">Variant / Colour</label>
+        <input type="text" id="cust-item-variant" class="add-input" placeholder="e.g. Blue" autocomplete="off">
+      </div>
+      <div>
+        <label class="add-field-lbl">Size</label>
+        <input type="text" id="cust-item-size" class="add-input" placeholder="e.g. XL / 42" autocomplete="off">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+      <div>
+        <label class="add-field-lbl">Qty <span style="color:var(--red);">*</span></label>
+        <input type="number" id="cust-item-qty" class="add-input add-center" value="1" min="0.01" step="any" inputmode="decimal">
+      </div>
+      <div>
+        <label class="add-field-lbl">Unit Price <span style="color:var(--red);">*</span></label>
+        <input type="number" id="cust-item-price" class="add-input add-center" placeholder="0" min="0" step="any" inputmode="decimal">
+      </div>
+    </div>
+    <div style="margin-bottom:10px;">
+      <label class="add-field-lbl">Note</label>
+      <input type="text" id="cust-item-note" class="add-input" placeholder="Optional" autocomplete="off">
+    </div>
+    <div style="margin-bottom:16px;">
+      <label class="add-field-lbl">Date</label>
+      <input type="date" id="cust-item-date" class="add-input">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <button onclick="closeCustItemSheet()"
+              style="padding:13px;border-radius:var(--r);border:1.5px solid var(--border);
+                     background:transparent;font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;">
+        Cancel
+      </button>
+      <button onclick="saveCustItem()"
+              style="padding:13px;border-radius:var(--r);border:none;background:var(--accent);
+                     color:white;font-size:14px;font-weight:800;cursor:pointer;">
+        Save
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── RECORD PAYMENT ──────────────────────────────────────────── -->
+<div class="sheet-overlay" id="cust-payment-sheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div class="sheet-title" style="margin:0;">Record Payment</div>
+      <button onclick="closeCustPaymentSheet()"
+              style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);
+                     background:var(--bg2);color:var(--muted);font-size:13px;cursor:pointer;
+                     display:flex;align-items:center;justify-content:center;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <label class="add-field-lbl">Amount (Ksh) <span style="color:var(--red);">*</span></label>
+      <input type="number" id="cust-pay-amount" class="add-input add-center"
+             placeholder="0" min="0.01" step="any" inputmode="decimal">
+    </div>
+    <div style="margin-bottom:10px;">
+      <label class="add-field-lbl">Payment Method</label>
+      <select id="cust-pay-method" class="add-select" style="width:100%;">
         <option value="Cash">Cash</option>
         <option value="M-Pesa">M-Pesa</option>
         <option value="Bank Transfer">Bank Transfer</option>
         <option value="Other">Other</option>
       </select>
     </div>
-    <div class="form-group">
-      <label class="form-label">Note</label>
-      <input type="text" id="cust-pay-note" class="form-input" placeholder="Optional note">
+    <div style="margin-bottom:10px;">
+      <label class="add-field-lbl">Note</label>
+      <input type="text" id="cust-pay-note" class="add-input" placeholder="Optional" autocomplete="off">
     </div>
-    <div class="form-group">
-      <label class="form-label">Date</label>
-      <input type="date" id="cust-pay-date" class="form-input">
+    <div style="margin-bottom:16px;">
+      <label class="add-field-lbl">Date</label>
+      <input type="date" id="cust-pay-date" class="add-input">
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
-      <button class="btn-secondary" onclick="closeCustPaymentSheet()">Cancel</button>
-      <button class="btn-primary" onclick="saveCustPayment()">Save Payment</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <button onclick="closeCustPaymentSheet()"
+              style="padding:13px;border-radius:var(--r);border:1.5px solid var(--border);
+                     background:transparent;font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;">
+        Cancel
+      </button>
+      <button onclick="saveCustPayment()"
+              style="padding:13px;border-radius:var(--r);border:none;background:var(--accent);
+                     color:white;font-size:14px;font-weight:800;cursor:pointer;">
+        Save
+      </button>
     </div>
   </div>
 </div>
