@@ -10860,7 +10860,7 @@ async function renderHistoryPage() {
   let ceiling = null;  // upper bound (exclusive) for prev periods
 
   if (filterVal === 'today') {
-    cutoff = new Date(today + 'T00:00:00');
+    cutoff = null;   // Today's sales go to the top section; past records shows all prior days
   } else if (filterVal === 'yesterday') {
     const d = new Date(); d.setDate(d.getDate() - 1);
     const yDate = d.toISOString().split('T')[0];
