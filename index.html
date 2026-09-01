@@ -2793,45 +2793,43 @@
 </div>
 
 
-<!-- ── CUSTOMER DETAIL (full-screen) ──────────────────────────── -->
-<div class="sheet-overlay" id="customer-detail-sheet" style="align-items:stretch;">
-  <div style="display:flex;flex-direction:column;width:100%;max-width:480px;
-              max-height:100vh;background:var(--surface);overflow:hidden;margin:auto;">
+<!-- ── CUSTOMER DETAIL PAGE ────────────────────────────────────── -->
+<div class="page cust-detail-page" id="page-customer-detail">
 
-    <!-- Green header -->
-    <div class="cust-detail-hdr">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;">
-        <div>
-          <div class="cust-detail-name" id="cust-detail-name">Customer</div>
-          <div class="cust-detail-id" id="cust-detail-id"></div>
-        </div>
-        <button onclick="closeCustomerDetail()"
-                style="background:rgba(255,255,255,.2);border:none;border-radius:50%;
-                       width:32px;height:32px;color:white;cursor:pointer;font-size:16px;
-                       display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
+  <!-- Header -->
+  <div class="cust-detail-hdr">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button onclick="closeCustomerDetail()" class="cust-back-btn">
+        <i class="fa-solid fa-arrow-left"></i>
+      </button>
+      <div style="flex:1;min-width:0;">
+        <div class="cust-detail-name" id="cust-detail-name">Customer</div>
+        <div class="cust-detail-id" id="cust-detail-id"></div>
       </div>
-      <div class="cust-detail-bal" id="cust-detail-bal" style="margin-top:10px;">—</div>
-      <div id="cust-detail-bal-lbl" style="font-size:11px;opacity:.7;margin-top:2px;">No balance</div>
-    </div>
-
-    <!-- Single view: summary + ledger combined -->
-    <div style="flex:1;overflow-y:auto;min-height:0;">
-      <div id="cust-tab-overview" style="display:none;"></div>
-      <div id="cust-tab-ledger"></div>
-    </div>
-
-    <!-- Actions -->
-    <div class="cust-actions">
-      <button class="cust-act-item" onclick="openCustItemSheet()">
-        <i class="fa-solid fa-box"></i> Add Item
-      </button>
-      <button class="cust-act-pay" onclick="openCustPaymentSheet()">
-        <i class="fa-solid fa-coins"></i> Record Payment
+      <button onclick="deleteCustomer()" class="cust-delete-btn" title="Move to recycle bin">
+        <i class="fa-solid fa-trash"></i>
       </button>
     </div>
+    <div class="cust-detail-bal" id="cust-detail-bal" style="margin-top:12px;">—</div>
+    <div id="cust-detail-bal-lbl" style="font-size:11px;opacity:.7;margin-top:3px;">No balance</div>
   </div>
+
+  <!-- Ledger content -->
+  <div class="cust-detail-body">
+    <div id="cust-tab-overview" style="display:none;"></div>
+    <div id="cust-tab-ledger"></div>
+  </div>
+
+  <!-- Action buttons pinned at bottom -->
+  <div class="cust-actions">
+    <button class="cust-act-item" onclick="openCustItemSheet()">
+      <i class="fa-solid fa-plus"></i> Add Item
+    </button>
+    <button class="cust-act-pay" onclick="openCustPaymentSheet()">
+      <i class="fa-solid fa-coins"></i> Payment
+    </button>
+  </div>
+
 </div>
 
 

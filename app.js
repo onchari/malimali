@@ -1297,6 +1297,7 @@ function showPage(id) {
   if (id === 'settings') { renderCategorySettings(); renderUnitsSettings(); }
   if (id === 'add') setTimeout(() => setItemMode(_addFormIsRecord), 0);
   if (id === 'customers') { renderCustomerList(''); }
+  if (id === 'customer-detail') { /* content already populated by openCustomerDetail */ }
 }
 
 // Guard: wrap showPage to enforce tab access by role
@@ -12458,7 +12459,7 @@ window.saveNewCustomer = saveNewCustomer;
 async function renderCustomerList(query) {
   const container = document.getElementById('customer-list');
   if (!container) return;
-  let customers = await dbAll('customers');
+  let customers = (await dbAll('customers')).filter(c => !c.isDeleted);
   const q = (query || '').trim().toLowerCase();
   if (q) {
     customers = customers.filter(c =>
@@ -12513,33 +12514,48 @@ function onCustomerSearch(val) {
 }
 window.onCustomerSearch = onCustomerSearch;
 
-// ── Customer Detail ────────────────────────────────────────────────
+// ── Customer Detail (full page, not popup) ────────────────────────
 async function openCustomerDetail(customerId) {
   _currentCustomerId = customerId;
   const customer = (await dbAll('customers')).find(c => c.customerId === customerId);
   if (!customer) { toast('Customer not found', 'err'); return; }
 
-  // Populate header
   const nameEl = document.getElementById('cust-detail-name');
   const idEl   = document.getElementById('cust-detail-id');
-  const balEl  = document.getElementById('cust-detail-bal');
   if (nameEl) nameEl.textContent = customer.name || '';
-  if (idEl)   idEl.textContent  = customer.customerId + (customer.phone ? ' · ' + customer.phone : '');
-  if (balEl) {
-    const bal = customer.balance || 0;
-    _custUpdateHeaderBal(bal);
-  }
+  if (idEl)   idEl.textContent  = customer.phone || customer.customerId;
+  _custUpdateHeaderBal(customer.balance || 0);
 
-  document.getElementById('customer-detail-sheet').classList.add('open');
+  // Navigate to the detail page (full screen, no popup)
+  _origShowPage('customer-detail');
   showCustomerTab('ledger');
 }
 window.openCustomerDetail = openCustomerDetail;
 
 function closeCustomerDetail() {
-  document.getElementById('customer-detail-sheet').classList.remove('open');
   _currentCustomerId = null;
+  _origShowPage('customers');   // go back to customer list
 }
 window.closeCustomerDetail = closeCustomerDetail;
+
+// ── Delete customer (soft delete → recycle bin) ────────────────────
+async function deleteCustomer() {
+  if (!_currentCustomerId) return;
+  const all      = await dbAll('customers');
+  const customer = all.find(c => c.customerId === _currentCustomerId);
+  if (!customer) return;
+  if (!confirm('Move "' + (customer.name || 'this customer') + '" to recycle bin?\n\nTheir records will be kept and can be restored later.')) return;
+
+  customer.isDeleted  = true;
+  customer.deletedAt  = new Date().toISOString();
+  customer.updatedAt  = new Date().toISOString();
+  await dbPut('customers', customer);
+  fbSyncCustomer(customer);
+  toast('Moved to recycle bin', '');
+  closeCustomerDetail();
+  await renderCustomerList('');
+}
+window.deleteCustomer = deleteCustomer;
 
 function showCustomerTab(tab) {
   // Update tab button states
