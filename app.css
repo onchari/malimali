@@ -5985,9 +5985,12 @@ body.photo-lightbox-open { overflow: hidden; }
 
 /* Customer detail — full page (no popup) */
 .cust-detail-page {
-  display: flex !important;
   flex-direction: column;
   overflow: hidden;
+  padding: 0;
+}
+.cust-detail-page.active {
+  display: flex;
 }
 .cust-detail-hdr {
   background: linear-gradient(160deg,#17532f,#1e7a3e);
