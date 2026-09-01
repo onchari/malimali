@@ -139,6 +139,12 @@ function initDB() {
     setLoginReady(true);
   };
 
+  req.onblocked = () => {
+    // Another tab has the DB open at an older version — ask user to close other tabs
+    console.warn('[DB] Upgrade blocked — close other tabs');
+    toast('Please close other tabs of this app and refresh', 'err');
+  };
+
   req.onsuccess = e => {
     db = e.target.result;
     db.onerror = ev => console.error('[DB] Unhandled error:', ev.target.error);
@@ -170,6 +176,8 @@ function _dbReady(rej) {
 function dbAll(store) {
   return new Promise((res, rej) => {
     if (!_dbReady(rej)) return;
+    // Guard: return [] for stores that don't exist yet (e.g. new stores not yet migrated)
+    if (!db.objectStoreNames.contains(store)) { res([]); return; }
     try {
       const tx = db.transaction(store, 'readonly');
       tx.objectStore(store).getAll().onsuccess = e => res(e.target.result || []);
@@ -180,6 +188,7 @@ function dbAll(store) {
 function dbGet(store, id) {
   return new Promise((res, rej) => {
     if (!_dbReady(rej)) return;
+    if (!db.objectStoreNames.contains(store)) { res(undefined); return; }
     try {
       const tx = db.transaction(store, 'readonly');
       tx.objectStore(store).get(id).onsuccess = e => res(e.target.result);
