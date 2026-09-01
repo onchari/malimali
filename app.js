@@ -6801,13 +6801,17 @@ async function initFirebase() {
     if (typeof window._fbUnsubFin === 'function') { window._fbUnsubFin(); }
     if (typeof window._fbUnsubWish === 'function') { window._fbUnsubWish(); }
     if (typeof window._fbUnsubSz === 'function') { window._fbUnsubSz(); }
-    if (typeof window._fbUnsubBd === 'function') { window._fbUnsubBd(); }
+    if (typeof window._fbUnsubBd       === 'function') { window._fbUnsubBd(); }
+    if (typeof window._fbUnsubCust     === 'function') { window._fbUnsubCust(); }
+    if (typeof window._fbUnsubCustTxn  === 'function') { window._fbUnsubCustTxn(); }
     fbUnsub = null;
     window._fbUnsubSales = null;
     window._fbUnsubFin = null;
     window._fbUnsubWish = null;
     window._fbUnsubSz = null;
     window._fbUnsubBd = null;
+    window._fbUnsubCust = null;
+    window._fbUnsubCustTxn = null;
 
     // ── items listener (self-healing) ────────────────────────────
     function _startItemsListener() {
@@ -7029,6 +7033,76 @@ async function initFirebase() {
       });
     }
     _startBdListener();
+
+    // ── customers listener (self-healing) ────────────────────────
+    if (db.objectStoreNames.contains('customers')) {
+      function _startCustListener() {
+        if (window._fbUnsubCust) { try { window._fbUnsubCust(); } catch(_) {} }
+        window._fbUnsubCust = onSnapshot(fbCol('customers'), async snap => {
+          const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+          if (!changes.length) return;
+          const local   = await dbAll('customers');
+          const byFbId  = Object.fromEntries(local.filter(c => c.fbId).map(c => [c.fbId, c]));
+          const byId    = Object.fromEntries(local.filter(c => c.customerId).map(c => [c.customerId, c]));
+          let changed = false;
+          for (const c of changes) {
+            const data = {...c.doc.data(), fbId: c.doc.id}; delete data.id;
+            if (c.type === 'removed') {
+              const ex = byFbId[c.doc.id];
+              if (ex) { await dbDelete('customers', ex.id); changed = true; }
+            } else {
+              const ex = byFbId[c.doc.id] || byId[data.customerId];
+              if (ex) { data.id = ex.id; await dbPut('customers', data); }
+              else { try { await dbAdd('customers', data); } catch(_) {} }
+              changed = true;
+            }
+          }
+          if (changed) try { renderCustomerList(''); } catch(_) {}
+        }, err => {
+          console.error('[FB] customers listener error:', err.message);
+          setTimeout(async () => { if (!fbReady||!fbDb) return; _startCustListener(); }, 3000);
+        });
+      }
+      _startCustListener();
+    }
+
+    // ── customer_txns listener (self-healing) ─────────────────────
+    if (db.objectStoreNames.contains('customer_txns')) {
+      function _startCustTxnListener() {
+        if (window._fbUnsubCustTxn) { try { window._fbUnsubCustTxn(); } catch(_) {} }
+        window._fbUnsubCustTxn = onSnapshot(fbCol('customer_txns'), async snap => {
+          const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+          if (!changes.length) return;
+          const local  = await dbAll('customer_txns');
+          const byFbId = Object.fromEntries(local.filter(t => t.fbId).map(t => [t.fbId, t]));
+          let changed = false;
+          for (const c of changes) {
+            const data = {...c.doc.data(), fbId: c.doc.id}; delete data.id;
+            if (c.type === 'removed') {
+              const ex = byFbId[c.doc.id];
+              if (ex) { await dbDelete('customer_txns', ex.id); changed = true; }
+            } else {
+              const ex = byFbId[c.doc.id];
+              if (ex) { data.id = ex.id; await dbPut('customer_txns', data); }
+              else { try { await dbAdd('customer_txns', data); } catch(_) {} }
+              changed = true;
+            }
+          }
+          // Recalculate balances for affected customers
+          if (changed) {
+            const custIds = [...new Set(changes.map(c => c.doc.data().customerId).filter(Boolean))];
+            for (const cid of custIds) {
+              try { await _recalcBalance(cid); } catch(_) {}
+            }
+            try { renderCustomerList(''); } catch(_) {}
+          }
+        }, err => {
+          console.error('[FB] customer_txns listener error:', err.message);
+          setTimeout(async () => { if (!fbReady||!fbDb) return; _startCustTxnListener(); }, 3000);
+        });
+      }
+      _startCustTxnListener();
+    }
 
     setFbStatus('on');
     toast('Firebase connected (' + getFirebaseEnvConfig().label + ')', 'ok');
