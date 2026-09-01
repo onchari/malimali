@@ -12326,6 +12326,20 @@ window.closeAddCustomerSheet = closeAddCustomerSheet;
 
 let _custSaving = false;   // prevent double-save on all customer forms
 
+function _custUpdateHeaderBal(bal) {
+  const el = document.getElementById('cust-detail-bal');
+  if (!el) return;
+  el.textContent = bal > 0 ? `Ksh ${fmt(bal)} owed` : bal < 0 ? `Ksh ${fmt(Math.abs(bal))} credit` : 'Balance clear';
+  el.style.color = bal > 0 ? 'rgba(255,80,80,1)' : 'rgba(255,255,255,1)';
+}
+
+function onCustItemTypeChange() {
+  const type   = document.getElementById('cust-item-type')?.value || 'item';
+  const title  = document.querySelector('#cust-item-sheet .sheet-title');
+  if (title) title.textContent = type === 'return' ? 'Record Return' : 'Add Item';
+}
+window.onCustItemTypeChange = onCustItemTypeChange;
+
 async function saveNewCustomer() {
   if (_custSaving) return;
   const name  = (document.getElementById('cust-form-name')?.value  || '').trim();
@@ -12454,137 +12468,115 @@ function showCustomerTab(tab) {
   dbAll('customers').then(all => {
     const customer = all.find(c => c.customerId === _currentCustomerId);
     if (!customer) return;
-    if (tab === 'overview')  _renderCustomerOverview(customer);
-    if (tab === 'items')     _renderCustomerItems(_currentCustomerId);
-    if (tab === 'payments')  _renderCustomerPayments(_currentCustomerId);
-    if (tab === 'history')   _renderCustomerHistory(_currentCustomerId);
+    if (tab === 'overview') _renderCustomerOverview(customer);
+    if (tab === 'ledger')   _renderCustomerLedger(_currentCustomerId);
   });
 }
 window.showCustomerTab = showCustomerTab;
 
+// ── Summary tab: 4 stat cards ──────────────────────────────────────
 async function _renderCustomerOverview(customer) {
   const el = document.getElementById('cust-tab-overview');
   if (!el) return;
-  const txns = (await dbAll('customer_txns')).filter(t => t.customerId === customer.customerId);
-  const itemCount = txns.filter(t => t.type === 'item').length;
-  const payCount  = txns.filter(t => t.type === 'payment').length;
-  const bal = customer.balance || 0;
-  const balColor = bal > 0 ? 'var(--red)' : 'var(--green)';
-  el.innerHTML = `
-    <div style="padding:14px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-        <div class="stat-card" style="padding:12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">Total Taken</div>
-          <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--red);">Ksh ${fmt(customer.totalTaken || 0)}</div>
-        </div>
-        <div class="stat-card" style="padding:12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">Total Paid</div>
-          <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--green);">Ksh ${fmt(customer.totalPaid || 0)}</div>
-        </div>
-        <div class="stat-card" style="padding:12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">Balance</div>
-          <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:${balColor};">${bal > 0 ? 'Ksh ' + fmt(bal) : (bal < 0 ? '-Ksh ' + fmt(Math.abs(bal)) : 'Clear')}</div>
-        </div>
-        <div class="stat-card" style="padding:12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">Transactions</div>
-          <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmtN(txns.length)}</div>
-        </div>
+  const txns    = (await dbAll('customer_txns')).filter(t => t.customerId === customer.customerId);
+  const taken   = txns.filter(t => t.type === 'item').reduce((s,t) => s + (t.totalValue || 0), 0);
+  const returns = txns.filter(t => t.type === 'return').reduce((s,t) => s + (t.totalValue || 0), 0);
+  const paid    = txns.filter(t => t.type === 'payment').reduce((s,t) => s + (t.amount || 0), 0);
+  const bal     = taken - returns - paid;
+  const balColor = bal > 0 ? '#dc2626' : '#16a34a';
+
+  el.innerHTML = `<div style="padding:12px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div style="padding:12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);">
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:4px;">Total Taken (Dr)</div>
+        <div style="font-size:17px;font-weight:900;font-family:var(--mono);color:#dc2626;">Ksh ${fmt(taken)}</div>
       </div>
-      ${customer.phone    ? `<div style="font-size:12px;color:var(--muted);margin-bottom:6px;"><i class="fa-solid fa-phone" style="margin-right:4px;"></i>${escapeHtml(customer.phone)}</div>` : ''}
-      ${customer.lastDate ? `<div style="font-size:11px;color:var(--muted);margin-top:8px;">Last transaction: ${customer.lastDate}</div>` : ''}
-      <div style="font-size:11px;color:var(--muted);margin-top:4px;">${fmtN(itemCount)} item${itemCount !== 1 ? 's' : ''} taken · ${fmtN(payCount)} payment${payCount !== 1 ? 's' : ''} recorded</div>
-    </div>`;
+      <div style="padding:12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);">
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:4px;">Returns (Cr)</div>
+        <div style="font-size:17px;font-weight:900;font-family:var(--mono);color:#f97316;">Ksh ${fmt(returns)}</div>
+      </div>
+      <div style="padding:12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);">
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:4px;">Payments (Cr)</div>
+        <div style="font-size:17px;font-weight:900;font-family:var(--mono);color:#16a34a;">Ksh ${fmt(paid)}</div>
+      </div>
+      <div style="padding:12px;border-radius:var(--r);background:${bal > 0 ? 'rgba(220,38,38,.06)' : 'rgba(22,163,74,.06)'};border:1.5px solid ${balColor};">
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:4px;">Balance Owed</div>
+        <div style="font-size:17px;font-weight:900;font-family:var(--mono);color:${balColor};">${bal > 0 ? 'Ksh ' + fmt(bal) : bal < 0 ? 'Credit ' + fmt(Math.abs(bal)) : 'Clear'}</div>
+      </div>
+    </div>
+    ${customer.phone ? `<div style="font-size:12px;color:var(--muted);"><i class="fa-solid fa-phone" style="margin-right:4px;"></i>${escapeHtml(customer.phone)}</div>` : ''}
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;">${fmtN(txns.length)} transaction${txns.length !== 1 ? 's' : ''} · Last: ${customer.lastDate || 'none'}</div>
+  </div>`;
 }
 
-async function _renderCustomerItems(customerId) {
-  const el = document.getElementById('cust-tab-items');
-  if (!el) return;
-  const txns = (await dbAll('customer_txns')).filter(t => t.customerId === customerId && t.type === 'item');
-  txns.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  if (!txns.length) {
-    el.innerHTML = `<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">No items recorded yet.</div>`;
-    return;
-  }
-  el.innerHTML = txns.map(t => {
-    const desc = [t.itemName, t.variant, t.size].filter(Boolean).join(' / ');
-    const qty  = t.qty || 1;
-    const unit = t.unitPrice || 0;
-    const total = t.totalValue || (qty * unit);
-    return `<div class="cust-txn">
-      <div class="cust-txn-icon cust-txn-item"><i class="fa-solid fa-box"></i></div>
-      <div class="cust-txn-body">
-        <div class="cust-txn-desc">${escapeHtml(desc || 'Item')}</div>
-        <div class="cust-txn-meta">${qty} × Ksh ${fmt(unit)} · ${t.date || ''}</div>
-        ${t.note ? `<div class="cust-txn-meta" style="font-style:italic;">${escapeHtml(t.note)}</div>` : ''}
-      </div>
-      <div class="cust-txn-amt" style="color:var(--red);">Ksh ${fmt(total)}</div>
-    </div>`;
-  }).join('');
-}
-
-async function _renderCustomerPayments(customerId) {
-  const el = document.getElementById('cust-tab-payments');
-  if (!el) return;
-  const txns = (await dbAll('customer_txns')).filter(t => t.customerId === customerId && t.type === 'payment');
-  txns.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  if (!txns.length) {
-    el.innerHTML = `<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">No payments recorded yet.</div>`;
-    return;
-  }
-  el.innerHTML = txns.map(t => {
-    const method = t.paymentMethod ? ` · ${t.paymentMethod}` : '';
-    return `<div class="cust-txn">
-      <div class="cust-txn-icon cust-txn-pay"><i class="fa-solid fa-coins"></i></div>
-      <div class="cust-txn-body">
-        <div class="cust-txn-desc">Payment${method}</div>
-        <div class="cust-txn-meta">${t.date || ''}</div>
-        ${t.note ? `<div class="cust-txn-meta" style="font-style:italic;">${escapeHtml(t.note)}</div>` : ''}
-      </div>
-      <div class="cust-txn-amt" style="color:var(--green);">Ksh ${fmt(t.amount || 0)}</div>
-    </div>`;
-  }).join('');
-}
-
-async function _renderCustomerHistory(customerId) {
-  const el = document.getElementById('cust-tab-history');
+// ── Ledger tab: balance-sheet style with running balance ────────────
+async function _renderCustomerLedger(customerId) {
+  const el = document.getElementById('cust-tab-ledger');
   if (!el) return;
   const txns = (await dbAll('customer_txns')).filter(t => t.customerId === customerId);
-  txns.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt||'').localeCompare(a.createdAt||''));
+  // Sort oldest first for ledger (running balance makes sense forward in time)
+  txns.sort((a, b) => (a.date||'').localeCompare(b.date||'') || (a.createdAt||'').localeCompare(b.createdAt||''));
+
   if (!txns.length) {
-    el.innerHTML = `<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">No transaction history yet.</div>`;
+    el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">No transactions yet.</div>';
     return;
   }
-  el.innerHTML = txns.map(t => {
-    const isItem = t.type === 'item';
-    const desc = isItem
-      ? [t.itemName, t.variant, t.size].filter(Boolean).join(' / ') || 'Item'
-      : 'Payment' + (t.paymentMethod ? ` · ${t.paymentMethod}` : '');
-    const amt  = isItem ? (t.totalValue || (t.qty||1) * (t.unitPrice||0)) : (t.amount || 0);
-    const amtColor = isItem ? 'var(--red)' : 'var(--green)';
-    const iconClass = isItem ? 'cust-txn-item' : 'cust-txn-pay';
-    const icon = isItem ? 'fa-box' : 'fa-coins';
-    return `<div class="cust-txn">
-      <div class="cust-txn-icon ${iconClass}"><i class="fa-solid ${icon}"></i></div>
-      <div class="cust-txn-body">
-        <div class="cust-txn-desc">${escapeHtml(desc)}</div>
-        <div class="cust-txn-meta">${t.date || ''}</div>
-        ${t.note ? `<div class="cust-txn-meta" style="font-style:italic;">${escapeHtml(t.note)}</div>` : ''}
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-        <div class="cust-txn-amt" style="color:${amtColor};">Ksh ${fmt(amt)}</div>
-        <button onclick="deleteCustTxn(${t.id})" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;"><i class="fa-solid fa-trash"></i></button>
-      </div>
-    </div>`;
+
+  let runningBal = 0;
+  const rows = txns.map(t => {
+    const isDebit  = t.type === 'item';    // increases balance
+    const isCredit = t.type !== 'item';    // payment or return
+    const debit    = isDebit  ? (t.totalValue || (t.qty||1)*(t.unitPrice||0)) : 0;
+    const credit   = isCredit ? (t.type === 'payment' ? (t.amount||0) : (t.totalValue||(t.qty||1)*(t.unitPrice||0))) : 0;
+    runningBal += debit - credit;
+    const balColor = runningBal > 0 ? '#dc2626' : '#16a34a';
+    const typeLabel = t.type === 'item' ? (t.itemName || 'Item') :
+                      t.type === 'return' ? 'Return: ' + (t.itemName || '') :
+                      'Payment' + (t.paymentMethod ? ' · ' + t.paymentMethod : '');
+    const detail = t.type === 'item' ? ` ×${t.qty||1} @ ${fmt(t.unitPrice||0)}` : '';
+    const deleteBtn = t.id ? `<button onclick="deleteCustTxn(${t.id})" title="Delete" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:0 2px;font-size:11px;opacity:.5;">✕</button>` : '';
+    return `<tr class="cust-ledger-row">
+      <td class="cust-ledger-date">${t.date || ''}</td>
+      <td class="cust-ledger-desc">${escapeHtml(typeLabel)}${escapeHtml(detail)}${t.note ? '<br><span style="font-size:10px;color:var(--muted);font-style:italic;">' + escapeHtml(t.note) + '</span>' : ''}</td>
+      <td class="cust-ledger-num" style="color:#dc2626;">${debit  > 0 ? fmt(debit)  : ''}</td>
+      <td class="cust-ledger-num" style="color:#16a34a;">${credit > 0 ? fmt(credit) : ''}</td>
+      <td class="cust-ledger-num" style="color:${balColor};font-weight:900;">${fmt(Math.abs(runningBal))}${runningBal < 0 ? ' Cr' : ''}</td>
+      <td style="padding:4px 2px;text-align:center;">${deleteBtn}</td>
+    </tr>`;
   }).join('');
+
+  const finalBal = runningBal;
+  const finalColor = finalBal > 0 ? '#dc2626' : '#16a34a';
+  el.innerHTML = `<div style="overflow-x:auto;">
+    <table class="cust-ledger-table">
+      <thead><tr>
+        <th>Date</th><th>Description</th>
+        <th class="cust-ledger-num">Debit</th>
+        <th class="cust-ledger-num">Credit</th>
+        <th class="cust-ledger-num">Balance</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="border-top:2px solid var(--border);">
+        <td colspan="4" style="padding:8px 6px;font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);">Balance carried forward</td>
+        <td class="cust-ledger-num" style="font-weight:900;color:${finalColor};font-size:13px;">${finalBal > 0 ? 'Ksh ' + fmt(finalBal) + ' Dr' : finalBal < 0 ? 'Ksh ' + fmt(Math.abs(finalBal)) + ' Cr' : 'Nil'}</td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+  </div>`;
 }
+
+// _renderCustomerHistory replaced by _renderCustomerLedger above
 
 // ── Add Item to Customer ───────────────────────────────────────────
 async function openCustItemSheet() {
-  ['cust-item-name','cust-item-variant','cust-item-size','cust-item-price','cust-item-note'].forEach(id => {
+  ['cust-item-name','cust-item-price','cust-item-note'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const qty  = document.getElementById('cust-item-qty');  if (qty)  qty.value  = '1';
   const date = document.getElementById('cust-item-date'); if (date) date.value = todayDateStr();
+  const type = document.getElementById('cust-item-type'); if (type) type.value = 'item';
+  onCustItemTypeChange();
   const overlay = document.getElementById('cust-item-sheet');
   if (overlay) overlay.classList.add('open');
   setTimeout(() => { const n = document.getElementById('cust-item-name'); if (n) n.focus(); }, 120);
@@ -12599,18 +12591,17 @@ window.closeCustItemSheet = closeCustItemSheet;
 
 async function saveCustItem() {
   if (!_currentCustomerId) return;
-  const g = id => document.getElementById(id);
-  const itemName  = (g('cust-item-name')?.value    || '').trim();
-  const variant   = (g('cust-item-variant')?.value || '').trim();
-  const size      = (g('cust-item-size')?.value    || '').trim();
+  const g    = id => document.getElementById(id);
+  const type = g('cust-item-type')?.value || 'item';   // 'item' or 'return'
+  const itemName  = (g('cust-item-name')?.value  || '').trim();
   const qty       = parseFloat(g('cust-item-qty')?.value)   || 0;
   const unitPrice = parseFloat(g('cust-item-price')?.value) || 0;
-  const note      = (g('cust-item-note')?.value || '').trim();
+  const note      = (g('cust-item-note')?.value  || '').trim();
   const date      = g('cust-item-date')?.value || todayDateStr();
 
-  if (!itemName)     { toast('Item name is required', 'err'); return; }
+  if (!itemName)     { toast('Description is required', 'err'); return; }
   if (qty <= 0)      { toast('Quantity must be greater than 0', 'err'); return; }
-  if (unitPrice <= 0){ toast('Unit price must be greater than 0', 'err'); return; }
+  if (unitPrice <= 0){ toast('Price must be greater than 0', 'err'); return; }
 
   const totalValue = qty * unitPrice;
   const now = new Date().toISOString();
@@ -12619,10 +12610,9 @@ async function saveCustItem() {
   const txn = {
     customerId: _currentCustomerId,
     customerName: customer.name || '',
-    type: 'item',
-    itemName, variant, size,
-    qty, unitPrice, totalValue,
-    amount: totalValue,
+    type,   // 'item' = debit, 'return' = credit
+    itemName, qty, unitPrice, totalValue,
+    amount: type === 'return' ? -totalValue : totalValue,
     paymentMethod: '',
     note, date, createdAt: now, fbId: ''
   };
@@ -12634,20 +12624,13 @@ async function saveCustItem() {
     await _recalcBalance(_currentCustomerId);
     fbSyncCustTxn(txn);
     closeCustItemSheet();
-    // Refresh balance in header without re-opening the sheet
+    // Update header balance
     const updated = (await dbAll('customers')).find(c => c.customerId === _currentCustomerId);
-    if (updated) {
-      const balEl = document.getElementById('cust-detail-bal');
-      if (balEl) {
-        const bal = updated.balance || 0;
-        balEl.textContent = bal > 0 ? `Ksh ${fmt(bal)} owed` : (bal < 0 ? `Ksh ${fmt(Math.abs(bal))} credit` : 'Balance clear');
-        balEl.style.color = bal > 0 ? 'rgba(255,80,80,1)' : 'rgba(255,255,255,1)';
-      }
-    }
-    showCustomerTab('items');   // refresh items tab
-    toast('✓ Item saved', 'ok');
+    if (updated) _custUpdateHeaderBal(updated.balance || 0);
+    showCustomerTab('ledger');
+    toast(type === 'return' ? '✓ Return recorded' : '✓ Item saved', 'ok');
   } catch(e) {
-    toast('Failed to save item', 'err');
+    toast('Failed to save', 'err');
     console.error('[CUST]', e);
   } finally { _custSaving = false; }
 }
@@ -12701,17 +12684,9 @@ async function saveCustPayment() {
     await _recalcBalance(_currentCustomerId);
     fbSyncCustTxn(txn);
     closeCustPaymentSheet();
-    // Refresh balance in header without re-opening the sheet
     const updated = (await dbAll('customers')).find(c => c.customerId === _currentCustomerId);
-    if (updated) {
-      const balEl = document.getElementById('cust-detail-bal');
-      if (balEl) {
-        const bal = updated.balance || 0;
-        balEl.textContent = bal > 0 ? `Ksh ${fmt(bal)} owed` : (bal < 0 ? `Ksh ${fmt(Math.abs(bal))} credit` : 'Balance clear');
-        balEl.style.color = bal > 0 ? 'rgba(255,80,80,1)' : 'rgba(255,255,255,1)';
-      }
-    }
-    showCustomerTab('payments');  // refresh payments tab
+    if (updated) _custUpdateHeaderBal(updated.balance || 0);
+    showCustomerTab('ledger');
     toast('✓ Payment recorded', 'ok');
   } catch(e) {
     toast('Failed to save payment', 'err');
@@ -12724,9 +12699,10 @@ window.saveCustPayment = saveCustPayment;
 async function _recalcBalance(customerId) {
   const txns = await dbAll('customer_txns');
   const custTxns = txns.filter(t => t.customerId === customerId);
-  const totalTaken = custTxns.filter(t => t.type === 'item').reduce((s, t) => s + (t.totalValue || 0), 0);
-  const totalPaid  = custTxns.filter(t => t.type === 'payment').reduce((s, t) => s + (t.amount || 0), 0);
-  const balance    = totalTaken - totalPaid;
+  const totalTaken   = custTxns.filter(t => t.type === 'item').reduce((s, t) => s + (t.totalValue || 0), 0);
+  const totalReturns = custTxns.filter(t => t.type === 'return').reduce((s, t) => s + (t.totalValue || 0), 0);
+  const totalPaid    = custTxns.filter(t => t.type === 'payment').reduce((s, t) => s + (t.amount || 0), 0);
+  const balance      = totalTaken - totalReturns - totalPaid;
   const sorted     = [...custTxns].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const lastDate   = sorted[0]?.date || '';
 
@@ -12751,7 +12727,9 @@ async function deleteCustTxn(txnId) {
   if (!txn) return;
   await dbDelete('customer_txns', txnId);
   await _recalcBalance(txn.customerId);
-  showCustomerTab('history');
+  const upd = (await dbAll('customers')).find(c => c.customerId === txn.customerId);
+  if (upd) _custUpdateHeaderBal(upd.balance || 0);
+  showCustomerTab('ledger');
   // Refresh header balance
   const all = await dbAll('customers');
   const cust = all.find(c => c.customerId === txn.customerId);

@@ -2816,20 +2816,16 @@
       <div class="cust-detail-bal" id="cust-detail-bal">Ksh 0</div>
     </div>
 
-    <!-- Tabs -->
+    <!-- Tabs: Summary + Ledger only -->
     <div class="cust-tabs">
-      <button class="cust-tab active" data-tab="overview" onclick="showCustomerTab('overview')">Overview</button>
-      <button class="cust-tab"        data-tab="items"    onclick="showCustomerTab('items')">Items</button>
-      <button class="cust-tab"        data-tab="payments" onclick="showCustomerTab('payments')">Payments</button>
-      <button class="cust-tab"        data-tab="history"  onclick="showCustomerTab('history')">History</button>
+      <button class="cust-tab active" data-tab="overview" onclick="showCustomerTab('overview')">Summary</button>
+      <button class="cust-tab"        data-tab="ledger"   onclick="showCustomerTab('ledger')">Ledger</button>
     </div>
 
     <!-- Tab content -->
     <div style="flex:1;overflow-y:auto;min-height:0;">
       <div class="cust-tab-pane" data-tab="overview" id="cust-tab-overview"></div>
-      <div class="cust-tab-pane" data-tab="items"    id="cust-tab-items"    style="display:none;"></div>
-      <div class="cust-tab-pane" data-tab="payments" id="cust-tab-payments" style="display:none;"></div>
-      <div class="cust-tab-pane" data-tab="history"  id="cust-tab-history"  style="display:none;"></div>
+      <div class="cust-tab-pane" data-tab="ledger"   id="cust-tab-ledger"   style="display:none;"></div>
     </div>
 
     <!-- Actions -->
@@ -2859,37 +2855,39 @@
       </button>
     </div>
 
-    <div style="margin-bottom:10px;">
-      <label class="add-field-lbl">Item Name <span style="color:var(--red);">*</span></label>
-      <input type="text" id="cust-item-name" class="add-input" placeholder="e.g. Men's Shirt" autocomplete="off">
+    <!-- Date first -->
+    <div style="margin-bottom:12px;">
+      <label class="add-field-lbl">Date <span style="color:var(--red);">*</span></label>
+      <input type="date" id="cust-item-date" class="add-input">
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-      <div>
-        <label class="add-field-lbl">Variant / Colour</label>
-        <input type="text" id="cust-item-variant" class="add-input" placeholder="e.g. Blue" autocomplete="off">
-      </div>
-      <div>
-        <label class="add-field-lbl">Size</label>
-        <input type="text" id="cust-item-size" class="add-input" placeholder="e.g. XL / 42" autocomplete="off">
-      </div>
+    <!-- Type: Items Taken or Return -->
+    <div style="margin-bottom:12px;">
+      <label class="add-field-lbl">Type</label>
+      <select id="cust-item-type" class="add-select" style="width:100%;" onchange="onCustItemTypeChange()">
+        <option value="item">Items Taken (Debit)</option>
+        <option value="return">Return / Refund (Credit)</option>
+      </select>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+    <div style="margin-bottom:12px;">
+      <label class="add-field-lbl">Description <span style="color:var(--red);">*</span></label>
+      <input type="text" id="cust-item-name" class="add-input"
+             placeholder="e.g. Men's Shirt, Shoes size 42…" autocomplete="off">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
       <div>
         <label class="add-field-lbl">Qty <span style="color:var(--red);">*</span></label>
-        <input type="number" id="cust-item-qty" class="add-input add-center" value="1" min="0.01" step="any" inputmode="decimal">
+        <input type="number" id="cust-item-qty" class="add-input add-center"
+               value="1" min="0.01" step="any" inputmode="decimal">
       </div>
       <div>
         <label class="add-field-lbl">Unit Price <span style="color:var(--red);">*</span></label>
-        <input type="number" id="cust-item-price" class="add-input add-center" placeholder="0" min="0" step="any" inputmode="decimal">
+        <input type="number" id="cust-item-price" class="add-input add-center"
+               placeholder="0" min="0" step="any" inputmode="decimal">
       </div>
     </div>
-    <div style="margin-bottom:10px;">
+    <div style="margin-bottom:16px;">
       <label class="add-field-lbl">Note</label>
       <input type="text" id="cust-item-note" class="add-input" placeholder="Optional" autocomplete="off">
-    </div>
-    <div style="margin-bottom:16px;">
-      <label class="add-field-lbl">Date</label>
-      <input type="date" id="cust-item-date" class="add-input">
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <button onclick="closeCustItemSheet()"
