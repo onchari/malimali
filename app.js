@@ -10998,68 +10998,27 @@ async function renderHistoryPage() {
   }).join('');
 
   recList.innerHTML = `
-    <!-- Page header -->
-    <div class="pr-page-header">
-      <div class="pr-page-header-left">
-        <div class="pr-page-icon"><i class="fa-solid fa-chart-line"></i></div>
-        <div>
-          <div class="pr-page-title">Past Records</div>
-          <div class="pr-page-sub">Overview of your performance for the selected period</div>
-        </div>
-      </div>
-      <div class="pr-date-badge"><i class="fa-regular fa-calendar"></i> ${dateRangeLabel}</div>
-    </div>
-
-    <!-- 5 summary cards -->
+    <!-- Period summary — 4 compact cards in one row -->
     <div class="pr-sum-row">
       <div class="pr-sum-card">
-        <div class="pr-sum-icon" style="background:rgba(22,163,74,.12);color:#16a34a;"><i class="fa-solid fa-wallet"></i></div>
-        <div class="pr-sum-body">
-          <div class="pr-sum-lbl">Revenue</div>
-          <div class="pr-sum-val pr-col-green">${_fmtNum(periodRev)}</div>
-          <div class="pr-sum-sub">Total revenue</div>
-        </div>
+        <div class="pr-sum-lbl">Revenue</div>
+        <div class="pr-sum-val pr-col-green">${_fmtNum(periodRev)}</div>
       </div>
       <div class="pr-sum-card">
-        <div class="pr-sum-icon" style="background:rgba(249,115,22,.12);color:#f97316;"><i class="fa-solid fa-cart-shopping"></i></div>
-        <div class="pr-sum-body">
-          <div class="pr-sum-lbl">Cost (BP)</div>
-          <div class="pr-sum-val pr-col-orange">${_fmtNum(periodCost)}</div>
-          <div class="pr-sum-sub">Total cost</div>
-        </div>
+        <div class="pr-sum-lbl">Cost</div>
+        <div class="pr-sum-val pr-col-orange">${_fmtNum(periodCost)}</div>
       </div>
       <div class="pr-sum-card pr-sum-highlight">
-        <div class="pr-sum-icon" style="background:rgba(255,255,255,.2);color:white;"><i class="fa-solid fa-chart-bar"></i></div>
-        <div class="pr-sum-body">
-          <div class="pr-sum-lbl" style="color:rgba(255,255,255,.8);">Earning</div>
-          <div class="pr-sum-val" style="color:white;font-size:22px;">${_fmtNum(periodProf)}</div>
-          <div class="pr-sum-sub" style="color:rgba(255,255,255,.7);">Net earning</div>
-        </div>
+        <div class="pr-sum-lbl" style="color:rgba(255,255,255,.75);">Earning</div>
+        <div class="pr-sum-val" style="color:white;">${_fmtNum(periodProf)}</div>
       </div>
       <div class="pr-sum-card">
-        <div class="pr-sum-icon" style="background:rgba(37,99,235,.1);color:#2563eb;"><i class="fa-solid fa-users"></i></div>
-        <div class="pr-sum-body">
-          <div class="pr-sum-lbl">Sales</div>
-          <div class="pr-sum-val pr-col-blue">${periodSales}</div>
-          <div class="pr-sum-sub">Total sales</div>
-        </div>
+        <div class="pr-sum-lbl">Sales</div>
+        <div class="pr-sum-val pr-col-blue">${periodSales}</div>
       </div>
     </div>
 
-    <!-- Daily breakdown header -->
-    <div class="pr-breakdown-hdr">
-      <div>
-        <div class="pr-breakdown-title">Daily Breakdown</div>
-        <div class="pr-breakdown-sub">Detailed performance per day</div>
-      </div>
-      <div class="pr-legend">
-        <span class="pr-legend-item"><span style="color:#16a34a;font-size:10px;">●</span> Earning</span>
-        <span class="pr-legend-item"><span style="color:#f97316;font-size:10px;">●</span> Cost</span>
-        <span class="pr-legend-item"><span style="color:#2563eb;font-size:10px;">●</span> Sales</span>
-      </div>
-    </div>
-
-    <!-- 5-per-row day cards -->
+    <!-- Day cards — horizontal scroll row -->
     <div class="pr-days-grid">${dayCards}</div>
 
     <!-- Expanded detail area -->
