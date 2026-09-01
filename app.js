@@ -10884,8 +10884,8 @@ async function renderHistoryPage() {
   } else if (filterVal === 'week') {
     cutoffStr  = _localDateStr(-6);   // 7 days including today
   } else if (filterVal === 'prev_week') {
-    cutoffStr  = _localDateStr(-13);  // 7 days ending 7 days ago
-    ceilingStr = _localDateStr(-6);
+    cutoffStr  = _localDateStr(-7);   // 7 days ending yesterday (today excluded by top section)
+    ceilingStr = null;
   } else if (filterVal === 'month') {
     cutoffStr  = _monthStr(0, 0);     // 1st of this month
   } else if (filterVal === 'prev_month') {
