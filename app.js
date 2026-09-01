@@ -10877,7 +10877,7 @@ async function renderHistoryPage() {
   let ceilingStr = null;   // include dates <  ceilingStr (exclusive upper bound)
 
   if (filterVal === 'today') {
-    cutoffStr = null;   // All past days shown; today is in the top section
+    cutoffStr = _monthStr(0, 0);   // 1st of current month → yesterday (today is in top section)
   } else if (filterVal === 'yesterday') {
     cutoffStr  = _localDateStr(-1);   // yesterday
     ceilingStr = today;               // exclude today
