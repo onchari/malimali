@@ -12411,15 +12411,13 @@ async function openCustomerDetail(customerId) {
   // Populate header
   const nameEl = document.getElementById('cust-detail-name');
   const idEl   = document.getElementById('cust-detail-id');
-  const phoneEl = document.getElementById('cust-detail-phone');
   const balEl  = document.getElementById('cust-detail-bal');
-  if (nameEl)  nameEl.textContent  = customer.name || '';
-  if (idEl)    idEl.textContent    = customer.customerId + (customer.phone ? ' · ' + customer.phone : '');
-  if (phoneEl) phoneEl.textContent = customer.phone || '';
+  if (nameEl) nameEl.textContent = customer.name || '';
+  if (idEl)   idEl.textContent  = customer.customerId + (customer.phone ? ' · ' + customer.phone : '');
   if (balEl) {
     const bal = customer.balance || 0;
     balEl.textContent = bal > 0 ? `Ksh ${fmt(bal)} owed` : (bal < 0 ? `Ksh ${fmt(Math.abs(bal))} credit` : 'Balance clear');
-    balEl.style.color = bal > 0 ? 'rgba(255,80,80,1)' : 'rgba(100,255,150,1)';
+    balEl.style.color = bal > 0 ? 'rgba(255,80,80,1)' : 'rgba(255,255,255,1)';
   }
 
   document.getElementById('customer-detail-sheet').classList.add('open');
@@ -12483,8 +12481,7 @@ async function _renderCustomerOverview(customer) {
           <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmtN(txns.length)}</div>
         </div>
       </div>
-      ${customer.location ? `<div style="font-size:12px;color:var(--muted);margin-bottom:6px;"><i class="fa-solid fa-location-dot" style="margin-right:4px;"></i>${escapeHtml(customer.location)}</div>` : ''}
-      ${customer.notes    ? `<div style="font-size:12px;color:var(--muted);padding:10px;background:var(--bg2);border-radius:var(--r);">${escapeHtml(customer.notes)}</div>` : ''}
+      ${customer.phone    ? `<div style="font-size:12px;color:var(--muted);margin-bottom:6px;"><i class="fa-solid fa-phone" style="margin-right:4px;"></i>${escapeHtml(customer.phone)}</div>` : ''}
       ${customer.lastDate ? `<div style="font-size:11px;color:var(--muted);margin-top:8px;">Last transaction: ${customer.lastDate}</div>` : ''}
       <div style="font-size:11px;color:var(--muted);margin-top:4px;">${fmtN(itemCount)} item${itemCount !== 1 ? 's' : ''} taken · ${fmtN(payCount)} payment${payCount !== 1 ? 's' : ''} recorded</div>
     </div>`;
@@ -12593,13 +12590,14 @@ window.closeCustItemSheet = closeCustItemSheet;
 
 async function saveCustItem() {
   if (!_currentCustomerId) return;
-  const itemName  = (document.getElementById('cust-item-name').value || '').trim();
-  const variant   = (document.getElementById('cust-item-variant').value || '').trim();
-  const size      = (document.getElementById('cust-item-size').value || '').trim();
-  const qty       = parseFloat(document.getElementById('cust-item-qty').value) || 0;
-  const unitPrice = parseFloat(document.getElementById('cust-item-price').value) || 0;
-  const note      = (document.getElementById('cust-item-note').value || '').trim();
-  const date      = document.getElementById('cust-item-date').value || todayDateStr();
+  const g = id => document.getElementById(id);
+  const itemName  = (g('cust-item-name')?.value    || '').trim();
+  const variant   = (g('cust-item-variant')?.value || '').trim();
+  const size      = (g('cust-item-size')?.value    || '').trim();
+  const qty       = parseFloat(g('cust-item-qty')?.value)   || 0;
+  const unitPrice = parseFloat(g('cust-item-price')?.value) || 0;
+  const note      = (g('cust-item-note')?.value || '').trim();
+  const date      = g('cust-item-date')?.value || todayDateStr();
 
   if (!itemName)     { toast('Item name is required', 'err'); return; }
   if (qty <= 0)      { toast('Quantity must be greater than 0', 'err'); return; }
@@ -12608,9 +12606,10 @@ async function saveCustItem() {
   const totalValue = qty * unitPrice;
   const now = new Date().toISOString();
   const customer = (await dbAll('customers')).find(c => c.customerId === _currentCustomerId);
+  if (!customer) { toast('Customer not found', 'err'); return; }
   const txn = {
     customerId: _currentCustomerId,
-    customerName: customer ? customer.name : '',
+    customerName: customer.name || '',
     type: 'item',
     itemName, variant, size,
     qty, unitPrice, totalValue,
@@ -12649,18 +12648,20 @@ window.closeCustPaymentSheet = closeCustPaymentSheet;
 
 async function saveCustPayment() {
   if (!_currentCustomerId) return;
-  const amount        = parseFloat(document.getElementById('cust-pay-amount').value) || 0;
-  const paymentMethod = (document.getElementById('cust-pay-method').value || 'Cash').trim();
-  const note          = (document.getElementById('cust-pay-note').value || '').trim();
-  const date          = document.getElementById('cust-pay-date').value || todayDateStr();
+  const g = id => document.getElementById(id);
+  const amount        = parseFloat(g('cust-pay-amount')?.value) || 0;
+  const paymentMethod = (g('cust-pay-method')?.value || 'Cash').trim();
+  const note          = (g('cust-pay-note')?.value   || '').trim();
+  const date          = g('cust-pay-date')?.value    || todayDateStr();
 
   if (amount <= 0) { toast('Amount must be greater than 0', 'err'); return; }
 
   const now = new Date().toISOString();
   const customer = (await dbAll('customers')).find(c => c.customerId === _currentCustomerId);
+  if (!customer) { toast('Customer not found', 'err'); return; }
   const txn = {
     customerId: _currentCustomerId,
-    customerName: customer ? customer.name : '',
+    customerName: customer.name || '',
     type: 'payment',
     itemName: '', variant: '', size: '',
     qty: 0, unitPrice: 0, totalValue: 0,
@@ -12744,7 +12745,9 @@ async function fbSyncCustTxn(txn) {
   try {
     const { doc, setDoc } = await waitForFbImports();
     if (!txn.fbId) {
-      txn.fbId = 'ctxn_' + txn.customerId + '_' + (txn.createdAt || '').replace(/[^0-9]/g, '').slice(0, 14);
+      // Use txn id + timestamp to guarantee uniqueness
+      const ts = (txn.createdAt || new Date().toISOString()).replace(/[^0-9]/g, '').slice(0, 14);
+      txn.fbId = 'ctxn_' + (txn.customerId || 'x') + '_' + ts + '_' + (txn.id || Math.floor(Math.random() * 9999));
       await dbPut('customer_txns', txn);
     }
     await setDoc(doc(fbDb, fbColName('customer_txns'), txn.fbId), sanitiseForFirestore({ ...txn }));
