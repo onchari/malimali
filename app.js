@@ -6612,6 +6612,7 @@ async function _onVisibilityChange() {
   try {
     await pullFromFirebase(true);
     await refreshUI({ sync: false });
+    try { await refreshSalesViews(); } catch(_) {}
     setFbStatus('on');
     await updateSyncDot();
   } catch(e) { /* non-critical */ }
@@ -6838,11 +6839,16 @@ async function initFirebase() {
           }
         }
         if (changed) {
-          allItems = await dbAll('items');
-          await enrichShoeItems(allItems);
-          renderList(); renderDashboard(); updateHeader();
-          setFbStatus('on');
-          updateSyncDot();
+          try {
+            allItems = await dbAll('items');
+            await enrichShoeItems(allItems);
+            renderList();
+            try { searchSell(); } catch(_) {}   // refresh sell search results
+            renderDashboard();
+            updateHeader();
+            setFbStatus('on');
+            updateSyncDot();
+          } catch(e) { console.error('[FB] items UI refresh error:', e.message); }
         }
       }, err => {
         console.error('[FB] items listener error:', err.message);
@@ -6862,23 +6868,32 @@ async function initFirebase() {
       window._fbUnsubSales = onSnapshot(fbCol('sales'), async snap => {
         const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
         if (!changes.length) return;
-        const localSales = await dbAll('sales');
-        const byFbId = Object.fromEntries(localSales.filter(s=>s.fbId).map(s=>[s.fbId,s]));
-        for (const c of changes) {
-          const data = {...c.doc.data(), fbId: c.doc.id };
-          delete data.id;
-          if (c.type === 'removed') {
-            const loc = byFbId[c.doc.id];
-            if (loc) await dbDelete('sales', loc.id);
-          } else {
-            const ex = byFbId[c.doc.id] || localSales.find(s => _salesMatch(s, data));
-            if (ex) { data.id = ex.id; await dbPut('sales', data); }
-            else    { try { await dbAdd('sales', data); } catch(_) {} }
+        try {
+          const localSales = await dbAll('sales');
+          const byFbId = Object.fromEntries(localSales.filter(s=>s.fbId).map(s=>[s.fbId,s]));
+          let changed = false;
+          for (const c of changes) {
+            const data = {...c.doc.data(), fbId: c.doc.id };
+            delete data.id;
+            if (c.type === 'removed') {
+              const loc = byFbId[c.doc.id];
+              if (loc) { await dbDelete('sales', loc.id); changed = true; }
+            } else {
+              const ex = byFbId[c.doc.id] || localSales.find(s => _salesMatch(s, data));
+              if (ex) { data.id = ex.id; await dbPut('sales', data); }
+              else    { try { await dbAdd('sales', data); } catch(_) {} }
+              changed = true;
+            }
           }
-        }
-        try { if (activeDay) updateDayLiveStats(); } catch(_) {}
-        try { renderDashboard(); } catch(_) {}
-        updateSyncDot();
+          if (changed) {
+            // Refresh ALL sales-related views so remote sales appear immediately
+            try { if (activeDay) updateDayLiveStats(); } catch(_) {}
+            try { renderDashboard(); } catch(_) {}
+            try { refreshSalesViews(); } catch(_) {}  // ← history + sell page
+            setFbStatus('on');
+            updateSyncDot();
+          }
+        } catch(e) { console.error('[FB] sales callback error:', e.message); }
       }, err => {
         console.error('[FB] sales listener error:', err.message);
         setFbStatus('error');
@@ -7113,12 +7128,12 @@ async function initFirebase() {
     document.removeEventListener('visibilitychange', _onVisibilityChange);
     document.addEventListener('visibilitychange', _onVisibilityChange);
 
-    // Heartbeat: every 60 s pull + sync dot update
+    // Heartbeat: every 15 s — always pull to catch anything listeners missed
     clearInterval(window._syncHeartbeat);
     window._syncHeartbeat = setInterval(async () => {
       if (!fbReady || !fbDb || !navigator.onLine) return;
       try {
-        // Auto-retry if previous writes failed
+        // Retry failed pushes first
         if (_pushFailCount > 0) {
           console.log('[SYNC] Heartbeat: retrying ' + _pushFailCount + ' failed push(es)');
           _pushFailCount = 0;
@@ -7126,21 +7141,14 @@ async function initFirebase() {
           await updateSyncDot();
           return;
         }
-        // Check if cloud is ahead
-        const { doc, getDoc } = await waitForFbImports();
-        const snap = await getDoc(doc(fbDb, '_sync_meta', 'global'));
-        if (!snap.exists()) return;
-        const cloudV = snap.data().version || 0;
-        if (cloudV > _getSyncVersion()) {
-          console.log('[SYNC] Heartbeat: behind cloud v' + cloudV + ' — pulling');
-          await pullFromFirebase(true);
-          _setSyncVersion(cloudV);
-          await refreshUI({ sync: false });
-          setFbStatus('on');
-        }
+        // Always pull to guarantee real-time consistency
+        await pullFromFirebase(true);
+        await refreshSalesViews();
+        try { allItems = await dbAll('items'); await enrichShoeItems(allItems); renderList(); } catch(_) {}
+        setFbStatus('on');
         await updateSyncDot();
       } catch(e) { /* non-critical */ }
-    }, 60000);
+    }, 15000);
 
   } catch(e) {
     setFbStatus('error');
