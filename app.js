@@ -12324,24 +12324,33 @@ function closeAddCustomerSheet() {
 }
 window.closeAddCustomerSheet = closeAddCustomerSheet;
 
+let _custSaving = false;   // prevent double-save on all customer forms
+
 async function saveNewCustomer() {
+  if (_custSaving) return;
   const name  = (document.getElementById('cust-form-name')?.value  || '').trim();
   const phone = (document.getElementById('cust-form-phone')?.value || '').trim();
   if (!name) { toast('Customer name is required', 'err'); return; }
 
-  const customerId = await _nextCustomerId();
-  const now = new Date().toISOString();
-  const customer = {
-    customerId, name, phone,
-    balance: 0, totalTaken: 0, totalPaid: 0,
-    lastDate: '', createdAt: now, updatedAt: now, fbId: ''
-  };
-  const id = await dbAdd('customers', customer);
-  customer.id = id;
-  await fbSyncCustomer(customer);
-  closeAddCustomerSheet();
-  await renderCustomerList('');
-  toast('Customer added', 'ok');
+  _custSaving = true;
+  try {
+    const customerId = await _nextCustomerId();
+    const now = new Date().toISOString();
+    const customer = {
+      customerId, name, phone,
+      balance: 0, totalTaken: 0, totalPaid: 0,
+      lastDate: '', createdAt: now, updatedAt: now, fbId: ''
+    };
+    const id = await dbAdd('customers', customer);
+    customer.id = id;
+    fbSyncCustomer(customer);
+    closeAddCustomerSheet();
+    await renderCustomerList('');
+    toast('✓ Customer added', 'ok');
+  } catch(e) {
+    toast('Failed to save customer', 'err');
+    console.error('[CUST]', e);
+  } finally { _custSaving = false; }
 }
 window.saveNewCustomer = saveNewCustomer;
 
@@ -12617,14 +12626,30 @@ async function saveCustItem() {
     paymentMethod: '',
     note, date, createdAt: now, fbId: ''
   };
-  const txnId = await dbAdd('customer_txns', txn);
-  txn.id = txnId;
-  await _recalcBalance(_currentCustomerId);
-  await fbSyncCustTxn(txn);
-  closeCustItemSheet();
-  // Refresh header balance
-  await openCustomerDetail(_currentCustomerId);
-  toast('Item recorded', 'ok');
+  if (_custSaving) return;
+  _custSaving = true;
+  try {
+    const txnId = await dbAdd('customer_txns', txn);
+    txn.id = txnId;
+    await _recalcBalance(_currentCustomerId);
+    fbSyncCustTxn(txn);
+    closeCustItemSheet();
+    // Refresh balance in header without re-opening the sheet
+    const updated = (await dbAll('customers')).find(c => c.customerId === _currentCustomerId);
+    if (updated) {
+      const balEl = document.getElementById('cust-detail-bal');
+      if (balEl) {
+        const bal = updated.balance || 0;
+        balEl.textContent = bal > 0 ? `Ksh ${fmt(bal)} owed` : (bal < 0 ? `Ksh ${fmt(Math.abs(bal))} credit` : 'Balance clear');
+        balEl.style.color = bal > 0 ? 'rgba(255,80,80,1)' : 'rgba(255,255,255,1)';
+      }
+    }
+    showCustomerTab('items');   // refresh items tab
+    toast('✓ Item saved', 'ok');
+  } catch(e) {
+    toast('Failed to save item', 'err');
+    console.error('[CUST]', e);
+  } finally { _custSaving = false; }
 }
 window.saveCustItem = saveCustItem;
 
@@ -12668,14 +12693,30 @@ async function saveCustPayment() {
     amount, paymentMethod,
     note, date, createdAt: now, fbId: ''
   };
-  const txnId = await dbAdd('customer_txns', txn);
-  txn.id = txnId;
-  await _recalcBalance(_currentCustomerId);
-  await fbSyncCustTxn(txn);
-  closeCustPaymentSheet();
-  // Refresh header balance
-  await openCustomerDetail(_currentCustomerId);
-  toast('Payment recorded', 'ok');
+  if (_custSaving) return;
+  _custSaving = true;
+  try {
+    const txnId = await dbAdd('customer_txns', txn);
+    txn.id = txnId;
+    await _recalcBalance(_currentCustomerId);
+    fbSyncCustTxn(txn);
+    closeCustPaymentSheet();
+    // Refresh balance in header without re-opening the sheet
+    const updated = (await dbAll('customers')).find(c => c.customerId === _currentCustomerId);
+    if (updated) {
+      const balEl = document.getElementById('cust-detail-bal');
+      if (balEl) {
+        const bal = updated.balance || 0;
+        balEl.textContent = bal > 0 ? `Ksh ${fmt(bal)} owed` : (bal < 0 ? `Ksh ${fmt(Math.abs(bal))} credit` : 'Balance clear');
+        balEl.style.color = bal > 0 ? 'rgba(255,80,80,1)' : 'rgba(255,255,255,1)';
+      }
+    }
+    showCustomerTab('payments');  // refresh payments tab
+    toast('✓ Payment recorded', 'ok');
+  } catch(e) {
+    toast('Failed to save payment', 'err');
+    console.error('[CUST]', e);
+  } finally { _custSaving = false; }
 }
 window.saveCustPayment = saveCustPayment;
 
