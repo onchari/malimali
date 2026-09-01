@@ -11092,47 +11092,26 @@ async function renderHistoryPage() {
   // Running total for cumulative profit
   let runningProfit = 0;
 
-  // Day cards (5 per row), newest first
+  // Day list rows, newest first
   const dayCards = datesSorted.map(date => {
     const day    = byDate[date];
     const safeId = date.replace(/-/g,'');
     const dt     = new Date(date + 'T12:00:00');
-    const wday   = dt.toLocaleDateString('en-GB', { weekday:'short' });
-    const dnum   = dt.getDate();
-    const mon    = dt.toLocaleDateString('en-GB', { month:'short' });
+    const label  = dt.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
     const earningColor = day.profit >= 0 ? '#16a34a' : '#dc2626';
     const isBest  = date === bestRevDay && datesSorted.length > 1;
     const isToday = date === today;
-    runningProfit += day.profit;
-    const spark = _sparkline(day.hours || {});
 
-    return `<div class="pr-day-card${isBest ? ' hdc-best' : ''}${isToday ? ' hdc-today' : ''}" onclick="expandHistDay('${safeId}')">
-      ${isBest  ? '<div class="hdc-best-badge">★ Best day</div>' : ''}
-      ${isToday ? '<div class="hdc-today-badge">Today</div>' : ''}
-      <div class="pr-day-header">
-        <span class="pr-day-date"><strong>${wday} ${dnum}</strong> ${mon}</span>
-        <span class="pr-day-meta">${day.sales.length} sales • ${fmtN(day.qty)} pcs</span>
+    return `<div class="day-list-row${isToday ? ' day-row-today' : ''}${isBest ? ' day-row-best' : ''}" onclick="expandHistDay('${safeId}')">
+      <div class="day-row-left">
+        <div class="day-row-date">${label}${isBest ? ' ★' : ''}</div>
+        <div class="day-row-meta">${day.sales.length} sale${day.sales.length!==1?'s':''} · ${fmtN(day.qty)} pcs</div>
       </div>
-      <div class="pr-day-figures">
-        <div class="pr-fig">
-          <div class="pr-fig-lbl">Sales</div>
-          <div class="pr-fig-val pr-col-blue">${_fmtNum(day.revenue)}</div>
-        </div>
-        <div class="pr-fig">
-          <div class="pr-fig-lbl">Cost</div>
-          <div class="pr-fig-val pr-col-orange">${_fmtNum(day.cost)}</div>
-        </div>
-        <div class="pr-fig">
-          <div class="pr-fig-lbl">Earning</div>
-          <div class="pr-fig-val" style="color:${earningColor};font-weight:900;font-family:var(--mono);">${_fmtNum(day.profit)}</div>
-        </div>
+      <div class="day-row-right">
+        <div class="day-row-earning" style="color:${earningColor};">${_fmtNum(day.profit)}</div>
+        <div class="day-row-revenue">${_fmtNum(day.revenue)}</div>
       </div>
-      <div class="hdc-footer">
-        ${spark}
-        <span class="hdc-running" style="color:${runningProfit>=0?'#16a34a':'#dc2626'};">
-          Σ ${_fmtNum(runningProfit)}
-        </span>
-      </div>
+      <i class="fa-solid fa-chevron-right day-row-chev"></i>
     </div>`;
   }).join('');
 
@@ -11157,8 +11136,8 @@ async function renderHistoryPage() {
       </div>
     </div>
 
-    <!-- Day cards — horizontal scroll row -->
-    <div class="pr-days-grid">${dayCards}</div>
+    <!-- Day list rows -->
+    <div class="pr-days-list">${dayCards}</div>
 
     <!-- Expanded detail area -->
     <div id="hist-expanded-area" class="hist-expanded-area" style="display:none;"></div>
@@ -11274,7 +11253,7 @@ async function _backfillSalesForItem(item) {
 let _expandedHistDay = null;
 
 function expandHistDay(safeId) {
-  const grid = document.querySelector('.pr-days-grid');
+  const grid = document.querySelector('.pr-days-list');
   const area = document.getElementById('hist-expanded-area');
   if (!area || !grid) return;
 
@@ -11381,7 +11360,7 @@ window.histSetPay = histSetPay;
 
 function collapseHistDay() {
   _expandedHistDay = null;
-  const grid = document.querySelector('.pr-days-grid');
+  const grid = document.querySelector('.pr-days-list');
   const area = document.getElementById('hist-expanded-area');
   if (grid) grid.style.display = 'grid';
   if (area) { area.style.display = 'none'; area.innerHTML = ''; }
