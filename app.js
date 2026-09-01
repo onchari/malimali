@@ -10885,14 +10885,6 @@ async function renderHistoryPage() {
     ceiling = new Date(firstThisMonth.toISOString().split('T')[0] + 'T00:00:00');
   }
 
-  // Active payment filter
-  const _histPay = window._histPayFilter || 'all';
-  // Item search filter
-  const _histSearch = (document.getElementById('hist-item-search')?.value || '').toLowerCase().trim();
-  // Update search clear button visibility
-  const _hscBtn = document.getElementById('hist-search-clear');
-  if (_hscBtn) _hscBtn.style.display = _histSearch ? 'flex' : 'none';
-
   const byDate = {};
   allSales.forEach(s => {
     const d = s.businessDate || s.date?.slice(0,10) || today;
@@ -10900,17 +10892,6 @@ async function renderHistoryPage() {
     const dTime = new Date(d + 'T12:00:00');
     if (cutoff  && dTime < cutoff)  return;
     if (ceiling && dTime >= ceiling) return;
-    // Payment filter
-    if (_histPay !== 'all') {
-      const pm = (s.paymentMethod || 'cash').toLowerCase();
-      if (pm !== _histPay) return;
-    }
-    // Item name/code search
-    if (_histSearch) {
-      const nameMatch = (s.itemName || '').toLowerCase().includes(_histSearch);
-      const codeMatch = (s.itemCode || '').toLowerCase().includes(_histSearch);
-      if (!nameMatch && !codeMatch) return;
-    }
     if (!byDate[d]) byDate[d] = { sales:[], revenue:0, profit:0, cost:0, qty:0, hours:{} };
     byDate[d].sales.push(s);
     byDate[d].revenue += (s.revenue || 0);
