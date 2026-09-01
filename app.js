@@ -12406,11 +12406,11 @@ function _custUpdateHeaderBal(bal) {
   const lbl = document.getElementById('cust-detail-bal-lbl');
   if (!el) return;
   if (bal > 0) {
-    el.textContent  = fmt(bal);
+    el.textContent  = _fmtNum(bal);
     el.style.color  = '#ff6b6b';
     if (lbl) { lbl.textContent = 'Owes you'; lbl.style.color = 'rgba(255,255,255,.7)'; }
   } else if (bal < 0) {
-    el.textContent  = fmt(Math.abs(bal));
+    el.textContent  = _fmtNum(Math.abs(bal));
     el.style.color  = '#6bffb8';
     if (lbl) { lbl.textContent = 'You owe them'; lbl.style.color = 'rgba(255,255,255,.7)'; }
   } else {
@@ -12504,8 +12504,60 @@ async function renderCustomerList(query) {
       <i class="fa-solid fa-chevron-right" style="color:var(--muted);font-size:10px;margin-left:2px;flex-shrink:0;"></i>
     </div>`;
   }).join('');
+
+  // ── Recycle bin section (collapsed by default) ──────────────────
+  const allForBin = await dbAll('customers');
+  const deleted   = allForBin.filter(c => c.isDeleted);
+  if (deleted.length && !q) {
+    const binCards = deleted.map(c => {
+      const initials = (c.name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+      return `<div class="cust-card" style="opacity:.55;" onclick="restoreCustomer('${escapeHtml(c.customerId)}')">
+        <div class="cust-avatar" style="background:var(--muted);font-size:13px;">${escapeHtml(initials)}</div>
+        <div class="cust-info">
+          <div class="cust-name">${escapeHtml(c.name || '')}</div>
+          <div class="cust-meta">Tap to restore</div>
+        </div>
+        <i class="fa-solid fa-trash-arrow-up" style="color:var(--muted);font-size:12px;"></i>
+      </div>`;
+    }).join('');
+    container.innerHTML += `
+      <div style="border-top:2px solid var(--border);margin-top:8px;">
+        <div onclick="toggleCustRecycleBin()"
+             style="display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;background:var(--bg2);">
+          <i class="fa-solid fa-trash" style="font-size:12px;color:var(--muted);"></i>
+          <span style="font-size:12px;font-weight:700;color:var(--muted);flex:1;">Recycle Bin (${deleted.length})</span>
+          <span id="cust-recycle-chev" style="color:var(--muted);font-size:11px;">▶</span>
+        </div>
+        <div id="cust-recycle-body" style="display:none;">${binCards}</div>
+      </div>`;
+  }
 }
 window.renderCustomerList = renderCustomerList;
+
+async function restoreCustomer(customerId) {
+  const all = await dbAll('customers');
+  const c   = all.find(x => x.customerId === customerId);
+  if (!c) return;
+  c.isDeleted = false;
+  delete c.deletedAt;
+  c.updatedAt = new Date().toISOString();
+  await dbPut('customers', c);
+  fbSyncCustomer(c);
+  await renderCustomerList('');
+  toast('Customer restored', 'ok');
+}
+window.restoreCustomer = restoreCustomer;
+
+// Show/hide recycle bin section
+function toggleCustRecycleBin() {
+  const body = document.getElementById('cust-recycle-body');
+  const chev = document.getElementById('cust-recycle-chev');
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (chev) chev.textContent = open ? '▶' : '▼';
+}
+window.toggleCustRecycleBin = toggleCustRecycleBin;
 
 function onCustomerSearch(val) {
   const btn = document.getElementById('cust-search-clear');
@@ -12629,19 +12681,19 @@ async function _renderCustomerLedger(customerId) {
   const summaryHtml = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border-bottom:2px solid var(--border);">
     <div style="background:var(--surface);padding:9px 7px;text-align:center;">
       <div style="font-size:8px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Taken</div>
-      <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:#dc2626;">${fmt(taken)}</div>
+      <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:#dc2626;">${_fmtNum(taken)}</div>
     </div>
     <div style="background:var(--surface);padding:9px 7px;text-align:center;">
       <div style="font-size:8px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Returns</div>
-      <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:#f97316;">${fmt(returns)}</div>
+      <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:#f97316;">${_fmtNum(returns)}</div>
     </div>
     <div style="background:var(--surface);padding:9px 7px;text-align:center;">
       <div style="font-size:8px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Paid</div>
-      <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:#16a34a;">${fmt(paid)}</div>
+      <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:#16a34a;">${_fmtNum(paid)}</div>
     </div>
     <div style="background:${bal > 0 ? 'rgba(220,38,38,.08)' : bal < 0 ? 'rgba(22,163,74,.08)' : 'var(--surface)'};padding:9px 7px;text-align:center;">
       <div style="font-size:8px;color:${balColor};text-transform:uppercase;font-weight:800;margin-bottom:3px;">${balLabel}</div>
-      <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:${balColor};">${bal !== 0 ? fmt(Math.abs(bal)) : '—'}</div>
+      <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:${balColor};">${bal !== 0 ? _fmtNum(Math.abs(bal)) : '—'}</div>
     </div>
   </div>`;
 
@@ -12661,15 +12713,29 @@ async function _renderCustomerLedger(customerId) {
     const typeLabel = t.type === 'item' ? (t.itemName || 'Item') :
                       t.type === 'return' ? 'Return: ' + (t.itemName || '') :
                       'Payment' + (t.paymentMethod ? ' · ' + t.paymentMethod : '');
-    const detail = t.type === 'item' ? ` ×${t.qty||1} @ ${fmt(t.unitPrice||0)}` : '';
-    const deleteBtn = t.id ? `<button onclick="deleteCustTxn(${t.id})" title="Delete" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:0 2px;font-size:11px;opacity:.5;">✕</button>` : '';
+    const detail = t.type === 'item' ? ` ×${t.qty||1} @ ${_fmtNum(t.unitPrice||0)}` : '';
+    const actions = t.id ? `
+      <div style="display:flex;gap:3px;justify-content:center;">
+        <button onclick="openEditCustTxn(${t.id})" title="Edit"
+          style="width:24px;height:24px;border-radius:5px;border:1px solid var(--border);
+                 background:var(--bg2);color:var(--muted);cursor:pointer;font-size:10px;
+                 display:flex;align-items:center;justify-content:center;">
+          <i class="fa-solid fa-pen"></i>
+        </button>
+        <button onclick="deleteCustTxn(${t.id})" title="Delete"
+          style="width:24px;height:24px;border-radius:5px;border:1px solid rgba(220,38,38,.3);
+                 background:rgba(220,38,38,.06);color:#dc2626;cursor:pointer;font-size:10px;
+                 display:flex;align-items:center;justify-content:center;">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </div>` : '';
     return `<tr class="cust-ledger-row">
       <td class="cust-ledger-date">${t.date || ''}</td>
       <td class="cust-ledger-desc">${escapeHtml(typeLabel)}${escapeHtml(detail)}${t.note ? '<br><span style="font-size:10px;color:var(--muted);font-style:italic;">' + escapeHtml(t.note) + '</span>' : ''}</td>
-      <td class="cust-ledger-num" style="color:#dc2626;">${debit  > 0 ? fmt(debit)  : ''}</td>
-      <td class="cust-ledger-num" style="color:#16a34a;">${credit > 0 ? fmt(credit) : ''}</td>
-      <td class="cust-ledger-num" style="color:${balColor};font-weight:900;">${fmt(Math.abs(runningBal))}${runningBal < 0 ? ' Cr' : ''}</td>
-      <td style="padding:4px 2px;text-align:center;">${deleteBtn}</td>
+      <td class="cust-ledger-num" style="color:#dc2626;">${debit  > 0 ? _fmtNum(debit)  : ''}</td>
+      <td class="cust-ledger-num" style="color:#16a34a;">${credit > 0 ? _fmtNum(credit) : ''}</td>
+      <td class="cust-ledger-num" style="color:${balColor};font-weight:900;">${_fmtNum(Math.abs(runningBal))}${runningBal < 0 ? ' Cr' : ''}</td>
+      <td style="padding:4px 4px;vertical-align:middle;">${actions}</td>
     </tr>`;
   }).join('');
 
@@ -12687,7 +12753,7 @@ async function _renderCustomerLedger(customerId) {
       <tbody>${rows}</tbody>
       <tfoot><tr style="border-top:2px solid var(--border);">
         <td colspan="4" style="padding:8px 6px;font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);">Balance carried forward</td>
-        <td class="cust-ledger-num" style="font-weight:900;color:${finalColor};font-size:13px;">${finalBal > 0 ? fmt(finalBal) + ' Dr' : finalBal < 0 ? fmt(Math.abs(finalBal)) + ' Cr' : 'Nil'}</td>
+        <td class="cust-ledger-num" style="font-weight:900;color:${finalColor};font-size:13px;">${finalBal > 0 ? _fmtNum(finalBal) + ' Dr' : finalBal < 0 ? _fmtNum(Math.abs(finalBal)) + ' Cr' : 'Nil'}</td>
         <td></td>
       </tr></tfoot>
     </table>
@@ -12848,6 +12914,74 @@ async function _recalcBalance(customerId) {
 }
 
 // ── Delete a transaction ───────────────────────────────────────────
+// ── Edit transaction ───────────────────────────────────────────────
+async function openEditCustTxn(txnId) {
+  const txn = (await dbAll('customer_txns')).find(t => t.id === txnId);
+  if (!txn) { toast('Transaction not found', 'err'); return; }
+  const g = id => document.getElementById(id);
+  if (g('edit-cust-txn-id'))   g('edit-cust-txn-id').value   = txnId;
+  if (g('edit-cust-txn-date')) g('edit-cust-txn-date').value = txn.date || todayDateStr();
+  if (g('edit-cust-txn-desc')) g('edit-cust-txn-desc').value = txn.itemName || '';
+  if (g('edit-cust-txn-qty'))  g('edit-cust-txn-qty').value  = txn.qty  || 1;
+  if (g('edit-cust-txn-price'))g('edit-cust-txn-price').value= txn.type === 'payment' ? (txn.amount||0) : (txn.unitPrice||0);
+  if (g('edit-cust-txn-note')) g('edit-cust-txn-note').value = txn.note || '';
+  // Show qty/price row only for item/return types
+  const isPayment = txn.type === 'payment';
+  const qtyRow = g('edit-cust-qty-row');
+  if (qtyRow) qtyRow.style.display = isPayment ? 'none' : 'grid';
+  const priceLabel = g('edit-cust-price-lbl');
+  if (priceLabel) priceLabel.textContent = isPayment ? 'Amount' : 'Unit Price';
+  const overlay = g('edit-cust-txn-sheet');
+  if (overlay) overlay.classList.add('open');
+}
+window.openEditCustTxn = openEditCustTxn;
+
+function closeEditCustTxn() {
+  const o = document.getElementById('edit-cust-txn-sheet');
+  if (o) o.classList.remove('open');
+}
+window.closeEditCustTxn = closeEditCustTxn;
+
+async function saveEditCustTxn() {
+  const g = id => document.getElementById(id);
+  const txnId = parseInt(g('edit-cust-txn-id')?.value) || 0;
+  if (!txnId) return;
+  const txn = (await dbAll('customer_txns')).find(t => t.id === txnId);
+  if (!txn) { toast('Transaction not found', 'err'); return; }
+
+  const date  = g('edit-cust-txn-date')?.value  || todayDateStr();
+  const desc  = (g('edit-cust-txn-desc')?.value || '').trim();
+  const price = parseFloat(g('edit-cust-txn-price')?.value) || 0;
+  const qty   = parseFloat(g('edit-cust-txn-qty')?.value)   || 1;
+  const note  = (g('edit-cust-txn-note')?.value || '').trim();
+
+  if (txn.type === 'payment') {
+    if (price <= 0) { toast('Amount must be > 0', 'err'); return; }
+    txn.amount = price;
+  } else {
+    if (!desc)       { toast('Description required', 'err'); return; }
+    if (price <= 0)  { toast('Price must be > 0', 'err'); return; }
+    txn.itemName   = desc;
+    txn.qty        = qty;
+    txn.unitPrice  = price;
+    txn.totalValue = qty * price;
+    txn.amount     = txn.totalValue;
+  }
+  txn.date = date;
+  txn.note = note;
+  txn.updatedAt = new Date().toISOString();
+
+  await dbPut('customer_txns', txn);
+  await _recalcBalance(txn.customerId);
+  fbSyncCustTxn(txn);
+  const upd = (await dbAll('customers')).find(c => c.customerId === txn.customerId);
+  if (upd) _custUpdateHeaderBal(upd.balance || 0);
+  closeEditCustTxn();
+  showCustomerTab('ledger');
+  toast('✓ Updated', 'ok');
+}
+window.saveEditCustTxn = saveEditCustTxn;
+
 async function deleteCustTxn(txnId) {
   if (!confirm('Delete this record? The balance will be recalculated.')) return;
   const txns = await dbAll('customer_txns');
