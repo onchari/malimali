@@ -6218,7 +6218,7 @@ async function resetAllData() {
 }
 
 const _DATA_STORES = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances', 'wishlist', 'photos'];
-const _FB_COLLECTIONS = ['items', 'sales', 'business_days', 'shoe_sizes', 'finances', 'wishlist'];
+const _FB_COLLECTIONS = ['items', 'sales', 'business_days', 'shoe_sizes', 'finances', 'wishlist', 'customers', 'customer_txns'];
 
 function _clearAllDayReconKeys() {
   const remove = [];
@@ -7632,6 +7632,37 @@ async function pullFromFirebase(silent = false) {
         const ex = bdByFbId[d.id] || (dateKey ? bdByDate[dateKey] : null);
         if (ex) { data.id = ex.id; await dbPut('business_days', data); }
         else { try { await dbAdd('business_days', data); } catch(_) { /* intentionally ignored */ } }
+      }
+    } catch(_) { /* intentionally ignored */ }
+
+    // Pull customers
+    try {
+      if (db.objectStoreNames.contains('customers')) {
+        const custSnap = await getDocs(fbCol('customers'));
+        const localCust = await dbAll('customers');
+        const custByFbId = Object.fromEntries(localCust.filter(c => c.fbId).map(c => [c.fbId, c]));
+        const custById   = Object.fromEntries(localCust.filter(c => c.customerId).map(c => [c.customerId, c]));
+        for (const d of custSnap.docs) {
+          const data = {...d.data(), fbId: d.id }; delete data.id;
+          const ex = custByFbId[d.id] || custById[data.customerId];
+          if (ex) { data.id = ex.id; await dbPut('customers', data); }
+          else { try { await dbAdd('customers', data); } catch(_) {} }
+        }
+      }
+    } catch(_) { /* intentionally ignored */ }
+
+    // Pull customer_txns
+    try {
+      if (db.objectStoreNames.contains('customer_txns')) {
+        const txnSnap = await getDocs(fbCol('customer_txns'));
+        const localTxns = await dbAll('customer_txns');
+        const txnByFbId = Object.fromEntries(localTxns.filter(t => t.fbId).map(t => [t.fbId, t]));
+        for (const d of txnSnap.docs) {
+          const data = {...d.data(), fbId: d.id }; delete data.id;
+          const ex = txnByFbId[d.id];
+          if (ex) { data.id = ex.id; await dbPut('customer_txns', data); }
+          else { try { await dbAdd('customer_txns', data); } catch(_) {} }
+        }
       }
     } catch(_) { /* intentionally ignored */ }
 
@@ -12294,16 +12325,14 @@ function closeAddCustomerSheet() {
 window.closeAddCustomerSheet = closeAddCustomerSheet;
 
 async function saveNewCustomer() {
-  const name = (document.getElementById('cust-form-name').value || '').trim();
+  const name  = (document.getElementById('cust-form-name')?.value  || '').trim();
+  const phone = (document.getElementById('cust-form-phone')?.value || '').trim();
   if (!name) { toast('Customer name is required', 'err'); return; }
-  const phone    = (document.getElementById('cust-form-phone').value || '').trim();
-  const location = (document.getElementById('cust-form-location').value || '').trim();
-  const notes    = (document.getElementById('cust-form-notes').value || '').trim();
 
   const customerId = await _nextCustomerId();
   const now = new Date().toISOString();
   const customer = {
-    customerId, name, phone, location, notes,
+    customerId, name, phone,
     balance: 0, totalTaken: 0, totalPaid: 0,
     lastDate: '', createdAt: now, updatedAt: now, fbId: ''
   };
@@ -12348,7 +12377,7 @@ async function renderCustomerList(query) {
     const bal = c.balance || 0;
     const balClass = bal > 0 ? 'cust-bal-owed' : 'cust-bal-clear';
     const balStr = bal > 0 ? `Ksh ${fmt(bal)}` : (bal < 0 ? `-Ksh ${fmt(Math.abs(bal))}` : 'Clear');
-    const meta = [c.phone, c.location].filter(Boolean).join(' · ') || 'No contact info';
+    const meta = c.phone || 'No phone';
     const lastDate = c.lastDate ? `Last: ${c.lastDate}` : 'No transactions';
     return `<div class="cust-card" onclick="openCustomerDetail('${escapeHtml(c.customerId)}')">
       <div class="cust-avatar">${escapeHtml(initials)}</div>
