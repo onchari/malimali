@@ -337,6 +337,9 @@
   <button class="nav-btn" onclick="showPage('sell')" id="tab-sell">
     <span class="icon"><i class="fa-solid fa-cash-register"></i></span>Sales
   </button>
+  <button class="nav-btn" onclick="showPage('customers')" id="tab-customers">
+    <span class="icon"><i class="fa-solid fa-users"></i></span>Customers
+  </button>
   <button class="nav-btn" onclick="showPage('operations')" id="tab-operations">
     <span class="icon"><i class="fa-solid fa-briefcase"></i></span>Operations
   </button>
@@ -2712,6 +2715,208 @@
 
   </div>
 </div>
+
+<!-- ==============================================================
+     PAGE: CUSTOMERS  (id="page-customers")
+     Credit tracking, balances, transaction history
+     ============================================================== -->
+<div class="page" id="page-customers">
+  <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;padding:14px 14px 0;">
+    <div class="page-title" style="font-size:18px;font-weight:900;">Customers</div>
+    <button class="btn-primary" onclick="openAddCustomerSheet()" style="font-size:13px;padding:8px 14px;">
+      <i class="fa-solid fa-plus"></i> Add Customer
+    </button>
+  </div>
+
+  <!-- Search bar -->
+  <div style="padding:10px 14px 0;position:relative;display:flex;align-items:center;gap:8px;">
+    <div style="flex:1;position:relative;">
+      <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;"></i>
+      <input type="text" id="cust-search-input" placeholder="Search by name or phone…"
+        oninput="onCustomerSearch(this.value)"
+        style="width:100%;padding:9px 36px 9px 32px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;">
+    </div>
+    <button id="cust-search-clear" onclick="document.getElementById('cust-search-input').value='';onCustomerSearch('');"
+      style="display:none;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--bg2);border:none;cursor:pointer;color:var(--muted);flex-shrink:0;">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+
+  <!-- Customer list -->
+  <div id="customer-list" style="margin-top:10px;overflow-y:auto;">
+    <div class="empty-state" style="padding:40px 20px;text-align:center;color:var(--muted);">
+      <i class="fa-solid fa-users" style="font-size:32px;margin-bottom:10px;display:block;opacity:.3;"></i>
+      <div>No customers yet. Tap <strong>+ Add Customer</strong> to get started.</div>
+    </div>
+  </div>
+</div><!-- /page-customers -->
+
+
+<!-- ==============================================================
+     SHEET: ADD CUSTOMER
+     ============================================================== -->
+<div class="sheet" id="add-customer-sheet">
+  <div class="sheet-header">
+    <div class="sheet-title">New Customer</div>
+    <button class="sheet-close" onclick="closeAddCustomerSheet()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="sheet-body">
+    <div class="form-group">
+      <label class="form-label">Name <span style="color:var(--red);">*</span></label>
+      <input type="text" id="cust-form-name" class="form-input" placeholder="Customer name">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Phone</label>
+      <input type="tel" id="cust-form-phone" class="form-input" placeholder="07xx xxx xxx">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Location</label>
+      <input type="text" id="cust-form-location" class="form-input" placeholder="Area / estate">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes</label>
+      <textarea id="cust-form-notes" class="form-input" rows="3" placeholder="Any notes…" style="resize:vertical;"></textarea>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
+      <button class="btn-secondary" onclick="closeAddCustomerSheet()">Cancel</button>
+      <button class="btn-primary" onclick="saveNewCustomer()">Save Customer</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==============================================================
+     SHEET: CUSTOMER DETAIL (full-screen overlay)
+     ============================================================== -->
+<div class="sheet sheet-full" id="customer-detail-sheet">
+  <div class="cust-detail-hdr">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+      <div>
+        <div class="cust-detail-name" id="cust-detail-name">Customer</div>
+        <div class="cust-detail-id" id="cust-detail-id"></div>
+      </div>
+      <button onclick="closeCustomerDetail()" style="background:rgba(255,255,255,.15);border:none;border-radius:50%;width:32px;height:32px;color:white;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div class="cust-detail-bal-lbl" style="margin-top:10px;">Outstanding Balance</div>
+    <div class="cust-detail-bal" id="cust-detail-bal">Ksh 0</div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="cust-tabs">
+    <button class="cust-tab active" data-tab="overview" onclick="showCustomerTab('overview')">Overview</button>
+    <button class="cust-tab" data-tab="items"    onclick="showCustomerTab('items')">Items</button>
+    <button class="cust-tab" data-tab="payments" onclick="showCustomerTab('payments')">Payments</button>
+    <button class="cust-tab" data-tab="history"  onclick="showCustomerTab('history')">History</button>
+  </div>
+
+  <!-- Tab content -->
+  <div style="flex:1;overflow-y:auto;">
+    <div class="cust-tab-pane" data-tab="overview" id="cust-tab-overview"></div>
+    <div class="cust-tab-pane" data-tab="items"    id="cust-tab-items"    style="display:none;"></div>
+    <div class="cust-tab-pane" data-tab="payments" id="cust-tab-payments" style="display:none;"></div>
+    <div class="cust-tab-pane" data-tab="history"  id="cust-tab-history"  style="display:none;"></div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="cust-actions">
+    <button class="cust-act-item" onclick="openCustItemSheet()">
+      <i class="fa-solid fa-box"></i> Add Item
+    </button>
+    <button class="cust-act-pay" onclick="openCustPaymentSheet()">
+      <i class="fa-solid fa-coins"></i> Record Payment
+    </button>
+  </div>
+</div>
+
+
+<!-- ==============================================================
+     SHEET: ADD ITEM TO CUSTOMER
+     ============================================================== -->
+<div class="sheet" id="cust-item-sheet">
+  <div class="sheet-header">
+    <div class="sheet-title">Add Item</div>
+    <button class="sheet-close" onclick="closeCustItemSheet()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="sheet-body">
+    <div class="form-group">
+      <label class="form-label">Item Name <span style="color:var(--red);">*</span></label>
+      <input type="text" id="cust-item-name" class="form-input" placeholder="e.g. Men's Shirt">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="form-group">
+        <label class="form-label">Variant / Colour</label>
+        <input type="text" id="cust-item-variant" class="form-input" placeholder="e.g. Blue">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Size</label>
+        <input type="text" id="cust-item-size" class="form-input" placeholder="e.g. XL / 42">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="form-group">
+        <label class="form-label">Qty <span style="color:var(--red);">*</span></label>
+        <input type="number" id="cust-item-qty" class="form-input" value="1" min="0.01" step="any">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Unit Price (Ksh) <span style="color:var(--red);">*</span></label>
+        <input type="number" id="cust-item-price" class="form-input" placeholder="0" min="0" step="any">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Note</label>
+      <input type="text" id="cust-item-note" class="form-input" placeholder="Optional note">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Date</label>
+      <input type="date" id="cust-item-date" class="form-input">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
+      <button class="btn-secondary" onclick="closeCustItemSheet()">Cancel</button>
+      <button class="btn-primary" onclick="saveCustItem()">Save Item</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==============================================================
+     SHEET: RECORD PAYMENT
+     ============================================================== -->
+<div class="sheet" id="cust-payment-sheet">
+  <div class="sheet-header">
+    <div class="sheet-title">Record Payment</div>
+    <button class="sheet-close" onclick="closeCustPaymentSheet()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="sheet-body">
+    <div class="form-group">
+      <label class="form-label">Amount (Ksh) <span style="color:var(--red);">*</span></label>
+      <input type="number" id="cust-pay-amount" class="form-input" placeholder="0" min="0.01" step="any">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Payment Method</label>
+      <select id="cust-pay-method" class="form-input">
+        <option value="Cash">Cash</option>
+        <option value="M-Pesa">M-Pesa</option>
+        <option value="Bank Transfer">Bank Transfer</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Note</label>
+      <input type="text" id="cust-pay-note" class="form-input" placeholder="Optional note">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Date</label>
+      <input type="date" id="cust-pay-date" class="form-input">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
+      <button class="btn-secondary" onclick="closeCustPaymentSheet()">Cancel</button>
+      <button class="btn-primary" onclick="saveCustPayment()">Save Payment</button>
+    </div>
+  </div>
+</div>
+
 
 <script src="app.js"></script>
 </body>

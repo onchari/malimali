@@ -1,12 +1,12 @@
 // ===================================================================
-// DATABASE SCHEMA  v11 -  Mandela General Stores
+// DATABASE SCHEMA  v12 -  Mandela General Stores
 // ===================================================================
 let db;
 // DB_NAME is resolved per-environment in initDB() - production and development
 // use entirely separate local IndexedDB databases so dev work can never
 // touch real shop data. See getFirebaseEnv() / KEY_FIREBASE_ENV below.
 let DB_NAME = 'InventoryApp';
-const DB_VER  = 11;
+const DB_VER  = 12;
 
 // ── APP CONSTANTS ─────────────────────────────────────────────────────
 const KEY_SESSION      = 'mg_session';
@@ -115,6 +115,22 @@ function initDB() {
 
     // NOTE: day_sessions store (legacy) intentionally NOT created in v9.
     //       Existing data migrated to business_days by migrateData().
+
+    // ── v12: customers & customer_txns ────────────────────────────
+    if (old < 12) {
+      if (!d.objectStoreNames.contains('customers')) {
+        const cu = d.createObjectStore('customers', { keyPath: 'id', autoIncrement: true });
+        cu.createIndex('idx_customerId', 'customerId', { unique: true  });
+        cu.createIndex('idx_name',       'name',       { unique: false });
+        cu.createIndex('idx_fbid',       'fbId',       { unique: false });
+      }
+      if (!d.objectStoreNames.contains('customer_txns')) {
+        const ct = d.createObjectStore('customer_txns', { keyPath: 'id', autoIncrement: true });
+        ct.createIndex('idx_customer', 'customerId', { unique: false });
+        ct.createIndex('idx_date',     'date',       { unique: false });
+        ct.createIndex('idx_fbid',     'fbId',       { unique: false });
+      }
+    }
   };
 
   req.onerror = e => {
@@ -1271,6 +1287,7 @@ function showPage(id) {
   if (id === 'finance')  { renderFinancePage(); }
   if (id === 'settings') { renderCategorySettings(); renderUnitsSettings(); }
   if (id === 'add') setTimeout(() => setItemMode(_addFormIsRecord), 0);
+  if (id === 'customers') { renderCustomerList(''); }
 }
 
 // Guard: wrap showPage to enforce tab access by role
@@ -8962,7 +8979,7 @@ const USERS = [
     role: 'super',
     roleLabel: 'Super User',
     // Super: access to everything
-    tabs: ['dash','inventory','sell','operations','settings']
+    tabs: ['dash','inventory','sell','customers','operations','settings']
   },
   {
     username: 'vanice',
@@ -8972,7 +8989,7 @@ const USERS = [
     role: 'user',
     roleLabel: 'User',
     // User: everything except Settings
-    tabs: ['dash','inventory','sell','operations']
+    tabs: ['dash','inventory','sell','customers','operations']
   },
   {
     username: 'trevor',
@@ -12229,3 +12246,473 @@ window._piUpdateRow = _piUpdateRow;
 window._piDeleteRow = _piDeleteRow;
 window.piAddRow = piAddRow;
 window.importPhotoItems = importPhotoItems;
+
+// ===================================================================
+// CUSTOMERS MODULE  — credit tracking, balances, transaction history
+// ===================================================================
+
+let _currentCustomerId = null;
+
+// ── Generate next customer ID: C-0001, C-0002, … ──────────────────
+async function _nextCustomerId() {
+  const all = await dbAll('customers');
+  if (!all.length) return 'C-0001';
+  const nums = all.map(c => {
+    const m = (c.customerId || '').match(/^C-(\d+)$/);
+    return m ? parseInt(m[1], 10) : 0;
+  });
+  const next = Math.max(...nums) + 1;
+  return 'C-' + String(next).padStart(4, '0');
+}
+
+// ── Add Customer sheet ─────────────────────────────────────────────
+async function openAddCustomerSheet() {
+  const sheet = document.getElementById('add-customer-sheet');
+  if (!sheet) return;
+  sheet.querySelector('#cust-form-name').value = '';
+  sheet.querySelector('#cust-form-phone').value = '';
+  sheet.querySelector('#cust-form-location').value = '';
+  sheet.querySelector('#cust-form-notes').value = '';
+  sheet.classList.add('open');
+  setTimeout(() => sheet.querySelector('#cust-form-name').focus(), 120);
+}
+window.openAddCustomerSheet = openAddCustomerSheet;
+
+function closeAddCustomerSheet() {
+  const sheet = document.getElementById('add-customer-sheet');
+  if (sheet) sheet.classList.remove('open');
+}
+window.closeAddCustomerSheet = closeAddCustomerSheet;
+
+async function saveNewCustomer() {
+  const name = (document.getElementById('cust-form-name').value || '').trim();
+  if (!name) { toast('Customer name is required', 'err'); return; }
+  const phone    = (document.getElementById('cust-form-phone').value || '').trim();
+  const location = (document.getElementById('cust-form-location').value || '').trim();
+  const notes    = (document.getElementById('cust-form-notes').value || '').trim();
+
+  const customerId = await _nextCustomerId();
+  const now = new Date().toISOString();
+  const customer = {
+    customerId, name, phone, location, notes,
+    balance: 0, totalTaken: 0, totalPaid: 0,
+    lastDate: '', createdAt: now, updatedAt: now, fbId: ''
+  };
+  const id = await dbAdd('customers', customer);
+  customer.id = id;
+  await fbSyncCustomer(customer);
+  closeAddCustomerSheet();
+  await renderCustomerList('');
+  toast('Customer added', 'ok');
+}
+window.saveNewCustomer = saveNewCustomer;
+
+// ── Customer List ──────────────────────────────────────────────────
+async function renderCustomerList(query) {
+  const container = document.getElementById('customer-list');
+  if (!container) return;
+  let customers = await dbAll('customers');
+  const q = (query || '').trim().toLowerCase();
+  if (q) {
+    customers = customers.filter(c =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.phone || '').toLowerCase().includes(q)
+    );
+  }
+  // Sort by balance descending (highest debtors first), then name
+  customers.sort((a, b) => {
+    const bd = (b.balance || 0) - (a.balance || 0);
+    if (bd !== 0) return bd;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  if (!customers.length) {
+    container.innerHTML = `<div class="empty-state" style="padding:40px 20px;text-align:center;color:var(--muted);">
+      <i class="fa-solid fa-users" style="font-size:32px;margin-bottom:10px;display:block;opacity:.3;"></i>
+      <div>${q ? 'No customers match your search.' : 'No customers yet. Tap <strong>+ Add Customer</strong> to get started.'}</div>
+    </div>`;
+    return;
+  }
+
+  container.innerHTML = customers.map(c => {
+    const initials = (c.name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+    const bal = c.balance || 0;
+    const balClass = bal > 0 ? 'cust-bal-owed' : 'cust-bal-clear';
+    const balStr = bal > 0 ? `Ksh ${fmt(bal)}` : (bal < 0 ? `-Ksh ${fmt(Math.abs(bal))}` : 'Clear');
+    const meta = [c.phone, c.location].filter(Boolean).join(' · ') || 'No contact info';
+    const lastDate = c.lastDate ? `Last: ${c.lastDate}` : 'No transactions';
+    return `<div class="cust-card" onclick="openCustomerDetail('${escapeHtml(c.customerId)}')">
+      <div class="cust-avatar">${escapeHtml(initials)}</div>
+      <div class="cust-info">
+        <div class="cust-name">${escapeHtml(c.name)}</div>
+        <div class="cust-meta">${escapeHtml(meta)} · ${escapeHtml(lastDate)}</div>
+      </div>
+      <div class="cust-balance-col">
+        <div class="cust-balance-val ${balClass}">${balStr}</div>
+        <div class="cust-balance-lbl">Balance</div>
+      </div>
+      <i class="fa-solid fa-chevron-right" style="color:var(--muted);font-size:11px;margin-left:4px;"></i>
+    </div>`;
+  }).join('');
+}
+window.renderCustomerList = renderCustomerList;
+
+function onCustomerSearch(val) {
+  const btn = document.getElementById('cust-search-clear');
+  if (btn) btn.style.display = val ? 'flex' : 'none';
+  renderCustomerList(val);
+}
+window.onCustomerSearch = onCustomerSearch;
+
+// ── Customer Detail ────────────────────────────────────────────────
+async function openCustomerDetail(customerId) {
+  _currentCustomerId = customerId;
+  const customer = (await dbAll('customers')).find(c => c.customerId === customerId);
+  if (!customer) { toast('Customer not found', 'err'); return; }
+
+  // Populate header
+  const nameEl = document.getElementById('cust-detail-name');
+  const idEl   = document.getElementById('cust-detail-id');
+  const phoneEl = document.getElementById('cust-detail-phone');
+  const balEl  = document.getElementById('cust-detail-bal');
+  if (nameEl)  nameEl.textContent  = customer.name || '';
+  if (idEl)    idEl.textContent    = customer.customerId + (customer.phone ? ' · ' + customer.phone : '');
+  if (phoneEl) phoneEl.textContent = customer.phone || '';
+  if (balEl) {
+    const bal = customer.balance || 0;
+    balEl.textContent = bal > 0 ? `Ksh ${fmt(bal)} owed` : (bal < 0 ? `Ksh ${fmt(Math.abs(bal))} credit` : 'Balance clear');
+    balEl.style.color = bal > 0 ? 'rgba(255,80,80,1)' : 'rgba(100,255,150,1)';
+  }
+
+  document.getElementById('customer-detail-sheet').classList.add('open');
+  showCustomerTab('overview');
+}
+window.openCustomerDetail = openCustomerDetail;
+
+function closeCustomerDetail() {
+  document.getElementById('customer-detail-sheet').classList.remove('open');
+  _currentCustomerId = null;
+}
+window.closeCustomerDetail = closeCustomerDetail;
+
+function showCustomerTab(tab) {
+  // Update tab button states
+  document.querySelectorAll('.cust-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  // Show/hide tab panes
+  document.querySelectorAll('.cust-tab-pane').forEach(pane => {
+    pane.style.display = pane.dataset.tab === tab ? 'block' : 'none';
+  });
+
+  if (!_currentCustomerId) return;
+  dbAll('customers').then(all => {
+    const customer = all.find(c => c.customerId === _currentCustomerId);
+    if (!customer) return;
+    if (tab === 'overview')  _renderCustomerOverview(customer);
+    if (tab === 'items')     _renderCustomerItems(_currentCustomerId);
+    if (tab === 'payments')  _renderCustomerPayments(_currentCustomerId);
+    if (tab === 'history')   _renderCustomerHistory(_currentCustomerId);
+  });
+}
+window.showCustomerTab = showCustomerTab;
+
+async function _renderCustomerOverview(customer) {
+  const el = document.getElementById('cust-tab-overview');
+  if (!el) return;
+  const txns = (await dbAll('customer_txns')).filter(t => t.customerId === customer.customerId);
+  const itemCount = txns.filter(t => t.type === 'item').length;
+  const payCount  = txns.filter(t => t.type === 'payment').length;
+  const bal = customer.balance || 0;
+  const balColor = bal > 0 ? 'var(--red)' : 'var(--green)';
+  el.innerHTML = `
+    <div style="padding:14px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+        <div class="stat-card" style="padding:12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">Total Taken</div>
+          <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--red);">Ksh ${fmt(customer.totalTaken || 0)}</div>
+        </div>
+        <div class="stat-card" style="padding:12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">Total Paid</div>
+          <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--green);">Ksh ${fmt(customer.totalPaid || 0)}</div>
+        </div>
+        <div class="stat-card" style="padding:12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">Balance</div>
+          <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:${balColor};">${bal > 0 ? 'Ksh ' + fmt(bal) : (bal < 0 ? '-Ksh ' + fmt(Math.abs(bal)) : 'Clear')}</div>
+        </div>
+        <div class="stat-card" style="padding:12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;">Transactions</div>
+          <div style="font-size:18px;font-weight:900;font-family:var(--mono);color:var(--text);">${fmtN(txns.length)}</div>
+        </div>
+      </div>
+      ${customer.location ? `<div style="font-size:12px;color:var(--muted);margin-bottom:6px;"><i class="fa-solid fa-location-dot" style="margin-right:4px;"></i>${escapeHtml(customer.location)}</div>` : ''}
+      ${customer.notes    ? `<div style="font-size:12px;color:var(--muted);padding:10px;background:var(--bg2);border-radius:var(--r);">${escapeHtml(customer.notes)}</div>` : ''}
+      ${customer.lastDate ? `<div style="font-size:11px;color:var(--muted);margin-top:8px;">Last transaction: ${customer.lastDate}</div>` : ''}
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">${fmtN(itemCount)} item${itemCount !== 1 ? 's' : ''} taken · ${fmtN(payCount)} payment${payCount !== 1 ? 's' : ''} recorded</div>
+    </div>`;
+}
+
+async function _renderCustomerItems(customerId) {
+  const el = document.getElementById('cust-tab-items');
+  if (!el) return;
+  const txns = (await dbAll('customer_txns')).filter(t => t.customerId === customerId && t.type === 'item');
+  txns.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (!txns.length) {
+    el.innerHTML = `<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">No items recorded yet.</div>`;
+    return;
+  }
+  el.innerHTML = txns.map(t => {
+    const desc = [t.itemName, t.variant, t.size].filter(Boolean).join(' / ');
+    const qty  = t.qty || 1;
+    const unit = t.unitPrice || 0;
+    const total = t.totalValue || (qty * unit);
+    return `<div class="cust-txn">
+      <div class="cust-txn-icon cust-txn-item"><i class="fa-solid fa-box"></i></div>
+      <div class="cust-txn-body">
+        <div class="cust-txn-desc">${escapeHtml(desc || 'Item')}</div>
+        <div class="cust-txn-meta">${qty} × Ksh ${fmt(unit)} · ${t.date || ''}</div>
+        ${t.note ? `<div class="cust-txn-meta" style="font-style:italic;">${escapeHtml(t.note)}</div>` : ''}
+      </div>
+      <div class="cust-txn-amt" style="color:var(--red);">Ksh ${fmt(total)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function _renderCustomerPayments(customerId) {
+  const el = document.getElementById('cust-tab-payments');
+  if (!el) return;
+  const txns = (await dbAll('customer_txns')).filter(t => t.customerId === customerId && t.type === 'payment');
+  txns.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (!txns.length) {
+    el.innerHTML = `<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">No payments recorded yet.</div>`;
+    return;
+  }
+  el.innerHTML = txns.map(t => {
+    const method = t.paymentMethod ? ` · ${t.paymentMethod}` : '';
+    return `<div class="cust-txn">
+      <div class="cust-txn-icon cust-txn-pay"><i class="fa-solid fa-coins"></i></div>
+      <div class="cust-txn-body">
+        <div class="cust-txn-desc">Payment${method}</div>
+        <div class="cust-txn-meta">${t.date || ''}</div>
+        ${t.note ? `<div class="cust-txn-meta" style="font-style:italic;">${escapeHtml(t.note)}</div>` : ''}
+      </div>
+      <div class="cust-txn-amt" style="color:var(--green);">Ksh ${fmt(t.amount || 0)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function _renderCustomerHistory(customerId) {
+  const el = document.getElementById('cust-tab-history');
+  if (!el) return;
+  const txns = (await dbAll('customer_txns')).filter(t => t.customerId === customerId);
+  txns.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt||'').localeCompare(a.createdAt||''));
+  if (!txns.length) {
+    el.innerHTML = `<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">No transaction history yet.</div>`;
+    return;
+  }
+  el.innerHTML = txns.map(t => {
+    const isItem = t.type === 'item';
+    const desc = isItem
+      ? [t.itemName, t.variant, t.size].filter(Boolean).join(' / ') || 'Item'
+      : 'Payment' + (t.paymentMethod ? ` · ${t.paymentMethod}` : '');
+    const amt  = isItem ? (t.totalValue || (t.qty||1) * (t.unitPrice||0)) : (t.amount || 0);
+    const amtColor = isItem ? 'var(--red)' : 'var(--green)';
+    const iconClass = isItem ? 'cust-txn-item' : 'cust-txn-pay';
+    const icon = isItem ? 'fa-box' : 'fa-coins';
+    return `<div class="cust-txn">
+      <div class="cust-txn-icon ${iconClass}"><i class="fa-solid ${icon}"></i></div>
+      <div class="cust-txn-body">
+        <div class="cust-txn-desc">${escapeHtml(desc)}</div>
+        <div class="cust-txn-meta">${t.date || ''}</div>
+        ${t.note ? `<div class="cust-txn-meta" style="font-style:italic;">${escapeHtml(t.note)}</div>` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+        <div class="cust-txn-amt" style="color:${amtColor};">Ksh ${fmt(amt)}</div>
+        <button onclick="deleteCustTxn(${t.id})" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Add Item to Customer ───────────────────────────────────────────
+async function openCustItemSheet() {
+  const sheet = document.getElementById('cust-item-sheet');
+  if (!sheet) return;
+  sheet.querySelector('#cust-item-name').value    = '';
+  sheet.querySelector('#cust-item-variant').value = '';
+  sheet.querySelector('#cust-item-size').value    = '';
+  sheet.querySelector('#cust-item-qty').value     = '1';
+  sheet.querySelector('#cust-item-price').value   = '';
+  sheet.querySelector('#cust-item-note').value    = '';
+  sheet.querySelector('#cust-item-date').value    = todayDateStr();
+  sheet.classList.add('open');
+  setTimeout(() => sheet.querySelector('#cust-item-name').focus(), 120);
+}
+window.openCustItemSheet = openCustItemSheet;
+
+function closeCustItemSheet() {
+  const sheet = document.getElementById('cust-item-sheet');
+  if (sheet) sheet.classList.remove('open');
+}
+window.closeCustItemSheet = closeCustItemSheet;
+
+async function saveCustItem() {
+  if (!_currentCustomerId) return;
+  const itemName  = (document.getElementById('cust-item-name').value || '').trim();
+  const variant   = (document.getElementById('cust-item-variant').value || '').trim();
+  const size      = (document.getElementById('cust-item-size').value || '').trim();
+  const qty       = parseFloat(document.getElementById('cust-item-qty').value) || 0;
+  const unitPrice = parseFloat(document.getElementById('cust-item-price').value) || 0;
+  const note      = (document.getElementById('cust-item-note').value || '').trim();
+  const date      = document.getElementById('cust-item-date').value || todayDateStr();
+
+  if (!itemName)     { toast('Item name is required', 'err'); return; }
+  if (qty <= 0)      { toast('Quantity must be greater than 0', 'err'); return; }
+  if (unitPrice <= 0){ toast('Unit price must be greater than 0', 'err'); return; }
+
+  const totalValue = qty * unitPrice;
+  const now = new Date().toISOString();
+  const customer = (await dbAll('customers')).find(c => c.customerId === _currentCustomerId);
+  const txn = {
+    customerId: _currentCustomerId,
+    customerName: customer ? customer.name : '',
+    type: 'item',
+    itemName, variant, size,
+    qty, unitPrice, totalValue,
+    amount: totalValue,
+    paymentMethod: '',
+    note, date, createdAt: now, fbId: ''
+  };
+  const txnId = await dbAdd('customer_txns', txn);
+  txn.id = txnId;
+  await _recalcBalance(_currentCustomerId);
+  await fbSyncCustTxn(txn);
+  closeCustItemSheet();
+  // Refresh header balance
+  await openCustomerDetail(_currentCustomerId);
+  toast('Item recorded', 'ok');
+}
+window.saveCustItem = saveCustItem;
+
+// ── Record Payment ─────────────────────────────────────────────────
+async function openCustPaymentSheet() {
+  const sheet = document.getElementById('cust-payment-sheet');
+  if (!sheet) return;
+  sheet.querySelector('#cust-pay-amount').value  = '';
+  sheet.querySelector('#cust-pay-method').value  = 'Cash';
+  sheet.querySelector('#cust-pay-note').value    = '';
+  sheet.querySelector('#cust-pay-date').value    = todayDateStr();
+  sheet.classList.add('open');
+  setTimeout(() => sheet.querySelector('#cust-pay-amount').focus(), 120);
+}
+window.openCustPaymentSheet = openCustPaymentSheet;
+
+function closeCustPaymentSheet() {
+  const sheet = document.getElementById('cust-payment-sheet');
+  if (sheet) sheet.classList.remove('open');
+}
+window.closeCustPaymentSheet = closeCustPaymentSheet;
+
+async function saveCustPayment() {
+  if (!_currentCustomerId) return;
+  const amount        = parseFloat(document.getElementById('cust-pay-amount').value) || 0;
+  const paymentMethod = (document.getElementById('cust-pay-method').value || 'Cash').trim();
+  const note          = (document.getElementById('cust-pay-note').value || '').trim();
+  const date          = document.getElementById('cust-pay-date').value || todayDateStr();
+
+  if (amount <= 0) { toast('Amount must be greater than 0', 'err'); return; }
+
+  const now = new Date().toISOString();
+  const customer = (await dbAll('customers')).find(c => c.customerId === _currentCustomerId);
+  const txn = {
+    customerId: _currentCustomerId,
+    customerName: customer ? customer.name : '',
+    type: 'payment',
+    itemName: '', variant: '', size: '',
+    qty: 0, unitPrice: 0, totalValue: 0,
+    amount, paymentMethod,
+    note, date, createdAt: now, fbId: ''
+  };
+  const txnId = await dbAdd('customer_txns', txn);
+  txn.id = txnId;
+  await _recalcBalance(_currentCustomerId);
+  await fbSyncCustTxn(txn);
+  closeCustPaymentSheet();
+  // Refresh header balance
+  await openCustomerDetail(_currentCustomerId);
+  toast('Payment recorded', 'ok');
+}
+window.saveCustPayment = saveCustPayment;
+
+// ── Balance recalculation ──────────────────────────────────────────
+async function _recalcBalance(customerId) {
+  const txns = await dbAll('customer_txns');
+  const custTxns = txns.filter(t => t.customerId === customerId);
+  const totalTaken = custTxns.filter(t => t.type === 'item').reduce((s, t) => s + (t.totalValue || 0), 0);
+  const totalPaid  = custTxns.filter(t => t.type === 'payment').reduce((s, t) => s + (t.amount || 0), 0);
+  const balance    = totalTaken - totalPaid;
+  const sorted     = [...custTxns].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const lastDate   = sorted[0]?.date || '';
+
+  const all      = await dbAll('customers');
+  const customer = all.find(c => c.customerId === customerId);
+  if (customer) {
+    customer.totalTaken = totalTaken;
+    customer.totalPaid  = totalPaid;
+    customer.balance    = balance;
+    customer.lastDate   = lastDate;
+    customer.updatedAt  = new Date().toISOString();
+    await dbPut('customers', customer);
+    fbSyncCustomer(customer);
+  }
+}
+
+// ── Delete a transaction ───────────────────────────────────────────
+async function deleteCustTxn(txnId) {
+  if (!confirm('Delete this record? The balance will be recalculated.')) return;
+  const txns = await dbAll('customer_txns');
+  const txn  = txns.find(t => t.id === txnId);
+  if (!txn) return;
+  await dbDelete('customer_txns', txnId);
+  await _recalcBalance(txn.customerId);
+  showCustomerTab('history');
+  // Refresh header balance
+  const all = await dbAll('customers');
+  const cust = all.find(c => c.customerId === txn.customerId);
+  if (cust) {
+    const balEl = document.getElementById('cust-detail-bal');
+    if (balEl) {
+      const bal = cust.balance || 0;
+      balEl.textContent = bal > 0 ? `Ksh ${fmt(bal)} owed` : (bal < 0 ? `Ksh ${fmt(Math.abs(bal))} credit` : 'Balance clear');
+      balEl.style.color = bal > 0 ? 'rgba(255,80,80,1)' : 'rgba(100,255,150,1)';
+    }
+  }
+  toast('Record deleted', '');
+}
+window.deleteCustTxn = deleteCustTxn;
+
+// ── Firebase sync ──────────────────────────────────────────────────
+async function fbSyncCustomer(customer) {
+  if (!fbReady || !fbDb) return;
+  try {
+    const { doc, setDoc } = await waitForFbImports();
+    if (!customer.fbId) {
+      customer.fbId = 'cust_' + customer.customerId;
+      await dbPut('customers', customer);
+    }
+    await setDoc(doc(fbDb, fbColName('customers'), customer.fbId), sanitiseForFirestore({ ...customer }));
+    bumpSyncVersion();
+  } catch (e) { console.error('[SYNC] fbSyncCustomer:', e.message); }
+}
+
+async function fbSyncCustTxn(txn) {
+  if (!fbReady || !fbDb) return;
+  try {
+    const { doc, setDoc } = await waitForFbImports();
+    if (!txn.fbId) {
+      txn.fbId = 'ctxn_' + txn.customerId + '_' + (txn.createdAt || '').replace(/[^0-9]/g, '').slice(0, 14);
+      await dbPut('customer_txns', txn);
+    }
+    await setDoc(doc(fbDb, fbColName('customer_txns'), txn.fbId), sanitiseForFirestore({ ...txn }));
+  } catch (e) { console.error('[SYNC] fbSyncCustTxn:', e.message); }
+}
