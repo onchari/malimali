@@ -12401,10 +12401,22 @@ window.closeAddCustomerSheet = closeAddCustomerSheet;
 let _custSaving = false;   // prevent double-save on all customer forms
 
 function _custUpdateHeaderBal(bal) {
-  const el = document.getElementById('cust-detail-bal');
+  const el  = document.getElementById('cust-detail-bal');
+  const lbl = document.getElementById('cust-detail-bal-lbl');
   if (!el) return;
-  el.textContent = bal > 0 ? `Ksh ${fmt(bal)} owed` : bal < 0 ? `Ksh ${fmt(Math.abs(bal))} credit` : 'Balance clear';
-  el.style.color = bal > 0 ? 'rgba(255,80,80,1)' : 'rgba(255,255,255,1)';
+  if (bal > 0) {
+    el.textContent  = fmt(bal);
+    el.style.color  = '#ff6b6b';
+    if (lbl) { lbl.textContent = 'Owes you'; lbl.style.color = 'rgba(255,255,255,.7)'; }
+  } else if (bal < 0) {
+    el.textContent  = fmt(Math.abs(bal));
+    el.style.color  = '#6bffb8';
+    if (lbl) { lbl.textContent = 'You owe them'; lbl.style.color = 'rgba(255,255,255,.7)'; }
+  } else {
+    el.textContent  = 'Clear';
+    el.style.color  = 'rgba(255,255,255,.8)';
+    if (lbl) { lbl.textContent = 'No balance'; lbl.style.color = 'rgba(255,255,255,.5)'; }
+  }
 }
 
 function onCustItemTypeChange() {
@@ -12470,23 +12482,25 @@ async function renderCustomerList(query) {
   }
 
   container.innerHTML = customers.map(c => {
-    const initials = (c.name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
-    const bal = c.balance || 0;
-    const balClass = bal > 0 ? 'cust-bal-owed' : 'cust-bal-clear';
-    const balStr = bal > 0 ? `Ksh ${fmt(bal)}` : (bal < 0 ? `-Ksh ${fmt(Math.abs(bal))}` : 'Clear');
-    const meta = c.phone || 'No phone';
-    const lastDate = c.lastDate ? `Last: ${c.lastDate}` : 'No transactions';
+    const initials  = (c.name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+    const bal       = c.balance || 0;
+    const balNum    = fmt(Math.abs(bal));
+    const balColor  = bal > 0 ? '#dc2626' : bal < 0 ? '#16a34a' : 'var(--muted)';
+    const balLabel  = bal > 0 ? 'Owes' : bal < 0 ? 'Credit' : 'Clear';
+    const balVal    = bal !== 0 ? balNum : '';
+    const avatarBg  = bal > 0 ? '#dc2626' : bal < 0 ? '#16a34a' : 'var(--accent)';
+    const lastTxt   = c.lastDate ? c.lastDate : '';
     return `<div class="cust-card" onclick="openCustomerDetail('${escapeHtml(c.customerId)}')">
-      <div class="cust-avatar">${escapeHtml(initials)}</div>
+      <div class="cust-avatar" style="background:${avatarBg};">${escapeHtml(initials)}</div>
       <div class="cust-info">
-        <div class="cust-name">${escapeHtml(c.name)}</div>
-        <div class="cust-meta">${escapeHtml(meta)} · ${escapeHtml(lastDate)}</div>
+        <div class="cust-name">${escapeHtml(c.name || '')}</div>
+        <div class="cust-meta">${escapeHtml(c.phone || 'No phone')}${lastTxt ? ' · ' + lastTxt : ''}</div>
       </div>
       <div class="cust-balance-col">
-        <div class="cust-balance-val ${balClass}">${balStr}</div>
-        <div class="cust-balance-lbl">Balance</div>
+        ${bal !== 0 ? `<div class="cust-balance-val" style="color:${balColor};">${balVal}</div>` : ''}
+        <div class="cust-balance-lbl" style="color:${balColor};font-weight:${bal !== 0 ? '800' : '600'};">${balLabel}</div>
       </div>
-      <i class="fa-solid fa-chevron-right" style="color:var(--muted);font-size:11px;margin-left:4px;"></i>
+      <i class="fa-solid fa-chevron-right" style="color:var(--muted);font-size:10px;margin-left:2px;flex-shrink:0;"></i>
     </div>`;
   }).join('');
 }
@@ -12513,8 +12527,7 @@ async function openCustomerDetail(customerId) {
   if (idEl)   idEl.textContent  = customer.customerId + (customer.phone ? ' · ' + customer.phone : '');
   if (balEl) {
     const bal = customer.balance || 0;
-    balEl.textContent = bal > 0 ? `Ksh ${fmt(bal)} owed` : (bal < 0 ? `Ksh ${fmt(Math.abs(bal))} credit` : 'Balance clear');
-    balEl.style.color = bal > 0 ? 'rgba(255,80,80,1)' : 'rgba(255,255,255,1)';
+    _custUpdateHeaderBal(bal);
   }
 
   document.getElementById('customer-detail-sheet').classList.add('open');
@@ -12596,22 +12609,23 @@ async function _renderCustomerLedger(customerId) {
   const bal     = taken - returns - paid;
   const balColor = bal > 0 ? '#dc2626' : '#16a34a';
 
-  const summaryHtml = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-bottom:2px solid var(--border);margin-bottom:0;">
-    <div style="background:var(--surface);padding:10px 10px 8px;">
-      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Total Taken</div>
-      <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:#dc2626;">${fmt(taken)}</div>
+  const balLabel = bal > 0 ? 'Owes You' : bal < 0 ? 'You Owe' : 'Clear';
+  const summaryHtml = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border-bottom:2px solid var(--border);">
+    <div style="background:var(--surface);padding:9px 7px;text-align:center;">
+      <div style="font-size:8px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Taken</div>
+      <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:#dc2626;">${fmt(taken)}</div>
     </div>
-    <div style="background:var(--surface);padding:10px 10px 8px;">
-      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Returns</div>
-      <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:#f97316;">${fmt(returns)}</div>
+    <div style="background:var(--surface);padding:9px 7px;text-align:center;">
+      <div style="font-size:8px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Returns</div>
+      <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:#f97316;">${fmt(returns)}</div>
     </div>
-    <div style="background:var(--surface);padding:10px 10px 8px;">
-      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Total Paid</div>
-      <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:#16a34a;">${fmt(paid)}</div>
+    <div style="background:var(--surface);padding:9px 7px;text-align:center;">
+      <div style="font-size:8px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Paid</div>
+      <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:#16a34a;">${fmt(paid)}</div>
     </div>
-    <div style="background:${bal > 0 ? 'rgba(220,38,38,.07)' : 'rgba(22,163,74,.07)'};padding:10px 10px 8px;border:1.5px solid ${balColor};">
-      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Balance Owed</div>
-      <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:${balColor};">${bal > 0 ? fmt(bal) : bal < 0 ? 'Cr '+fmt(Math.abs(bal)) : 'Clear'}</div>
+    <div style="background:${bal > 0 ? 'rgba(220,38,38,.08)' : bal < 0 ? 'rgba(22,163,74,.08)' : 'var(--surface)'};padding:9px 7px;text-align:center;">
+      <div style="font-size:8px;color:${balColor};text-transform:uppercase;font-weight:800;margin-bottom:3px;">${balLabel}</div>
+      <div style="font-size:13px;font-weight:900;font-family:var(--mono);color:${balColor};">${bal !== 0 ? fmt(Math.abs(bal)) : '—'}</div>
     </div>
   </div>`;
 
@@ -12657,7 +12671,7 @@ async function _renderCustomerLedger(customerId) {
       <tbody>${rows}</tbody>
       <tfoot><tr style="border-top:2px solid var(--border);">
         <td colspan="4" style="padding:8px 6px;font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);">Balance carried forward</td>
-        <td class="cust-ledger-num" style="font-weight:900;color:${finalColor};font-size:13px;">${finalBal > 0 ? 'Ksh ' + fmt(finalBal) + ' Dr' : finalBal < 0 ? 'Ksh ' + fmt(Math.abs(finalBal)) + ' Cr' : 'Nil'}</td>
+        <td class="cust-ledger-num" style="font-weight:900;color:${finalColor};font-size:13px;">${finalBal > 0 ? fmt(finalBal) + ' Dr' : finalBal < 0 ? fmt(Math.abs(finalBal)) + ' Cr' : 'Nil'}</td>
         <td></td>
       </tr></tfoot>
     </table>
@@ -12836,7 +12850,7 @@ async function deleteCustTxn(txnId) {
     if (balEl) {
       const bal = cust.balance || 0;
       balEl.textContent = bal > 0 ? `Ksh ${fmt(bal)} owed` : (bal < 0 ? `Ksh ${fmt(Math.abs(bal))} credit` : 'Balance clear');
-      balEl.style.color = bal > 0 ? 'rgba(255,80,80,1)' : 'rgba(100,255,150,1)';
+      // color handled by _custUpdateHeaderBal
     }
   }
   toast('Record deleted', '');
