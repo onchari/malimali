@@ -1277,6 +1277,10 @@ function resolvePageRoute(id) {
     _activeSalesTab = 'history';
     return 'sell';
   }
+  // Customer detail requires a selected customer — fall back to list if none
+  if (id === 'customer-detail' && !_currentCustomerId) {
+    return 'customers';
+  }
   return id;
 }
 
