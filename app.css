@@ -5944,6 +5944,11 @@ body.photo-lightbox-open { overflow: hidden; }
 .cust-ledger-desc { font-size:12px; color:var(--text); }
 .cust-ledger-num  { text-align:right; font-family:var(--mono); white-space:nowrap; font-size:12px; }
 .cust-ledger-table tfoot td { padding:8px 5px; font-size:11px; background:var(--surface2); }
+/* Column separator lines */
+.cust-ledger-lined th,
+.cust-ledger-lined td { border-right:1px solid var(--border); }
+.cust-ledger-lined th:last-child,
+.cust-ledger-lined td:last-child { border-right:none; }
 
 /* ── Customers Module ──────────────────────────────────────────────── */
 .cust-card { display:flex; align-items:center; gap:12px; padding:12px 14px; border-bottom:1px solid var(--border); cursor:pointer; background:var(--surface); transition:background .1s; }

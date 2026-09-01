@@ -2816,16 +2816,10 @@
       <div class="cust-detail-bal" id="cust-detail-bal">Ksh 0</div>
     </div>
 
-    <!-- Tabs: Summary + Ledger only -->
-    <div class="cust-tabs">
-      <button class="cust-tab active" data-tab="overview" onclick="showCustomerTab('overview')">Summary</button>
-      <button class="cust-tab"        data-tab="ledger"   onclick="showCustomerTab('ledger')">Ledger</button>
-    </div>
-
-    <!-- Tab content -->
+    <!-- Single view: summary + ledger combined -->
     <div style="flex:1;overflow-y:auto;min-height:0;">
-      <div class="cust-tab-pane" data-tab="overview" id="cust-tab-overview"></div>
-      <div class="cust-tab-pane" data-tab="ledger"   id="cust-tab-ledger"   style="display:none;"></div>
+      <div id="cust-tab-overview" style="display:none;"></div>
+      <div id="cust-tab-ledger"></div>
     </div>
 
     <!-- Actions -->

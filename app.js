@@ -12518,7 +12518,7 @@ async function openCustomerDetail(customerId) {
   }
 
   document.getElementById('customer-detail-sheet').classList.add('open');
-  showCustomerTab('overview');
+  showCustomerTab('ledger');
 }
 window.openCustomerDetail = openCustomerDetail;
 
@@ -12538,13 +12538,9 @@ function showCustomerTab(tab) {
     pane.style.display = pane.dataset.tab === tab ? 'block' : 'none';
   });
 
+  // All views now combined in the ledger — just refresh it
   if (!_currentCustomerId) return;
-  dbAll('customers').then(all => {
-    const customer = all.find(c => c.customerId === _currentCustomerId);
-    if (!customer) return;
-    if (tab === 'overview') _renderCustomerOverview(customer);
-    if (tab === 'ledger')   _renderCustomerLedger(_currentCustomerId);
-  });
+  _renderCustomerLedger(_currentCustomerId);
 }
 window.showCustomerTab = showCustomerTab;
 
@@ -12583,16 +12579,44 @@ async function _renderCustomerOverview(customer) {
   </div>`;
 }
 
-// ── Ledger tab: balance-sheet style with running balance ────────────
+// ── Ledger: summary cards on top + balance-sheet table ─────────────
 async function _renderCustomerLedger(customerId) {
   const el = document.getElementById('cust-tab-ledger');
   if (!el) return;
+  const allCust = await dbAll('customers');
+  const customer = allCust.find(c => c.customerId === customerId);
   const txns = (await dbAll('customer_txns')).filter(t => t.customerId === customerId);
-  // Sort oldest first for ledger (running balance makes sense forward in time)
+  // Sort oldest first (running balance flows forward in time)
   txns.sort((a, b) => (a.date||'').localeCompare(b.date||'') || (a.createdAt||'').localeCompare(b.createdAt||''));
 
+  // ── Summary cards ──────────────────────────────────────────────
+  const taken   = txns.filter(t => t.type === 'item').reduce((s,t) => s + (t.totalValue||0), 0);
+  const returns = txns.filter(t => t.type === 'return').reduce((s,t) => s + (t.totalValue||0), 0);
+  const paid    = txns.filter(t => t.type === 'payment').reduce((s,t) => s + (t.amount||0), 0);
+  const bal     = taken - returns - paid;
+  const balColor = bal > 0 ? '#dc2626' : '#16a34a';
+
+  const summaryHtml = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-bottom:2px solid var(--border);margin-bottom:0;">
+    <div style="background:var(--surface);padding:10px 10px 8px;">
+      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Total Taken</div>
+      <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:#dc2626;">${fmt(taken)}</div>
+    </div>
+    <div style="background:var(--surface);padding:10px 10px 8px;">
+      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Returns</div>
+      <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:#f97316;">${fmt(returns)}</div>
+    </div>
+    <div style="background:var(--surface);padding:10px 10px 8px;">
+      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Total Paid</div>
+      <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:#16a34a;">${fmt(paid)}</div>
+    </div>
+    <div style="background:${bal > 0 ? 'rgba(220,38,38,.07)' : 'rgba(22,163,74,.07)'};padding:10px 10px 8px;border:1.5px solid ${balColor};">
+      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Balance Owed</div>
+      <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:${balColor};">${bal > 0 ? fmt(bal) : bal < 0 ? 'Cr '+fmt(Math.abs(bal)) : 'Clear'}</div>
+    </div>
+  </div>`;
+
   if (!txns.length) {
-    el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">No transactions yet.</div>';
+    el.innerHTML = summaryHtml + '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">No transactions yet.</div>';
     return;
   }
 
@@ -12621,8 +12645,8 @@ async function _renderCustomerLedger(customerId) {
 
   const finalBal = runningBal;
   const finalColor = finalBal > 0 ? '#dc2626' : '#16a34a';
-  el.innerHTML = `<div style="overflow-x:auto;">
-    <table class="cust-ledger-table">
+  el.innerHTML = summaryHtml + `<div style="overflow-x:auto;">
+    <table class="cust-ledger-table cust-ledger-lined">
       <thead><tr>
         <th>Date</th><th>Description</th>
         <th class="cust-ledger-num">Debit</th>
