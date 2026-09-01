@@ -4794,12 +4794,23 @@ body.photo-lightbox-open { overflow: hidden; }
 .pr-legend { display: flex; align-items: center; gap: 10px; padding-top: 4px; }
 .pr-legend-item { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 3px; }
 
-/* 5-per-row day cards */
+/* Day cards — horizontal scroll row, 3 visible on mobile */
 .pr-days-grid {
-  display: grid;
-  grid-template-columns: repeat(5,1fr);
+  display: flex;
+  flex-direction: row;
   gap: 8px;
-  margin-bottom: 16px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.pr-days-grid::-webkit-scrollbar { display: none; }
+.pr-day-card {
+  flex: 0 0 calc(33.33% - 6px);  /* 3 cards visible */
+  min-width: 110px;
+  max-width: 160px;
+  scroll-snap-align: start;
 }
 .pr-day-card {
   background: var(--surface);
@@ -4859,8 +4870,8 @@ body.photo-lightbox-open { overflow: hidden; }
   /* Summary: 2 per row, earning card full width */
   .pr-sum-row { grid-template-columns: 1fr 1fr; }
   .pr-sum-highlight { grid-column: 1 / -1; flex-direction: row; align-items: center; }
-  /* Day cards: 2 per row on mobile */
-  .pr-days-grid { grid-template-columns: repeat(2,1fr); }
+  /* Day cards: already a scrollable row — 3 per viewport */
+  .pr-day-card { flex: 0 0 calc(33% - 6px); }
   /* Compact summary card on mobile */
   .pr-sum-card { padding: 10px 8px; gap: 7px; }
   .pr-sum-icon { width: 32px; height: 32px; font-size: 13px; }
