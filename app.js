@@ -6871,7 +6871,14 @@ async function initFirebase() {
         setFbStatus('error');
         clearTimeout(window['_retry_' + store]);
         window['_retry_' + store] = setTimeout(() => {
-          if (fbReady && fbDb) startRealtimeListener(store, collectionName, key);
+          if (fbReady && fbDb) {
+            startRealtimeListener(store, collectionName, key);
+            pullFromFirebase(true).catch(e => {
+              _lastSyncError = e.message || String(e);
+              setFbStatus('error');
+              updateSyncDot();
+            });
+          }
         }, 3000);
       });
       if (key === 'fbUnsub') fbUnsub = unsub;
@@ -7019,7 +7026,7 @@ function _syncRecordKey(collection, record) {
   return String(record.fbId || record.id || record.codeSize || record.code || record.customerId || '');
 }
 
-async function _queueSync(collection, record, operation = 'upsert') {
+async function _queueSyncUnlocked(collection, record, operation = 'upsert') {
   if (!db.objectStoreNames.contains('sync_queue')) return;
   const key = _syncRecordKey(collection, record);
   if (!key) throw new Error('Cannot queue sync record without an id');
@@ -7031,6 +7038,10 @@ async function _queueSync(collection, record, operation = 'upsert') {
     payload: operation === 'upsert' ? sanitiseForFirestore({ ...record }) : null,
     createdAt: Date.now(), attempts: 0, status: 'pending'
   });
+}
+
+async function _queueSync(collection, record, operation = 'upsert') {
+  await _withSyncLock(() => _queueSyncUnlocked(collection, record, operation));
   scheduleSync(50);
 }
 
@@ -7047,13 +7058,13 @@ async function fbSyncShoeSize(sizeRec) {
     const stable = stableShoeSizeFbId(sizeRec);
     if (sizeRec.fbId !== stable) { sizeRec.fbId = stable; if (sizeRec.id) await dbPut('shoe_sizes', sizeRec); }
     await _queueSync('shoe_sizes', sizeRec);
-  } catch (e) { console.error('[SYNC] queue shoe size:', e); }
+  } catch (e) { _lastSyncError = e.message; console.error('[SYNC] queue shoe size:', e); updateSyncDot(); }
 }
 
 async function fbDeleteItem(fbId) {
   if (!fbId) return;
   try { await _queueSync('items', { fbId }, 'delete'); }
-  catch (e) { console.error('[SYNC] queue item delete failed:', e); }
+  catch (e) { _lastSyncError = e.message; console.error('[SYNC] queue item delete failed:', e); updateSyncDot(); }
 }
 
 async function fbSyncSale(sale) {
@@ -7065,19 +7076,19 @@ async function fbSyncSale(sale) {
 
 async function fbDeleteSale(sale) {
   if (!sale || !sale.fbId) return 0;
-  try { await _queueSync('sales', sale, 'delete'); return 1; } catch (e) { console.error('[SYNC] queue sale delete:', e); return 0; }
+  try { await _queueSync('sales', sale, 'delete'); return 1; } catch (e) { _lastSyncError = e.message; console.error('[SYNC] queue sale delete:', e); updateSyncDot(); return 0; }
 }
 
 async function fbDeleteFinanceEntry(entry) {
   if (!entry || !entry.fbId) return 0;
-  try { await _queueSync('finances', entry, 'delete'); return 1; } catch (e) { console.error('[SYNC] queue finance delete:', e); return 0; }
+  try { await _queueSync('finances', entry, 'delete'); return 1; } catch (e) { _lastSyncError = e.message; console.error('[SYNC] queue finance delete:', e); updateSyncDot(); return 0; }
 }
 
 async function fbSyncCustomer(customer) {
   try {
     if (!customer.fbId) { customer.fbId = 'cust_' + customer.customerId; await dbPut('customers', customer); }
     await _queueSync('customers', customer);
-  } catch(e) { console.error('[SYNC] queue customer:', e); }
+  } catch(e) { _lastSyncError = e.message; console.error('[SYNC] queue customer:', e); updateSyncDot(); }
 }
 
 async function fbSyncCustTxn(txn) {
@@ -7088,13 +7099,13 @@ async function fbSyncCustTxn(txn) {
       if (txn.id) await dbPut('customer_txns', txn);
     }
     await _queueSync('customer_txns', txn);
-  } catch(e) { console.error('[SYNC] queue customer txn:', e); }
+  } catch(e) { _lastSyncError = e.message; console.error('[SYNC] queue customer txn:', e); updateSyncDot(); }
 }
 
 async function fbDeleteCustTxn(txn) {
   if (!txn || !txn.fbId) return 0;
   try { await _queueSync('customer_txns', txn, 'delete'); return 1; }
-  catch (e) { console.error('[SYNC] queue customer txn delete:', e); return 0; }
+  catch (e) { _lastSyncError = e.message; console.error('[SYNC] queue customer txn delete:', e); updateSyncDot(); return 0; }
 }
 
 function sanitiseForFirestore(obj){
@@ -7253,11 +7264,17 @@ function _salesMatch(local, remote) {
 }
 
 async function _withSyncLock(fn) {
-  const previous = _syncLock;
-  let release;
-  _syncLock = new Promise(resolve => { release = resolve; });
-  await previous;
-  try { return await fn(); } finally { release(); }
+  const run = async () => {
+    const previous = _syncLock;
+    let release;
+    _syncLock = new Promise(resolve => { release = resolve; });
+    await previous;
+    try { return await fn(); } finally { release(); }
+  };
+  if (navigator.locks && typeof navigator.locks.request === 'function') {
+    return navigator.locks.request('malimali-firestore-sync', { mode: 'exclusive' }, run);
+  }
+  return run();
 }
 
 function _remoteTimestamp(record) {
@@ -7279,6 +7296,20 @@ async function _findLocalForRemote(store, data, fbId) {
     if (date) return rows.find(r => (r.businessDate || r.business_date) === date);
   }
   if (store === 'customers' && data.customerId != null) return rows.find(r => String(r.customerId) === String(data.customerId));
+  if (store === 'customer_txns') {
+    const same = row => row.customerId === data.customerId &&
+      row.type === data.type &&
+      Number(row.amount || 0) === Number(data.amount || 0) &&
+      Number(row.qty || 0) === Number(data.qty || 0) &&
+      Number(row.unitPrice || 0) === Number(data.unitPrice || 0) &&
+      Number(row.totalValue || 0) === Number(data.totalValue || 0) &&
+      (row.itemName || '') === (data.itemName || '') &&
+      (row.paymentMethod || '') === (data.paymentMethod || '') &&
+      (row.note || '') === (data.note || '') &&
+      row.date === data.date &&
+      row.createdAt === data.createdAt;
+    return rows.find(same);
+  }
   return undefined;
 }
 
@@ -7401,12 +7432,14 @@ async function forcePushToFirebase(silent = false) {
   if (!silent) setFbStatus('syncing');
   // This function is retained as the explicit/manual "push all" action.
   // It queues the current local state once, then drains the persistent queue.
+  // Queue the current local state before acquiring the drain lock. Calling
+  // processSyncQueue from inside _withSyncLock would wait on that same lock.
+  const collections = [
+    ['items', 'items'], ['sales', 'sales'], ['shoe_sizes', 'shoe_sizes'],
+    ['finances', 'finances'], ['business_days', 'business_days'],
+    ['wishlist', 'wishlist'], ['customers', 'customers'], ['customer_txns', 'customer_txns']
+  ];
   await _withSyncLock(async () => {
-    const collections = [
-      ['items', 'items'], ['sales', 'sales'], ['shoe_sizes', 'shoe_sizes'],
-      ['finances', 'finances'], ['business_days', 'business_days'],
-      ['wishlist', 'wishlist'], ['customers', 'customers'], ['customer_txns', 'customer_txns']
-    ];
     for (const [store, collection] of collections) {
       if (!db.objectStoreNames.contains(store)) continue;
       const rows = await dbAll(store);
@@ -7424,9 +7457,7 @@ async function forcePushToFirebase(silent = false) {
         if (store === 'customer_txns' && !row.fbId) { row.fbId = 'ctxn_' + (row.customerId || 'x') + '_' + (row.id || Date.now()); await dbPut(store,row); }
         const key = _syncRecordKey(collection, row);
         if (!key) continue;
-        const q = await dbAll('sync_queue');
-        const existing = q.find(x => x.collection === collection && x.recordKey === key && x.status !== 'done');
-        if (!existing) await dbAdd('sync_queue', { collection, recordKey:key, operation:'upsert', payload:sanitiseForFirestore({...row}), createdAt:Date.now(), attempts:0, status:'pending' });
+        await _queueSyncUnlocked(collection, row);
       }
     }
   });
@@ -7447,26 +7478,33 @@ async function pullFromFirebase(silent = false) {
       let completed = 0;
       let total = 0;
       const sizes = {};
-      _setSyncProgress('pull', 0, 1);
+      const snapshots = [];
       for (const store of stores) {
         if (!db.objectStoreNames.contains(store)) continue;
         try {
           const snap = await window._fbImports.getDocs(fbCol(store));
           sizes[store] = snap.size;
           total += snap.size;
-          _setSyncProgress('pull', completed, total);
-          for (const d of snap.docs) {
-            const data = { ...d.data(), fbId: d.id };
-            if (store === 'sales' && _isDeletedSaleRemote(d.id, data)) continue;
-            if (store === 'finances' && _isDeletedFinanceRemote(d.id, data)) continue;
-            if (await _applyRemoteRecord(store, data, d.id)) changed++;
-            completed++;
-            _setSyncProgress('pull', completed, total);
-          }
+          snapshots.push([store, snap]);
         } catch (e) {
-          // Missing optional collections should not make the whole sync fail.
-          if (!['customers','customer_txns','wishlist'].includes(store)) throw e;
-          console.warn('[SYNC] optional pull failed:', store, e.message);
+          // An absent Firestore collection is valid, but permission/network
+          // failures must surface instead of falsely reporting a full pull.
+          if (e && (e.code === 'not-found' || e.code === 'failed-precondition')) {
+            console.warn('[SYNC] optional collection unavailable:', store, e.message);
+          } else {
+            throw e;
+          }
+        }
+      }
+      _setSyncProgress('pull', 0, total || 1);
+      for (const [store, snap] of snapshots) {
+        for (const d of snap.docs) {
+          const data = { ...d.data(), fbId: d.id };
+          if (store === 'sales' && _isDeletedSaleRemote(d.id, data)) continue;
+          if (store === 'finances' && _isDeletedFinanceRemote(d.id, data)) continue;
+          if (await _applyRemoteRecord(store, data, d.id)) changed++;
+          completed++;
+          _setSyncProgress('pull', completed, total || 1);
         }
       }
       await refreshUI({ sync: false });
