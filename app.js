@@ -11182,19 +11182,6 @@ async function renderHistoryPage() {
     return;
   }
 
-  // Totals summary for the selected period
-  const periodRev  = datesSorted.reduce((s,d) => s + byDate[d].revenue, 0);
-  const periodCost = datesSorted.reduce((s,d) => s + byDate[d].cost,    0);
-  const periodProf = datesSorted.reduce((s,d) => s + byDate[d].profit,  0);
-  const periodSales= datesSorted.reduce((s,d) => s + byDate[d].sales.length, 0);
-  const pMargin    = periodRev > 0 ? (periodProf / periodRev * 100).toFixed(1) : '0.0';
-
-  // Date range label
-  const firstDate = datesSorted[datesSorted.length - 1];
-  const lastDate  = datesSorted[0];
-  const fmtDR = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB',{ day:'numeric', month:'short', year:'numeric' });
-  const dateRangeLabel = firstDate === lastDate ? fmtDR(firstDate) : fmtDR(firstDate) + ' – ' + fmtDR(lastDate);
-
   // Insights — best day by revenue
   const bestRevDay  = datesSorted.reduce((best,d) => byDate[d].revenue > (byDate[best]?.revenue||0) ? d : best, datesSorted[0]);
   const bestRevInfo = byDate[bestRevDay];
@@ -11275,30 +11262,6 @@ async function renderHistoryPage() {
       </button>
     </div>
 
-    <!-- Period total — kept at the bottom as the final record summary -->
-    <div class="pr-total">
-      <div class="pr-total-heading">
-        <span>Total for this period</span>
-        <span class="pr-total-range">${dateRangeLabel}</span>
-      </div>
-      <div class="pr-sum-row">
-        <div class="pr-sum-card">
-          <div class="pr-sum-lbl">Revenue</div>
-          <div class="pr-sum-val pr-col-green">${_fmtNum(periodRev)}</div>
-        </div>
-        <div class="pr-sum-card">
-          <div class="pr-sum-lbl">Cost</div>
-          <div class="pr-sum-val pr-col-orange">${_fmtNum(periodCost)}</div>
-        </div>
-        <div class="pr-sum-card pr-sum-highlight">
-          <div class="pr-sum-lbl" style="color:rgba(255,255,255,.75);">Profit</div>
-          <div class="pr-sum-val" style="color:white;">${_fmtNum(periodProf)}</div>
-        </div>
-        <div class="pr-sum-card">
-          <div class="pr-sum-lbl">Transactions</div>
-          <div class="pr-sum-val pr-col-blue">${periodSales}</div>
-        </div>
-      </div>
     </div>`;
 
   // Auto-expand today's card when "Today" filter is selected
