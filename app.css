@@ -3315,6 +3315,7 @@ body[data-firebase-env="development"]::before {
 .sync-progress[data-mode="push"] .sync-progress-fill { background:#eab308; }
 .sync-progress[data-mode="sync"] .sync-progress-fill { background:#60a5fa; }
 .sync-progress[data-mode="pull"] .sync-progress-fill { background:#60a5fa; }
+.sync-progress[data-mode="complete"] .sync-progress-fill { background:#4ade80; }
 
 @media (max-width: 620px) {
   .sync-status-bar { flex-wrap:wrap; padding:7px 10px; }
