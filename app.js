@@ -7657,6 +7657,24 @@ async function processSyncQueue(silent = false, onProgress = null) {
       queue = (await dbAll('sync_queue'))
         .filter(q => q.status !== 'done' && (!q.nextAttemptAt || q.nextAttemptAt <= Date.now()))
         .sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0));
+      // If a record was edited several times while offline, only its newest
+      // mutation needs to reach Firestore. Older pending mutations are
+      // superseded and would only waste writes.
+      const newestByRecord = new Map();
+      for (const entry of queue) {
+        const key = entry.collection + ':' + entry.recordKey;
+        const previous = newestByRecord.get(key);
+        if (!previous || (entry.payload?._syncVersion || 0) >= (previous.payload?._syncVersion || 0)) {
+          newestByRecord.set(key, entry);
+        }
+      }
+      const latestQueueIds = new Set(Array.from(newestByRecord.values()).map(entry => entry.id));
+      for (const entry of queue) {
+        if (!latestQueueIds.has(entry.id) && entry.status !== 'processing') {
+          await dbDelete('sync_queue', entry.id);
+        }
+      }
+      queue = queue.filter(entry => latestQueueIds.has(entry.id));
       let processed = 0;
       _syncState = { ..._syncState, phase: 'push', done: 0, total: queue.length, failed: 0, lastError: null };
       _broadcastSyncStatus();
@@ -7782,9 +7800,8 @@ async function pullFromFirebase(silent = false, options = {}) {
           let snap;
           if (incremental && query && where) {
             try {
-              const cursorFloor = new Date(Math.max(0, Date.parse(cursor) - 60000)).toISOString();
               snap = await window._fbImports.getDocs(
-                query(fbCol(store), where('_syncUpdatedAt', '>', cursorFloor))
+                query(fbCol(store), where('_syncUpdatedAt', '>', cursor))
               );
             } catch (incrementalError) {
               // Older documents may not have metadata or the project may not
