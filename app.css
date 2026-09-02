@@ -1239,7 +1239,7 @@ body {
 }
 .form-input:focus, .form-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(30,122,62,0.1); }
 .form-input::placeholder { color: #b0bfb0; font-weight: 400; }
-.form-select { 
+.form-select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237a957b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
@@ -3306,6 +3306,7 @@ body[data-firebase-env="development"]::before {
 .ssb-btn-sync    { border-color: rgba(124,58,237,.5); background: rgba(124,58,237,.18); }
 .ssb-btn-offline { border-color: rgba(220,38,38,.5);  background: rgba(220,38,38,.18); }
 .sync-progress { display:flex; align-items:center; gap:6px; min-width:170px; margin-left:10px; flex-shrink:0; }
+e t.sync-progress[hidden] { display:none; }
 .sync-progress-label, .sync-progress-percent { color:rgba(255,255,255,.85); font:700 10px var(--mono); white-space:nowrap; }
 .sync-progress-track { width:90px; height:5px; overflow:hidden; border-radius:5px; background:rgba(255,255,255,.2); }
 .sync-progress-fill { width:0; height:100%; background:#3b82f6; transition:width .2s ease, background .2s ease; }
