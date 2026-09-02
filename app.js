@@ -6522,14 +6522,18 @@ function _setSyncProgress(mode, done, total) {
   const el = document.getElementById('sync-progress');
   const fill = document.getElementById('sync-progress-fill');
   const label = document.getElementById('sync-progress-label');
+  const count = document.getElementById('sync-progress-count');
   const percentEl = document.getElementById('sync-progress-percent');
-  if (!el || !fill || !label || !percentEl) return;
+  const track = el && el.querySelector('.sync-progress-track');
+  if (!el || !fill || !label || !count || !percentEl || !track) return;
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 100;
   el.hidden = false;
   el.dataset.mode = mode;
   label.textContent = mode === 'pull' ? 'Downloading' : mode === 'push' ? 'Uploading' : 'Syncing';
+  count.textContent = total > 0 ? done + ' of ' + total + ' changes' : 'Preparing...';
   fill.style.width = percent + '%';
   percentEl.textContent = percent + '%';
+  track.setAttribute('aria-valuenow', String(percent));
 }
 
 function _clearSyncProgress() {
