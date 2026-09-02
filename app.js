@@ -6827,14 +6827,6 @@ function setFbStatus(status) {
   if (barDot) barDot.style.background = barColors[status] || '#888';
   if (barTxt) barTxt.textContent = barLabels[status] || status;
   if (barTime && (status === 'on' || status === 'syncing')) barTime.textContent = now;
-  if (status === 'on') {
-    // Auto hide after 5s
-    clearTimeout(window._syncBarTimer);
-    window._syncBarTimer = setTimeout(() => { if (bar) bar.style.display = 'none'; }, 5000);
-  } else {
-    clearTimeout(window._syncBarTimer);
-    bar.style.display = 'flex';
-  }
 }
 
 // ===== FIREBASE ENVIRONMENTS =====
