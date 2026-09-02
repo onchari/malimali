@@ -3310,6 +3310,7 @@ body[data-firebase-env="development"]::before {
 .sync-progress-track { width:90px; height:5px; overflow:hidden; border-radius:5px; background:rgba(255,255,255,.2); }
 .sync-progress-fill { width:0; height:100%; background:#3b82f6; transition:width .2s ease, background .2s ease; }
 .sync-progress[data-mode="push"] .sync-progress-fill { background:#eab308; }
+.sync-progress[data-mode="sync"] .sync-progress-fill { background:#60a5fa; }
 
 .user-pill {
   display: inline-flex; align-items: center; gap: 6px;

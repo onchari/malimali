@@ -6357,7 +6357,7 @@ function _setSyncProgress(mode, done, total) {
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 100;
   el.hidden = false;
   el.dataset.mode = mode;
-  label.textContent = mode === 'pull' ? 'Pulling' : 'Pushing';
+  label.textContent = mode === 'pull' ? 'Pulling' : mode === 'push' ? 'Pushing' : 'Syncing';
   fill.style.width = percent + '%';
   percentEl.textContent = percent + '%';
 }
@@ -6652,6 +6652,7 @@ function setFbStatus(status) {
   if (!bar) return;
   const barColors = { off:'#888', connecting:'#f59e0b', on:'#4ade80', error:'#f87171', syncing:'#60a5fa' };
   const barLabels = { off:'Offline', connecting:'Connecting...', on:'Live', error:'Sync Error', syncing:'Syncing...' };
+  if (status === 'syncing') _setSyncProgress('sync', 0, 1);
   bar.style.display = 'flex';
   if (barDot) barDot.style.background = barColors[status] || '#888';
   if (barTxt) barTxt.textContent = barLabels[status] || status;
@@ -7327,11 +7328,26 @@ async function _hasPendingSync(store, fbId) {
   return q.some(x => x.collection === store && x.recordKey === String(fbId) && x.status !== 'done');
 }
 
+async function _acknowledgeMatchingQueue(store, fbId, remote) {
+  if (!db.objectStoreNames.contains('sync_queue')) return;
+  const queue = await dbAll('sync_queue');
+  for (const entry of queue) {
+    if (entry.collection !== store || entry.recordKey !== String(fbId) || entry.operation !== 'upsert') continue;
+    if (_syncValue(entry.payload || {}) === _syncValue(remote)) {
+      await dbDelete('sync_queue', entry.id);
+    }
+  }
+}
+
 async function _applyRemoteRecord(store, data, fbId) {
   const remote = { ...data, fbId };
   delete remote.id;
   const existing = await _findLocalForRemote(store, remote, fbId);
   if (existing && await _hasPendingSync(store, String(fbId))) {
+    if (_syncValue(existing) === _syncValue(remote)) {
+      await _acknowledgeMatchingQueue(store, fbId, remote);
+      return false;
+    }
     // A local change is waiting to be uploaded. Never let a snapshot erase it.
     return false;
   }
@@ -7428,6 +7444,12 @@ async function processSyncQueue(silent = false, onProgress = null) {
       }
       if (!silent && !failed) toast(processed ? `Synced ${processed} change(s) ✓` : 'Already synchronized ✓', 'ok');
       return { processed, failed };
+    } catch (e) {
+      _lastSyncError = e.message || String(e);
+      _pushFailCount = Math.max(1, _pushFailCount);
+      setFbStatus('error');
+      console.error('[SYNC] queue processing failed:', e);
+      throw e;
     } finally {
       _syncProcessing = false;
       updateSyncDot();
