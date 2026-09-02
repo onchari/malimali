@@ -4,7 +4,7 @@
 
 Offline-first inventory & point-of-sale PWA for Mandela General Stores (a small retail shop). Tracks stock, records sales, manages daily business-day reconciliation, and syncs to Firebase Firestore. Runs entirely in the browser — no server, no build step.
 
-**Tech stack:** Vanilla JS (ES2020), HTML5, CSS3, IndexedDB v11, Firebase Firestore v9 (modular), Service Worker (Cache API), GitHub Pages hosting.
+**Tech stack:** Vanilla JS (ES2020), HTML5, CSS3, IndexedDB v14, Firebase Firestore v10 (modular), Service Worker (Cache API), GitHub Pages hosting.
 
 ## Architecture
 
@@ -17,7 +17,7 @@ Offline-first inventory & point-of-sale PWA for Mandela General Stores (a small 
 | `sw.js` | Service worker — offline caching, background sync |
 | `manifest.json` | PWA manifest (name: "Mandela General Stores") |
 
-### IndexedDB v11 — 8 stores (`DB_NAME = 'InventoryApp'`)
+### IndexedDB v14 — application stores and sync metadata (`DB_NAME = 'InventoryApp'`)
 
 | Store | Purpose |
 |-------|---------|
@@ -29,6 +29,8 @@ Offline-first inventory & point-of-sale PWA for Mandela General Stores (a small 
 | `types` | Product categories / sub-categories |
 | `wishlist` | Prospective items the shop wants to stock |
 | `photos` | Compressed item/wishlist photos (key: `"item_12"` / `"wish_3"`) |
+| `sync_queue` | Durable, idempotent Firebase outbox |
+| `sync_meta` | Lamport clock, cross-tab lease, and incremental pull cursors |
 
 Development uses a separate DB: `InventoryApp_dev`. Switch via Settings → Firebase Environment.
 
@@ -38,11 +40,15 @@ Development uses a separate DB: `InventoryApp_dev`. Switch via Settings → Fire
 - **Production collections:** `items`, `sales`, `shoe_sizes`, `finances`, `business_days`, `wishlist`
 - **Development collections:** `dev_items`, `dev_sales`, `dev_shoe_sizes`, …  (prefix `dev_`)
 - `types` and `photos` are **not** synced to Firestore.
-- Sync is write-on-change (via `setDoc`) + explicit `forcePushToFirebase()` / `pullFromFirebase()`.
+- Local CRUD writes atomically update IndexedDB and the durable `sync_queue`; retries use deterministic document IDs and tombstones.
+- Records carry `_syncVersion`, `_syncClient`, `_syncUpdatedAt`, and `_syncMutationId` for conflict-safe merges and idempotent replay.
+- Cross-tab coordination uses `navigator.locks` plus an IndexedDB lease/BroadcastChannel; `forcePushToFirebase()` / `pullFromFirebase()` remain available.
+- Pulls use `_syncUpdatedAt` cursors when available and safely fall back to a full pull for older collections.
+- Settings exposes `restoreLocalFromCloud()` (destructive local replacement) and `syncRebuildOutbox()` (non-destructive queue recovery).
 - `_localWriting` flag prevents echo-back from `onSnapshot` listeners.
 
 ### PWA / Service Worker
-- **`CACHE_NAME`** must be bumped on every deploy (currently `mandela-v20260802b-english-ui`).
+- **`CACHE_NAME`** must be bumped on every deploy (currently `mandela-v20260903a-robust-sync`).
 - App files: network-first with cache fallback.
 - Firebase CDN: separate `FIREBASE_CACHE` cache, network-first.
 - Background sync tag: `firebase-sync`.
@@ -122,7 +128,7 @@ For footwear: delegates to `saveShoeItems(baseCode, baseName, type)` (line ~1004
 - Plain items: listed individually.
 
 ### Firebase sync
-- `forcePushToFirebase()` (line ~6844) — pushes all local records in batches.
+- `forcePushToFirebase()` — drains the durable outbox; it does not re-upload unchanged records.
 - `pullFromFirebase(silent)` (line ~6928) — fetches all Firestore docs, merges into IndexedDB.
 
 ## Development Notes

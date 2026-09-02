@@ -38,13 +38,13 @@
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import {
       getFirestore, collection, doc, setDoc, deleteDoc,
-      getDocs, onSnapshot, writeBatch, serverTimestamp
+      getDocs, onSnapshot, writeBatch, serverTimestamp, query, where, runTransaction
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     window._fbImports = {
       initializeApp, getApp, getApps,
       getFirestore, collection, doc, setDoc, deleteDoc,
-      getDocs, onSnapshot, writeBatch, serverTimestamp
+      getDocs, onSnapshot, writeBatch, serverTimestamp, query, where, runTransaction
     };
   </script>
   <script>
@@ -88,6 +88,11 @@
   </script>
 </head>
 <body>
+<div id="app-update-center-bar" class="app-update-center-bar" role="status" aria-live="polite" hidden>
+  <span><i class="fa-solid fa-rotate"></i> New app version available</span>
+  <button type="button" onclick="applyAppUpdate()">Update now</button>
+  <button type="button" class="app-update-dismiss" onclick="dismissAppUpdate()">Later</button>
+</div>
 
 <!-- ==============================================================
      UPDATE BANNER  (id="app-update-banner")
@@ -275,6 +280,11 @@
             style="display:none;">
       <i class="fa-solid fa-wifi"></i> Reconnect
     </button>
+  </div>
+  <div id="sync-progress" class="sync-progress" aria-live="polite" hidden>
+    <span id="sync-progress-label" class="sync-progress-label"></span>
+    <div class="sync-progress-track"><div id="sync-progress-fill" class="sync-progress-fill"></div></div>
+    <span id="sync-progress-percent" class="sync-progress-percent">0%</span>
   </div>
 </div>
 
@@ -1388,6 +1398,14 @@
         <div class="sync-actions-grid">
           <button type="button" class="sync-action-btn sync-action-danger" onclick="clearLocalData()">Clear local data</button>
           <button type="button" class="sync-action-btn sync-action-danger" onclick="clearCloudData()">Clear cloud data</button>
+        </div>
+      </div>
+
+      <div class="sync-actions-group">
+        <div class="sync-actions-label">Recovery</div>
+        <div class="sync-actions-grid">
+          <button type="button" class="sync-action-btn sync-action-pull" onclick="restoreLocalFromCloud()">Restore local from cloud</button>
+          <button type="button" class="sync-action-btn sync-action-push" onclick="syncRebuildOutbox()">Retry all local changes</button>
         </div>
       </div>
 
