@@ -6759,6 +6759,10 @@ async function initFirebase() {
       setFbStatus('off');
       return;
     }
+    // IndexedDB must be ready before listeners and sync can inspect local
+    // stores. Startup can reach this function while a schema migration is
+    // still running, especially on a slow device.
+    await waitForAppDb();
     setFbStatus('connecting');
     const {
       initializeApp, getApps,
