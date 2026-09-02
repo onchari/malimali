@@ -9162,6 +9162,8 @@ function _setUpdateLastCheck() {
 }
 
 function _showUpdateBanner() {
+  const centerBar = document.getElementById('app-update-center-bar');
+  if (centerBar) centerBar.hidden = false;
   const banner = document.getElementById('app-update-banner');
   if (!banner) return;
   // Reset state
@@ -9175,11 +9177,14 @@ function _showUpdateBanner() {
   if (btnArea)    btnArea.style.display    = 'flex';
   if (installBtn) { installBtn.disabled = false; installBtn.style.opacity = '1'; installBtn.textContent = 'Install update now'; }
   if (laterBtn)   laterBtn.style.display  = 'block';
-  // Show banner
-  banner.style.display = 'flex';
+  // Keep the full-screen legacy prompt hidden; the centered bar is the
+  // non-blocking update notification shown to users.
+  banner.style.display = 'none';
 }
 
 function dismissAppUpdate() {
+  const centerBar = document.getElementById('app-update-center-bar');
+  if (centerBar) centerBar.hidden = true;
   const banner = document.getElementById('app-update-banner');
   if (banner) banner.style.display = 'none';
   _updateBannerDismissed = true;
@@ -9189,6 +9194,8 @@ function dismissAppUpdate() {
 
 function applyAppUpdate() {
   if (!_pendingWorker) return;
+  const centerBar = document.getElementById('app-update-center-bar');
+  if (centerBar) centerBar.hidden = true;
   const installBtn = document.getElementById('upd-install-btn');
   const laterBtn   = document.getElementById('upd-later-btn');
   const progress   = document.getElementById('upd-progress-wrap');
