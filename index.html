@@ -266,19 +266,20 @@
   <!-- Right: context-sensitive action buttons -->
   <div id="ssb-actions" class="ssb-actions">
     <button id="ssb-btn-push" class="ssb-btn ssb-btn-push" onclick="syncPushOnly()"
-            style="display:none;">
-     <i class="fa-solid fa-cloud-arrow-up"></i> Upload
+            style="display:none;" aria-label="Upload changes" title="Upload changes">
+     <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
     </button>
     <button id="ssb-btn-pull" class="ssb-btn ssb-btn-pull" onclick="syncPullOnly()"
-            style="display:none;">
-     <i class="fa-solid fa-cloud-arrow-down"></i> Download
+            style="display:none;" aria-label="Download changes" title="Download changes">
+     <i class="fa-solid fa-cloud-arrow-down" aria-hidden="true"></i>
     </button>
-    <button id="ssb-btn-sync" class="ssb-btn ssb-btn-sync" onclick="runForceSync()">
-     <i class="fa-solid fa-rotate"></i> Sync
+    <button id="ssb-btn-sync" class="ssb-btn ssb-btn-sync" onclick="runForceSync()"
+            aria-label="Sync changes" title="Sync changes">
+     <i class="fa-solid fa-rotate" aria-hidden="true"></i>
     </button>
     <button id="ssb-btn-offline" class="ssb-btn ssb-btn-offline" onclick="retryConnection()"
-            style="display:none;">
-      <i class="fa-solid fa-wifi"></i> Reconnect
+            style="display:none;" aria-label="Reconnect to Firebase" title="Reconnect to Firebase">
+     <i class="fa-solid fa-wifi" aria-hidden="true"></i>
     </button>
   </div>
   <div id="sync-progress" class="sync-progress" role="status" aria-live="polite">
