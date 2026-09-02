@@ -4794,25 +4794,37 @@ body.photo-lightbox-open { overflow: hidden; }
 .pr-legend { display: flex; align-items: center; gap: 10px; padding-top: 4px; }
 .pr-legend-item { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 3px; }
 
-/* Day list — flat full-width rows, no card container */
+/* Past records — flat full-width table, one row per day */
 .pr-days-list { margin-bottom: 10px; }
-.day-list-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 0; border-bottom: 1px solid var(--border);
-  cursor: pointer; transition: background .1s;
-  background: var(--surface);
+.hist-days-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
 }
-.day-list-row:last-child { border-bottom: none; }
-.day-list-row:active     { opacity: .75; }
-.day-row-today { border-left: 3px solid var(--accent); padding-left: 10px; }
-.day-row-best  { border-left: 3px solid #f59e0b;       padding-left: 10px; }
-.day-row-left  { flex: 1; min-width: 0; }
-.day-row-date  { font-size: 14px; font-weight: 800; color: var(--text); }
-.day-row-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
-.day-row-right { text-align: right; flex-shrink: 0; }
-.day-row-earning { font-size: 15px; font-weight: 900; font-family: var(--mono); line-height: 1.2; }
-.day-row-revenue { font-size: 11px; color: var(--muted); font-family: var(--mono); }
-.day-row-chev    { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+.hist-days-table thead th {
+  padding: 7px 6px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  color: var(--muted);
+  border-bottom: 2px solid var(--border);
+  background: var(--surface2);
+}
+.hist-day-tr td {
+  padding: 10px 6px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.hist-day-tr:last-child td { border-bottom: none; }
+.hist-day-tr:active td     { background: var(--bg2); }
+.hist-row-today td:first-child { border-left: 3px solid var(--accent); padding-left: 10px; }
+.hist-row-best  td:first-child { border-left: 3px solid #f59e0b;       padding-left: 10px; }
+.hdt-date  { font-weight: 700; color: var(--text); width: 40%; }
+.hdt-num   { text-align: right; font-family: var(--mono); color: var(--text); }
+.hdt-chev  { text-align: right; color: var(--muted); font-size: 10px; width: 24px; }
 .pr-day-card {
   background: var(--surface);
   border: 1.5px solid var(--border);

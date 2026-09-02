@@ -11092,8 +11092,8 @@ async function renderHistoryPage() {
   // Running total for cumulative profit
   let runningProfit = 0;
 
-  // Day list rows, newest first
-  const dayCards = datesSorted.map(date => {
+  // Day table rows, newest first
+  const dayRows = datesSorted.map(date => {
     const day    = byDate[date];
     const safeId = date.replace(/-/g,'');
     const dt     = new Date(date + 'T12:00:00');
@@ -11101,19 +11101,25 @@ async function renderHistoryPage() {
     const earningColor = day.profit >= 0 ? '#16a34a' : '#dc2626';
     const isBest  = date === bestRevDay && datesSorted.length > 1;
     const isToday = date === today;
-
-    return `<div class="day-list-row${isToday ? ' day-row-today' : ''}${isBest ? ' day-row-best' : ''}" onclick="expandHistDay('${safeId}')">
-      <div class="day-row-left">
-        <div class="day-row-date">${label}${isBest ? ' ★' : ''}</div>
-        <div class="day-row-meta">${day.sales.length} sale${day.sales.length!==1?'s':''} · ${fmtN(day.qty)} pcs</div>
-      </div>
-      <div class="day-row-right">
-        <div class="day-row-earning" style="color:${earningColor};">${_fmtNum(day.profit)}</div>
-        <div class="day-row-revenue">${_fmtNum(day.revenue)}</div>
-      </div>
-      <i class="fa-solid fa-chevron-right day-row-chev"></i>
-    </div>`;
+    const rowCls  = isToday ? ' hist-row-today' : isBest ? ' hist-row-best' : '';
+    return `<tr class="hist-day-tr${rowCls}" onclick="expandHistDay('${safeId}')" style="cursor:pointer;">
+      <td class="hdt-date">${label}${isBest ? ' ★' : ''}</td>
+      <td class="hdt-num">${day.sales.length}</td>
+      <td class="hdt-num">${_fmtNum(day.revenue)}</td>
+      <td class="hdt-num" style="color:${earningColor};font-weight:800;">${_fmtNum(day.profit)}</td>
+      <td class="hdt-chev"><i class="fa-solid fa-chevron-right"></i></td>
+    </tr>`;
   }).join('');
+  const dayCards = `<table class="hist-days-table">
+    <thead><tr>
+      <th class="hdt-date">Date</th>
+      <th class="hdt-num">Sales</th>
+      <th class="hdt-num">Revenue</th>
+      <th class="hdt-num">Earning</th>
+      <th class="hdt-chev"></th>
+    </tr></thead>
+    <tbody>${dayRows}</tbody>
+  </table>`;
 
   recList.innerHTML = `
     <!-- Period summary — 4 compact cards in one row -->
