@@ -7175,34 +7175,39 @@ async function ensureItemFbId(item) {
 }
 
 async function normalizeSyncIds() {
-  const items = await dbAll('items');
-  for (const item of items) {
-    await ensureItemFbId(item);
-  }
-  const shoeSizes = await dbAll('shoe_sizes');
-  for (const sz of shoeSizes) {
-    const stable = stableShoeSizeFbId(sz);
-    if (sz.fbId !== stable) {
-      sz.fbId = stable;
-      await dbPut('shoe_sizes', sz);
+  _syncWriteContext++;
+  try {
+    const items = await dbAll('items');
+    for (const item of items) {
+      await ensureItemFbId(item);
     }
-  }
-  const bdays = await dbAll('business_days');
-  for (const bd of bdays) {
-    const stable = stableBusinessDayFbId(bd);
-    if (bd.fbId !== stable) {
-      bd.fbId = stable;
-      await dbPut('business_days', bd);
-    }
-  }
-  if (db.objectStoreNames.contains('wishlist')) {
-    const wishes = await dbAll('wishlist');
-    for (const w of wishes) {
-      if (!w.fbId) {
-        w.fbId = stableWishFbId(w);
-        await dbPut('wishlist', w);
+    const shoeSizes = await dbAll('shoe_sizes');
+    for (const sz of shoeSizes) {
+      const stable = stableShoeSizeFbId(sz);
+      if (sz.fbId !== stable) {
+        sz.fbId = stable;
+        await dbPut('shoe_sizes', sz);
       }
     }
+    const bdays = await dbAll('business_days');
+    for (const bd of bdays) {
+      const stable = stableBusinessDayFbId(bd);
+      if (bd.fbId !== stable) {
+        bd.fbId = stable;
+        await dbPut('business_days', bd);
+      }
+    }
+    if (db.objectStoreNames.contains('wishlist')) {
+      const wishes = await dbAll('wishlist');
+      for (const w of wishes) {
+        if (!w.fbId) {
+          w.fbId = stableWishFbId(w);
+          await dbPut('wishlist', w);
+        }
+      }
+    }
+  } finally {
+    _syncWriteContext--;
   }
 }
 
@@ -7758,18 +7763,6 @@ async function forcePushToFirebase(silent = false) {
   if (!silent) setFbStatus('syncing');
   // Local writes are queued at the point of change. Do not scan and requeue
   // every local record here, otherwise each manual push creates a full upload.
-  // A one-time recovery scan covers records created by pre-v14 versions.
-  const pending = db.objectStoreNames.contains('sync_queue') ? await dbAll('sync_queue') : [];
-  if (!pending.length) {
-    const legacy = [];
-    for (const store of _SYNCABLE_STORES) {
-      if (!db.objectStoreNames.contains(store)) continue;
-      for (const record of await dbAll(store)) {
-        if (!record._syncVersion || !record._syncMutationId) legacy.push([store, record]);
-      }
-    }
-    if (legacy.length) await syncRebuildOutbox(true);
-  }
   const result = await processSyncQueue(true);
   if (!silent) {
     if (result.failed) toast('Sync failed — will retry automatically', 'err');

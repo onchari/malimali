@@ -40,11 +40,11 @@ Development uses a separate DB: `InventoryApp_dev`. Switch via Settings → Fire
 - **Production collections:** `items`, `sales`, `shoe_sizes`, `finances`, `business_days`, `wishlist`
 - **Development collections:** `dev_items`, `dev_sales`, `dev_shoe_sizes`, …  (prefix `dev_`)
 - `types` and `photos` are **not** synced to Firestore.
-- Local CRUD writes atomically update IndexedDB and the durable `sync_queue`; retries use deterministic document IDs and tombstones.
+- Local CRUD writes atomically update IndexedDB and the durable `sync_queue`; retries use deterministic document IDs and tombstones. Startup identity normalization never queues uploads.
 - Records carry `_syncVersion`, `_syncClient`, `_syncUpdatedAt`, and `_syncMutationId` for conflict-safe merges and idempotent replay.
 - Cross-tab coordination uses `navigator.locks` plus an IndexedDB lease/BroadcastChannel; `forcePushToFirebase()` / `pullFromFirebase()` remain available.
 - Pulls use `_syncUpdatedAt` cursors when available and safely fall back to a full pull for older collections.
-- Settings exposes `restoreLocalFromCloud()` (destructive local replacement) and `syncRebuildOutbox()` (non-destructive queue recovery).
+- Settings exposes `restoreLocalFromCloud()` (destructive local replacement) and `syncRebuildOutbox()` (explicit non-destructive queue recovery for legacy data).
 - `_localWriting` flag prevents echo-back from `onSnapshot` listeners.
 
 ### PWA / Service Worker
