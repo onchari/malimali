@@ -38,13 +38,13 @@
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import {
       getFirestore, collection, doc, setDoc, deleteDoc,
-      getDocs, onSnapshot, writeBatch, serverTimestamp
+      getDocs, onSnapshot, writeBatch, serverTimestamp, query, where, runTransaction
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     window._fbImports = {
       initializeApp, getApp, getApps,
       getFirestore, collection, doc, setDoc, deleteDoc,
-      getDocs, onSnapshot, writeBatch, serverTimestamp
+      getDocs, onSnapshot, writeBatch, serverTimestamp, query, where, runTransaction
     };
   </script>
   <script>
@@ -1398,6 +1398,14 @@
         <div class="sync-actions-grid">
           <button type="button" class="sync-action-btn sync-action-danger" onclick="clearLocalData()">Clear local data</button>
           <button type="button" class="sync-action-btn sync-action-danger" onclick="clearCloudData()">Clear cloud data</button>
+        </div>
+      </div>
+
+      <div class="sync-actions-group">
+        <div class="sync-actions-label">Recovery</div>
+        <div class="sync-actions-grid">
+          <button type="button" class="sync-action-btn sync-action-pull" onclick="restoreLocalFromCloud()">Restore local from cloud</button>
+          <button type="button" class="sync-action-btn sync-action-push" onclick="syncRebuildOutbox()">Retry all local changes</button>
         </div>
       </div>
 
