@@ -6586,23 +6586,59 @@ async function _subscribeSyncMeta() {
   } catch(e) { console.warn('[SYNC] _subscribeSyncMeta:', e.message); }
 }
 
-/** Refresh every section of the app after any remote data change */
-async function _refreshAllViews() {
-  try { allItems = await dbAll('items'); await enrichShoeItems(allItems); } catch(_) {}
-  try { renderList(); } catch(_) {}
-  try { renderDashboard(); } catch(_) {}
-  try { updateHeader(); } catch(_) {}
-  try { updateLowStockBadge(); } catch(_) {}
-  try { refreshSalesViews(); } catch(_) {}
-  try { renderFinancePage(); } catch(_) {}
-  try { renderDayState(); } catch(_) {}
-  try { renderDaySessionsList(); } catch(_) {}
-  try { renderWishlistPage(); } catch(_) {}
-  try { renderCustomerList(''); } catch(_) {}
-  try { searchSell(); } catch(_) {}
-  updateSyncDot();
+// Debounce timer — prevents rapid-fire re-renders from multiple listener events
+let _refreshTimer = null;
+let _refreshPending = false;
+
+/**
+ * Debounced refresh — waits 600 ms after the last call, then refreshes
+ * only what the user can actually see (active page). This eliminates
+ * flickering caused by the heartbeat + multiple listeners firing together.
+ */
+function _refreshAllViews() {
+  _refreshPending = true;
+  clearTimeout(_refreshTimer);
+  _refreshTimer = setTimeout(_doRefresh, 600);
 }
 window._refreshAllViews = _refreshAllViews;
+
+async function _doRefresh() {
+  if (!_refreshPending) return;
+  _refreshPending = false;
+  try {
+    // Always refresh data model
+    allItems = await dbAll('items');
+    await enrichShoeItems(allItems);
+    // Always refresh lightweight always-visible elements
+    try { updateHeader(); } catch(_) {}
+    try { updateLowStockBadge(); } catch(_) {}
+    try { renderDashboard(); } catch(_) {}
+    updateSyncDot();
+    // Refresh only the currently visible page to avoid full re-render flicker
+    const active = document.querySelector('.page.active');
+    const pid = active ? active.id : '';
+    if (pid === 'page-list' || pid === 'page-inventory' || pid === 'page-add') {
+      try { renderList(); } catch(_) {}
+    }
+    if (pid === 'page-sell') {
+      try { refreshSalesViews(); } catch(_) {}
+      try { searchSell(); } catch(_) {}
+    }
+    if (pid === 'page-finance') {
+      try { renderFinancePage(); } catch(_) {}
+    }
+    if (pid === 'page-operations' || pid === 'page-day') {
+      try { renderDayState(); } catch(_) {}
+      try { renderDaySessionsList(); } catch(_) {}
+    }
+    if (pid === 'page-wishlist') {
+      try { renderWishlistPage(); } catch(_) {}
+    }
+    if (pid === 'page-customers') {
+      try { renderCustomerList(''); } catch(_) {}
+    }
+  } catch(e) { console.warn('[SYNC] refresh error:', e.message); }
+}
 
 /** Called when device comes back online — check version and pull if behind. */
 async function _onComeOnline() {
@@ -7128,20 +7164,23 @@ async function initFirebase() {
     window._syncHeartbeat = setInterval(async () => {
       if (!fbReady || !fbDb || !navigator.onLine) return;
       try {
-        // Retry failed pushes first
         if (_pushFailCount > 0) {
-          console.log('[SYNC] Heartbeat: retrying ' + _pushFailCount + ' failed push(es)');
           _pushFailCount = 0;
           await forcePushToFirebase(true);
-          await updateSyncDot();
+          updateSyncDot();
           return;
         }
-        // Always pull to guarantee real-time consistency
+        // Pull silently — only trigger refresh if something actually changed
+        const before = { items: allItems.length, sales: (await dbAll('sales')).length };
         await pullFromFirebase(true);
-        await _refreshAllViews();
+        const after  = { items: allItems.length, sales: (await dbAll('sales')).length };
+        if (before.items !== after.items || before.sales !== after.sales) {
+          _refreshAllViews(); // debounced — won't flicker
+        }
         setFbStatus('on');
+        updateSyncDot();
       } catch(e) { /* non-critical */ }
-    }, 5000);   // 5 s — near-real-time fallback when listeners miss a change
+    }, 10000);  // 10 s safety-net — real-time handled by onSnapshot listeners
 
   } catch(e) {
     setFbStatus('error');
