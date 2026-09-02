@@ -6823,7 +6823,7 @@ async function initFirebase() {
     function _startItemsListener() {
       if (fbUnsub) { try { fbUnsub(); } catch(_) {} }
       fbUnsub = onSnapshot(fbCol('items'), async snap => {
-        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        const changes = snap.docChanges();
         if (!changes.length) return;
         const localItems = await dbAll('items');
         const byFbId = Object.fromEntries(localItems.filter(i=>i.fbId).map(i=>[i.fbId,i]));
@@ -6870,7 +6870,7 @@ async function initFirebase() {
     function _startSalesListener() {
       if (window._fbUnsubSales) { try { window._fbUnsubSales(); } catch(_) {} }
       window._fbUnsubSales = onSnapshot(fbCol('sales'), async snap => {
-        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        const changes = snap.docChanges();
         if (!changes.length) return;
         try {
           const localSales = await dbAll('sales');
@@ -7152,7 +7152,7 @@ async function initFirebase() {
         setFbStatus('on');
         await updateSyncDot();
       } catch(e) { /* non-critical */ }
-    }, 15000);
+    }, 5000);   // 5 s — near-real-time fallback when listeners miss a change
 
   } catch(e) {
     setFbStatus('error');
@@ -7215,10 +7215,12 @@ function stableShoeSizeFbId(sz) {
 
 function stableSaleFbId(sale) {
   if (sale && sale.fbId) return sale.fbId;
-  const ts = (sale && (sale.createdAt || sale.date) || '').replace(/[^0-9]/g, '').slice(0, 17) || '0';
+  const ts   = (sale && (sale.createdAt || sale.date) || '').replace(/[^0-9]/g, '').slice(0, 17) || '0';
   const code = _fbSlug(sale && sale.itemCode, 'x');
-  const rev = String(Math.round(Number(sale && sale.revenue || 0) * 100));
-  return 'sale_' + ts + '_' + code + '_' + rev;
+  const rev  = String(Math.round(Number(sale && sale.revenue || 0) * 100));
+  // Include local DB id to prevent collisions when two sales share same second/item/revenue
+  const lid  = sale && sale.id ? String(sale.id) : Math.random().toString(36).slice(2, 7);
+  return 'sale_' + ts + '_' + code + '_' + rev + '_' + lid;
 }
 
 async function ensureItemFbId(item) {
@@ -7421,23 +7423,24 @@ function _isDeletedSaleRemote(fbId, sale) {
  */
 async function deduplicateSales() {
   const all = await dbAll('sales');
-  const seen = new Map();     // signature → winning record
-  const losers = [];          // {id, fbId} — duplicates to delete
+  // Only deduplicate on EXACT fbId match — never on signature
+  // (signature collisions would delete valid distinct sales)
+  const seenFbId = new Map();  // fbId → winning record
+  const losers   = [];
 
   for (const sale of all) {
-    const sig = _saleSignature(sale);
-    if (!sig) continue;
-    if (seen.has(sig)) {
-      const winner = seen.get(sig);
-      if (!winner.fbId && sale.fbId) {
-        // Current 'sale' is better keeper → demote previous winner
+    if (!sale.fbId) continue;   // no fbId = can't be a duplicate
+    if (seenFbId.has(sale.fbId)) {
+      const winner = seenFbId.get(sale.fbId);
+      // Keep the one with lowest local id (recorded first)
+      if (sale.id < winner.id) {
         losers.push(winner);
-        seen.set(sig, sale);
+        seenFbId.set(sale.fbId, sale);
       } else {
         losers.push(sale);
       }
     } else {
-      seen.set(sig, sale);
+      seenFbId.set(sale.fbId, sale);
     }
   }
 
@@ -7642,11 +7645,10 @@ async function pullFromFirebase(silent = false) {
         continue;
       }
       // Match by fbId first, then by content signature (prevents duplicate creation)
-      const existing = salesByFbId[d.id] || localSales.find(s => _salesMatch(s, data));
+      // Match by fbId only — signature matching caused false positives deleting valid distinct sales
+      const existing = salesByFbId[d.id];
       if (existing) {
         data.id = existing.id;
-        // Update local fbId if it was missing
-        if (!existing.fbId) salesByFbId[d.id] = { ...existing, fbId: d.id };
         await dbPut('sales', data);
         salesUpdated++;
       } else {
