@@ -7634,7 +7634,7 @@ async function processSyncQueue(silent = false, onProgress = null) {
     let failed = 0;
     try {
       setFbStatus('syncing');
-      const { setDoc, runTransaction } = await waitForFbImports();
+      const { setDoc } = await waitForFbImports();
       const allQueue = await dbAll('sync_queue');
       // A tab can be closed after marking an entry processing but before the
       // Firestore write completes. Recover those abandoned entries on retry.
@@ -7665,21 +7665,11 @@ async function processSyncQueue(silent = false, onProgress = null) {
           const payload = sanitiseForFirestore(q.payload || {
             fbId: q.recordKey, _syncDeleted: q.operation === 'delete'
           });
-          let superseded = null;
-          if (runTransaction) {
-            await runTransaction(fbDb, async transaction => {
-              const snap = await transaction.get(ref);
-              const current = snap.exists() ? { ...snap.data(), fbId: q.recordKey } : null;
-              if (current && _compareSyncVersion(current, payload) > 0) {
-                superseded = current;
-                return;
-              }
-              transaction.set(ref, payload);
-            });
-          } else {
-            await setDoc(ref, payload);
-          }
-          if (superseded) await _applyRemoteRecord(q.collection, superseded, q.recordKey);
+          // Deterministic document IDs make retries idempotent. Avoid a
+          // read-before-write transaction here: every queued record would
+          // otherwise consume an extra BatchGet read and can exhaust the
+          // Firestore read quota during recovery or repeated retries.
+          await setDoc(ref, payload);
           await dbDelete('sync_queue', q.id);
           processed++;
           if (onProgress) onProgress(processed, queue.length);
