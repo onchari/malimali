@@ -6527,7 +6527,7 @@ function _setSyncProgress(mode, done, total) {
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 100;
   el.hidden = false;
   el.dataset.mode = mode;
-  label.textContent = mode === 'pull' ? 'Pulling' : mode === 'push' ? 'Pushing' : 'Syncing';
+  label.textContent = mode === 'pull' ? 'Downloading' : mode === 'push' ? 'Uploading' : 'Syncing';
   fill.style.width = percent + '%';
   percentEl.textContent = percent + '%';
 }
@@ -6568,12 +6568,12 @@ async function updateSyncDot() {
     const btnPull    = document.getElementById('ssb-btn-pull');
     const btnSync    = document.getElementById('ssb-btn-sync');
     const btnOffline = document.getElementById('ssb-btn-offline');
-    // Refresh button always visible (hidden only when offline — use Reconnect instead)
+    // Sync button remains available whenever Firebase is reachable.
     if (btnPush)    btnPush.style.display    = (state === 'ahead')   ? 'flex' : 'none';
     if (btnPull)    btnPull.style.display    = (state === 'behind')  ? 'flex' : 'none';
     if (btnSync)    btnSync.style.display    = (state !== 'offline') ? 'flex' : 'none';
     if (btnOffline) btnOffline.style.display = (state === 'offline') ? 'flex' : 'none';
-    // Highlight Refresh in red when there's an error
+    // Highlight Sync in red when there's an error.
     if (btnSync) btnSync.style.borderColor = (state === 'error') ? 'rgba(220,38,38,.6)' : '';
   }
 
@@ -6591,7 +6591,7 @@ async function updateSyncDot() {
     // 1. Push failures
     if (_pushFailCount > 0) {
       const errMsg = _lastSyncError ? _lastSyncError : 'unknown error';
-      _applySyncState('ahead', 'Push failed', _pushFailCount + ' write(s) failed: ' + errMsg + ' — tap Push to retry');
+      _applySyncState('ahead', 'Upload failed', _pushFailCount + ' change(s) failed: ' + errMsg + ' — tap Upload to retry');
       return;
     }
 
@@ -6599,7 +6599,7 @@ async function updateSyncDot() {
     const localItems = await dbAll('items');
     const unsynced   = localItems.filter(i => i.id && !i.fbId);
     if (unsynced.length) {
-      _applySyncState('ahead', 'Not pushed', unsynced.length + ' local item(s) not yet in cloud — tap Push');
+      _applySyncState('ahead', 'Not uploaded', unsynced.length + ' local item(s) waiting to upload — tap Upload');
       return;
     }
 
@@ -6607,10 +6607,11 @@ async function updateSyncDot() {
     const pending = db.objectStoreNames.contains('sync_queue') ? (await dbAll('sync_queue')).filter(q => q.status !== 'done').length : 0;
     if (pending) {
       _setSyncProgress('push', 0, pending);
+      const noun = pending === 1 ? 'change' : 'changes';
       if (_lastSyncError) {
-        _applySyncState('error', 'Sync error', pending + ' change(s) waiting · ' + _lastSyncError);
+        _applySyncState('error', 'Sync error', pending + ' ' + noun + ' waiting · ' + _lastSyncError);
       } else {
-        _applySyncState('ahead', 'Pending', pending + ' change(s) waiting to sync');
+        _applySyncState('ahead', 'Waiting', pending + ' ' + noun + ' waiting to upload');
       }
       return;
     }
@@ -6618,7 +6619,7 @@ async function updateSyncDot() {
     // 4. All known local changes have been acknowledged. Realtime listeners
     // handle cloud changes; visibility/online recovery performs a full pull.
     const now = new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-    _applySyncState('synced', 'Synced', 'All local changes synced · ' + now);
+    _applySyncState('synced', 'Up to date', 'No changes waiting to upload · ' + now);
     _clearSyncProgress();
   } catch(e) {
     _applySyncState('synced', 'Synced', 'In sync');
@@ -6635,8 +6636,8 @@ async function syncPushOnly() {
     await forcePushToFirebase(true);
     _pushFailCount = 0; _lastSyncError = null;
     setFbStatus('on');
-    toast('Pushed to cloud ✓', 'ok');
-  } catch(e) { toast('Push failed: ' + e.message, 'err'); }
+    toast('Changes uploaded ✓', 'ok');
+  } catch(e) { toast('Upload failed: ' + e.message, 'err'); }
   await updateSyncDot();
 }
 window.syncPushOnly = syncPushOnly;
@@ -6649,8 +6650,8 @@ async function syncPullOnly() {
     await pullFromFirebase(true);
     await refreshUI({ sync: false });
     setFbStatus('on');
-    toast('Pulled from cloud ✓', 'ok');
-  } catch(e) { toast('Pull failed: ' + e.message, 'err'); }
+    toast('Changes downloaded ✓', 'ok');
+  } catch(e) { toast('Download failed: ' + e.message, 'err'); }
   await updateSyncDot();
 }
 window.syncPullOnly = syncPullOnly;
@@ -6821,7 +6822,7 @@ function setFbStatus(status) {
   const barTime = document.getElementById('sync-bar-time');
   if (!bar) return;
   const barColors = { off:'#888', connecting:'#f59e0b', on:'#4ade80', error:'#f87171', syncing:'#60a5fa' };
-  const barLabels = { off:'Offline', connecting:'Connecting...', on:'Live', error:'Sync Error', syncing:'Syncing...' };
+  const barLabels = { off:'Offline', connecting:'Connecting...', on:'Up to date', error:'Sync error', syncing:'Syncing...' };
   if (status === 'syncing') _setSyncProgress('sync', 0, 1);
   bar.style.display = 'flex';
   if (barDot) barDot.style.background = barColors[status] || '#888';

@@ -252,8 +252,8 @@
 
 <!-- ==============================================================
      SYNC STATUS BAR
-     Thin green bar below header. Shows Firebase connection state.
-     Auto-hides 5 s after status becomes "Live".
+     Thin green bar below header. Shows Firebase connection state and
+     provides only the action needed for the current sync state.
      setFbStatus() in app.js controls this.
      ============================================================== -->
 <!-- ── SYNC STATUS BAR ──────────────────────────────────────────── -->
@@ -267,14 +267,14 @@
   <div id="ssb-actions" class="ssb-actions">
     <button id="ssb-btn-push" class="ssb-btn ssb-btn-push" onclick="syncPushOnly()"
             style="display:none;">
-      <i class="fa-solid fa-cloud-arrow-up"></i> Push
+     <i class="fa-solid fa-cloud-arrow-up"></i> Upload
     </button>
     <button id="ssb-btn-pull" class="ssb-btn ssb-btn-pull" onclick="syncPullOnly()"
             style="display:none;">
-      <i class="fa-solid fa-cloud-arrow-down"></i> Pull
+     <i class="fa-solid fa-cloud-arrow-down"></i> Download
     </button>
     <button id="ssb-btn-sync" class="ssb-btn ssb-btn-sync" onclick="runForceSync()">
-      <i class="fa-solid fa-rotate"></i> Refresh
+     <i class="fa-solid fa-rotate"></i> Sync
     </button>
     <button id="ssb-btn-offline" class="ssb-btn ssb-btn-offline" onclick="retryConnection()"
             style="display:none;">
@@ -1386,10 +1386,10 @@
     <!-- Sync actions - meaningless in Development (cloud sync is off), so hidden there -->
     <div id="fb-sync-actions-wrap">
       <div class="sync-actions-group">
-        <div class="sync-actions-label">Sync - merge without wiping first</div>
+        <div class="sync-actions-label">Sync changes</div>
         <div class="sync-actions-grid">
-          <button type="button" class="sync-action-btn sync-action-pull" onclick="pullFromFirebase()">Pull cloud to local</button>
-          <button type="button" class="sync-action-btn sync-action-push" onclick="forcePushToFirebase()">Push local to cloud</button>
+          <button type="button" class="sync-action-btn sync-action-pull" onclick="pullFromFirebase()">Download changes</button>
+          <button type="button" class="sync-action-btn sync-action-push" onclick="forcePushToFirebase()">Upload changes</button>
         </div>
       </div>
 
