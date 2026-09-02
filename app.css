@@ -4885,16 +4885,6 @@ body.photo-lightbox-open { overflow: hidden; }
   padding: 14px 16px;
   margin-top: 4px;
 }
-.pr-total { margin-top:14px; }
-.pr-total-heading {
-  display:flex; align-items:baseline; justify-content:space-between;
-  gap:8px; margin:0 2px 6px; color:var(--text);
-  font-size:13px; font-weight:800;
-}
-.pr-total-range {
-  color:var(--muted); font-size:10px; font-weight:600;
-  font-family:var(--mono); text-align:right;
-}
 .pr-insights-icon {
   width: 40px; height: 40px; border-radius: 50%;
   background: #16a34a; color: white;
@@ -4932,8 +4922,6 @@ body.photo-lightbox-open { overflow: hidden; }
   .pr-page-header { flex-direction: column; }
   .pr-insights    { flex-wrap: wrap; }
   .pr-export-btn  { width: 100%; justify-content: center; }
-  .pr-total-heading { align-items:flex-start; flex-direction:column; gap:2px; }
-  .pr-total-range { text-align:left; }
 }
 
 /* ── Day mini-card grid (3 per row) — kept for backwards compat ─── */
