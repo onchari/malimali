@@ -6538,7 +6538,19 @@ function _setSyncProgress(mode, done, total) {
 
 function _clearSyncProgress() {
   const el = document.getElementById('sync-progress');
-  if (el) el.hidden = true;
+  const fill = document.getElementById('sync-progress-fill');
+  const label = document.getElementById('sync-progress-label');
+  const count = document.getElementById('sync-progress-count');
+  const percent = document.getElementById('sync-progress-percent');
+  const track = el && el.querySelector('.sync-progress-track');
+  if (!el) return;
+  el.hidden = false;
+  el.dataset.mode = 'complete';
+  if (label) label.textContent = 'Up to date';
+  if (count) count.textContent = 'No changes waiting';
+  if (fill) fill.style.width = '100%';
+  if (percent) percent.textContent = '100%';
+  if (track) track.setAttribute('aria-valuenow', '100');
 }
 
 
