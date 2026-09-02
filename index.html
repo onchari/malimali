@@ -281,10 +281,18 @@
       <i class="fa-solid fa-wifi"></i> Reconnect
     </button>
   </div>
-  <div id="sync-progress" class="sync-progress" aria-live="polite" hidden>
-    <span id="sync-progress-label" class="sync-progress-label"></span>
-    <div class="sync-progress-track"><div id="sync-progress-fill" class="sync-progress-fill"></div></div>
-    <span id="sync-progress-percent" class="sync-progress-percent">0%</span>
+  <div id="sync-progress" class="sync-progress" role="status" aria-live="polite" hidden>
+    <div class="sync-progress-heading">
+      <span id="sync-progress-label" class="sync-progress-label">Syncing</span>
+      <span id="sync-progress-count" class="sync-progress-count">Preparing...</span>
+    </div>
+    <div class="sync-progress-row">
+      <div class="sync-progress-track" role="progressbar" aria-label="Synchronization progress"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="sync-progress-fill" class="sync-progress-fill"></div>
+      </div>
+      <span id="sync-progress-percent" class="sync-progress-percent">0%</span>
+    </div>
   </div>
 </div>
 
