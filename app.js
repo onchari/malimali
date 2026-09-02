@@ -11199,7 +11199,7 @@ async function renderHistoryPage() {
   const bestRevDay  = datesSorted.reduce((best,d) => byDate[d].revenue > (byDate[best]?.revenue||0) ? d : best, datesSorted[0]);
   const bestRevInfo = byDate[bestRevDay];
   const bestRevDt   = new Date(bestRevDay + 'T12:00:00').toLocaleDateString('en-GB',{ weekday:'short', day:'numeric', month:'short' });
-  const insightText = `Your best day was ${bestRevDt} with ${_fmtNum(bestRevInfo.revenue)} in sales and ${_fmtNum(bestRevInfo.profit)} in earning.`;
+  const insightText = `Best day: ${bestRevDt} with ${_fmtNum(bestRevInfo.revenue)} in revenue and ${_fmtNum(bestRevInfo.profit)} profit.`;
 
   // Store byDate for click access
   window._histByDate = byDate;
@@ -11257,26 +11257,6 @@ async function renderHistoryPage() {
   </table>`;
 
   recList.innerHTML = `
-    <!-- Period summary — 4 compact cards in one row -->
-    <div class="pr-sum-row">
-      <div class="pr-sum-card">
-        <div class="pr-sum-lbl">Revenue</div>
-        <div class="pr-sum-val pr-col-green">${_fmtNum(periodRev)}</div>
-      </div>
-      <div class="pr-sum-card">
-        <div class="pr-sum-lbl">Cost</div>
-        <div class="pr-sum-val pr-col-orange">${_fmtNum(periodCost)}</div>
-      </div>
-      <div class="pr-sum-card pr-sum-highlight">
-        <div class="pr-sum-lbl" style="color:rgba(255,255,255,.75);">Earning</div>
-        <div class="pr-sum-val" style="color:white;">${_fmtNum(periodProf)}</div>
-      </div>
-      <div class="pr-sum-card">
-        <div class="pr-sum-lbl">Sales</div>
-        <div class="pr-sum-val pr-col-blue">${periodSales}</div>
-      </div>
-    </div>
-
     <!-- Day list rows -->
     <div class="pr-days-list">${dayCards}</div>
 
@@ -11293,6 +11273,32 @@ async function renderHistoryPage() {
       <button class="pr-export-btn" onclick="exportSalesReport()">
         <i class="fa-solid fa-download"></i> Export Report
       </button>
+    </div>
+
+    <!-- Period total — kept at the bottom as the final record summary -->
+    <div class="pr-total">
+      <div class="pr-total-heading">
+        <span>Total for this period</span>
+        <span class="pr-total-range">${dateRangeLabel}</span>
+      </div>
+      <div class="pr-sum-row">
+        <div class="pr-sum-card">
+          <div class="pr-sum-lbl">Revenue</div>
+          <div class="pr-sum-val pr-col-green">${_fmtNum(periodRev)}</div>
+        </div>
+        <div class="pr-sum-card">
+          <div class="pr-sum-lbl">Cost</div>
+          <div class="pr-sum-val pr-col-orange">${_fmtNum(periodCost)}</div>
+        </div>
+        <div class="pr-sum-card pr-sum-highlight">
+          <div class="pr-sum-lbl" style="color:rgba(255,255,255,.75);">Profit</div>
+          <div class="pr-sum-val" style="color:white;">${_fmtNum(periodProf)}</div>
+        </div>
+        <div class="pr-sum-card">
+          <div class="pr-sum-lbl">Transactions</div>
+          <div class="pr-sum-val pr-col-blue">${periodSales}</div>
+        </div>
+      </div>
     </div>`;
 
   // Auto-expand today's card when "Today" filter is selected
