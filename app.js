@@ -6586,22 +6586,32 @@ async function _subscribeSyncMeta() {
   } catch(e) { console.warn('[SYNC] _subscribeSyncMeta:', e.message); }
 }
 
+/** Refresh every section of the app after any remote data change */
+async function _refreshAllViews() {
+  try { allItems = await dbAll('items'); await enrichShoeItems(allItems); } catch(_) {}
+  try { renderList(); } catch(_) {}
+  try { renderDashboard(); } catch(_) {}
+  try { updateHeader(); } catch(_) {}
+  try { updateLowStockBadge(); } catch(_) {}
+  try { refreshSalesViews(); } catch(_) {}
+  try { renderFinancePage(); } catch(_) {}
+  try { renderDayState(); } catch(_) {}
+  try { renderDaySessionsList(); } catch(_) {}
+  try { renderWishlistPage(); } catch(_) {}
+  try { renderCustomerList(''); } catch(_) {}
+  try { searchSell(); } catch(_) {}
+  updateSyncDot();
+}
+window._refreshAllViews = _refreshAllViews;
+
 /** Called when device comes back online — check version and pull if behind. */
 async function _onComeOnline() {
   if (!fbReady || !fbDb) { try { await initFirebase(); } catch(_) {} return; }
   setFbStatus('syncing');
   try {
-    const { doc, getDoc } = await waitForFbImports();
-    const snap = await getDoc(doc(fbDb, '_sync_meta', 'global'));
-    if (snap.exists()) {
-      const cloudVersion = snap.data().version || 0;
-      if (cloudVersion > _getSyncVersion()) {
-        await pullFromFirebase(true);
-        _setSyncVersion(cloudVersion);
-        await refreshUI({ sync: false });
-      }
-    }
+    await pullFromFirebase(true);
     await forcePushToFirebase(true);
+    await _refreshAllViews();
     setFbStatus('on');
     toast('Online — sync complete', 'ok');
   } catch(e) { setFbStatus('error'); }
@@ -6615,10 +6625,8 @@ async function _onVisibilityChange() {
   if (!fbReady || !fbDb || !navigator.onLine) return;
   try {
     await pullFromFirebase(true);
-    await refreshUI({ sync: false });
-    try { await refreshSalesViews(); } catch(_) {}
+    await _refreshAllViews();
     setFbStatus('on');
-    await updateSyncDot();
   } catch(e) { /* non-critical */ }
 }
 window._onVisibilityChange = _onVisibilityChange;
@@ -6843,16 +6851,7 @@ async function initFirebase() {
           }
         }
         if (changed) {
-          try {
-            allItems = await dbAll('items');
-            await enrichShoeItems(allItems);
-            renderList();
-            try { searchSell(); } catch(_) {}   // refresh sell search results
-            renderDashboard();
-            updateHeader();
-            setFbStatus('on');
-            updateSyncDot();
-          } catch(e) { console.error('[FB] items UI refresh error:', e.message); }
+          try { await _refreshAllViews(); setFbStatus('on'); } catch(e) { console.error('[FB] items refresh error:', e.message); }
         }
       }, err => {
         console.error('[FB] items listener error:', err.message);
@@ -6890,12 +6889,8 @@ async function initFirebase() {
             }
           }
           if (changed) {
-            // Refresh ALL sales-related views so remote sales appear immediately
             try { if (activeDay) updateDayLiveStats(); } catch(_) {}
-            try { renderDashboard(); } catch(_) {}
-            try { refreshSalesViews(); } catch(_) {}  // ← history + sell page
-            setFbStatus('on');
-            updateSyncDot();
+            try { await _refreshAllViews(); setFbStatus('on'); } catch(_) {}
           }
         } catch(e) { console.error('[FB] sales callback error:', e.message); }
       }, err => {
@@ -6914,7 +6909,7 @@ async function initFirebase() {
     function _startFinListener() {
       if (window._fbUnsubFin) { try { window._fbUnsubFin(); } catch(_) {} }
       window._fbUnsubFin = onSnapshot(fbCol('finances'), async snap => {
-        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        const changes = snap.docChanges();
         if (!changes.length) return;
         const localFin = await dbAll('finances');
         const byFbId = Object.fromEntries(localFin.filter(f => f.fbId).map(f => [f.fbId, f]));
@@ -6934,8 +6929,7 @@ async function initFirebase() {
           }
         }
         if (changed) {
-          try { renderFinancePage(); } catch(_) {}
-          try { renderDashboard(); } catch(_) {}
+          try { _refreshAllViews(); } catch(_) {}
         }
       }, err => {
         console.error('[FB] finances listener error:', err.message);
@@ -6954,7 +6948,7 @@ async function initFirebase() {
       function _startWishListener() {
         if (window._fbUnsubWish) { try { window._fbUnsubWish(); } catch(_) {} }
         window._fbUnsubWish = onSnapshot(fbCol('wishlist'), async snap => {
-          const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+          const changes = snap.docChanges();
           if (!changes.length) return;
           const localWish = await dbAll('wishlist');
           const byFbId = Object.fromEntries(localWish.filter(w => w.fbId).map(w => [w.fbId, w]));
@@ -6972,7 +6966,7 @@ async function initFirebase() {
               changed = true;
             }
           }
-          if (changed) try { renderWishlistPage(); } catch(_) {}
+          if (changed) try { _refreshAllViews(); } catch(_) {}
         }, err => {
           console.error('[FB] wishlist listener error:', err.message);
           setTimeout(async () => { if (!fbReady||!fbDb) return; _startWishListener(); try { await pullFromFirebase(true); await refreshUI({sync:false}); setFbStatus('on'); updateSyncDot(); } catch(_) {} }, 3000);
@@ -6985,7 +6979,7 @@ async function initFirebase() {
     function _startSzListener() {
       if (window._fbUnsubSz) { try { window._fbUnsubSz(); } catch(_) {} }
       window._fbUnsubSz = onSnapshot(fbCol('shoe_sizes'), async snap => {
-        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        const changes = snap.docChanges();
         if (!changes.length) return;
         const localSizes = await dbAll('shoe_sizes');
         const byFbId = Object.fromEntries(localSizes.filter(s => s.fbId).map(s => [s.fbId, s]));
@@ -7005,9 +6999,7 @@ async function initFirebase() {
           }
         }
         if (changed) {
-          allItems = await dbAll('items');
-          await enrichShoeItems(allItems);
-          renderList(); renderDashboard(); updateHeader();
+          try { await _refreshAllViews(); } catch(_) {}
         }
       }, err => {
         console.error('[FB] shoe_sizes listener error:', err.message);
@@ -7020,7 +7012,7 @@ async function initFirebase() {
     function _startBdListener() {
       if (window._fbUnsubBd) { try { window._fbUnsubBd(); } catch(_) {} }
       window._fbUnsubBd = onSnapshot(fbCol('business_days'), async snap => {
-        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        const changes = snap.docChanges();
         if (!changes.length) return;
         const localBd = await dbAll('business_days');
         const byFbId  = Object.fromEntries(localBd.filter(b => b.fbId).map(b => [b.fbId, b]));
@@ -7044,8 +7036,7 @@ async function initFirebase() {
           }
         }
         if (changed) {
-          try { renderDayState(); } catch(_) {}
-          try { renderDaySessionsList(); } catch(_) {}
+          try { _refreshAllViews(); } catch(_) {}
         }
       }, err => {
         console.error('[FB] business_days listener error:', err.message);
@@ -7059,7 +7050,7 @@ async function initFirebase() {
       if (window._fbUnsubCust) { try { window._fbUnsubCust(); } catch(_) {} }
       if (!db.objectStoreNames.contains('customers')) return;
       window._fbUnsubCust = onSnapshot(fbCol('customers'), async snap => {
-        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        const changes = snap.docChanges();
         if (!changes.length) return;
         const local   = await dbAll('customers');
         const byFbId  = Object.fromEntries(local.filter(c => c.fbId).map(c => [c.fbId, c]));
@@ -7090,7 +7081,7 @@ async function initFirebase() {
       if (window._fbUnsubCustTxn) { try { window._fbUnsubCustTxn(); } catch(_) {} }
       if (!db.objectStoreNames.contains('customer_txns')) return;
       window._fbUnsubCustTxn = onSnapshot(fbCol('customer_txns'), async snap => {
-        const changes = snap.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+        const changes = snap.docChanges();
         if (!changes.length) return;
         const local  = await dbAll('customer_txns');
         const byFbId = Object.fromEntries(local.filter(t => t.fbId).map(t => [t.fbId, t]));
@@ -7147,10 +7138,8 @@ async function initFirebase() {
         }
         // Always pull to guarantee real-time consistency
         await pullFromFirebase(true);
-        await refreshSalesViews();
-        try { allItems = await dbAll('items'); await enrichShoeItems(allItems); renderList(); } catch(_) {}
+        await _refreshAllViews();
         setFbStatus('on');
-        await updateSyncDot();
       } catch(e) { /* non-critical */ }
     }, 5000);   // 5 s — near-real-time fallback when listeners miss a change
 
