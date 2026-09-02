@@ -6436,6 +6436,7 @@ async function updateSyncDot() {
     // 3. Pending local operations
     const pending = db.objectStoreNames.contains('sync_queue') ? (await dbAll('sync_queue')).filter(q => q.status !== 'done').length : 0;
     if (pending) {
+      _setSyncProgress('push', 0, pending);
       if (_lastSyncError) {
         _applySyncState('error', 'Sync error', pending + ' change(s) waiting · ' + _lastSyncError);
       } else {
@@ -6448,8 +6449,10 @@ async function updateSyncDot() {
     // handle cloud changes; visibility/online recovery performs a full pull.
     const now = new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
     _applySyncState('synced', 'Synced', 'All local changes synced · ' + now);
+    _clearSyncProgress();
   } catch(e) {
     _applySyncState('synced', 'Synced', 'In sync');
+    _clearSyncProgress();
   }
 }
 window.updateSyncDot = updateSyncDot;
@@ -7283,6 +7286,11 @@ function _remoteTimestamp(record) {
   return Number.isFinite(t) ? t : 0;
 }
 
+function _syncValue(record) {
+  return JSON.stringify(Object.keys(record || {}).filter(key => key !== 'id').sort()
+    .reduce((out, key) => { out[key] = record[key]; return out; }, {}));
+}
+
 async function _findLocalForRemote(store, data, fbId) {
   const rows = await dbAll(store);
   if (data.fbId || fbId) {
@@ -7328,6 +7336,7 @@ async function _applyRemoteRecord(store, data, fbId) {
     return false;
   }
   if (existing) {
+    if (_syncValue(existing) === _syncValue(remote)) return false;
     const localTime = _remoteTimestamp(existing);
     const remoteTime = _remoteTimestamp(remote);
     if (localTime > remoteTime) return false;
@@ -7430,37 +7439,8 @@ async function processSyncQueue(silent = false, onProgress = null) {
 async function forcePushToFirebase(silent = false) {
   if (!fbReady || !fbDb) { if (!silent) toast('Warning: Connect Firebase first', 'err'); return; }
   if (!silent) setFbStatus('syncing');
-  // This function is retained as the explicit/manual "push all" action.
-  // It queues the current local state once, then drains the persistent queue.
-  // Queue the current local state before acquiring the drain lock. Calling
-  // processSyncQueue from inside _withSyncLock would wait on that same lock.
-  const collections = [
-    ['items', 'items'], ['sales', 'sales'], ['shoe_sizes', 'shoe_sizes'],
-    ['finances', 'finances'], ['business_days', 'business_days'],
-    ['wishlist', 'wishlist'], ['customers', 'customers'], ['customer_txns', 'customer_txns']
-  ];
-  await _withSyncLock(async () => {
-    for (const [store, collection] of collections) {
-      if (!db.objectStoreNames.contains(store)) continue;
-      const rows = await dbAll(store);
-      for (const row of rows) {
-        if (store === 'items') await ensureItemFbId(row);
-        if (store === 'shoe_sizes' && row.codeSize) {
-          const id = stableShoeSizeFbId(row); if (row.fbId !== id) { row.fbId = id; await dbPut(store,row); }
-        }
-        if (store === 'business_days') {
-          const id = stableBusinessDayFbId(row); if (row.fbId !== id) { row.fbId = id; await dbPut(store,row); }
-        }
-        if (store === 'wishlist' && !row.fbId) { row.fbId = stableWishFbId(row); await dbPut(store,row); }
-        if (store === 'finances' && !row.fbId) { row.fbId = 'fin_' + String(row.createdAt || Date.now()).replace(/[^0-9]/g,'') + '_' + (row.id || 'x'); await dbPut(store,row); }
-        if (store === 'customers' && !row.fbId) { row.fbId = 'cust_' + row.customerId; await dbPut(store,row); }
-        if (store === 'customer_txns' && !row.fbId) { row.fbId = 'ctxn_' + (row.customerId || 'x') + '_' + (row.id || Date.now()); await dbPut(store,row); }
-        const key = _syncRecordKey(collection, row);
-        if (!key) continue;
-        await _queueSyncUnlocked(collection, row);
-      }
-    }
-  });
+  // Local writes are queued at the point of change. Do not scan and requeue
+  // every local record here, otherwise each manual push creates a full upload.
   const result = await processSyncQueue(true);
   if (!silent) {
     if (result.failed) toast('Sync failed — will retry automatically', 'err');
