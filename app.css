@@ -3291,9 +3291,9 @@ body[data-firebase-env="development"]::before {
 }
 .ssb-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .ssb-btn {
-  display: flex; align-items: center; gap: 5px;
+  display: flex; align-items: center; justify-content:center;
   font-size: 11px; font-weight: 700;
-  padding: 4px 10px; border-radius: 10px;
+  width: 30px; height: 28px; padding: 0; border-radius: 9px;
   border: 1px solid rgba(255,255,255,.35);
   background: rgba(255,255,255,.12);
   color: white; cursor: pointer;
@@ -3305,7 +3305,7 @@ body[data-firebase-env="development"]::before {
 .ssb-btn-pull    { border-color: #eab30888; background: rgba(234,179, 8,.18); }
 .ssb-btn-sync    { border-color: rgba(124,58,237,.5); background: rgba(124,58,237,.18); }
 .ssb-btn-offline { border-color: rgba(220,38,38,.5);  background: rgba(220,38,38,.18); }
-.sync-progress { display:flex; flex-direction:column; gap:4px; min-width:190px; margin-left:10px; flex-shrink:0; }
+.sync-progress { display:flex; flex-direction:column; gap:3px; min-width:180px; margin-left:8px; flex-shrink:0; }
 .sync-progress[hidden] { display:none; }
 .sync-progress-heading, .sync-progress-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .sync-progress-label, .sync-progress-percent { color:rgba(255,255,255,.92); font:800 10px var(--mono); white-space:nowrap; }
@@ -3318,10 +3318,12 @@ body[data-firebase-env="development"]::before {
 .sync-progress[data-mode="complete"] .sync-progress-fill { background:#4ade80; }
 
 @media (max-width: 620px) {
-  .sync-status-bar { flex-wrap:wrap; padding:7px 10px; }
-  .ssb-left { min-width:135px; }
+  .sync-status-bar { flex-wrap:wrap; padding:6px 8px; gap:5px; }
+  .ssb-left { min-width:0; flex:1; }
   .ssb-actions { margin-left:auto; }
-  .sync-progress { order:3; width:100%; min-width:0; margin:2px 0 0; }
+  .sync-progress { order:3; width:100%; min-width:0; margin:1px 0 0; }
+  .sync-progress-heading { padding:0 1px; }
+  .sync-progress-track { height:6px; }
 }
 
 .user-pill {
