@@ -6348,6 +6348,25 @@ let _syncRetryTimer = null;
 let _syncLock = Promise.resolve();
 let _syncProcessing = false;
 
+function _setSyncProgress(mode, done, total) {
+  const el = document.getElementById('sync-progress');
+  const fill = document.getElementById('sync-progress-fill');
+  const label = document.getElementById('sync-progress-label');
+  const percentEl = document.getElementById('sync-progress-percent');
+  if (!el || !fill || !label || !percentEl) return;
+  const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 100;
+  el.hidden = false;
+  el.dataset.mode = mode;
+  label.textContent = mode === 'pull' ? 'Pulling' : 'Pushing';
+  fill.style.width = percent + '%';
+  percentEl.textContent = percent + '%';
+}
+
+function _clearSyncProgress() {
+  const el = document.getElementById('sync-progress');
+  if (el) el.hidden = true;
+}
+
 
 // ══════════════════════════════════════════════════════════════════
 // SYNC VERSION SYSTEM
@@ -7297,21 +7316,36 @@ async function _applyRemoteRecord(store, data, fbId) {
   }
 }
 
-async function processSyncQueue(silent = false) {
+async function processSyncQueue(silent = false, onProgress = null) {
   if (!fbReady || !fbDb || !navigator.onLine) return { processed: 0, failed: 0 };
   return _withSyncLock(async () => {
     if (_syncProcessing) return { processed: 0, failed: 0 };
     _syncProcessing = true;
+    let queue = [];
+    let failed = 0;
     try {
       setFbStatus('syncing');
       const { setDoc, deleteDoc } = await waitForFbImports();
-      const queue = (await dbAll('sync_queue'))
+      const allQueue = await dbAll('sync_queue');
+      // A tab can be closed after marking an entry processing but before the
+      // Firestore write completes. Recover those abandoned entries on retry.
+      const staleBefore = Date.now() - 2 * 60 * 1000;
+      for (const entry of allQueue) {
+        if (entry.status === 'processing' && (entry.processingAt || entry.createdAt || 0) < staleBefore) {
+          entry.status = 'pending';
+          await dbPut('sync_queue', entry);
+        }
+      }
+      queue = (await dbAll('sync_queue'))
         .filter(q => q.status !== 'done')
         .sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0));
-      let processed = 0, failed = 0;
+      let processed = 0;
+      if (queue.length) _setSyncProgress('push', 0, queue.length);
       for (const q of queue) {
         try {
-          q.status = 'processing'; q.attempts = (q.attempts || 0) + 1;
+          q.status = 'processing';
+          q.processingAt = Date.now();
+          q.attempts = (q.attempts || 0) + 1;
           await dbPut('sync_queue', q);
           const ref = fbDoc(q.collection, q.recordKey);
           if (q.operation === 'delete') {
@@ -7321,9 +7355,12 @@ async function processSyncQueue(silent = false) {
           }
           await dbDelete('sync_queue', q.id);
           processed++;
+          if (onProgress) onProgress(processed, queue.length);
+          else _setSyncProgress('push', processed, queue.length);
         } catch (e) {
           failed++;
           q.status = 'pending';
+          delete q.processingAt;
           q.lastError = e.message || String(e);
           await dbPut('sync_queue', q).catch(() => {});
           _lastSyncError = q.lastError;
@@ -7345,6 +7382,7 @@ async function processSyncQueue(silent = false) {
         clearTimeout(_syncRetryTimer);
         _syncRetryTimer = null;
         setFbStatus('on');
+        if (queue.length) _setSyncProgress('push', queue.length, queue.length);
       } else {
         setFbStatus('error');
       }
@@ -7353,6 +7391,7 @@ async function processSyncQueue(silent = false) {
     } finally {
       _syncProcessing = false;
       updateSyncDot();
+      if (!failed && queue.length) setTimeout(_clearSyncProgress, 700);
     }
   });
 }
@@ -7405,17 +7444,24 @@ async function pullFromFirebase(silent = false) {
     try {
       const stores = ['items','sales','shoe_sizes','finances','business_days','wishlist','customers','customer_txns'];
       let changed = 0;
+      let completed = 0;
+      let total = 0;
       const sizes = {};
+      _setSyncProgress('pull', 0, 1);
       for (const store of stores) {
         if (!db.objectStoreNames.contains(store)) continue;
         try {
           const snap = await window._fbImports.getDocs(fbCol(store));
           sizes[store] = snap.size;
+          total += snap.size;
+          _setSyncProgress('pull', completed, total);
           for (const d of snap.docs) {
             const data = { ...d.data(), fbId: d.id };
             if (store === 'sales' && _isDeletedSaleRemote(d.id, data)) continue;
             if (store === 'finances' && _isDeletedFinanceRemote(d.id, data)) continue;
             if (await _applyRemoteRecord(store, data, d.id)) changed++;
+            completed++;
+            _setSyncProgress('pull', completed, total);
           }
         } catch (e) {
           // Missing optional collections should not make the whole sync fail.
@@ -7426,12 +7472,15 @@ async function pullFromFirebase(silent = false) {
       await refreshUI({ sync: false });
       setFbStatus('on');
       updateSyncDot();
+      _setSyncProgress('pull', total, total);
+      setTimeout(_clearSyncProgress, 700);
       if (!silent) toast(`Pulled ${changed} cloud change(s) ✓`, 'ok');
       return { changed, sizes };
     } catch (e) {
       _lastSyncError = e.message;
       _pushFailCount = Math.max(1, _pushFailCount);
       setFbStatus('error');
+      _clearSyncProgress();
       if (!silent) toast('Pull failed: ' + e.message, 'err');
       throw e;
     }
@@ -12655,4 +12704,3 @@ async function deleteCustTxn(txnId) {
   toast('Record deleted', '');
 }
 window.deleteCustTxn = deleteCustTxn;
-
