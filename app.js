@@ -8749,8 +8749,11 @@ if ('serviceWorker' in navigator) {
       // Show the big fullscreen update banner
       _showUpdateBanner();
     }
+    if (reg.waiting) onNewWorker(reg.waiting);
     reg.addEventListener('updatefound',()=>{const w=reg.installing;w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)onNewWorker(w);});});
-    if(reg.waiting&&navigator.serviceWorker.controller)onNewWorker(reg.waiting);
+    reg.addEventListener('statechange', () => {
+      if (reg.waiting) onNewWorker(reg.waiting);
+    });
     setInterval(()=>reg.update().then(()=>_setUpdateLastCheck()).catch(()=>{}), 30*60*1000);
   }).catch(()=>{});
   let _reloading=false;
@@ -9599,7 +9602,15 @@ function dismissAppUpdate() {
 }
 
 function applyAppUpdate() {
-  if (!_pendingWorker) return;
+  const worker = _pendingWorker || (swRegistration && swRegistration.waiting);
+  if (!worker) {
+    if (swRegistration && typeof swRegistration.update === 'function') {
+      swRegistration.update().catch(e => console.warn('[UPDATE] check failed:', e.message));
+    }
+    toast('Update is not ready yet. Please try again in a moment.', '');
+    return;
+  }
+  _pendingWorker = worker;
   const centerBar = document.getElementById('app-update-center-bar');
   if (centerBar) centerBar.hidden = true;
   const installBtn = document.getElementById('upd-install-btn');
@@ -9631,7 +9642,7 @@ function applyAppUpdate() {
   });
 
   // Trigger the actual SW skip-waiting
-  _pendingWorker.postMessage({ type: 'SKIP_WAITING' });
+  worker.postMessage({ type: 'SKIP_WAITING' });
   // controllerchange will fire to reloads page; we also update settings card
   _showUpdateState('installing');
 }
