@@ -7159,7 +7159,7 @@ async function initFirebase() {
     document.removeEventListener('visibilitychange', _onVisibilityChange);
     document.addEventListener('visibilitychange', _onVisibilityChange);
 
-    // Heartbeat: every 15 s — always pull to catch anything listeners missed
+    // Heartbeat: every 5 s — pull then push, always refresh (debounce prevents flicker)
     clearInterval(window._syncHeartbeat);
     window._syncHeartbeat = setInterval(async () => {
       if (!fbReady || !fbDb || !navigator.onLine) return;
@@ -7167,20 +7167,14 @@ async function initFirebase() {
         if (_pushFailCount > 0) {
           _pushFailCount = 0;
           await forcePushToFirebase(true);
-          updateSyncDot();
-          return;
+        } else {
+          await pullFromFirebase(true);
         }
-        // Pull silently — only trigger refresh if something actually changed
-        const before = { items: allItems.length, sales: (await dbAll('sales')).length };
-        await pullFromFirebase(true);
-        const after  = { items: allItems.length, sales: (await dbAll('sales')).length };
-        if (before.items !== after.items || before.sales !== after.sales) {
-          _refreshAllViews(); // debounced — won't flicker
-        }
+        _refreshAllViews(); // debounced 600ms — no visible flicker
         setFbStatus('on');
         updateSyncDot();
       } catch(e) { /* non-critical */ }
-    }, 10000);  // 10 s safety-net — real-time handled by onSnapshot listeners
+    }, 5000);
 
   } catch(e) {
     setFbStatus('error');
@@ -10867,25 +10861,13 @@ let _syncRunning = false;
 function scheduleSync() {
   if (!navigator.onLine || !fbReady || !fbDb) return;
   clearTimeout(_autoSyncTimer);
+  // 2 s delay — pushes ALL local records to Firestore as a safety net
+  // (individual fbSyncItem/Sale handle immediate push; this catches any failures)
   _autoSyncTimer = setTimeout(async () => {
     if (_syncRunning) return;
     _syncRunning = true;
     try {
-      // Only push items that genuinely have no fbId yet (unsynced local records).
-      // Individual fbSyncItem/Sale calls already handle normal writes — this is
-      // a safety net for records created while offline.
-      const items = await dbAll('items');
-      const unsyncedItems = items.filter(i => !i.fbId);
-      if (unsyncedItems.length > 0) {
-        console.log('[SYNC] scheduleSync: pushing', unsyncedItems.length, 'unsynced item(s)');
-        for (const item of unsyncedItems) fbSyncItem(item);
-      }
-      const sales = await dbAll('sales');
-      const unsyncedSales = sales.filter(s => !s.fbId);
-      if (unsyncedSales.length > 0) {
-        console.log('[SYNC] scheduleSync: pushing', unsyncedSales.length, 'unsynced sale(s)');
-        for (const sale of unsyncedSales) fbSyncSale(sale);
-      }
+      await forcePushToFirebase(true);  // push everything, not just unsynced
     } catch (_) { /* intentionally ignored */ }
     finally { _syncRunning = false; updateSyncDot(); }
   }, 2000);
