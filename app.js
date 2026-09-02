@@ -6417,7 +6417,11 @@ async function updateSyncDot() {
     // 3. Pending local operations
     const pending = db.objectStoreNames.contains('sync_queue') ? (await dbAll('sync_queue')).filter(q => q.status !== 'done').length : 0;
     if (pending) {
-      _applySyncState('ahead', 'Pending', pending + ' change(s) waiting to sync');
+      if (_lastSyncError) {
+        _applySyncState('error', 'Sync error', pending + ' change(s) waiting · ' + _lastSyncError);
+      } else {
+        _applySyncState('ahead', 'Pending', pending + ' change(s) waiting to sync');
+      }
       return;
     }
 
@@ -7319,12 +7323,27 @@ async function processSyncQueue(silent = false) {
           q.lastError = e.message || String(e);
           await dbPut('sync_queue', q).catch(() => {});
           _lastSyncError = q.lastError;
+          // Keep retrying automatically. Previously a failed queue item was
+          // left in `pending` with no guaranteed future drain, so the UI could
+          // remain stuck on "Pending" indefinitely.
+          clearTimeout(_syncRetryTimer);
+          const retryDelay = Math.min(30000, 2000 * Math.pow(2, Math.min((q.attempts || 1) - 1, 4)));
+          _syncRetryTimer = setTimeout(() => {
+            if (navigator.onLine && fbReady && fbDb) scheduleSync(0);
+          }, retryDelay);
           break; // preserve order; retry from the failed operation
         }
       }
       _pushFailCount = failed;
-      if (!failed) { _lastSyncError = null; setFbStatus('on'); }
-      else setFbStatus('error');
+      if (!failed) {
+        _lastSyncError = null;
+        _pushFailCount = 0;
+        clearTimeout(_syncRetryTimer);
+        _syncRetryTimer = null;
+        setFbStatus('on');
+      } else {
+        setFbStatus('error');
+      }
       if (!silent && !failed) toast(processed ? `Synced ${processed} change(s) ✓` : 'Already synchronized ✓', 'ok');
       return { processed, failed };
     } finally {
