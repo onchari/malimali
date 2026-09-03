@@ -8100,7 +8100,7 @@ async function pullFromFirebase(silent = false, options = {}) {
   return _withSyncLock(async () => {
     if (!silent) setFbStatus('syncing');
     try {
-      const stores = ['items','sales','shoe_sizes','finances','business_days','wishlist','customers','customer_txns'];
+      const stores = ['items','sales','shoe_sizes','finances','business_days','wishlist','wishlist_lists','wishlist_activity_log','customers','customer_txns'];
       const env = getFirebaseEnv();
       const { query, where } = window._fbImports;
       let changed = 0;
