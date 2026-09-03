@@ -2072,11 +2072,15 @@
 
 
 <!-- ==============================================================
-     UTILITY: ADD ITEM SUCCESS SPLASH
-     Shown for ~2 s after a new item is saved.
+     UTILITY: SUCCESS SPLASH
+     Item confirmations auto-close; sale congratulations stays until dismissed.
      showSplash(name, sell, profit) in app.js animates this.
      ============================================================== -->
 <div class="splash" id="splash">
+  <button type="button" class="splash-close" onclick="closeSuccessSplash()"
+          aria-label="Close success message" title="Close">
+    <i class="fa-solid fa-xmark"></i>
+  </button>
   <div class="splash-circle" id="splash-circle">
     <svg viewBox="0 0 60 60" width="70" height="70">
       <!-- Animated tick drawn via stroke-dashoffset -->
@@ -2603,8 +2607,12 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
         <div>
           <label class="add-field-lbl">Qty sold</label>
-          <input type="number" id="sds-edit-qty" class="add-input add-center add-mono"
-                 min="1" inputmode="numeric" placeholder="1">
+          <div class="qty-row" aria-label="Quantity sold">
+            <button type="button" class="qty-btn" onclick="adjEditedSaleQty(-1)" aria-label="Decrease quantity">−</button>
+            <input type="number" id="sds-edit-qty" class="qty-input"
+                   min="1" inputmode="none" readonly aria-label="Quantity sold">
+            <button type="button" class="qty-btn" onclick="adjEditedSaleQty(1)" aria-label="Increase quantity">+</button>
+          </div>
         </div>
         <div>
           <label class="add-field-lbl">Price sold</label>
