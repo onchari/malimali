@@ -3286,6 +3286,21 @@ function toggleWishlistHistory() {
   renderWishlistPage();
 }
 window.toggleWishlistHistory = toggleWishlistHistory;
+async function clearWishlistHistory() {
+  const stocked = (await dbAll('wishlist')).filter(w => w.status === 'stocked');
+  if (!stocked.length) return toast('No stocked history to clear', '');
+  if (!confirm('Delete all ' + stocked.length + ' stocked wishlist item' + (stocked.length === 1 ? '' : 's') + '?\n\nActive wishlist items will stay.')) return;
+  for (const wish of stocked) {
+    await removeWishPhoto(wish.id);
+    await dbDelete('wishlist', wish.id);
+  }
+  scheduleSync();
+  _wishlistHistoryVisible = true;
+  await renderWishlistPage();
+  await renderStockMonitorSummary();
+  toast('Wishlist history cleared', 'ok');
+}
+window.clearWishlistHistory = clearWishlistHistory;
 async function toggleWishlistStocked(id) {
   const wish = await dbGet('wishlist', id);
   if (!wish) return;
@@ -4505,6 +4520,10 @@ async function renderWishlistPage() {
   if (wishSub) wishSub.textContent = (_wishlistHistoryVisible ? 'Stocked history · ' : '') + (rows.length ? rows.length + ' item' + (rows.length === 1 ? '' : 's') : 'Nothing yet');
   const historyBtn = document.getElementById('wish-history-btn');
   if (historyBtn) historyBtn.classList.toggle('active', _wishlistHistoryVisible);
+  const clearHistoryBtn = document.getElementById('wish-clear-history-btn');
+  if (clearHistoryBtn) {
+    clearHistoryBtn.hidden = !_wishlistHistoryVisible || !allWishlist.some(w => w.status === 'stocked');
+  }
 
   const toolbar = '<div class="wish-list-toolbar">' +
     '<button type="button" class="wish-fab-add" onclick="showWishlistSection(\'add\')"><i class="fa-solid fa-plus"></i> Add item</button>' +
