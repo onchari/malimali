@@ -3207,54 +3207,15 @@ function buildWishListCardHtml(row, wishRec) {
   if (row.qty) chips.push('<span class="wish-chip">' + row.qty + ' pcs</span>');
   if (wishRec && wishRec.estimatedCost) chips.push('<span class="wish-chip">BP ' + fmt(wishRec.estimatedCost) + '</span>');
 
-  const stocked = wishRec && wishRec.status === 'stocked';
-  const targetDate = wishRec && wishRec.targetDate ? '<span class="wish-chip wish-chip-date"><i class="fa-regular fa-calendar"></i> ' + escapeHtml(wishRec.targetDate) + '</span>' : '';
-  return '<article class="wish-card' + (stocked ? ' is-stocked' : '') + '" onclick="openWishlistDetail(' + row.wishId + ')" role="button" tabindex="0">' +
-    '<button type="button" class="wish-check ' + (stocked ? 'checked' : '') + '" onclick="event.stopPropagation();toggleWishlistStocked(' + row.wishId + ')" aria-label="' + (stocked ? 'Mark as active' : 'Mark as stocked') + '"><i class="fa-solid fa-check"></i></button>' +
+  return '<article class="wish-card" onclick="openWishlistDetail(' + row.wishId + ')" role="button" tabindex="0">' +
     thumb +
     '<div class="wish-card-body">' +
       '<div class="wish-card-name">' + escapeHtml(row.name || row.code || 'Item') + '</div>' +
-      (chips.length || targetDate ? '<div class="wish-card-chips">' + chips.join('') + targetDate + '</div>' : '') +
+      (chips.length ? '<div class="wish-card-chips">' + chips.join('') + '</div>' : '') +
     '</div>' +
     priceHtml +
   '</article>';
 }
-
-const WISHLIST_LISTS_KEY = 'mgs_wishlist_lists';
-let _wishlistHistoryVisible = false;
-function getWishlistLists() {
-  let lists = [];
-  try { lists = JSON.parse(localStorage.getItem(WISHLIST_LISTS_KEY) || '[]'); } catch (_) {}
-  if (!Array.isArray(lists) || !lists.length) lists = ['Customer Requests'];
-  return lists.filter(v => String(v || '').trim()).map(v => String(v).trim());
-}
-function saveWishlistLists(lists) { localStorage.setItem(WISHLIST_LISTS_KEY, JSON.stringify(lists)); }
-function createWishlistList() {
-  const name = prompt('List name');
-  const clean = String(name || '').trim();
-  if (!clean) return;
-  const lists = getWishlistLists();
-  if (lists.some(v => v.toLowerCase() === clean.toLowerCase())) return toast('List already exists', 'err');
-  lists.push(clean); saveWishlistLists(lists);
-  renderWishlistPage();
-}
-window.createWishlistList = createWishlistList;
-function toggleWishlistHistory() {
-  _wishlistHistoryVisible = !_wishlistHistoryVisible;
-  renderWishlistPage();
-}
-window.toggleWishlistHistory = toggleWishlistHistory;
-async function toggleWishlistStocked(id) {
-  const wish = await dbGet('wishlist', id);
-  if (!wish) return;
-  wish.status = wish.status === 'stocked' ? 'prospective' : 'stocked';
-  wish.stockedAt = wish.status === 'stocked' ? new Date().toISOString() : null;
-  await dbPut('wishlist', wish);
-  scheduleSync();
-  await renderWishlistPage();
-  await renderStockMonitorSummary();
-}
-window.toggleWishlistStocked = toggleWishlistStocked;
 
 function clearWishDetailVendorForm() {
   ['wd-vendor-name', 'wd-vendor-price'].forEach(id => {
@@ -4436,38 +4397,16 @@ async function renderWishlistPage() {
   await renderStockMonitorSummary();
   const list = document.getElementById('wishlist-list');
   if (!list) return;
-  const allWishlist = await dbAll('wishlist');
-  const filter = document.getElementById('wish-list-filter');
-  const lists = getWishlistLists();
-  const selectedList = filter?.value || 'all';
-  if (filter) {
-    filter.innerHTML = '<option value="all">All lists</option>' + lists.map(name => '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>').join('');
-    filter.value = lists.includes(selectedList) || selectedList === 'all' ? selectedList : 'all';
-  }
-  const selected = filter?.value || 'all';
-  const visibleWishlist = allWishlist.filter(w => (selected === 'all' || (w.listName || 'Customer Requests') === selected) && (_wishlistHistoryVisible ? w.status === 'stocked' : (w.status || 'prospective') !== 'stocked'));
-  const rows = visibleWishlist.map(w => ({ kind: 'prospective', wishId: w.id, name: w.name, code: w.code || '', type: w.type || '', qty: w.qty || 0, buyPrice: w.estimatedCost || 0, note: w.note || '' }));
+  const rows = filterStockRows(await getStockMonitorRows(), 'prospective');
   const wishSub = document.getElementById('wishlist-sub');
-  if (wishSub) wishSub.textContent = (_wishlistHistoryVisible ? 'Stocked history · ' : '') + (rows.length ? rows.length + ' item' + (rows.length === 1 ? '' : 's') : 'Nothing yet');
-  const historyBtn = document.getElementById('wish-history-btn');
-  if (historyBtn) historyBtn.classList.toggle('active', _wishlistHistoryVisible);
+  if (wishSub) wishSub.textContent = rows.length ? rows.length + ' item' + (rows.length === 1 ? '' : 's') : 'Nothing yet';
 
   const toolbar = '<div class="wish-list-toolbar">' +
     '<button type="button" class="wish-fab-add" onclick="showWishlistSection(\'add\')"><i class="fa-solid fa-plus"></i> Add item</button>' +
     '</div>';
-  const today = todayDateStr();
-  const reminders = visibleWishlist
-    .filter(w => w.targetDate)
-    .sort((a, b) => String(a.targetDate).localeCompare(String(b.targetDate)))
-    .slice(0, 5);
-  const reminderHtml = reminders.length
-    ? '<div class="wish-reminders"><div class="wish-reminders-title"><i class="fa-regular fa-calendar"></i> Upcoming</div>' +
-      reminders.map(w => '<div class="wish-reminder' + (w.targetDate < today ? ' overdue' : '') + '"><span>' + escapeHtml(w.name || 'Item') + '</span><strong>' + escapeHtml(w.targetDate) + '</strong></div>').join('') +
-      '</div>'
-    : '';
 
   if (!rows.length) {
-    list.innerHTML = toolbar + reminderHtml +
+    list.innerHTML = toolbar +
       '<div class="wish-empty">' +
         '<div class="wish-empty-icon">+</div>' +
         '<p class="wish-empty-title">No wishlist items</p>' +
@@ -4480,7 +4419,7 @@ async function renderWishlistPage() {
   if (db.objectStoreNames.contains('wishlist')) {
     (await dbAll('wishlist')).forEach(w => wishById.set(w.id, w));
   }
-  list.innerHTML = toolbar + reminderHtml + '<div class="wish-card-list">' +
+  list.innerHTML = toolbar + '<div class="wish-card-list">' +
     rows.map(row => buildWishListCardHtml(row, wishById.get(row.wishId))).join('') +
     '</div>';
 }
@@ -4518,7 +4457,7 @@ async function saveWishlistItem() {
   };
   entry.id = await dbAdd('wishlist', entry);
   if (_wishFormPhotoData) await setWishPhoto(entry.id, _wishFormPhotoData);
-  ['wish-name','wish-code','wish-qty','wish-cost','wish-note','wish-target-date','wish-vendor-name','wish-vendor-price'].forEach(id => {
+  ['wish-name','wish-code','wish-qty','wish-cost','wish-note','wish-vendor-name','wish-vendor-price'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -5831,9 +5770,6 @@ async function confirmOffStockSale() {
     createdAt: new Date().toISOString(),
     createdBy: currentUser ? currentUser.username : 'system'
   };
-  entry.listName = document.getElementById('wish-list-filter')?.value;
-  if (!entry.listName || entry.listName === 'all') entry.listName = 'Customer Requests';
-  entry.targetDate = document.getElementById('wish-target-date')?.value || '';
   monitorRow.id = await dbAdd('wishlist', monitorRow);
 
   ['off-name','off-code','off-size','off-buy','off-sell'].forEach(id => {
