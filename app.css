@@ -1843,7 +1843,6 @@ body {
 .wish-board-toolbar .add-select { min-width:0; }
 .wish-new-list-btn, .wish-history-btn { border:1px solid var(--border); border-radius:var(--r); background:var(--surface); color:var(--accent); font:700 12px var(--sans); padding:0 10px; cursor:pointer; white-space:nowrap; }
 .wish-history-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
-.wish-clear-history-btn { border:1px solid rgba(192,57,43,.3); border-radius:var(--r); background:var(--red-light); color:var(--red); font:700 12px var(--sans); padding:0 9px; cursor:pointer; white-space:nowrap; }
 .wish-reminders { margin:0 0 12px; padding:10px 12px; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); }
 .wish-reminders-title { color:var(--accent); font-size:11px; font-weight:800; margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em; }
 .wish-reminder { display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-top:1px solid var(--border); color:var(--text2); font-size:12px; }
