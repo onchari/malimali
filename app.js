@@ -9504,7 +9504,7 @@ function resolveLandingPage(user, rawLastPage) {
 }
 
 async function waitForAppDb(timeoutMs = 30000) {
-fix   if (db) return;
+ if (db) return;
   const start = Date.now();
   while (!db) {
     if (Date.now() - start > timeoutMs) throw new Error('Database not ready');
