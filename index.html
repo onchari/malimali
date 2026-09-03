@@ -1794,11 +1794,20 @@
       </div>
       <div class="stock-form-grid">
         <input class="add-input" id="off-size" type="text" placeholder="Size / variant optional">
-        <div class="qty-row" aria-label="Quantity sold">
-          <button type="button" class="qty-btn" onclick="adjOffStockQty(-1)" aria-label="Decrease quantity">−</button>
-          <input class="qty-input" id="off-qty" type="number" min="1" value="1"
-                 inputmode="none" readonly aria-label="Quantity sold">
-          <button type="button" class="qty-btn" onclick="adjOffStockQty(1)" aria-label="Increase quantity">+</button>
+        <div>
+          <div class="field-label" style="text-transform:uppercase;">QTY to sell</div>
+          <div class="qty-row" aria-label="Quantity sold">
+            <button type="button" class="qty-btn" onclick="adjOffStockQty(-1)"
+                    aria-label="Decrease quantity" title="Decrease quantity">
+              <i class="fa-solid fa-minus" aria-hidden="true"></i>
+            </button>
+            <input class="qty-input" id="off-qty" type="number" min="1" value="1"
+                   inputmode="none" readonly aria-label="Quantity sold">
+            <button type="button" class="qty-btn" onclick="adjOffStockQty(1)"
+                    aria-label="Increase quantity" title="Increase quantity">
+              <i class="fa-solid fa-plus" aria-hidden="true"></i>
+            </button>
+          </div>
         </div>
       </div>
       <div class="stock-form-grid">
