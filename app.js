@@ -1424,7 +1424,7 @@ function showPage(id) {
   if (id === 'day') { updateDayLiveStats(); renderDaySessionsList(); renderDayState(); }
   if (id === 'sell') showSalesTab(_activeSalesTab);
   if (id === 'finance')  { renderFinancePage(); }
-  if (id === 'settings') { renderCategorySettings(); renderUnitsSettings(); }
+  if (id === 'settings') { renderCategorySettings(); renderUnitsSettings(); renderMotivationSettings(); }
   if (id === 'add') setTimeout(() => setItemMode(_addFormIsRecord), 0);
   if (id === 'customers') { renderCustomerList(''); }
   if (id === 'customer-detail') { /* content already populated by openCustomerDetail */ }
@@ -5309,6 +5309,104 @@ function updateCurrencyUI() {
 }
 
 // ===== SPLASH =====
+const MOTIVATION_KEY = 'mgs_sale_motivations';
+const MOTIVATION_STATE_KEY = 'mgs_sale_motivation_state';
+const MOTIVATION_CATEGORIES = ['Keep Going', 'Customer Relationships', 'Save Money', 'Stock Well', 'Stay Safe'];
+const DEFAULT_SALE_MOTIVATIONS = [
+  'Keep Going: Keep moving forward - every sale, every effort, and every small step builds momentum toward lasting success. Persistence is the bridge between today\'s grind and tomorrow\'s achievement.',
+  'Keep Going: Progress may feel slow, but consistency compounds into greatness. Stay focused, keep pushing, and remember: resilience always pays off in business and in life.',
+  'Customer Relationships: Customers are the heartbeat of your business. Treat them with care, build trust, and nurture loyalty - because strong relationships create repeat sales and long-term growth.',
+  'Customer Relationships: Every interaction matters. A smile, respect, and genuine service turn one-time buyers into lifelong partners who spread your reputation far beyond your store.',
+  'Save Money: Saving today secures tomorrow. Every coin saved strengthens your margins, protects against tough times, and builds the foundation for future expansion.',
+  'Save Money: Discipline in spending is silent profit. Cut waste, not quality, and watch your savings grow into resilience and opportunity.',
+  'Stock Well: Smart stock management is smart business. Balanced inventory keeps customers satisfied, prevents shortages, and ensures cash flow remains steady.',
+  'Stock Well: Stock wisely - quality over quantity. Organized shelves and planned supply make your store reliable, trusted, and ready for every customer need.',
+  'Stay Safe: Safety first, always. Protect yourself, your team, and your customers - because a safe business is a sustainable business.',
+  'Stay Safe: Secure today to succeed tomorrow. Safety builds confidence, ensures continuity, and keeps your dream alive through every challenge.'
+];
+
+function getMotivationMessages() {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem(MOTIVATION_KEY) || '[]'); } catch (_) {}
+  if (!Array.isArray(saved) || !saved.length) {
+    saved = DEFAULT_SALE_MOTIVATIONS.map((text, index) => {
+      const split = text.indexOf(': ');
+      return { id: 'default_' + index, category: split > 0 ? text.slice(0, split) : 'Keep Going', text: split > 0 ? text.slice(split + 2) : text, builtIn: true };
+    });
+    localStorage.setItem(MOTIVATION_KEY, JSON.stringify(saved));
+  }
+  return saved.filter(m => m && MOTIVATION_CATEGORIES.includes(m.category) && String(m.text || '').trim());
+}
+
+function saveMotivationMessages(messages) {
+  localStorage.setItem(MOTIVATION_KEY, JSON.stringify(messages));
+}
+
+function addMotivationMessage() {
+  const category = document.getElementById('motivation-category')?.value || '';
+  const input = document.getElementById('motivation-message');
+  const text = (input?.value || '').trim();
+  if (!text) return Validate.fail('Enter a message', 'motivation-message');
+  const messages = getMotivationMessages();
+  messages.push({ id: 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), category, text, builtIn: false });
+  saveMotivationMessages(messages);
+  if (input) input.value = '';
+  renderMotivationSettings();
+  toast('Motivation message added', 'ok');
+}
+window.addMotivationMessage = addMotivationMessage;
+
+function removeMotivationMessage(id) {
+  const messages = getMotivationMessages();
+  if (messages.length <= 1) return toast('Keep at least one motivation message', 'err');
+  saveMotivationMessages(messages.filter(m => m.id !== id));
+  renderMotivationSettings();
+  toast('Motivation message removed', 'ok');
+}
+window.removeMotivationMessage = removeMotivationMessage;
+
+function renderMotivationSettings() {
+  const list = document.getElementById('motivation-message-list');
+  if (!list) return;
+  const messages = getMotivationMessages();
+  list.innerHTML = messages.map(m =>
+    '<div class="motivation-message-item">' +
+      '<div class="motivation-message-category">' + escapeHtml(m.category) + '</div>' +
+      '<div class="motivation-message-text">' + escapeHtml(m.text) + '</div>' +
+      '<button type="button" class="motivation-delete-btn" onclick="removeMotivationMessage(\'' + escapeHtml(m.id) + '\')" aria-label="Remove message" title="Remove message"><i class="fa-solid fa-trash"></i></button>' +
+    '</div>'
+  ).join('');
+}
+
+function getSaleMotivation() {
+  const messages = getMotivationMessages();
+  if (!messages.length) return '';
+  const today = todayDateStr();
+  const year = today.slice(0, 4);
+  let state = {};
+  try { state = JSON.parse(localStorage.getItem(MOTIVATION_STATE_KEY) || '{}'); } catch (_) {}
+  if (state.year !== year) state = { year, used: [], categoryCounts: {}, lastUsed: {} };
+  if (!Array.isArray(state.used)) state.used = [];
+  if (!state.categoryCounts || typeof state.categoryCounts !== 'object') state.categoryCounts = {};
+  if (!state.lastUsed || typeof state.lastUsed !== 'object') state.lastUsed = {};
+  const available = messages.filter(m => !state.used.includes(m.id));
+  const pool = available.length ? available : messages;
+  if (!available.length) {
+    state.used = [];
+    state.categoryCounts = {};
+  }
+  const notToday = pool.filter(m => state.lastUsed[m.id] !== today);
+  const candidates = notToday.length ? notToday : pool;
+  const minCount = Math.min(...candidates.map(m => state.categoryCounts[m.category] || 0));
+  const balanced = candidates.filter(m => (state.categoryCounts[m.category] || 0) === minCount);
+  const chosen = balanced[Math.floor(Math.random() * balanced.length)] || candidates[0];
+  state.used.push(chosen.id);
+  state.categoryCounts[chosen.category] = (state.categoryCounts[chosen.category] || 0) + 1;
+  state.lastUsed[chosen.id] = today;
+  localStorage.setItem(MOTIVATION_STATE_KEY, JSON.stringify(state));
+  return chosen.category + ': ' + chosen.text;
+}
+
 function showSplash(name, sell, profit, persist) {
   const splash = document.getElementById('splash');
   const circle = document.getElementById('splash-circle');
@@ -5365,9 +5463,11 @@ function showSaleSuccess(profit) {
   const msg = document.getElementById('splash-msg');
   const sub = document.getElementById('splash-sub');
   const label = document.querySelector('#splash-profit-wrap .splash-profit-lbl');
+  const motivation = document.getElementById('splash-motivation');
   if (msg) msg.textContent = 'Congratulations!';
   if (label) label.textContent = 'Profit earned';
   if (sub) sub.textContent = 'You earned ' + fmt(profit) + ' from this sale.';
+  if (motivation) motivation.textContent = getSaleMotivation();
 }
 
 function closeSuccessSplash() {
@@ -5581,7 +5681,7 @@ function selectPayment(method) {
 function openOffStockSale() {
   renderOffstockTypeOptions();
   const qty = document.getElementById('off-qty');
-  if (qty && (!qty.value || parseInt(qty.value, 10) < 1)) qty.value = '1';
+  if (qty && (!qty.value || parseInt(qty.value, 10) < 0)) qty.value = '0';
   const sheet = document.getElementById('offstock-sale-sheet');
   if (sheet) sheet.classList.add('open');
   setTimeout(() => document.getElementById('off-name')?.focus(), 80);
@@ -5595,8 +5695,8 @@ function closeOffStockSale() {
 function adjOffStockQty(delta) {
   const input = document.getElementById('off-qty');
   if (!input) return;
-  const current = parseInt(input.value, 10) || 1;
-  input.value = String(Math.max(1, Math.min(999999, current + delta)));
+  const current = parseInt(input.value, 10) || 0;
+  input.value = String(Math.max(0, Math.min(999999, current + delta)));
 }
 
 async function confirmOffStockSale() {
@@ -5661,7 +5761,7 @@ async function confirmOffStockSale() {
     if (el) el.value = '';
   });
   const offQty = document.getElementById('off-qty');
-  if (offQty) offQty.value = '1';
+  if (offQty) offQty.value = '0';
   const offType = document.getElementById('off-type');
   if (offType) offType.value = '';
   renderOffstockTypeOptions();
