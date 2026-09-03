@@ -1218,6 +1218,27 @@
 
   </div>
 
+  <!-- ── Sale motivation messages ─────────────────────────────── -->
+  <div class="sec-label">Sale motivation</div>
+  <div class="card settings-card motivation-settings-card">
+    <p class="settings-hint">Add messages by category. Sales rotate fairly across categories and cycle through the library during the year.</p>
+    <div class="motivation-add-row">
+      <select id="motivation-category" class="add-select" aria-label="Message category">
+        <option value="Keep Going">Keep Going</option>
+        <option value="Customer Relationships">Customer Relationships</option>
+        <option value="Save Money">Save Money</option>
+        <option value="Stock Well">Stock Well</option>
+        <option value="Stay Safe">Stay Safe</option>
+      </select>
+      <textarea id="motivation-message" class="add-input motivation-message-input"
+                rows="3" maxlength="500" placeholder="Add a motivational message..." aria-label="Motivational message"></textarea>
+      <button type="button" class="settings-btn settings-btn--primary" onclick="addMotivationMessage()">
+        <i class="fa-solid fa-plus"></i> Add message
+      </button>
+    </div>
+    <div id="motivation-message-list" class="motivation-message-list"></div>
+  </div>
+
   <!-- ── System & updates ───────────────────────────────────── -->
   <div class="sec-label">System &amp; updates</div>
   <p class="settings-hint">Follow the steps in order. Updates change app code only - your items, sales, and finances are kept.</p>
@@ -1801,7 +1822,7 @@
                     aria-label="Decrease quantity" title="Decrease quantity">
               <i class="fa-solid fa-minus" aria-hidden="true"></i>
             </button>
-            <input class="qty-input" id="off-qty" type="number" min="1" value="1"
+            <input class="qty-input" id="off-qty" type="number" min="0" value="0"
                    inputmode="none" readonly aria-label="Quantity sold">
             <button type="button" class="qty-btn" onclick="adjOffStockQty(1)"
                     aria-label="Increase quantity" title="Increase quantity">
@@ -2115,6 +2136,7 @@
     <div id="splash-profit-insight"
          style="font-size:14px;font-family:var(--mono);margin-top:6px;font-weight:600;">
     </div>
+    <div id="splash-motivation" class="splash-motivation"></div>
   </div>
 </div><!-- /splash -->
 
