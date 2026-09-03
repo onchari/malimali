@@ -5369,13 +5369,21 @@ function renderMotivationSettings() {
   const list = document.getElementById('motivation-message-list');
   if (!list) return;
   const messages = getMotivationMessages();
-  list.innerHTML = messages.map(m =>
-    '<div class="motivation-message-item">' +
-      '<div class="motivation-message-category">' + escapeHtml(m.category) + '</div>' +
-      '<div class="motivation-message-text">' + escapeHtml(m.text) + '</div>' +
-      '<button type="button" class="motivation-delete-btn" onclick="removeMotivationMessage(\'' + escapeHtml(m.id) + '\')" aria-label="Remove message" title="Remove message"><i class="fa-solid fa-trash"></i></button>' +
-    '</div>'
-  ).join('');
+  const count = document.getElementById('motivation-message-count');
+  if (count) count.textContent = messages.length + (messages.length === 1 ? ' message' : ' messages');
+  list.innerHTML = MOTIVATION_CATEGORIES.map(category => {
+    const categoryMessages = messages.filter(m => m.category === category);
+    if (!categoryMessages.length) return '';
+    return '<div class="motivation-category-group">' +
+      '<div class="motivation-category-heading">' + escapeHtml(category) + '<span>' + categoryMessages.length + '</span></div>' +
+      categoryMessages.map(m =>
+        '<div class="motivation-message-item">' +
+          '<div class="motivation-message-text">' + escapeHtml(m.text) + '</div>' +
+          '<button type="button" class="motivation-delete-btn" onclick="removeMotivationMessage(\'' + escapeHtml(m.id) + '\')" aria-label="Remove message" title="Remove message"><i class="fa-solid fa-trash"></i></button>' +
+        '</div>'
+      ).join('') +
+    '</div>';
+  }).join('');
 }
 
 function getSaleMotivation() {
