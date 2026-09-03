@@ -5801,8 +5801,10 @@ async function updateSellModal() {
 
 function adjSellQty(d) {
   const inp = document.getElementById('sm-qty');
+  if (!inp) return;
   let v = (parseInt(inp.value) || 0) + d;
-  const max = parseInt(inp.max) || 9999;
+  const parsedMax = parseInt(inp.max, 10);
+  const max = Number.isFinite(parsedMax) ? Math.max(0, parsedMax) : 999999;
   if (v > max) { toast('Warning: Only ' + max + ' in stock', 'err'); v = max; }
   inp.value = Math.max(0, v);
   updateSellModal();

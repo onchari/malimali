@@ -1658,10 +1658,11 @@
     <div style="margin-bottom:14px;">
       <div style="display:flex;align-items:center;border:2px solid var(--border);
                   border-radius:var(--r);overflow:hidden;background:var(--surface);">
-        <button onclick="adjSellQty(-1)"
+        <button type="button" class="qty-btn" onclick="adjSellQty(-1)"
+                aria-label="Decrease quantity"
                 style="width:52px;height:52px;border:none;background:var(--surface2);
                        font-size:24px;font-weight:700;cursor:pointer;color:var(--text);flex-shrink:0;">
-          −
+          <i class="fa-solid fa-minus" aria-hidden="true"></i>
         </button>
         <input id="sm-qty" type="number" min="0" value="0"
                placeholder="Qty to sell"
@@ -1671,10 +1672,11 @@
                       font-family:var(--mono);color:var(--text);background:transparent;
                       outline:none;padding:10px;"
                oninput="updateSellModal()">
-        <button onclick="adjSellQty(1)"
+        <button type="button" class="qty-btn" onclick="adjSellQty(1)"
+                aria-label="Increase quantity"
                 style="width:52px;height:52px;border:none;background:var(--surface2);
                        font-size:24px;font-weight:700;cursor:pointer;color:var(--text);flex-shrink:0;">
-          +
+          <i class="fa-solid fa-plus" aria-hidden="true"></i>
         </button>
       </div>
     </div>
