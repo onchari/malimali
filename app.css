@@ -1839,6 +1839,15 @@ body {
 .wish-list-toolbar {
   padding: 0 0 12px;
 }
+.wish-board-toolbar { display:grid; grid-template-columns:1fr auto auto; gap:7px; margin-bottom:10px; }
+.wish-board-toolbar .add-select { min-width:0; }
+.wish-new-list-btn, .wish-history-btn { border:1px solid var(--border); border-radius:var(--r); background:var(--surface); color:var(--accent); font:700 12px var(--sans); padding:0 10px; cursor:pointer; white-space:nowrap; }
+.wish-history-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+.wish-reminders { margin:0 0 12px; padding:10px 12px; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); }
+.wish-reminders-title { color:var(--accent); font-size:11px; font-weight:800; margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em; }
+.wish-reminder { display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-top:1px solid var(--border); color:var(--text2); font-size:12px; }
+.wish-reminder strong { color:var(--muted); font-family:var(--mono); font-size:11px; }
+.wish-reminder.overdue strong { color:var(--red); }
 .wish-fab-add {
   width: 100%;
   padding: 13px 14px;
@@ -1871,6 +1880,14 @@ body {
   box-shadow: var(--shadow-sm);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+.wish-card.is-stocked { opacity:.72; }
+.wish-check { width:28px; height:28px; flex-shrink:0; align-self:center; border:2px solid var(--border); border-radius:7px; background:var(--surface); color:transparent; cursor:pointer; }
+.wish-check.checked { background:var(--accent); border-color:var(--accent); color:#fff; }
+.wish-chip-date { color:var(--accent); }
+@media (max-width:420px) {
+  .wish-board-toolbar { grid-template-columns:1fr auto; }
+  .wish-board-toolbar .add-select { grid-column:1 / -1; min-height:40px; }
 }
 .wish-card:active {
   transform: scale(0.99);
