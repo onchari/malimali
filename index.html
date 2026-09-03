@@ -1221,7 +1221,13 @@
   <!-- ── Sale motivation messages ─────────────────────────────── -->
   <div class="sec-label">Sale motivation</div>
   <div class="card settings-card motivation-settings-card">
-    <p class="settings-hint">Add messages by category. Sales rotate fairly across categories and cycle through the library during the year.</p>
+    <div class="motivation-heading">
+      <div>
+        <div class="motivation-title">Messages</div>
+        <div class="motivation-sub">Shown after each sale</div>
+      </div>
+      <span id="motivation-message-count" class="motivation-count"></span>
+    </div>
     <div class="motivation-add-row">
       <select id="motivation-category" class="add-select" aria-label="Message category">
         <option value="Keep Going">Keep Going</option>
@@ -1236,6 +1242,7 @@
         <i class="fa-solid fa-plus"></i> Add message
       </button>
     </div>
+    <div class="motivation-list-heading">Your message library</div>
     <div id="motivation-message-list" class="motivation-message-list"></div>
   </div>
 
