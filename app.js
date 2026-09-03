@@ -8793,7 +8793,9 @@ if ('serviceWorker' in navigator) {
       }
     });
     function onNewWorker(worker) {
+      if (!worker || worker === _pendingWorker) return;
       _pendingWorker = worker;
+      _updateBannerDismissed = false;
       _showUpdateState('available');
       // Also add red dot on settings tab
       const t = document.getElementById('tab-settings');
@@ -8806,11 +8808,17 @@ if ('serviceWorker' in navigator) {
       _showUpdateBanner();
     }
     if (reg.waiting) onNewWorker(reg.waiting);
-    reg.addEventListener('updatefound',()=>{const w=reg.installing;w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)onNewWorker(w);});});
+    reg.addEventListener('updatefound', () => {
+      const worker = reg.installing;
+      if (!worker) return;
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) onNewWorker(worker);
+      });
+    });
     reg.addEventListener('statechange', () => {
       if (reg.waiting) onNewWorker(reg.waiting);
     });
-    setInterval(()=>reg.update().then(()=>_setUpdateLastCheck()).catch(()=>{}), 30*60*1000);
+     setInterval(() => reg.update().then(() => _setUpdateLastCheck()).catch(() => {}), 30 * 60 * 1000);
   }).catch(()=>{});
   let _reloading=false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -9697,7 +9705,7 @@ function applyAppUpdate() {
     }, delay);
   });
 
-  // Trigger the actual SW skip-waiting
+  // Activate only after the user explicitly chooses to install.
   worker.postMessage({ type: 'SKIP_WAITING' });
   // controllerchange will fire to reloads page; we also update settings card
   _showUpdateState('installing');
