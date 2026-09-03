@@ -5318,6 +5318,9 @@ function showSplash(name, sell, profit) {
   const profitWrap = document.getElementById('splash-profit-wrap');
   const profitVal = document.getElementById('splash-val');
 
+  msg.textContent = 'Item Saved!';
+  const profitLabel = document.querySelector('#splash-profit-wrap .splash-profit-lbl');
+  if (profitLabel) profitLabel.textContent = 'Selling Price';
   sub.textContent = name;
   profitVal.textContent = fmtN(sell);
   // Show profit insight in splash
@@ -5352,6 +5355,16 @@ function showSplash(name, sell, profit) {
       splash.style.display = 'none';
     }, 350);
   }, 2200);
+}
+
+function showSaleSuccess(profit) {
+  showSplash('', profit, profit);
+  const msg = document.getElementById('splash-msg');
+  const sub = document.getElementById('splash-sub');
+  const label = document.querySelector('#splash-profit-wrap .splash-profit-lbl');
+  if (msg) msg.textContent = 'Congratulations!';
+  if (label) label.textContent = 'Profit earned';
+  if (sub) sub.textContent = 'You earned ' + fmt(profit) + ' from this sale.';
 }
 
 // ===== EXPORT =====
@@ -5583,10 +5596,12 @@ async function confirmOffStockSale() {
   const paymentMethod = 'cash';
   if (!name && !code) return Validate.fail('Enter item name or code', 'off-name');
   if (!Validate.restockQty(qty, 'off-qty')) return;
-  if (!Validate.moneyOptional(buyPrice, 'off-buy', 'Buy price')) return;
+  if (buyPrice === null || !Validate.moneyRequired(buyPrice, 'off-buy', 'Buy price')) return;
   if (!Validate.moneyRequired(sellPrice, 'off-sell', 'Sale price')) return;
-  const buy = buyPrice === null ? 0 : buyPrice;
-  if (buy > 0 && sellPrice < buy && !confirm('Sale price is below buy price. Record anyway?')) return;
+  const buy = buyPrice;
+  if (buy <= 0) return Validate.fail('Buy price must be greater than zero', 'off-buy');
+  if (sellPrice <= 0) return Validate.fail('Sale price must be greater than zero', 'off-sell');
+  if (buy >= sellPrice) return Validate.fail('Buy price must be less than sale price', 'off-buy');
 
   const revenue = qty * sellPrice;
   const profit = qty * (sellPrice - buy);
@@ -5642,6 +5657,7 @@ async function confirmOffStockSale() {
   try { if (activeDay) updateDayLiveStats(); } catch(_) { /* intentionally ignored */ }
   scheduleSync();
   toast('Sale recorded - monitor marked NOT ACCOUNTED', 'ok');
+  showSaleSuccess(profit);
 }
 
 // Shows the "enter buy price" field only when the item/size has no cost on record yet.
@@ -5827,8 +5843,27 @@ async function confirmSale() {
     if (!Validate.stock(qty, maxQty, itemLabel)) { _overlay.hide(); return; }
   }
 
-  // ── Validate sale price ────────────────────────────────────────
-  if (!Validate.salePrice(priceUsed, buyPrice, sellPrice)) { _overlay.hide(); return; }
+  // ── Validate sale price and cost ────────────────────────────────
+  if (!Number.isFinite(sellPrice) || sellPrice <= 0) {
+    Validate.fail('Sale price must be greater than zero', 'sm-actual');
+    _overlay.hide();
+    return;
+  }
+  if (!Number.isFinite(buyPrice) || buyPrice <= 0) {
+    Validate.fail('Buy price must be greater than zero', 'sm-buy');
+    _overlay.hide();
+    return;
+  }
+  if (!Number.isFinite(priceUsed) || priceUsed <= 0) {
+    Validate.fail('Sale price must be greater than zero', 'sm-actual');
+    _overlay.hide();
+    return;
+  }
+  if (buyPrice >= priceUsed) {
+    Validate.fail('Buy price must be less than sale price', 'sm-buy');
+    _overlay.hide();
+    return;
+  }
   const _sellMin = (_isShoeSale && _sellShoeSize ? (_sellShoeSize.sellPriceMin || 0) : (item.sellPriceMin || 0));
   if (_sellMin > 0 && priceUsed < _sellMin) {
     const go = confirm(
@@ -5929,6 +5964,7 @@ async function confirmSale() {
   } catch(_) { /* intentionally ignored */ }
 
   toast('' + fmt(revenue) + ' - Profit: ' + fmt(profit), 'ok');
+  showSaleSuccess(profit);
 
   } catch(err) {
     console.error('[confirmSale]', err);
