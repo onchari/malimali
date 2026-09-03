@@ -5309,7 +5309,7 @@ function updateCurrencyUI() {
 }
 
 // ===== SPLASH =====
-function showSplash(name, sell, profit) {
+function showSplash(name, sell, profit, persist) {
   const splash = document.getElementById('splash');
   const circle = document.getElementById('splash-circle');
   const tick = document.getElementById('splash-tick');
@@ -5317,10 +5317,12 @@ function showSplash(name, sell, profit) {
   const sub = document.getElementById('splash-sub');
   const profitWrap = document.getElementById('splash-profit-wrap');
   const profitVal = document.getElementById('splash-val');
+  const closeBtn = document.querySelector('.splash-close');
 
   msg.textContent = 'Item Saved!';
   const profitLabel = document.querySelector('#splash-profit-wrap .splash-profit-lbl');
   if (profitLabel) profitLabel.textContent = 'Selling Price';
+  if (closeBtn) closeBtn.style.display = persist ? 'block' : 'none';
   sub.textContent = name;
   profitVal.textContent = fmtN(sell);
   // Show profit insight in splash
@@ -5348,6 +5350,7 @@ function showSplash(name, sell, profit) {
     profitWrap.style.opacity = '1';
   }));
 
+  if (persist) return;
   setTimeout(() => {
     splash.style.opacity = '0';
     splash.style.transition = 'opacity 0.35s ease';
@@ -5358,7 +5361,7 @@ function showSplash(name, sell, profit) {
 }
 
 function showSaleSuccess(profit) {
-  showSplash('', profit, profit);
+  showSplash('', profit, profit, true);
   const msg = document.getElementById('splash-msg');
   const sub = document.getElementById('splash-sub');
   const label = document.querySelector('#splash-profit-wrap .splash-profit-lbl');
@@ -5366,6 +5369,18 @@ function showSaleSuccess(profit) {
   if (label) label.textContent = 'Profit earned';
   if (sub) sub.textContent = 'You earned ' + fmt(profit) + ' from this sale.';
 }
+
+function closeSuccessSplash() {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+  splash.style.opacity = '0';
+  splash.style.transition = 'opacity 0.25s ease';
+  setTimeout(() => {
+    splash.style.display = 'none';
+    splash.style.transition = '';
+  }, 250);
+}
+window.closeSuccessSplash = closeSuccessSplash;
 
 // ===== EXPORT =====
 
@@ -11602,6 +11617,14 @@ function discardSaleEdit() {
   document.getElementById('sds-actions').style.display   = 'flex';
 }
 window.discardSaleEdit = discardSaleEdit;
+displ
+function adjEditedSaleQty(delta) {
+  const input = document.getElementById('sds-edit-qty');
+  if (!input) return;
+  const current = parseInt(input.value, 10) || 1;
+  input.value = String(Math.max(1, Math.min(999999, current + delta)));
+}
+window.adjEditedSaleQty = adjEditedSaleQty;
 
 async function saveSaleEdit() {
   const id    = parseInt(document.getElementById('sds-id').value);
