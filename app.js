@@ -11743,7 +11743,6 @@ function discardSaleEdit() {
   document.getElementById('sds-actions').style.display   = 'flex';
 }
 window.discardSaleEdit = discardSaleEdit;
-displ
 function adjEditedSaleQty(delta) {
   const input = document.getElementById('sds-edit-qty');
   if (!input) return;
