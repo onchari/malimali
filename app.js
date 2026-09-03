@@ -1787,7 +1787,7 @@ function mountOffTypeCascade() {
     idPrefix: 'off-type',
     valueMode: 'name',
     requireLeaf: true,
-    placeholder: 'Category...'
+    placeholder: 'Category (optional)...'
   });
 }
 
@@ -5552,6 +5552,8 @@ function selectPayment(method) {
 
 function openOffStockSale() {
   renderOffstockTypeOptions();
+  const qty = document.getElementById('off-qty');
+  if (qty && (!qty.value || parseInt(qty.value, 10) < 1)) qty.value = '1';
   const sheet = document.getElementById('offstock-sale-sheet');
   if (sheet) sheet.classList.add('open');
   setTimeout(() => document.getElementById('off-name')?.focus(), 80);
@@ -5562,25 +5564,24 @@ function closeOffStockSale() {
   if (sheet) sheet.classList.remove('open');
 }
 
+function adjOffStockQty(delta) {
+  const input = document.getElementById('off-qty');
+  if (!input) return;
+  const current = parseInt(input.value, 10) || 1;
+  input.value = String(Math.max(1, Math.min(999999, current + delta)));
+}
+
 async function confirmOffStockSale() {
   const name = Input.text('off-name');
   const code = sanitiseCode(Input.text('off-code'));
-  const type = getCascadeCommittedValue('off-type', { valueMode: 'name', requireLeaf: true });
+  const selectedType = getCascadeCommittedValue('off-type', { valueMode: 'name', requireLeaf: true });
+  const type = selectedType || 'General';
   const size = Input.text('off-size');
   const qty = Input.int('off-qty');
   const buyPrice = Input.money('off-buy');
   const sellPrice = Input.money('off-sell');
   const paymentMethod = 'cash';
   if (!name && !code) return Validate.fail('Enter item name or code', 'off-name');
-  if (!type) {
-    const wrap = document.getElementById('off-type-cascade');
-    const pathIds = wrap ? _getCascadePathFromWrap(wrap) : [];
-    const deepest = pathIds.length ? getTypeById(pathIds[pathIds.length - 1]) : null;
-    if (deepest && _categoryHasActiveChildren(deepest.id)) {
-      return Validate.fail('Pick a sub-category', 'off-type');
-    }
-    return Validate.fail('Select a category', 'off-type');
-  }
   if (!Validate.restockQty(qty, 'off-qty')) return;
   if (!Validate.moneyOptional(buyPrice, 'off-buy', 'Buy price')) return;
   if (!Validate.moneyRequired(sellPrice, 'off-sell', 'Sale price')) return;
@@ -5625,10 +5626,12 @@ async function confirmOffStockSale() {
   };
   monitorRow.id = await dbAdd('wishlist', monitorRow);
 
-  ['off-name','off-code','off-size','off-qty','off-buy','off-sell'].forEach(id => {
+  ['off-name','off-code','off-size','off-buy','off-sell'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  const offQty = document.getElementById('off-qty');
+  if (offQty) offQty.value = '1';
   const offType = document.getElementById('off-type');
   if (offType) offType.value = '';
   renderOffstockTypeOptions();
