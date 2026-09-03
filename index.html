@@ -1663,8 +1663,9 @@
                        font-size:24px;font-weight:700;cursor:pointer;color:var(--text);flex-shrink:0;">
           −
         </button>
-        <input id="sm-qty" type="number" min="0"
+        <input id="sm-qty" type="number" min="0" value="0"
                placeholder="Qty to sell"
+               inputmode="none" readonly
                aria-label="Quantity to sell"
                style="flex:1;border:none;text-align:center;font-size:24px;font-weight:800;
                       font-family:var(--mono);color:var(--text);background:transparent;
@@ -1785,12 +1786,17 @@
       </div>
       <div class="cat-cascade-field">
         <div id="off-type-cascade" class="add-cascade"></div>
-        <input type="hidden" id="off-type" value="" aria-label="Category">
+        <input type="hidden" id="off-type" value="" aria-label="Category (optional)">
         <div id="off-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
       </div>
       <div class="stock-form-grid">
         <input class="add-input" id="off-size" type="text" placeholder="Size / variant optional">
-        <input class="add-input add-mono" id="off-qty" type="number" min="0" inputmode="numeric" placeholder="Qty sold">
+        <div class="qty-row" aria-label="Quantity sold">
+          <button type="button" class="qty-btn" onclick="adjOffStockQty(-1)" aria-label="Decrease quantity">−</button>
+          <input class="qty-input" id="off-qty" type="number" min="1" value="1"
+                 inputmode="none" readonly aria-label="Quantity sold">
+          <button type="button" class="qty-btn" onclick="adjOffStockQty(1)" aria-label="Increase quantity">+</button>
+        </div>
       </div>
       <div class="stock-form-grid">
         <input class="add-input add-mono" id="off-buy" type="number" min="0" inputmode="decimal" placeholder="Buy price">

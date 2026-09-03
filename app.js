@@ -1787,7 +1787,7 @@ function mountOffTypeCascade() {
     idPrefix: 'off-type',
     valueMode: 'name',
     requireLeaf: true,
-    placeholder: 'Category...'
+    placeholder: 'Category (optional)...'
   });
 }
 
@@ -5318,6 +5318,9 @@ function showSplash(name, sell, profit) {
   const profitWrap = document.getElementById('splash-profit-wrap');
   const profitVal = document.getElementById('splash-val');
 
+  msg.textContent = 'Item Saved!';
+  const profitLabel = document.querySelector('#splash-profit-wrap .splash-profit-lbl');
+  if (profitLabel) profitLabel.textContent = 'Selling Price';
   sub.textContent = name;
   profitVal.textContent = fmtN(sell);
   // Show profit insight in splash
@@ -5352,6 +5355,16 @@ function showSplash(name, sell, profit) {
       splash.style.display = 'none';
     }, 350);
   }, 2200);
+}
+
+function showSaleSuccess(profit) {
+  showSplash('', profit, profit);
+  const msg = document.getElementById('splash-msg');
+  const sub = document.getElementById('splash-sub');
+  const label = document.querySelector('#splash-profit-wrap .splash-profit-lbl');
+  if (msg) msg.textContent = 'Congratulations!';
+  if (label) label.textContent = 'Profit earned';
+  if (sub) sub.textContent = 'You earned ' + fmt(profit) + ' from this sale.';
 }
 
 // ===== EXPORT =====
@@ -5552,6 +5565,8 @@ function selectPayment(method) {
 
 function openOffStockSale() {
   renderOffstockTypeOptions();
+  const qty = document.getElementById('off-qty');
+  if (qty && (!qty.value || parseInt(qty.value, 10) < 1)) qty.value = '1';
   const sheet = document.getElementById('offstock-sale-sheet');
   if (sheet) sheet.classList.add('open');
   setTimeout(() => document.getElementById('off-name')?.focus(), 80);
@@ -5562,30 +5577,31 @@ function closeOffStockSale() {
   if (sheet) sheet.classList.remove('open');
 }
 
+function adjOffStockQty(delta) {
+  const input = document.getElementById('off-qty');
+  if (!input) return;
+  const current = parseInt(input.value, 10) || 1;
+  input.value = String(Math.max(1, Math.min(999999, current + delta)));
+}
+
 async function confirmOffStockSale() {
   const name = Input.text('off-name');
   const code = sanitiseCode(Input.text('off-code'));
-  const type = getCascadeCommittedValue('off-type', { valueMode: 'name', requireLeaf: true });
+  const selectedType = getCascadeCommittedValue('off-type', { valueMode: 'name', requireLeaf: true });
+  const type = selectedType || 'General';
   const size = Input.text('off-size');
   const qty = Input.int('off-qty');
   const buyPrice = Input.money('off-buy');
   const sellPrice = Input.money('off-sell');
   const paymentMethod = 'cash';
   if (!name && !code) return Validate.fail('Enter item name or code', 'off-name');
-  if (!type) {
-    const wrap = document.getElementById('off-type-cascade');
-    const pathIds = wrap ? _getCascadePathFromWrap(wrap) : [];
-    const deepest = pathIds.length ? getTypeById(pathIds[pathIds.length - 1]) : null;
-    if (deepest && _categoryHasActiveChildren(deepest.id)) {
-      return Validate.fail('Pick a sub-category', 'off-type');
-    }
-    return Validate.fail('Select a category', 'off-type');
-  }
   if (!Validate.restockQty(qty, 'off-qty')) return;
-  if (!Validate.moneyOptional(buyPrice, 'off-buy', 'Buy price')) return;
+  if (buyPrice === null || !Validate.moneyRequired(buyPrice, 'off-buy', 'Buy price')) return;
   if (!Validate.moneyRequired(sellPrice, 'off-sell', 'Sale price')) return;
-  const buy = buyPrice === null ? 0 : buyPrice;
-  if (buy > 0 && sellPrice < buy && !confirm('Sale price is below buy price. Record anyway?')) return;
+  const buy = buyPrice;
+  if (buy <= 0) return Validate.fail('Buy price must be greater than zero', 'off-buy');
+  if (sellPrice <= 0) return Validate.fail('Sale price must be greater than zero', 'off-sell');
+  if (buy >= sellPrice) return Validate.fail('Buy price must be less than sale price', 'off-buy');
 
   const revenue = qty * sellPrice;
   const profit = qty * (sellPrice - buy);
@@ -5625,10 +5641,12 @@ async function confirmOffStockSale() {
   };
   monitorRow.id = await dbAdd('wishlist', monitorRow);
 
-  ['off-name','off-code','off-size','off-qty','off-buy','off-sell'].forEach(id => {
+  ['off-name','off-code','off-size','off-buy','off-sell'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  const offQty = document.getElementById('off-qty');
+  if (offQty) offQty.value = '1';
   const offType = document.getElementById('off-type');
   if (offType) offType.value = '';
   renderOffstockTypeOptions();
@@ -5639,6 +5657,7 @@ async function confirmOffStockSale() {
   try { if (activeDay) updateDayLiveStats(); } catch(_) { /* intentionally ignored */ }
   scheduleSync();
   toast('Sale recorded - monitor marked NOT ACCOUNTED', 'ok');
+  showSaleSuccess(profit);
 }
 
 // Shows the "enter buy price" field only when the item/size has no cost on record yet.
@@ -5824,8 +5843,27 @@ async function confirmSale() {
     if (!Validate.stock(qty, maxQty, itemLabel)) { _overlay.hide(); return; }
   }
 
-  // ── Validate sale price ────────────────────────────────────────
-  if (!Validate.salePrice(priceUsed, buyPrice, sellPrice)) { _overlay.hide(); return; }
+  // ── Validate sale price and cost ────────────────────────────────
+  if (!Number.isFinite(sellPrice) || sellPrice <= 0) {
+    Validate.fail('Sale price must be greater than zero', 'sm-actual');
+    _overlay.hide();
+    return;
+  }
+  if (!Number.isFinite(buyPrice) || buyPrice <= 0) {
+    Validate.fail('Buy price must be greater than zero', 'sm-buy');
+    _overlay.hide();
+    return;
+  }
+  if (!Number.isFinite(priceUsed) || priceUsed <= 0) {
+    Validate.fail('Sale price must be greater than zero', 'sm-actual');
+    _overlay.hide();
+    return;
+  }
+  if (buyPrice >= priceUsed) {
+    Validate.fail('Buy price must be less than sale price', 'sm-buy');
+    _overlay.hide();
+    return;
+  }
   const _sellMin = (_isShoeSale && _sellShoeSize ? (_sellShoeSize.sellPriceMin || 0) : (item.sellPriceMin || 0));
   if (_sellMin > 0 && priceUsed < _sellMin) {
     const go = confirm(
@@ -5926,6 +5964,7 @@ async function confirmSale() {
   } catch(_) { /* intentionally ignored */ }
 
   toast('' + fmt(revenue) + ' - Profit: ' + fmt(profit), 'ok');
+  showSaleSuccess(profit);
 
   } catch(err) {
     console.error('[confirmSale]', err);
