@@ -6,7 +6,7 @@ let db;
 // use entirely separate local IndexedDB databases so dev work can never
 // touch real shop data. See getFirebaseEnv() / KEY_FIREBASE_ENV below.
 let DB_NAME = 'InventoryApp';
-const DB_VER  = 14;
+const DB_VER  = 15;
 
 // ── APP CONSTANTS ─────────────────────────────────────────────────────
 const KEY_SESSION      = 'mg_session';
@@ -107,6 +107,17 @@ function initDB() {
       wl.createIndex('idx_created_at', 'createdAt', { unique: false });
       wl.createIndex('idx_fbid',       'fbId',      { unique: false });
     }
+    if (!d.objectStoreNames.contains('wishlist_lists')) {
+      const wl = d.createObjectStore('wishlist_lists', { keyPath: 'id', autoIncrement: true });
+      wl.createIndex('idx_fbid', 'fbId', { unique: false });
+      wl.createIndex('idx_owner', 'ownerId', { unique: false });
+    }
+    if (!d.objectStoreNames.contains('wishlist_activity_log')) {
+      const wa = d.createObjectStore('wishlist_activity_log', { keyPath: 'id', autoIncrement: true });
+      wa.createIndex('idx_list', 'listId', { unique: false });
+      wa.createIndex('idx_time', 'timestamp', { unique: false });
+      wa.createIndex('idx_fbid', 'fbId', { unique: false });
+    }
 
     // Compressed item/wish photos (JPEG/WebP data URLs). key: "item_12" | "wish_3"
     if (!d.objectStoreNames.contains('photos')) {
@@ -196,7 +207,7 @@ function _dbReady(rej) {
 }
 const _SYNCABLE_STORES = Object.freeze([
   'items', 'sales', 'shoe_sizes', 'finances', 'business_days', 'wishlist',
-  'customers', 'customer_txns'
+  'wishlist_lists', 'wishlist_activity_log', 'customers', 'customer_txns'
 ]);
 let _syncWriteContext = 0;
 let _syncClock = 0;
@@ -224,6 +235,8 @@ function _syncIdentity(store, record) {
   if (store === 'shoe_sizes' && typeof stableShoeSizeFbId === 'function') return stableShoeSizeFbId(record);
   if (store === 'business_days' && typeof stableBusinessDayFbId === 'function') return stableBusinessDayFbId(record);
   if (store === 'wishlist' && typeof stableWishFbId === 'function') return stableWishFbId(record);
+  if (store === 'wishlist_lists') return record.fbId || 'wlist_' + _fbSlug(record.name, 'list');
+  if (store === 'wishlist_activity_log') return record.fbId || 'wact_' + _syncUuid();
   if (store === 'customers' && record.customerId != null) return 'cust_' + record.customerId;
   if (store === 'sales') return 'sale_' + _syncUuid();
   if (store === 'finances') return 'fin_' + _syncUuid();
@@ -3209,12 +3222,14 @@ function buildWishListCardHtml(row, wishRec) {
 
   const stocked = wishRec && wishRec.status === 'stocked';
   const targetDate = wishRec && wishRec.targetDate ? '<span class="wish-chip wish-chip-date"><i class="fa-regular fa-calendar"></i> ' + escapeHtml(wishRec.targetDate) + '</span>' : '';
+  const modifiedBy = wishRec && wishRec.lastModifiedBy ? '<span class="wish-card-updated">by ' + escapeHtml(wishRec.lastModifiedBy) + '</span>' : '';
   return '<article class="wish-card' + (stocked ? ' is-stocked' : '') + '" onclick="openWishlistDetail(' + row.wishId + ')" role="button" tabindex="0">' +
     '<button type="button" class="wish-check ' + (stocked ? 'checked' : '') + '" onclick="event.stopPropagation();toggleWishlistStocked(' + row.wishId + ')" aria-label="' + (stocked ? 'Mark as active' : 'Mark as stocked') + '"><i class="fa-solid fa-check"></i></button>' +
     thumb +
     '<div class="wish-card-body">' +
       '<div class="wish-card-name">' + escapeHtml(row.name || row.code || 'Item') + '</div>' +
       (chips.length || targetDate ? '<div class="wish-card-chips">' + chips.join('') + targetDate + '</div>' : '') +
+      modifiedBy +
     '</div>' +
     priceHtml +
   '</article>';
@@ -3229,14 +3244,41 @@ function getWishlistLists() {
   return lists.filter(v => String(v || '').trim()).map(v => String(v).trim());
 }
 function saveWishlistLists(lists) { localStorage.setItem(WISHLIST_LISTS_KEY, JSON.stringify(lists)); }
-function createWishlistList() {
+async function recordWishlistActivity(listId, itemId, action) {
+  if (!db.objectStoreNames.contains('wishlist_activity_log')) return;
+  const actor = currentUser ? currentUser.username : 'system';
+  const entry = {
+    fbId: 'wact_' + _syncUuid(),
+    listId: listId || 'Customer Requests',
+    itemId: itemId || null,
+    userId: actor,
+    action,
+    timestamp: new Date().toISOString()
+  };
+  await dbAdd('wishlist_activity_log', entry);
+}
+async function createWishlistList() {
   const name = prompt('List name');
   const clean = String(name || '').trim();
   if (!clean) return;
   const lists = getWishlistLists();
   if (lists.some(v => v.toLowerCase() === clean.toLowerCase())) return toast('List already exists', 'err');
   lists.push(clean); saveWishlistLists(lists);
-  renderWishlistPage();
+  const ownerId = currentUser ? currentUser.username : 'system';
+  if (db.objectStoreNames.contains('wishlist_lists')) {
+    await dbAdd('wishlist_lists', {
+      fbId: 'wlist_' + _fbSlug(clean, 'list'),
+      name: clean,
+      color: '#1e7a3e',
+      ownerId,
+      sharedWith: [],
+      permissions: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    await recordWishlistActivity(clean, null, 'list_created');
+  }
+  await renderWishlistPage();
 }
 window.createWishlistList = createWishlistList;
 function toggleWishlistHistory() {
@@ -3249,7 +3291,10 @@ async function toggleWishlistStocked(id) {
   if (!wish) return;
   wish.status = wish.status === 'stocked' ? 'prospective' : 'stocked';
   wish.stockedAt = wish.status === 'stocked' ? new Date().toISOString() : null;
+  wish.lastModifiedBy = currentUser ? currentUser.username : 'system';
+  wish.updatedAt = new Date().toISOString();
   await dbPut('wishlist', wish);
+  await recordWishlistActivity(wish.listName || 'Customer Requests', wish.id, wish.status === 'stocked' ? 'item_stocked' : 'item_reopened');
   scheduleSync();
   await renderWishlistPage();
   await renderStockMonitorSummary();
@@ -3315,6 +3360,8 @@ async function saveWishlistDetail() {
 
   const noteInput = document.getElementById('wd-note-input');
   wish.note = noteInput ? String(noteInput.value || '').trim() : '';
+  wish.lastModifiedBy = currentUser ? currentUser.username : 'system';
+  wish.updatedAt = new Date().toISOString();
 
   const vendorName = Input.text('wd-vendor-name').trim();
   const vendorPriceRaw = Input.money('wd-vendor-price');
@@ -3340,6 +3387,7 @@ async function saveWishlistDetail() {
   }
 
   await dbPut('wishlist', wish);
+  await recordWishlistActivity(wish.listName || 'Customer Requests', wish.id, 'item_updated');
   scheduleSync();
   renderWishDetailItemInfo(wish);
   renderWishVendorSection(wish);
@@ -4437,6 +4485,12 @@ async function renderWishlistPage() {
   const list = document.getElementById('wishlist-list');
   if (!list) return;
   const allWishlist = await dbAll('wishlist');
+  const sharedLists = db.objectStoreNames.contains('wishlist_lists') ? await dbAll('wishlist_lists') : [];
+  const syncedNames = sharedLists.map(l => l.name).filter(Boolean);
+  if (syncedNames.length) {
+    const mergedLists = Array.from(new Set(getWishlistLists().concat(syncedNames)));
+    saveWishlistLists(mergedLists);
+  }
   const filter = document.getElementById('wish-list-filter');
   const lists = getWishlistLists();
   const selectedList = filter?.value || 'all';
@@ -4517,6 +4571,7 @@ async function saveWishlistItem() {
     createdBy: currentUser ? currentUser.username : 'system'
   };
   entry.id = await dbAdd('wishlist', entry);
+  await recordWishlistActivity(entry.listName, entry.id, 'item_added');
   if (_wishFormPhotoData) await setWishPhoto(entry.id, _wishFormPhotoData);
   ['wish-name','wish-code','wish-qty','wish-cost','wish-note','wish-target-date','wish-vendor-name','wish-vendor-price'].forEach(id => {
     const el = document.getElementById(id);
@@ -4532,8 +4587,10 @@ async function saveWishlistItem() {
 }
 
 async function deleteWishlistItem(id) {
+  const wish = await dbGet('wishlist', id);
   await removeWishPhoto(id);
   await dbDelete('wishlist', id);
+  if (wish) await recordWishlistActivity(wish.listName || 'Customer Requests', id, 'item_deleted');
   scheduleSync();
   await renderWishlistPage();
   await renderStockMonitor();
@@ -4555,7 +4612,10 @@ async function markWishlistStockedForItem(item) {
     wish.status = 'stocked';
     wish.stockedAt = new Date().toISOString();
     wish.stockedItemId = item.id || null;
+    wish.lastModifiedBy = currentUser ? currentUser.username : 'system';
+    wish.updatedAt = new Date().toISOString();
     await dbPut('wishlist', wish);
+    await recordWishlistActivity(wish.listName || 'Customer Requests', wish.id, 'item_stocked');
   }
 }
 
@@ -5834,6 +5894,8 @@ async function confirmOffStockSale() {
   entry.listName = document.getElementById('wish-list-filter')?.value;
   if (!entry.listName || entry.listName === 'all') entry.listName = 'Customer Requests';
   entry.targetDate = document.getElementById('wish-target-date')?.value || '';
+  entry.lastModifiedBy = currentUser ? currentUser.username : 'system';
+  entry.updatedAt = new Date().toISOString();
   monitorRow.id = await dbAdd('wishlist', monitorRow);
 
   ['off-name','off-code','off-size','off-buy','off-sell'].forEach(id => {
@@ -6225,6 +6287,7 @@ async function resetAndRebuildDB() {
     await DB.clearAll([
       STORES.ITEMS, STORES.SALES, STORES.SIZES,
       STORES.FINANCES, STORES.BDAYS, STORES.TYPES, STORES.WISHLIST,
+      'wishlist_lists', 'wishlist_activity_log',
     ]);
     console.log('[DB] All local stores cleared');
 
@@ -6508,7 +6571,7 @@ async function resetAllData() {
     if (fbReady && fbDb) {
       try {
         const { collection, getDocs, deleteDoc, doc, writeBatch } = await waitForFbImports();
-        for (const col of ['items', 'sales', 'business_days', 'shoe_sizes', 'finances', 'wishlist']) {
+        for (const col of ['items', 'sales', 'business_days', 'shoe_sizes', 'finances', 'wishlist', 'wishlist_lists', 'wishlist_activity_log']) {
           const snap = await getDocs(fbCol(col));
           if (!snap.empty) {
             // Use batched deletes (max 500 per batch)
@@ -6561,8 +6624,8 @@ async function resetAllData() {
   }
 }
 
-const _DATA_STORES = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances', 'wishlist', 'photos', 'customers', 'customer_txns', 'sync_queue', 'sync_meta'];
-const _FB_COLLECTIONS = ['items', 'sales', 'business_days', 'shoe_sizes', 'finances', 'wishlist', 'customers', 'customer_txns'];
+const _DATA_STORES = ['items', 'sales', 'types', 'day_sessions', 'business_days', 'shoe_sizes', 'finances', 'wishlist', 'wishlist_lists', 'wishlist_activity_log', 'photos', 'customers', 'customer_txns', 'sync_queue', 'sync_meta'];
+const _FB_COLLECTIONS = ['items', 'sales', 'business_days', 'shoe_sizes', 'finances', 'wishlist', 'wishlist_lists', 'wishlist_activity_log', 'customers', 'customer_txns'];
 
 function _clearAllDayReconKeys() {
   const remove = [];
@@ -7221,6 +7284,8 @@ async function initFirebase() {
     if (typeof window._fbUnsubWish === 'function') { window._fbUnsubWish(); }
     if (typeof window._fbUnsubSz === 'function') { window._fbUnsubSz(); }
     if (typeof window._fbUnsubBd       === 'function') { window._fbUnsubBd(); }
+    if (typeof window._fbUnsubWishLists === 'function') { window._fbUnsubWishLists(); }
+    if (typeof window._fbUnsubWishActivity === 'function') { window._fbUnsubWishActivity(); }
     if (typeof window._fbUnsubCust     === 'function') { window._fbUnsubCust(); }
     if (typeof window._fbUnsubCustTxn  === 'function') { window._fbUnsubCustTxn(); }
     fbUnsub = null;
@@ -7229,6 +7294,8 @@ async function initFirebase() {
     window._fbUnsubWish = null;
     window._fbUnsubSz = null;
     window._fbUnsubBd = null;
+    window._fbUnsubWishLists = null;
+    window._fbUnsubWishActivity = null;
     window._fbUnsubCust = null;
     window._fbUnsubCustTxn = null;
 
@@ -7242,6 +7309,8 @@ async function initFirebase() {
       ['finances', 'finances', 'finances'],
       ['business_days', 'business_days', 'business_days'],
       ['wishlist', 'wishlist', 'wishlist'],
+      ['wishlist_lists', 'wishlist_lists', '_fbUnsubWishLists'],
+      ['wishlist_activity_log', 'wishlist_activity_log', '_fbUnsubWishActivity'],
       ['customers', 'customers', 'customers'],
       ['customer_txns', 'customer_txns', 'customer_txns']
     ];
@@ -7249,6 +7318,7 @@ async function initFirebase() {
     const listenerRefs = {
       items: 'fbUnsub', sales: '_fbUnsubSales', shoe_sizes: '_fbUnsubSz',
       finances: '_fbUnsubFin', business_days: '_fbUnsubBd', wishlist: '_fbUnsubWish',
+      wishlist_lists: '_fbUnsubWishLists', wishlist_activity_log: '_fbUnsubWishActivity',
       customers: '_fbUnsubCust', customer_txns: '_fbUnsubCustTxn'
     };
 
