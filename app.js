@@ -5423,6 +5423,7 @@ function showSplash(name, sell, profit, persist) {
   const sub = document.getElementById('splash-sub');
   const profitWrap = document.getElementById('splash-profit-wrap');
   const profitVal = document.getElementById('splash-val');
+  const motivation = document.getElementById('splash-motivation');
   const closeBtn = document.querySelector('.splash-close');
 
   msg.textContent = 'Item Saved!';
@@ -5438,6 +5439,10 @@ function showSplash(name, sell, profit, persist) {
     profitLine.style.color = profit >= 0 ? 'var(--green)' : 'var(--red)';
   }
   profitWrap.style.display = sell > 0 ? 'block' : 'none';
+  if (motivation) {
+    motivation.textContent = '';
+    motivation.style.display = 'none';
+  }
 
   circle.style.transform = 'scale(0)';
   tick.style.strokeDashoffset = '65';
@@ -5475,7 +5480,10 @@ function showSaleSuccess(profit) {
   if (msg) msg.textContent = 'Congratulations!';
   if (label) label.textContent = 'Profit earned';
   if (sub) sub.textContent = 'You earned ' + fmt(profit) + ' from this sale.';
-  if (motivation) motivation.textContent = getSaleMotivation();
+  if (motivation) {
+    motivation.textContent = getSaleMotivation();
+    motivation.style.display = 'block';
+  }
 }
 
 function closeSuccessSplash() {
