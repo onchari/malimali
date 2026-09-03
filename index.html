@@ -609,12 +609,6 @@
     <button type="button" class="wish-inv-tab active" id="wish-tab-list" onclick="showWishlistSection('list')">List</button>
     <button type="button" class="wish-inv-tab" id="wish-tab-add" onclick="showWishlistSection('add')">Add</button>
   </div>
-  <div class="wish-board-toolbar">
-    <select id="wish-list-filter" class="add-select" aria-label="Wishlist list" onchange="renderWishlistPage()"></select>
-    <button type="button" class="wish-new-list-btn" onclick="createWishlistList()"><i class="fa-solid fa-plus"></i> New list</button>
-    <button type="button" class="wish-history-btn" id="wish-history-btn" onclick="toggleWishlistHistory()">History</button>
-    <button type="button" class="wish-clear-history-btn" id="wish-clear-history-btn" onclick="clearWishlistHistory()" hidden><i class="fa-solid fa-trash"></i> Clear</button>
-  </div>
 
   <div id="wishlist-list" class="wish-list-panel"></div>
 
@@ -697,10 +691,6 @@
         <div class="wish-add-field">
           <label class="add-label" for="wish-note">Note</label>
           <input class="add-input" id="wish-note" type="text" maxlength="160" placeholder="Optional">
-        </div>
-        <div class="wish-add-field">
-          <label class="add-label" for="wish-target-date">Stock by</label>
-          <input class="add-input" id="wish-target-date" type="date">
         </div>
       </section>
     </div>
