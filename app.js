@@ -10205,14 +10205,14 @@ async function runForceSync(silent = false) {
     toast("Syncing…", "");
   }
   try {
-    // Pull first (get authoritative cloud state)
-    await pullFromFirebase(true);
+    // Push offline work first so the user's local changes reach the cloud
+    // before remote data is merged into this device.
+    await forcePushToFirebase(true);
     // Remove any duplicates caused by previous sync races
     const dupsRemoved = await deduplicateSales();
     if (dupsRemoved > 0)
       console.log("[SYNC] Removed " + dupsRemoved + " duplicate sale(s)");
-    // Push local records not yet in cloud
-    await forcePushToFirebase(true);
+    await pullFromFirebase(true);
     _pushFailCount = 0;
     _lastSyncError = null;
     await refreshUI({ sync: false });
@@ -10315,6 +10315,7 @@ async function _onComeOnline() {
   }
   setFbStatus("syncing");
   try {
+    await forcePushToFirebase(true);
     await pullFromFirebase(true);
     await forcePushToFirebase(true);
     await _refreshAllViews();
@@ -10335,8 +10336,8 @@ async function _onVisibilityChange() {
   if (document.visibilityState !== "visible") return;
   if (!fbReady || !fbDb || !navigator.onLine) return;
   try {
-    await pullFromFirebase(true);
     await processSyncQueue(true);
+    await pullFromFirebase(true);
     await _refreshAllViews();
     setFbStatus("on");
   } catch (e) {
@@ -10718,6 +10719,7 @@ async function initFirebase() {
 
     setFbStatus("on");
     toast("Firebase connected (" + getFirebaseEnvConfig().label + ")", "ok");
+    await forcePushToFirebase(true);
     await pullFromFirebase(true);
     await deduplicateSales(); // remove any duplicates from previous sync bugs
     await normalizeSyncIds();
