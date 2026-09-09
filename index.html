@@ -16,6 +16,7 @@
   <meta name="description" content="Mandela General Stores - Inventory Management System">
   <meta http-equiv="Permissions-Policy" content="clipboard-read=(self), clipboard-write=(self)">
   <title>Mandela General Stores</title>
+  <link rel="icon" href="data:,">
 
   <!-- PWA manifest & touch icon -->
   <link rel="manifest" href="manifest.json">
@@ -474,6 +475,13 @@
     <p id="d-summary-headline" class="dash-summary-headline"></p>
     <div id="d-summary-cards" class="dash-summary-cards"></div>
   </section>
+  <section class="dash-budget" aria-labelledby="dash-budget-title">
+    <div class="dash-budget-head">
+      <span id="dash-budget-title">Purchase budget</span>
+      <button type="button" onclick="showPage('inventory');showInventoryTab('wishlist')">Manage</button>
+    </div>
+    <div id="dash-budget-metrics" class="dash-budget-metrics">No active purchase budget</div>
+  </section>
 
   <!-- ── 7-day revenue spark line ─────────────────────────────── -->
   <div id="d-sparkline-wrap" class="dash-extra" style="margin:0 12px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;display:none;">
@@ -598,106 +606,107 @@
      Prospective items the business may stock later.
      ============================================================== -->
 <div class="page" id="page-wishlist" style="padding:12px 12px 0;">
-  <div class="stock-toolbar">
-    <div>
-      <div class="stock-title">Wishlist</div>
-      <div class="stock-sub" id="wishlist-sub">0 items</div>
+  <div class="wishlist-hero">
+    <div class="wishlist-hero-mark"><i class="fa-solid fa-cart-shopping"></i></div>
+    <div class="wishlist-hero-copy">
+      <div class="wishlist-hero-title">Wishlist</div>
+      <div class="wishlist-hero-sub">Keep track of what you want to stock</div>
     </div>
+    <div class="wishlist-hero-side"><i class="fa-solid fa-list-check"></i><span>Manage your<br>stock plans</span></div>
   </div>
 
   <div class="wish-inv-tabs">
-    <button type="button" class="wish-inv-tab active" id="wish-tab-list" onclick="showWishlistSection('list')">List</button>
-    <button type="button" class="wish-inv-tab" id="wish-tab-add" onclick="showWishlistSection('add')">Add</button>
+    <button type="button" class="wish-inv-tab active" id="wish-tab-list" onclick="showWishlistSection('list')"><i class="fa-solid fa-list"></i> Wish list</button>
+    <button type="button" class="wish-inv-tab" id="wish-tab-day" onclick="showWishlistSection('day')"><i class="fa-solid fa-calendar-day"></i> Purchase List</button>
+    <button type="button" class="wish-inv-tab" id="wish-tab-stocked" onclick="showWishlistSection('stocked')"><i class="fa-solid fa-check"></i> Stocked</button>
+    <button type="button" class="wish-inv-tab" id="wish-tab-add" onclick="showWishlistSection('add')"><i class="fa-solid fa-circle-plus"></i> Add</button>
   </div>
+  <div id="wishlist-controls" class="wish-list-controls" aria-label="Wishlist"></div>
 
   <div id="wishlist-list" class="wish-list-panel"></div>
 
   <div id="wishlist-add-panel" class="wish-add-panel" style="display:none;">
-    <button type="button" class="wish-add-back" onclick="showWishlistSection('list')">← List</button>
-
     <div class="wish-add-card">
-      <section class="wish-add-block wish-add-block-photo" aria-labelledby="wish-add-hd-photo">
-        <h3 class="wish-add-block-hd" id="wish-add-hd-photo">Photo</h3>
-        <div class="wish-add-photo-wrap">
-          <div class="add-photo-box wish-photo-box">
-            <img id="wish-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
-            <div id="wish-photo-placeholder" class="add-photo-ph" onclick="triggerWishPhotoUpload()">
-              <span class="add-photo-ph-icon"><i class="fa-solid fa-camera"></i></span>
-              <span class="add-photo-ph-text">Tap to add</span>
-            </div>
-            <button type="button" id="wish-photo-remove" onclick="removeWishFormPhoto(event)" class="add-photo-remove" style="display:none;"></button>
-          </div>
-          <button type="button" class="wish-paste-btn" onclick="startWishlistScreenshotImport()"><span class="wish-paste-btn-icon" aria-hidden="true"><i class="fa-solid fa-paste"></i></span>
-            <span>Paste image</span>
-          </button>
-        </div>
-      </section>
-
-      <section class="wish-add-block" aria-labelledby="wish-add-hd-item">
-        <h3 class="wish-add-block-hd" id="wish-add-hd-item">Item</h3>
-        <div class="wish-add-field">
-          <label class="add-label" for="wish-name">Name <span class="add-required">*</span></label>
-          <input class="add-input" id="wish-name" type="text" placeholder="e.g. YS5981 runner" required>
-        </div>
-      </section>
-
-      <section class="wish-add-block" aria-labelledby="wish-add-hd-vendor">
-        <h3 class="wish-add-block-hd" id="wish-add-hd-vendor">Vendor quote</h3>
+      <section class="wish-add-block wish-add-primary" aria-labelledby="wish-add-hd-item">
+        <h2 class="wish-section-title"><span class="wish-section-icon"><i class="fa-solid fa-cube"></i></span>What do you want to stock? <span class="add-required">*</span></h2>
         <div class="wish-add-vendor-grid">
           <div class="wish-add-field">
-            <label class="add-label" for="wish-vendor-name">Vendor</label>
-            <input class="add-input" id="wish-vendor-name" type="text" maxlength="80" placeholder="Shop name">
+            <label class="add-label" for="wish-name"><i class="fa-solid fa-magnifying-glass"></i> Name / Item</label>
+            <input class="add-input" id="wish-name" type="text" placeholder="e.g. YS5981 runner" required autofocus>
           </div>
-          <div class="wish-add-field wish-add-field-price">
-            <label class="add-label" for="wish-vendor-price">Price</label>
-            <div class="wish-price-input-wrap">
-              <span class="wish-price-prefix" aria-hidden="true">K</span>
-              <input class="add-input add-mono add-center" id="wish-vendor-price" type="number" min="0" inputmode="decimal" placeholder="0">
-            </div>
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-code"><i class="fa-solid fa-barcode"></i> Code <span class="wish-add-hint">(optional)</span></label>
+            <input class="add-input add-mono" id="wish-code" type="text" placeholder="YS5981" oninput="updateWishFormProgress()">
+          </div>
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-qty"><i class="fa-solid fa-cubes"></i> Quantity</label>
+              <input class="add-input add-mono add-center" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="1">
+          </div>
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-cost"><i class="fa-solid fa-coins"></i> Estimated cost <span class="wish-add-hint">(optional)</span></label>
+            <input class="add-input add-mono" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="0">
           </div>
         </div>
       </section>
 
-      <button type="button" class="wish-add-more-toggle" id="wish-add-more-toggle" onclick="toggleWishAddMore()" aria-expanded="false" aria-controls="wish-add-more"><span class="wish-add-more-toggle-text">More options</span>
-        <span class="wish-add-more-chevron" aria-hidden="true"></span>
-      </button>
-
-      <section id="wish-add-more" class="wish-add-more" hidden aria-label="More options">
-        <div class="wish-add-field">
-          <label class="add-label" for="wish-code">Code</label>
-          <input class="add-input add-mono" id="wish-code" type="text" placeholder="YS5981">
-        </div>
-        <div class="wish-add-field wish-cascade-field">
-          <span class="add-label">Category</span>
-          <div class="cat-cascade-field">
+      <section class="wish-add-block" aria-labelledby="wish-add-hd-purchase">
+        <h3 class="wish-section-title"><span class="wish-section-icon"><i class="fa-solid fa-basket-shopping"></i></span>Purchase details</h3>
+        <div class="wish-add-vendor-grid">
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-type"><i class="fa-solid fa-layer-group"></i> Category <span class="wish-add-hint">(optional)</span></label>
+            <input type="hidden" id="wish-type">
             <div id="wish-type-cascade" class="add-cascade"></div>
-            <input type="hidden" id="wish-type" value="" aria-label="Category">
             <div id="wish-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
           </div>
-        </div>
-        <div class="wish-add-vendor-grid">
           <div class="wish-add-field">
-            <label class="add-label" for="wish-qty">Qty</label>
-            <input class="add-input add-mono add-center" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="1">
+            <label class="add-label" for="wish-planned-date"><i class="fa-solid fa-calendar-day"></i> Planned date <span class="wish-add-hint">(optional)</span></label>
+            <input class="add-input" id="wish-planned-date" type="date">
           </div>
           <div class="wish-add-field">
-            <label class="add-label" for="wish-cost">BP est.</label>
-            <div class="wish-price-input-wrap">
-              <span class="wish-price-prefix" aria-hidden="true">K</span>
-              <input class="add-input add-mono add-center" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="0">
+            <label class="add-label" for="wish-supplier"><i class="fa-solid fa-truck"></i> Supplier <span class="wish-add-hint">(optional)</span></label>
+            <select class="add-input" id="wish-supplier">
+              <option value="">Select supplier</option>
+            </select>
+          </div>
+          <div class="wish-add-field">
+            <span class="add-label"><i class="fa-solid fa-flag"></i> Priority</span>
+            <div class="wish-priority-radios" role="radiogroup" aria-label="Priority">
+              <label><input type="radio" name="wish-priority" value="urgent"> Urgent</label>
+              <label><input type="radio" name="wish-priority" value="medium" checked> Medium</label>
+              <label><input type="radio" name="wish-priority" value="low"> Low</label>
             </div>
           </div>
         </div>
+      </section>
+
+      <section class="wish-add-block wish-add-block-optional" aria-labelledby="wish-add-hd-notes">
+        <h3 class="wish-section-title"><span class="wish-section-icon"><i class="fa-solid fa-file-lines"></i></span>Note <span class="wish-add-hint">(optional)</span></h3>
         <div class="wish-add-field">
-          <label class="add-label" for="wish-note">Note</label>
-          <input class="add-input" id="wish-note" type="text" maxlength="160" placeholder="Optional">
+          <label class="add-label" for="wish-note"><i class="fa-solid fa-pen"></i> Note</label>
+            <textarea class="add-input wish-note-input" id="wish-note" maxlength="160" placeholder="Size, colour, or other detail..."></textarea>
         </div>
       </section>
     </div>
 
     <footer class="wish-add-footer">
-      <button type="button" class="wish-save-btn" onclick="saveWishlistItem()">Save to wishlist</button>
+      <button type="button" class="wish-save-btn" onclick="saveWishlistItem()"><i class="fa-solid fa-floppy-disk"></i> Save to wishlist</button>
     </footer>
+  </div>
+  <div class="wish-chooser-overlay" id="wishlist-planner-chooser" role="dialog" aria-modal="true" aria-labelledby="wishlist-planner-chooser-title">
+    <div class="wish-chooser-panel">
+      <h2 id="wishlist-planner-chooser-title">Add to planner</h2>
+      <span class="add-label">Planner</span>
+      <div class="wish-planner-choice" role="radiogroup" aria-label="Planner choice">
+        <label><input type="radio" name="wishlist-planner-mode" value="__new__" checked onchange="updateWishlistPlannerChoice()"> New planner</label>
+        <label><input type="radio" name="wishlist-planner-mode" value="__existing__" onchange="updateWishlistPlannerChoice()"> Existing planner</label>
+      </div>
+      <select class="add-input" id="wishlist-existing-planner" hidden aria-label="Existing planner"></select>
+      <input class="add-input" id="wishlist-new-planner-name" type="text" placeholder="Planner name">
+      <div class="wish-chooser-actions">
+        <button type="button" class="wish-filter-action" onclick="closeWishlistPlannerChooser()">Cancel</button>
+        <button type="button" class="wish-filter-action" onclick="addSelectedWishlistToPlanner()"><i class="fa-solid fa-floppy-disk"></i> Save planner</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1191,6 +1200,17 @@
     <div class="units-header">
       <div>
         <div style="font-size:14px;font-weight:800;">Stock Units</div>
+
+    <div class="sec-label">Wishlist Suppliers</div>
+    <div class="card settings-card" style="padding:16px;">
+      <div style="font-size:14px;font-weight:800;margin-bottom:4px;">Suppliers</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Add the shops or suppliers used in your wishlist.</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input class="add-input" id="supplier-setting-input" type="text" maxlength="80" placeholder="Supplier name">
+        <button type="button" class="settings-btn settings-btn--primary" onclick="addWishlistSupplier()"><i class="fa-solid fa-plus"></i> Add</button>
+      </div>
+      <div id="wishlist-suppliers-list" style="margin-top:12px;"></div>
+    </div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px;">
           Tap to toggle · <span id="units-active-count" style="color:var(--accent);font-weight:700;"></span>
         </div>
@@ -1900,6 +1920,39 @@
       <section class="wish-detail-block" aria-labelledby="wd-hd-note">
         <h3 class="wish-detail-section-label" id="wd-hd-note">Note</h3>
         <textarea class="wish-detail-note-input" id="wd-note-input" rows="3" maxlength="160" placeholder="Optional note"></textarea>
+      </section>
+
+      <section class="wish-detail-block" aria-labelledby="wd-hd-planning">
+        <h3 class="wish-detail-section-label" id="wd-hd-planning">Purchase planning</h3>
+        <div class="wish-detail-edit-grid">
+          <div class="wish-detail-field">
+            <label class="add-label" for="wd-priority">Priority</label>
+            <select class="add-input" id="wd-priority">
+              <option value="medium">Medium</option>
+              <option value="urgent">Urgent</option>
+              <option value="high">High</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div class="wish-detail-field">
+            <label class="add-label" for="wd-planned-date">Planned purchase date</label>
+            <input class="add-input" id="wd-planned-date" type="date">
+          </div>
+          <div class="wish-detail-field">
+            <label class="add-label" for="wd-category">Planning category</label>
+            <input class="add-input" id="wd-category" type="text" maxlength="80">
+          </div>
+          <div class="wish-detail-field">
+            <label class="add-label" for="wd-supplier">Preferred supplier / shop</label>
+            <input class="add-input" id="wd-supplier" type="text" maxlength="80">
+          </div>
+          <div class="wish-detail-field">
+            <label class="add-label" for="wd-purchase-list">Purchase list</label>
+            <select class="add-input" id="wd-purchase-list">
+              <option value="">No purchase list</option>
+            </select>
+          </div>
+        </div>
       </section>
     </div>
 
