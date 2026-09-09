@@ -6537,8 +6537,10 @@ async function saveWishlistItem() {
 }
 
 async function deleteWishlistItem(id, skipRender) {
-  await removeWishPhoto(id);
-  await dbDelete("wishlist", id);
+  const wishId = Number(id);
+  if (!Number.isInteger(wishId) || wishId < 1) return;
+  await removeWishPhoto(wishId);
+  await dbDelete("wishlist", wishId);
   scheduleSync();
   if (!skipRender) {
     await renderWishlistPage();
