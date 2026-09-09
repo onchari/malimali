@@ -11362,6 +11362,14 @@ async function _findLocalForRemote(store, data, fbId) {
     if (date)
       return rows.find((r) => (r.businessDate || r.business_date) === date);
   }
+  if (store === "wishlist" && typeof stableWishFbId === "function") {
+    // Older wishlist documents may use a different Firestore id. Match them
+    // by the stable fields so the local record adopts that cloud identity.
+    const stableWishId = stableWishFbId({ ...data, fbId: "" });
+    return rows.find(
+      (r) => stableWishFbId({ ...r, fbId: "" }) === stableWishId,
+    );
+  }
   if (store === "customers" && data.customerId != null)
     return rows.find((r) => String(r.customerId) === String(data.customerId));
   if (store === "customer_txns") {
