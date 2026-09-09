@@ -10700,11 +10700,13 @@ async function initFirebase() {
           window["_retry_" + store] = setTimeout(() => {
             if (fbReady && fbDb) {
               startRealtimeListener(store, collectionName, key);
-              pullFromFirebase(true).catch((e) => {
-                _lastSyncError = e.message || String(e);
-                setFbStatus("error");
-                updateSyncDot();
-              });
+              forcePushToFirebase(true)
+                .then(() => pullFromFirebase(true))
+                .catch((e) => {
+                  _lastSyncError = e.message || String(e);
+                  setFbStatus("error");
+                  updateSyncDot();
+                });
             }
           }, 3000);
         },
