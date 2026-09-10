@@ -6,7 +6,7 @@ let db;
 // use entirely separate local IndexedDB databases so dev work can never
 // touch real shop data. See getFirebaseEnv() / KEY_FIREBASE_ENV below.
 let DB_NAME = "InventoryApp";
-const DB_VER = 15;
+const DB_VER = 16;
 
 // ── APP CONSTANTS ─────────────────────────────────────────────────────
 const KEY_SESSION = "mg_session";
@@ -67,6 +67,29 @@ function initDB() {
       ss.createIndex("idx_code_size", "codeSize", { unique: true }); // "CODE_42"
       ss.createIndex("idx_item_id", "itemId", { unique: false });
       ss.createIndex("idx_fbid", "fbId", { unique: false });
+    }
+
+    // ── stock_moves ────────────────────────────────────────────────
+    // Append-only ledger: each stock-affecting action records a delta.
+    // This is the source of truth for derived stock after migration.
+    if (!d.objectStoreNames.contains("stock_moves")) {
+      const sm = d.createObjectStore("stock_moves", {
+        keyPath: "id",
+      });
+      sm.createIndex("idx_item_id", "itemId", { unique: false });
+      sm.createIndex("idx_size_id", "sizeId", { unique: false });
+      sm.createIndex("idx_reason", "reason", { unique: false });
+      sm.createIndex("idx_ref", "refId", { unique: false });
+      sm.createIndex("idx_hlc", "_hlc", { unique: false });
+    }
+
+    if (!d.objectStoreNames.contains("sync_audit")) {
+      const sa = d.createObjectStore("sync_audit", {
+        keyPath: "id",
+        autoIncrement: true,
+      });
+      sa.createIndex("idx_type", "type", { unique: false });
+      sa.createIndex("idx_created_at", "createdAt", { unique: false });
     }
 
     // ── sales ──────────────────────────────────────────────────────
@@ -165,6 +188,16 @@ function initDB() {
     if (!d.objectStoreNames.contains("sync_meta")) {
       d.createObjectStore("sync_meta", { keyPath: "key" });
     }
+    if (!d.objectStoreNames.contains("sync_dead_letters")) {
+      const dl = d.createObjectStore("sync_dead_letters", {
+        keyPath: "id",
+        autoIncrement: true,
+      });
+      dl.createIndex("idx_collection", "collection", { unique: false });
+      dl.createIndex("idx_record", "recordKey", { unique: false });
+      dl.createIndex("idx_created", "createdAt", { unique: false });
+      dl.createIndex("idx_failed_at", "failedAt", { unique: false });
+    }
     if (old >= 13 && d.objectStoreNames.contains("sync_queue")) {
       const sq = req.transaction.objectStore("sync_queue");
       if (!sq.indexNames.contains("idx_op"))
@@ -254,6 +287,7 @@ const _SYNCABLE_STORES = Object.freeze([
   "items",
   "sales",
   "shoe_sizes",
+  "stock_moves",
   "finances",
   "business_days",
   "wishlist",
@@ -286,6 +320,378 @@ function _syncClient() {
   return id;
 }
 
+function _readHlcState() {
+  try {
+    const raw = localStorage.getItem("mgs_hlc_state");
+    if (!raw) return { wall: 0, counter: 0, clientId: _syncClient() };
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object")
+      return {
+        wall: Number(parsed.wall || 0),
+        counter: Number(parsed.counter || 0),
+        clientId: parsed.clientId || _syncClient(),
+      };
+  } catch (_) {}
+  return { wall: 0, counter: 0, clientId: _syncClient() };
+}
+
+function _writeHlcState(state) {
+  try {
+    localStorage.setItem("mgs_hlc_state", JSON.stringify(state));
+  } catch (_) {}
+}
+
+async function ensureSyncMetaClientId() {
+  if (!db || !db.objectStoreNames.contains("sync_meta")) return _syncClient();
+  const existing = (await dbGet("sync_meta", "state")) || {
+    key: "state",
+    clock: 0,
+    clientId: _syncClient(),
+  };
+  const clientId = existing.clientId || _syncClient();
+  existing.key = "state";
+  existing.clientId = clientId;
+  await dbPut("sync_meta", existing);
+  return clientId;
+}
+
+const STOCK_LEDGER_MIGRATION_HLC = Object.freeze({
+  wall: 0,
+  counter: 0,
+  clientId: "migration",
+});
+
+function _nextHlc() {
+  const state = _readHlcState();
+  const wall = Math.max(Date.now(), Number(state.wall || 0));
+  const counter = wall === Number(state.wall || 0) ? Number(state.counter || 0) + 1 : 0;
+  const next = { wall, counter, clientId: state.clientId || _syncClient() };
+  _writeHlcState(next);
+  return next;
+}
+
+function _hlcCompare(a, b) {
+  const A = a || { wall: 0, counter: 0, clientId: "" };
+  const B = b || { wall: 0, counter: 0, clientId: "" };
+  const wallDelta = Number(A.wall || 0) - Number(B.wall || 0);
+  if (wallDelta !== 0) return wallDelta;
+  const counterDelta = Number(A.counter || 0) - Number(B.counter || 0);
+  if (counterDelta !== 0) return counterDelta;
+  const ac = String(A.clientId || "");
+  const bc = String(B.clientId || "");
+  if (ac < bc) return -1;
+  if (ac > bc) return 1;
+  return 0;
+}
+
+function _stockMoveId({ reason, refId, itemId, sizeId = null }) {
+  const safeReason = String(reason || "adjust");
+  const safeRef = String(refId || "unknown");
+  const safeItem = String(itemId ?? "unknown");
+  const safeSize = sizeId == null || sizeId === "" ? "_" : String(sizeId);
+  return `${safeReason}:${safeRef}:${safeItem}:${safeSize}`;
+}
+
+async function recordStockAudit(type, detail = {}) {
+  if (!db || !db.objectStoreNames.contains("sync_audit")) return null;
+  const entry = {
+    type: String(type || "unknown"),
+    createdAt: new Date().toISOString(),
+    detail: detail || {},
+  };
+  try {
+    return await dbAdd("sync_audit", entry);
+  } catch (_) {
+    return null;
+  }
+}
+
+async function recomputeDerivedQtyForItem(itemId, sizeId = null) {
+  if (!itemId || !db) return 0;
+  const duty = sizeId == null || sizeId === "" ? null : String(sizeId);
+  const derived = await deriveQty(itemId, duty);
+  if (db.objectStoreNames.contains("items")) {
+    const item = await dbGet("items", itemId);
+    if (item) {
+      item.qtyCache = Number(derived || 0);
+      await dbPut("items", item);
+    }
+  }
+  return Number(derived || 0);
+}
+
+async function appendStockMove({
+  itemId,
+  sizeId = null,
+  delta = 0,
+  reason = "adjust",
+  refId = null,
+  actor = _syncClient(),
+  source = "app",
+} = {}) {
+  if (!itemId || !db || !db.objectStoreNames.contains("stock_moves")) return null;
+  if (!Number.isFinite(Number(delta))) return null;
+  const moveId = _stockMoveId({ reason, refId, itemId, sizeId });
+  const move = {
+    id: moveId,
+    itemId: String(itemId),
+    sizeId: sizeId == null || sizeId === "" ? null : String(sizeId),
+    delta: Number(delta),
+    reason: String(reason || "adjust"),
+    refId: refId == null ? null : String(refId),
+    actor: String(actor || _syncClient()),
+    source: String(source || "app"),
+    createdAt: new Date().toISOString(),
+    _hlc: _nextHlc(),
+    _serverUpdatedAt: new Date().toISOString(),
+    fbId: moveId,
+  };
+  await dbPut("stock_moves", move);
+  await recomputeDerivedQtyForItem(itemId, sizeId);
+  await recordStockAudit("stock_move_written", { itemId, sizeId, delta, reason, refId });
+  await _queueSync("stock_moves", move, "upsert");
+  return move;
+}
+
+async function deriveQty(itemId, sizeId = null) {
+  if (!itemId || !db || !db.objectStoreNames.contains("stock_moves")) {
+    if (itemId == null) return 0;
+    const item = await dbGet("items", itemId);
+    if (!item) return 0;
+    if (sizeId != null && sizeId !== "") {
+      const rec = await dbAll("shoe_sizes");
+      const sizeRec = rec.find(
+        (s) => String(s.itemId) === String(itemId) && String(s.size ?? s.id) === String(sizeId),
+      );
+      return Number(sizeRec?.qty || item.qty || 0);
+    }
+    return Number(item.qty || 0);
+  }
+  const moves = await dbAll("stock_moves");
+  const qty = moves
+    .filter((m) => String(m.itemId) === String(itemId))
+    .filter((m) =>
+      sizeId == null || sizeId === "" ? m.sizeId == null : String(m.sizeId) === String(sizeId),
+    )
+    .reduce((sum, move) => sum + Number(move.delta || 0), 0);
+  return Number(qty || 0);
+}
+
+async function readableStockQty(item, sizeId = null) {
+  if (!item) return 0;
+  if (sizeId != null && sizeId !== "") {
+    const itemId = item.itemId ?? item.id;
+    if (item.qtyCache != null && Number.isFinite(Number(item.qtyCache))) {
+      return Number(item.qtyCache);
+    }
+    if (item.id != null || item.itemId != null) {
+      return await deriveQty(itemId, sizeId);
+    }
+    return Number(item.qty || 0);
+  }
+  if (item.qtyCache != null && Number.isFinite(Number(item.qtyCache))) {
+    return Number(item.qtyCache);
+  }
+  if (item.id != null) {
+    return await deriveQty(item.id, null);
+  }
+  return Number(item.qty || 0);
+}
+
+async function markStockLedgerMigrationCutover() {
+  if (!db || !db.objectStoreNames.contains("sync_meta")) return false;
+  const state = (await dbGet("sync_meta", "stock_ledger_migration")) || {
+    key: "stock_ledger_migration",
+    version: 0,
+    cutoverHlc: { ...STOCK_LEDGER_MIGRATION_HLC },
+    cutoverAt: new Date().toISOString(),
+  };
+  state.key = "stock_ledger_migration";
+  state.version = 1;
+  state.cutoverHlc = { ...STOCK_LEDGER_MIGRATION_HLC };
+  state.cutoverAt = new Date().toISOString();
+  await dbPut("sync_meta", state);
+  return true;
+}
+
+async function backfillStockMovesFromCurrentQty({ dryRun = false } = {}) {
+  if (!db) return { skipped: true, dryRun, reason: "db unavailable" };
+  if (!db.objectStoreNames.contains("items")) return { skipped: true, dryRun, reason: "items store missing" };
+  if (!db.objectStoreNames.contains("stock_moves")) {
+    return { skipped: true, dryRun, reason: "stock_moves store missing" };
+  }
+
+  const meta = (await dbGet("sync_meta", "stock_ledger_migration")) || null;
+  if (meta && Number(meta.version || 0) >= 1 && !dryRun) {
+    return { skipped: true, dryRun, reason: "migration already applied" };
+  }
+
+  const items = await dbAll("items");
+  const sizes = await dbAll("shoe_sizes");
+  const records = [];
+
+  for (const item of items) {
+    const qty = Number(item.qty || 0);
+    if (qty === 0) continue;
+    const key = `migrate:cutover:${item.id}:_`;
+    records.push({
+      id: key,
+      itemId: String(item.id),
+      sizeId: null,
+      delta: qty,
+      reason: "migrate",
+      refId: key,
+      actor: "migration",
+      source: "backfill",
+      createdAt: new Date().toISOString(),
+      _hlc: { ...STOCK_LEDGER_MIGRATION_HLC },
+      _serverUpdatedAt: new Date().toISOString(),
+      fbId: key,
+    });
+  }
+
+  for (const size of sizes) {
+    const qty = Number(size.qty || 0);
+    if (qty === 0) continue;
+    const key = `migrate:cutover:${size.itemId}:${size.id}`;
+    records.push({
+      id: key,
+      itemId: String(size.itemId),
+      sizeId: String(size.id),
+      delta: qty,
+      reason: "migrate",
+      refId: key,
+      actor: "migration",
+      source: "backfill",
+      createdAt: new Date().toISOString(),
+      _hlc: { ...STOCK_LEDGER_MIGRATION_HLC },
+      _serverUpdatedAt: new Date().toISOString(),
+      fbId: key,
+    });
+  }
+
+  if (dryRun) return { dryRun: true, items: records.length, records };
+
+  for (const rec of records) {
+    const existing = await dbGet("stock_moves", rec.id);
+    if (!existing) await dbPut("stock_moves", rec);
+  }
+
+  await markStockLedgerMigrationCutover();
+  return { dryRun: false, items: records.length, records };
+}
+
+async function runStockLedgerMigrationCutover({ dryRun = false, force = false } = {}) {
+  if (!db) {
+    throw new Error("Database is not ready yet");
+  }
+  const meta = (await dbGet("sync_meta", "stock_ledger_migration")) || null;
+  if (!force && meta && Number(meta.version || 0) >= 1) {
+    return {
+      dryRun,
+      skipped: true,
+      reason: "migration already applied",
+      migration: meta,
+    };
+  }
+
+  const baseline = await runStockLedgerIntegrityCheck();
+  const backfill = await backfillStockMovesFromCurrentQty({ dryRun });
+
+  if (dryRun) {
+    return {
+      dryRun: true,
+      baseline,
+      backfill,
+      migration: meta,
+    };
+  }
+
+  const items = await dbAll("items");
+  const allSizes = await dbAll("shoe_sizes");
+  for (const item of items) {
+    const derived = await deriveQty(item.id, null);
+    item.qtyCache = Number(derived || 0);
+    item.updatedAt = new Date().toISOString();
+    await dbPut("items", item);
+  }
+
+  for (const size of allSizes) {
+    const derived = await deriveQty(size.itemId, size.id);
+    size.qtyCache = Number(derived || 0);
+    size.updatedAt = new Date().toISOString();
+    await dbPut("shoe_sizes", size);
+  }
+
+  const summary = {
+    dryRun: false,
+    baseline,
+    backfill,
+    migration: await dbGet("sync_meta", "stock_ledger_migration"),
+    derivedApplied: true,
+  };
+
+  await recordStockAudit("ledger_cutover_run", {
+    summary,
+    startedAt: new Date().toISOString(),
+  });
+
+  return summary;
+}
+
+async function verifyDerivedStockSnapshot() {
+  if (!db || !db.objectStoreNames.contains("items")) {
+    return { checked: 0, mismatches: [] };
+  }
+  const items = await dbAll("items");
+  const mismatches = [];
+  for (const item of items) {
+    const derived = await deriveQty(item.id, null);
+    const legacy = Number(item.qty || 0);
+    if (Number(derived) !== Number(legacy)) {
+      mismatches.push({ itemId: item.id, code: item.code, legacy, derived });
+    }
+  }
+  return { checked: items.length, mismatches };
+}
+
+window.backfillStockMovesFromCurrentQty = backfillStockMovesFromCurrentQty;
+window.ensureSyncMetaClientId = ensureSyncMetaClientId;
+window.markStockLedgerMigrationCutover = markStockLedgerMigrationCutover;
+window.runStockLedgerMigrationCutover = runStockLedgerMigrationCutover;
+window.verifyDerivedStockSnapshot = verifyDerivedStockSnapshot;
+window.deriveQty = deriveQty;
+window.recordStockAudit = recordStockAudit;
+
+async function runStockLedgerIntegrityCheck() {
+  if (!db || !db.objectStoreNames.contains("items")) return { checked: 0, mismatches: [] };
+  const items = await dbAll("items");
+  const mismatches = [];
+  for (const item of items) {
+    const derived = await deriveQty(item.id, null);
+    const legacy = Number(item.qty || 0);
+    if (Number(derived) !== Number(legacy)) {
+      mismatches.push({
+        itemId: item.id,
+        code: item.code,
+        legacy,
+        derived,
+      });
+      await recordStockAudit("stock_mismatch", {
+        itemId: item.id,
+        code: item.code,
+        legacy,
+        derived,
+      });
+      console.warn("[stock-ledger] mismatch", { itemId: item.id, legacy, derived });
+    }
+    await recomputeDerivedQtyForItem(item.id, null);
+  }
+  return { checked: items.length, mismatches };
+}
+
+window.runStockLedgerIntegrityCheck = runStockLedgerIntegrityCheck;
+
 function _syncIdentity(store, record) {
   if (!record) return "";
   if (record.fbId) return String(record.fbId);
@@ -314,6 +720,7 @@ function _prepareSyncRecord(store, data) {
 }
 
 function _queueRecord(store, record, operation, clock, now) {
+  const hlc = _nextHlc();
   const payload =
     operation === "delete"
       ? {
@@ -324,6 +731,11 @@ function _queueRecord(store, record, operation, clock, now) {
   payload._syncVersion = clock;
   payload._syncClient = _syncClient();
   payload._syncUpdatedAt = now;
+  payload._hlc = {
+    wall: Number(hlc.wall || 0),
+    counter: Number(hlc.counter || 0),
+    clientId: String(hlc.clientId || _syncClient()),
+  };
   payload._syncMutationId = record._syncMutationId || _syncUuid();
   return {
     opId: payload._syncMutationId + ":" + clock,
@@ -4879,6 +5291,14 @@ async function saveItem() {
       sizeRec.profit = nextSell - nextBuy;
       sizeRec.updatedAt = new Date().toISOString();
       await dbPut("shoe_sizes", sizeRec);
+      await appendStockMove({
+        itemId: item?.id || sizeRec.itemId,
+        sizeId: sizeRec.id,
+        delta: addQty,
+        reason: "receive",
+        refId: `restock:${item?.id || sizeRec.itemId}:${sizeRec.id}`,
+        actor: currentUser ? currentUser.username : "system",
+      });
       fbSyncShoeSize(sizeRec);
       if (item) {
         const updSz = await getShoeSizes(item.code);
@@ -8614,7 +9034,9 @@ async function confirmSale() {
       !isNaN(actualRaw) && actualRaw > 0 ? actualRaw : sellPrice;
 
     // ── Validate stock ─────────────────────────────────────────────
-    const maxQty = _isShoeSale && _sellShoeSize ? _sellShoeSize.qty : item.qty;
+    const maxQty = _isShoeSale && _sellShoeSize
+      ? Number(_sellShoeSize.qtyCache ?? _sellShoeSize.qty ?? 0)
+      : await readableStockQty(item);
     const itemLabel = item.name || item.code;
     if (!Number.isFinite(qty) || qty <= 0) {
       Validate.fail("Enter quantity to sell", "sm-qty");
@@ -8719,12 +9141,24 @@ async function confirmSale() {
         _sellShoeSize.qty = Math.max(0, (_sellShoeSize.qty || 0) - qty);
         _sellShoeSize.updatedAt = new Date().toISOString();
         await dbPut("shoe_sizes", _sellShoeSize);
-        fbSyncShoeSize(_sellShoeSize);
         const allSz = await getShoeSizes(item.code);
         item.qty = allSz.reduce((t, s) => t + s.qty, 0);
+        _sellShoeSize.qtyCache = Number(_sellShoeSize.qty || 0);
+        item.qtyCache = Number(item.qty || 0);
+        if (db.objectStoreNames.contains("stock_moves")) {
+          await appendStockMove({
+            itemId: item.id,
+            sizeId: _sellShoeSize.id,
+            delta: -qty,
+            reason: "sale",
+            refId: `sale:${sale.id}`,
+            actor: currentUser ? currentUser.username : "system",
+          });
+        }
         fbSyncShoeSize(_sellShoeSize);
       } else {
         item.qty = Math.max(0, item.qty - qty);
+        item.qtyCache = Number(item.qty || 0);
       }
     }
     await dbPut("items", item);
@@ -8734,6 +9168,25 @@ async function confirmSale() {
     sale.fbId = stableSaleFbId(sale);
     const newSaleId = await dbAdd("sales", sale);
     sale.id = newSaleId;
+    if (!item.isRecord && !(item.isShoe && _sellShoeSize)) {
+      await appendStockMove({
+        itemId: item.id,
+        sizeId: _isShoeSale && _sellShoeSize ? _sellShoeSize.id : null,
+        delta: -qty,
+        reason: "sale",
+        refId: `sale:${sale.id}`,
+        actor: currentUser ? currentUser.username : "system",
+      });
+    } else if (!item.isRecord && _isShoeSale && _sellShoeSize) {
+      await appendStockMove({
+        itemId: item.id,
+        sizeId: _sellShoeSize.id,
+        delta: -qty,
+        reason: "sale",
+        refId: `sale:${sale.id}`,
+        actor: currentUser ? currentUser.username : "system",
+      });
+    }
     fbSyncItem(item);
     fbSyncSale(sale);
 
@@ -9920,6 +10373,7 @@ let _pushFailCount = 0;
 let _lastSyncError = null;
 let _syncRetryTimer = null;
 let _syncLock = Promise.resolve();
+let _syncDeadLetterLimit = 8;
 let _syncProcessing = false;
 let _syncLeaseOwner = _syncUuid();
 let _syncChannel = null;
@@ -10027,6 +10481,34 @@ function _clearSyncProgress() {
   if (percent) percent.textContent = "100%";
   if (track) track.setAttribute("aria-valuenow", "100");
 }
+
+async function _moveQueueEntryToDeadLetter(entry, error) {
+  if (!entry || !db.objectStoreNames.contains("sync_dead_letters")) return;
+  const deadLetter = {
+    collection: entry.collection,
+    recordKey: entry.recordKey,
+    operation: entry.operation,
+    payload: entry.payload || {},
+    attempts: entry.attempts || 0,
+    createdAt: entry.createdAt || Date.now(),
+    failedAt: Date.now(),
+    lastError: error && (error.message || String(error)),
+    status: "dead-letter",
+  };
+  try {
+    await dbAdd("sync_dead_letters", deadLetter);
+  } catch (_) {
+    // Ignore record-store-write errors; the queue item is still marked failed
+    // and should be retained in sync_queue until manual recovery.
+  }
+}
+
+async function _readDeadLetters() {
+  if (!db || !db.objectStoreNames.contains("sync_dead_letters")) return [];
+  return dbAll("sync_dead_letters");
+}
+
+window._readDeadLetters = _readDeadLetters;
 
 // ══════════════════════════════════════════════════════════════════
 // SYNC VERSION SYSTEM
@@ -10936,7 +11418,10 @@ async function _queueSyncUnlocked(collection, record, operation = "upsert") {
   if (!key) throw new Error("Cannot queue sync record without an id");
   const queue = await dbAll("sync_queue");
   const same = queue.filter(
-    (q) => q.collection === collection && q.recordKey === key,
+    (q) =>
+      q.collection === collection &&
+      q.recordKey === key &&
+      (q.operation || "upsert") === operation,
   );
   if (
     operation === "delete" &&
@@ -11354,9 +11839,10 @@ function _remoteTimestamp(record) {
 }
 
 function _compareSyncVersion(a, b) {
-  const av = Number(a && a._syncVersion) || 0;
-  const bv = Number(b && b._syncVersion) || 0;
-  if (av !== bv) return av - bv;
+  const aHlc = a && (a._hlc || { wall: Number(a._syncVersion) || 0, counter: 0, clientId: a._syncClient || "" });
+  const bHlc = b && (b._hlc || { wall: Number(b._syncVersion) || 0, counter: 0, clientId: b._syncClient || "" });
+  const hlcDelta = _hlcCompare(aHlc, bHlc);
+  if (hlcDelta !== 0) return hlcDelta;
   const at = _remoteTimestamp(a),
     bt = _remoteTimestamp(b);
   if (at !== bt) return at - bt;
@@ -11590,13 +12076,14 @@ async function processSyncQueue(silent = false, onProgress = null) {
       // superseded and would only waste writes.
       const newestByRecord = new Map();
       for (const entry of queue) {
-        const key = entry.collection + ":" + entry.recordKey;
+        const key =
+          entry.collection + ":" + entry.recordKey + ":" + (entry.operation || "upsert");
         const previous = newestByRecord.get(key);
-        if (
-          !previous ||
-          (entry.payload?._syncVersion || 0) >=
-            (previous.payload?._syncVersion || 0)
-        ) {
+        const prevVersion = previous?.payload?._hlc ||
+          { wall: Number(previous?.payload?._syncVersion || 0), counter: 0, clientId: previous?.payload?._syncClient || "" };
+        const nextVersion = entry.payload?._hlc ||
+          { wall: Number(entry.payload?._syncVersion || 0), counter: 0, clientId: entry.payload?._syncClient || "" };
+        if (!previous || _hlcCompare(nextVersion, prevVersion) >= 0) {
           newestByRecord.set(key, entry);
         }
       }
@@ -11656,6 +12143,31 @@ async function processSyncQueue(silent = false, onProgress = null) {
               120000,
               2000 * Math.pow(2, Math.min((q.attempts || 1) - 1, 6)),
             );
+          if ((q.attempts || 0) >= _syncDeadLetterLimit) {
+            q.status = "dead-letter";
+            await _moveQueueEntryToDeadLetter(q, q.lastError);
+            await dbDelete("sync_queue", q.id).catch(() => {});
+            _lastSyncError = q.lastError;
+            _syncState = {
+              ..._syncState,
+              phase: "dead-letter",
+              failed: failed,
+              lastError: _lastSyncError,
+            };
+            _broadcastSyncStatus();
+            setFbStatus("error");
+            if (!silent) {
+              toast(
+                "Sync dead-letter: " +
+                  (q.collection || "record") +
+                  " failed after " +
+                  (q.attempts || 0) +
+                  " attempts",
+                "err",
+              );
+            }
+            break;
+          }
           await dbPut("sync_queue", q).catch(() => {});
           _lastSyncError = q.lastError;
           // Keep retrying automatically. Previously a failed queue item was
@@ -11747,6 +12259,7 @@ async function pullFromFirebase(silent = false, options = {}) {
         "items",
         "sales",
         "shoe_sizes",
+        "stock_moves",
         "finances",
         "business_days",
         "wishlist",
