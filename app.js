@@ -4895,6 +4895,10 @@ function wishStatus(wish) {
   return wish?.status || "prospective";
 }
 
+function isWishlistSaleMonitorEntry(wish) {
+  return String(wish?.source || "") === "sale-monitor";
+}
+
 function wishDateLabel(value) {
   if (!value) return "";
   const date = new Date(value + (value.length === 10 ? "T00:00:00" : ""));
@@ -6816,6 +6820,7 @@ async function renderWishlistPage() {
     }
   }
   let filteredWishes = allWishes
+    .filter((wish) => !isWishlistSaleMonitorEntry(wish))
     .filter((wish) => showStocked ? wishStatus(wish) === "stocked" : showDay ? wishStatus(wish) !== "stocked" && Boolean(wish.dayPurchaseDate) : wishStatus(wish) !== "stocked" && !wish.dayPurchaseDate)
     .filter((wish) => (!showDay && !showToBuy) || !selectedPriority || wishPriority(wish) === selectedPriority)
     .filter((wish) => (!showDay && !showToBuy) || !selectedSupplier || String(wish.supplierId || wish.supplier || "").trim() === selectedSupplier)
@@ -8775,6 +8780,7 @@ async function confirmOffStockSale() {
     estimatedCost: buyPrice,
     note: "Sold before stock count",
     status: "unaccounted",
+    source: "sale-monitor",
     saleId: sale.id,
     createdAt: new Date().toISOString(),
     createdBy: currentUser ? currentUser.username : "system",
