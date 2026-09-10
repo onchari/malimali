@@ -380,8 +380,15 @@ function _writeLocal(store, operation, data, id) {
             return;
           }
           const record = isDelete ? result : data;
-          if (isDelete) record._syncMutationId = _syncUuid();
           if (isDelete) {
+            if (!record || !record.fbId) {
+              const stableId =
+                store === "wishlist" && typeof stableWishFbId === "function"
+                  ? stableWishFbId(record)
+                  : _syncIdentity(store, record);
+              if (record && stableId) record.fbId = String(stableId);
+            }
+            record._syncMutationId = _syncUuid();
             os.delete(id);
           } else {
             record._syncMutationId = _syncUuid();
@@ -468,6 +475,27 @@ function dbPut(store, data) {
 }
 function dbDelete(store, id) {
   return _writeLocal(store, "delete", null, id);
+}
+
+async function cascadeDeleteRecord(store, id, record = null) {
+  if (!db.objectStoreNames.contains(store)) return;
+  const localRecord = record || (await dbGet(store, id));
+  if (!localRecord) return;
+  const fbKey =
+    localRecord.fbId ||
+    (store === "wishlist" && typeof stableWishFbId === "function"
+      ? stableWishFbId(localRecord)
+      : _syncIdentity(store, localRecord));
+  if (fbKey) {
+    const synced = { ...localRecord, fbId: String(fbKey) };
+    if (store === "wishlist" && !localRecord.fbId) {
+      synced.fbId = stableWishFbId(synced);
+      await dbPut(store, synced);
+    }
+    await _queueSync(store, synced, "delete");
+  }
+  await dbDelete(store, id);
+  scheduleSync(50);
 }
 
 // ===================================================================
@@ -6539,9 +6567,9 @@ async function saveWishlistItem() {
 async function deleteWishlistItem(id, skipRender) {
   const wishId = Number(id);
   if (!Number.isInteger(wishId) || wishId < 1) return;
+  const wish = await dbGet("wishlist", wishId);
   await removeWishPhoto(wishId);
-  await dbDelete("wishlist", wishId);
-  scheduleSync();
+  await cascadeDeleteRecord("wishlist", wishId, wish);
   if (!skipRender) {
     await renderWishlistPage();
     await renderStockMonitor();
@@ -7143,13 +7171,11 @@ async function deleteItem() {
     if (toDelete.isShoe) {
       const sizes = await getShoeSizes(toDelete.code);
       for (const sz of sizes) {
-        if (sz.fbId) await _queueSync("shoe_sizes", sz, "delete");
-        await dbDelete("shoe_sizes", sz.id);
+        await cascadeDeleteRecord("shoe_sizes", sz.id, sz);
       }
     }
-    await dbDelete("items", currentDetailId);
+    await cascadeDeleteRecord("items", currentDetailId, toDelete);
     await removeItemPhoto(currentDetailId);
-    if (toDelete && toDelete.fbId) fbDeleteItem(toDelete.fbId);
     closeSheet();
     allItems = await dbAll("items");
     renderList();
