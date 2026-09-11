@@ -690,22 +690,6 @@
       <button type="button" class="wish-save-btn" onclick="saveWishlistItem()"><i class="fa-solid fa-floppy-disk"></i> Save to wishlist</button>
     </footer>
   </div>
-  <div class="wish-chooser-overlay" id="wishlist-planner-chooser" role="dialog" aria-modal="true" aria-labelledby="wishlist-planner-chooser-title">
-    <div class="wish-chooser-panel">
-      <h2 id="wishlist-planner-chooser-title">Add to planner</h2>
-      <span class="add-label">Planner</span>
-      <div class="wish-planner-choice" role="radiogroup" aria-label="Planner choice">
-        <label><input type="radio" name="wishlist-planner-mode" value="__new__" checked onchange="updateWishlistPlannerChoice()"> New planner</label>
-        <label><input type="radio" name="wishlist-planner-mode" value="__existing__" onchange="updateWishlistPlannerChoice()"> Existing planner</label>
-      </div>
-      <select class="add-input" id="wishlist-existing-planner" hidden aria-label="Existing planner"></select>
-      <input class="add-input" id="wishlist-new-planner-name" type="text" placeholder="Planner name">
-      <div class="wish-chooser-actions">
-        <button type="button" class="wish-filter-action" onclick="closeWishlistPlannerChooser()">Cancel</button>
-        <button type="button" class="wish-filter-action" onclick="addSelectedWishlistToPlanner()"><i class="fa-solid fa-floppy-disk"></i> Save planner</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- ============================================================== 
