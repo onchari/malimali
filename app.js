@@ -5076,12 +5076,12 @@ function renderWishDetailItemInfo(wish) {
 function buildWishListCardHtml(row, wishRec) {
   const stocked = wishStatus(wishRec) === "stocked";
   const actionHtml = stocked
-    ? '<div class="wish-card-actions wish-card-stocked-actions"><button type="button" class="wish-card-return-btn" title="Move to To buy" aria-label="Move to To buy" onclick="event.stopPropagation();moveWishlistFromStocked(' + row.wishId + ',\'list\')"><i class="fa-solid fa-list"></i></button><button type="button" class="wish-card-day-btn" title="Move to Day Purchase" aria-label="Move to Day Purchase" onclick="event.stopPropagation();moveWishlistFromStocked(' + row.wishId + ',\'day\')"><i class="fa-solid fa-calendar-day"></i></button></div>'
+    ? '<div class="wish-card-actions wish-card-stocked-actions"><button type="button" class="wish-card-return-btn" title="Move to To buy" aria-label="Move to To buy" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')"><i class="fa-solid fa-list"></i></button><button type="button" class="wish-card-day-btn" title="Move to Day Purchase" aria-label="Move to Day Purchase" onclick="event.stopPropagation();moveWishlistFromStocked(' + row.wishId + ',\'day\')"><i class="fa-solid fa-calendar-day"></i></button></div>'
     : row.section === "day"
-      ? '<div class="wish-card-actions"><button type="button" class="wish-card-return-btn" title="Return to To buy" aria-label="Return to To buy" onclick="event.stopPropagation();moveWishlistFromDayToBuy(' + row.wishId + ')\"><i class="fa-solid fa-arrow-left"></i></button><button type="button" class="wish-card-mark-btn" title="Mark stocked" aria-label="Mark stocked" onclick="event.stopPropagation();markWishlistStockedDirect(' + row.wishId + ')\"><i class="fa-solid fa-check"></i></button><button type="button" class="wish-card-stock-btn" title="Stock to track" aria-label="Stock to track" onclick="event.stopPropagation();startWishlistRestock(' + row.wishId + ')\"><i class="fa-solid fa-boxes-stacked"></i></button></div>'
-    : '<button type="button" class="wish-card-day-btn" title="Add to Day Purchase" aria-label="Add to Day Purchase" onclick="event.stopPropagation();addWishlistToDayPurchase(' + row.wishId + ')\"><i class="fa-solid fa-calendar-plus"></i></button>';
+      ? '<div class="wish-card-actions"><button type="button" class="wish-card-return-btn" title="Return to To buy" aria-label="Return to To buy" onclick="event.stopPropagation();moveWishlistFromDayToBuy(' + row.wishId + ')\"><i class="fa-solid fa-arrow-left"></i></button><button type="button" class="wish-card-mark-btn" title="Mark stocked" aria-label="Mark stocked" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')\"><i class="fa-solid fa-check"></i></button><button type="button" class="wish-card-stock-btn" title="Stock to track" aria-label="Stock to track" onclick="event.stopPropagation();startWishlistRestock(' + row.wishId + ')\"><i class="fa-solid fa-boxes-stacked"></i></button></div>'
+      : '<div class="wish-card-actions"><button type="button" class="wish-card-day-btn" title="Add to Day Purchase" aria-label="Add to Day Purchase" onclick="event.stopPropagation();addWishlistToDayPurchase(' + row.wishId + ')\"><i class="fa-solid fa-calendar-plus"></i></button><button type="button" class="wish-card-mark-btn" title="Mark stocked" aria-label="Mark stocked" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')\"><i class="fa-solid fa-check"></i></button></div>';
   return (
-    '<article class="wish-card' + (stocked ? " wish-card-stocked" : "") + (row.section === "day" ? " wish-card-day" : "") + '">' +
+    '<article class="wish-card' + (stocked ? " wish-card-stocked" : "") + (row.section === "day" ? " wish-card-day" : "") + '" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')">' +
     '<div class="wish-card-body">' +
     '<div class="wish-card-name">' +
     escapeHtml(row.name || row.code || "Item") +
@@ -5237,6 +5237,14 @@ function wishlistDetailStock() {
   if (id) startWishlistRestock(id);
 }
 window.wishlistDetailStock = wishlistDetailStock;
+
+async function wishlistDetailEdit() {
+  const id = _currentWishDetailId;
+  if (!id) return;
+  closeWishlistDetail();
+  await openEditWishlistItem(id);
+}
+window.wishlistDetailEdit = wishlistDetailEdit;
 
 async function wishlistDetailDelete() {
   const id = _currentWishDetailId;
@@ -6690,19 +6698,16 @@ function showWishlistSection(section) {
   const addPanel = document.getElementById("wishlist-add-panel");
   const controls = document.getElementById("wishlist-controls");
   const tabList = document.getElementById("wish-tab-list");
-  const tabDay = document.getElementById("wish-tab-day");
-  const tabStocked = document.getElementById("wish-tab-stocked");
   const tabAdd = document.getElementById("wish-tab-add");
-  const isAdd = section === "add";
+  const normalizedSection = section === "day" || section === "stocked" ? "list" : (section === "add" ? "add" : "list");
+  const isAdd = normalizedSection === "add";
   rememberWishlistFilters(_activeWishlistSection);
-  _activeWishlistSection = ["day", "stocked", "add"].includes(section) ? section : "list";
+  _activeWishlistSection = normalizedSection;
   saveLastView();
   if (listPanel) listPanel.style.display = isAdd ? "none" : "block";
   if (addPanel) addPanel.style.display = isAdd ? "block" : "none";
   if (controls) controls.style.display = isAdd ? "none" : "block";
   if (tabList) tabList.classList.toggle("active", !isAdd && _activeWishlistSection === "list");
-  if (tabDay) tabDay.classList.toggle("active", !isAdd && _activeWishlistSection === "day");
-  if (tabStocked) tabStocked.classList.toggle("active", !isAdd && _activeWishlistSection === "stocked");
   if (tabAdd) tabAdd.classList.toggle("active", isAdd);
   if (isAdd) {
     renderWishlistSupplierOptions();
@@ -6777,28 +6782,24 @@ async function renderWishlistPage() {
   const list = document.getElementById("wishlist-list");
   if (!list) return;
   const allWishes = db.objectStoreNames.contains("wishlist") ? await dbAll("wishlist") : [];
-  const showStocked = _activeWishlistSection === "stocked";
-  const showDay = _activeWishlistSection === "day";
-  const showToBuy = !showStocked && !showDay;
-  if (showToBuy) _selectedWishlistIds.clear();
+  const showList = _activeWishlistSection === "list";
+  const showAdd = _activeWishlistSection === "add";
+  if (showList) _selectedWishlistIds.clear();
   const controls = document.getElementById("wishlist-controls");
-  const filterPrefix = showDay ? "day" : "list";
+  const filterPrefix = "list";
   const priorityFilterId = "wish-" + filterPrefix + "-filter-priority";
   const supplierFilterId = "wish-" + filterPrefix + "-filter-supplier";
   const categoryFilterId = "wish-" + filterPrefix + "-filter-category";
   rememberWishlistFilters(_activeWishlistSection);
-  const filterState = showDay ? {} : _wishlistFilterState.list;
+  const filterState = _wishlistFilterState.list;
   const selectedPriority = filterState.priority;
   const selectedSupplier = filterState.supplier;
   const selectedCategory = filterState.category;
-  const dayPreviewWishes = showDay ? wishlistFilteredRecords(allWishes, "day") : [];
-  const dayEstimatedTotal = dayPreviewWishes.reduce((total, wish) =>
-    total + Math.max(0, Number(wish.qty || 0)) * Math.max(0, Number(wish.estimatedCost || 0)), 0);
   if (controls) {
-      const bulkBar = showToBuy
-        ? '<div id="wishlist-bulk-actions" class="wish-bulk-actions" hidden><button type="button" class="wish-bulk-btn wish-bulk-danger" onclick="bulkDeleteWishlistItems()"><i class="fa-solid fa-trash"></i> Delete</button></div>'
+    const bulkBar = showList
+      ? '<div id="wishlist-bulk-actions" class="wish-bulk-actions" hidden><button type="button" class="wish-bulk-btn wish-bulk-danger" onclick="bulkDeleteWishlistItems()"><i class="fa-solid fa-trash"></i> Delete</button></div>'
       : "";
-    if (showToBuy) {
+    if (showList) {
       const priorities = [...new Set(allWishes.map((wish) => wishPriority(wish)))];
       const suppliers = [...new Set(allWishes.map((wish) => String(wish.supplierId || wish.supplier || "").trim()).filter(Boolean))].sort();
       const categories = [...new Set(allWishes.map((wish) => String(wish.type || wish.category || "").trim()).filter(Boolean))].sort();
@@ -6821,17 +6822,11 @@ async function renderWishlistPage() {
   }
   let filteredWishes = allWishes
     .filter((wish) => !isWishlistSaleMonitorEntry(wish))
-    .filter((wish) => showStocked ? wishStatus(wish) === "stocked" : showDay ? wishStatus(wish) !== "stocked" && Boolean(wish.dayPurchaseDate) : wishStatus(wish) !== "stocked" && !wish.dayPurchaseDate)
-    .filter((wish) => (!showDay && !showToBuy) || !selectedPriority || wishPriority(wish) === selectedPriority)
-    .filter((wish) => (!showDay && !showToBuy) || !selectedSupplier || String(wish.supplierId || wish.supplier || "").trim() === selectedSupplier)
-    .filter((wish) => (!showDay && !showToBuy) || !selectedCategory || String(wish.type || wish.category || "").trim() === selectedCategory)
+    .filter((wish) => !selectedPriority || wishPriority(wish) === selectedPriority)
+    .filter((wish) => !selectedSupplier || String(wish.supplierId || wish.supplier || "").trim() === selectedSupplier)
+    .filter((wish) => !selectedCategory || String(wish.type || wish.category || "").trim() === selectedCategory)
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  if (showToBuy) filteredWishes = wishlistFilteredRecords(filteredWishes, "list");
-  if (showDay && _activeWishlistPlanId) {
-    const plan = getWishlistPlans().find((entry) => String(entry.id) === String(_activeWishlistPlanId));
-    const planIds = new Set((plan?.items || []).map((item) => String(item.wishId)));
-    filteredWishes = filteredWishes.filter((wish) => planIds.has(String(wish.id)));
-  }
+  if (showList) filteredWishes = wishlistFilteredRecords(filteredWishes, "list");
   const rows = filteredWishes.map((wish) => ({
     kind: "prospective",
     wishId: wish.id,
@@ -6847,19 +6842,7 @@ async function renderWishlistPage() {
       : "Nothing yet";
 
   if (!rows.length) {
-    if (showDay) {
-      list.innerHTML = buildWishlistPlannerHtml([]);
-      _wishlistPlannerRows = [];
-      _wishlistPlannerDirty = false;
-      updateWishlistPlannerTotals();
-      return;
-    }
-    list.innerHTML =
-      '<div class="wish-empty">' +
-      '<div class="wish-empty-icon">+</div>' +
-      '<p class="wish-empty-title">No ' + (showStocked ? "stocked" : showDay ? "purchase list items" : "Wish list items") + ' yet</p>' +
-      (!showStocked && !showDay ? '<button type="button" class="wish-empty-btn" onclick="showWishlistSection(\'add\')">Add first item</button>' : "") +
-      "</div>";
+    list.innerHTML = '<div class="wish-empty"><div class="wish-empty-icon">+</div><p class="wish-empty-title">No Wish list items yet</p>' + (!showAdd ? '<button type="button" class="wish-empty-btn" onclick="showWishlistSection(\'add\')">Add first item</button>' : "") + '</div>';
     return;
   }
 
@@ -6867,16 +6850,7 @@ async function renderWishlistPage() {
   if (db.objectStoreNames.contains("wishlist")) {
     (await dbAll("wishlist")).forEach((w) => wishById.set(w.id, w));
   }
-  list.innerHTML = showToBuy
-    ? buildWishTableHtml(rows, wishById)
-    : showDay
-      ? buildWishlistPlannerHtml(filteredWishes)
-      : '<div class="wish-card-list">' + rows.map((row) => buildWishListCardHtml({ ...row, section: _activeWishlistSection }, wishById.get(row.wishId))).join("") + "</div>";
-  if (showDay) {
-    _wishlistPlannerRows = filteredWishes;
-    _wishlistPlannerDirty = false;
-    updateWishlistPlannerTotals();
-  }
+  list.innerHTML = '<div class="wish-card-list">' + rows.map((row) => buildWishListCardHtml({ ...row, section: "list" }, wishById.get(row.wishId))).join("") + "</div>";
 }
 
 async function addWishlistToDayPurchase(wishId) {
@@ -6916,6 +6890,23 @@ async function moveWishlistFromStocked(wishId, destination) {
 }
 window.moveWishlistFromStocked = moveWishlistFromStocked;
 
+async function toggleWishlistStockedState(wishId) {
+  const wish = await dbGet("wishlist", wishId);
+  if (!wish) return;
+  const nextStocked = wishStatus(wish) !== "stocked";
+  wish.status = nextStocked ? "stocked" : "prospective";
+  wish.stockedAt = nextStocked ? new Date().toISOString() : null;
+  wish.stockedItemId = null;
+  wish.dayPurchaseDate = null;
+  if (nextStocked) removeWishFromAllPlanners(wishId);
+  await dbPut("wishlist", wish);
+  scheduleSync();
+  await renderWishlistPage();
+  await renderStockMonitorSummary();
+  toast(nextStocked ? "Marked as stocked" : "Moved back to wishlist", "ok");
+}
+window.toggleWishlistStockedState = toggleWishlistStockedState;
+
 async function markWishlistStockedDirect(wishId) {
   const wish = await dbGet("wishlist", wishId);
   if (!wish) return;
@@ -6933,6 +6924,7 @@ async function markWishlistStockedDirect(wishId) {
 window.markWishlistStockedDirect = markWishlistStockedDirect;
 
 async function saveWishlistItem() {
+  const isEditing = !!_editingWishlistId;
   const name = Input.text("wish-name");
   const code = Input.text("wish-code").toUpperCase();
   const qtyRaw = Input.int("wish-qty");
@@ -6945,6 +6937,53 @@ async function saveWishlistItem() {
   if (!name) return Validate.fail("Enter item name", "wish-name");
   if (!Validate.intOptional(qtyRaw, "wish-qty", "Quantity")) return;
   const qty = qtyRaw === null || qtyRaw <= 0 ? 1 : qtyRaw;
+
+  if (isEditing) {
+    const existing = await dbGet("wishlist", _editingWishlistId);
+    if (!existing) {
+      _editingWishlistId = null;
+      toast("Wishlist item not found", "err");
+      return;
+    }
+    Object.assign(existing, {
+      name,
+      code,
+      qty,
+      type,
+      category: type,
+      estimatedCost: estimatedCost > 0 ? estimatedCost : 0,
+      plannedPurchaseDate,
+      note,
+      supplierId,
+      priority,
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser ? currentUser.username : "system",
+    });
+    await dbPut("wishlist", existing);
+    _editingWishlistId = null;
+    clearWishPhotoForm();
+    [
+      "wish-name",
+      "wish-code",
+      "wish-qty",
+      "wish-cost",
+      "wish-planned-date",
+      "wish-supplier",
+      "wish-note",
+    ].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+    const priorityEl = document.querySelector('input[name="wish-priority"][value="medium"]');
+    if (priorityEl) priorityEl.checked = true;
+    scheduleSync();
+    showWishlistSection("list");
+    await renderWishlistPage();
+    await renderStockMonitorSummary();
+    toast("Wishlist item updated", "ok");
+    return;
+  }
+
   const entry = {
     name,
     code,
@@ -6988,6 +7027,68 @@ async function saveWishlistItem() {
     budgetSummary.unfunded > 0 ? "info" : "ok",
   );
 }
+
+async function openEditWishlistItem(wishId) {
+  const wish = await dbGet("wishlist", wishId);
+  if (!wish) {
+    toast("Wishlist item not found", "err");
+    return;
+  }
+  _editingWishlistId = Number(wishId);
+  showWishlistSection("add");
+  renderWishlistSupplierOptions();
+  const typeEl = document.getElementById("wish-type");
+  if (typeEl) typeEl.value = wish.type || wish.category || "";
+  const priorityEls = document.querySelectorAll('input[name="wish-priority"]');
+  priorityEls.forEach((el) => {
+    el.checked = el.value === (wish.priority || "medium");
+  });
+  [
+    ["wish-name", wish.name || ""],
+    ["wish-code", wish.code || ""],
+    ["wish-qty", Number(wish.qty || 1)],
+    ["wish-cost", Number(wish.estimatedCost || 0)],
+    ["wish-planned-date", wish.plannedPurchaseDate || ""],
+    ["wish-note", wish.note || ""],
+  ].forEach(([id, value]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  });
+  const supplierEl = document.getElementById("wish-supplier");
+  if (supplierEl) supplierEl.value = wish.supplierId || wish.supplier || "";
+  const saveBtn = document.querySelector(".wish-save-btn");
+  if (saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Update wishlist item';
+  const addTitle = document.querySelector("#wishlist-add-panel .wish-section-title");
+  if (addTitle) addTitle.innerHTML = '<span class="wish-section-icon"><i class="fa-solid fa-pen"></i></span>Edit wishlist item';
+  setTimeout(() => document.getElementById("wish-name")?.focus(), 100);
+}
+window.openEditWishlistItem = openEditWishlistItem;
+
+function cancelWishlistEdit() {
+  _editingWishlistId = null;
+  const saveBtn = document.querySelector(".wish-save-btn");
+  if (saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save to wishlist';
+  const addTitle = document.querySelector("#wishlist-add-panel .wish-section-title");
+  if (addTitle) addTitle.innerHTML = '<span class="wish-section-icon"><i class="fa-solid fa-cube"></i></span>What do you want to stock? <span class="add-required">*</span>';
+  [
+    "wish-name",
+    "wish-code",
+    "wish-qty",
+    "wish-cost",
+    "wish-planned-date",
+    "wish-supplier",
+    "wish-note",
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  const priorityEl = document.querySelector('input[name="wish-priority"][value="medium"]');
+  if (priorityEl) priorityEl.checked = true;
+  const typeEl = document.getElementById("wish-type");
+  if (typeEl) typeEl.value = "";
+  showWishlistSection("list");
+}
+window.cancelWishlistEdit = cancelWishlistEdit;
 
 async function deleteWishlistItem(id, skipRender) {
   const wishId = Number(id);

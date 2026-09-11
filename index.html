@@ -617,8 +617,6 @@
 
   <div class="wish-inv-tabs">
     <button type="button" class="wish-inv-tab active" id="wish-tab-list" onclick="showWishlistSection('list')"><i class="fa-solid fa-list"></i> Wish list</button>
-    <button type="button" class="wish-inv-tab" id="wish-tab-day" onclick="showWishlistSection('day')"><i class="fa-solid fa-calendar-day"></i> Purchase List</button>
-    <button type="button" class="wish-inv-tab" id="wish-tab-stocked" onclick="showWishlistSection('stocked')"><i class="fa-solid fa-check"></i> Stocked</button>
     <button type="button" class="wish-inv-tab" id="wish-tab-add" onclick="showWishlistSection('add')"><i class="fa-solid fa-circle-plus"></i> Add</button>
   </div>
   <div id="wishlist-controls" class="wish-list-controls" aria-label="Wishlist"></div>
@@ -1959,6 +1957,7 @@
     <footer class="wish-detail-footer">
       <button type="button" class="wish-detail-btn save" onclick="saveWishlistDetail()">Save</button>
       <div class="wish-detail-footer-row">
+        <button type="button" class="wish-detail-btn stock" onclick="wishlistDetailEdit()"><i class="fa-solid fa-pen"></i> Edit</button>
         <button type="button" class="wish-detail-btn stock" onclick="wishlistDetailStock()"><i class="fa-solid fa-boxes-stacked"></i> Stock
         </button>
         <button type="button" class="wish-detail-btn delete" onclick="wishlistDetailDelete()">Remove</button>
