@@ -2088,31 +2088,11 @@ body {
 }
 .wishlist-planner-inline .wishlist-planner-panel {
   width: 100%;
-  padding: 12px 10px 8px 16px;
-  border: 1px solid rgba(125, 101, 58, 0.2);
-  border-radius: 14px;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      rgba(125, 101, 58, 0.06),
-      rgba(125, 101, 58, 0.06) 2px,
-      transparent 2px,
-      transparent 8px
-    ),
-    linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.12)),
-    #f9f3e3;
-  box-shadow: inset 0 0 0 1px rgba(126, 103, 58, 0.05);
-  position: relative;
-}
-.wishlist-planner-inline .wishlist-planner-panel::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 12px;
-  width: 2px;
-  height: calc(100% - 6px);
-  border-radius: 2px;
-  background: rgba(120, 88, 44, 0.18);
+  padding: 12px 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(11, 36, 28, 0.04);
 }
 .wishlist-planner-head-actions { display: flex; align-items: center; gap: 6px; }
 .wishlist-planner-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
@@ -2130,21 +2110,21 @@ body {
 }
 .wishlist-planner-head {
   margin-bottom: 12px;
-  padding: 4px 2px 6px 0;
-  border-bottom: 1px dashed rgba(112, 88, 51, 0.28);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
 }
 .wishlist-planner-head h2 {
   margin: 0;
   font-size: 18px;
-  color: #52412a;
-  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
-  letter-spacing: 0.04em;
+  color: var(--text);
+  font-family: var(--sans);
+  letter-spacing: 0;
 }
 .wishlist-planner-head p {
   margin: 3px 0 0;
-  color: rgba(82, 65, 42, 0.7);
+  color: var(--muted);
   font-size: 10px;
-  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
+  font-family: var(--sans);
 }
 .wishlist-planner-select {
   min-width: 150px;
@@ -2158,31 +2138,21 @@ body {
 }
 .wishlist-planner-budget {
   padding: 10px;
-  border: 1px solid rgba(91, 74, 44, 0.28);
-  border-radius: 12px;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
-    repeating-linear-gradient(
-      to bottom,
-      rgba(125, 101, 58, 0.06),
-      rgba(125, 101, 58, 0.06) 2px,
-      transparent 2px,
-      transparent 7px
-    ),
-    #f7f0df;
-  box-shadow: inset 0 0 0 1px rgba(126, 103, 58, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface2);
 }
 .wishlist-planner-budget label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 10px; font-weight: 700; }
 .wishlist-planner-budget-row input {
   width: 150px;
   min-height: 36px;
   padding: 7px 9px;
-  border: 1px solid rgba(105, 84, 48, 0.24);
+  border: 1px solid var(--border);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--surface);
   color: var(--text);
   box-sizing: border-box;
-  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
+  font-family: var(--sans);
 }
 .wishlist-planner-budget-row strong { color: var(--accent); font-size: 18px; }
 .wishlist-planner-status { margin-top: 6px; color: var(--muted); font-size: 10px; }
@@ -2194,41 +2164,41 @@ body {
   align-items: center;
   gap: 6px;
   padding: 8px 0 7px;
-  border-bottom: 1px dashed rgba(115, 92, 50, 0.3);
-  background: linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.02));
+  border-bottom: 1px solid var(--border);
+  background: transparent;
 }
 .wishlist-planner-item-name {
   min-width: 0;
-  color: #4f3d25;
+  color: var(--text);
   font-size: 12px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
-  letter-spacing: 0.02em;
+  font-family: var(--sans);
+  letter-spacing: 0;
 }
 .wishlist-planner-item-name small {
   display: block;
   margin-top: 2px;
-  color: rgba(79, 61, 37, 0.7);
+  color: var(--muted);
   font-size: 9px;
   font-weight: 400;
-  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
+  font-family: var(--sans);
 }
 .wishlist-planner-item input {
   width: 100%;
   min-height: 30px;
   padding: 5px 6px;
-  border: 1px solid rgba(96, 78, 51, 0.24);
+  border: 1px solid var(--border);
   border-radius: 6px;
   box-sizing: border-box;
   font-size: 10.5px;
   line-height: 1.2;
   text-align: right;
-  background: rgba(255, 255, 255, 0.48);
-  color: #3e2f1f;
-  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--sans);
 }
 .wishlist-planner-item .wishlist-planner-qty,
 .wishlist-planner-item .wishlist-planner-price {
@@ -2236,13 +2206,13 @@ body {
   max-width: 100%;
 }
 .wishlist-planner-line-total {
-  color: #4c3926;
+  color: var(--text2);
   font-size: 11px;
   font-weight: 700;
   text-align: right;
   justify-self: end;
   min-width: 0;
-  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
+  font-family: var(--sans);
 }
 .wishlist-planner-actions {
   display: flex;
