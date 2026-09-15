@@ -6839,34 +6839,17 @@ body.photo-lightbox-open { overflow: hidden; }
   text-decoration: underline;
 }
 
-/* Wishlist tabs */
-.wish-inv-tabs {
-  display: flex;
-  gap: 0;
-  padding: 0 12px 14px;
-}
-.wish-inv-tab {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 3px;
-  border: 1.5px solid #c9e4dc;
-  border-radius: 0;
-  background: rgba(255,255,255,.6);
-  font-size: 11px;
-  font-weight: 800;
-  font-family: var(--sans);
-  cursor: pointer;
-  color: #124f43;
-}
-.wish-inv-tab:first-child { border-radius: 12px 0 0 12px; }
-.wish-inv-tab:last-child { border-radius: 0 12px 12px 0; }
-.wish-inv-tab i { margin-right: 4px; color: #208d59; }
-.wish-inv-tab.active {
+.wishlist-hero-add {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
   background: #208d59;
-  border-color: #208d59;
   color: #fff;
+  font: 800 11px var(--sans);
+  cursor: pointer;
+  white-space: nowrap;
 }
-.wish-inv-tab.active i { color: #fff; }
+.wishlist-hero-add i { margin-right: 4px; }
 
 /* Finance layout */
 .fin-kpi-grid {
