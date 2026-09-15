@@ -6433,7 +6433,7 @@ async function renderWishlistPage() {
       : "Nothing yet";
 
   if (!rows.length) {
-    list.innerHTML = '<div class="wish-empty"><div class="wish-empty-icon">+</div><p class="wish-empty-title">No Wish list items yet</p>' + (!showAdd ? '<button type="button" class="wish-empty-btn" onclick="showWishlistSection(\'add\')">Add first item</button>' : "") + '</div>';
+    list.innerHTML = '<div class="wish-empty"><div class="wish-empty-icon">+</div><p class="wish-empty-title">No item to display.</p>' + (!showAdd ? '<button type="button" class="wish-empty-btn" onclick="window.showWishlistSection(\'add\')">Add item</button>' : "") + '</div>';
     return;
   }
 
