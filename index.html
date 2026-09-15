@@ -619,47 +619,38 @@
 
   <div id="wishlist-add-panel" class="wish-add-panel" style="display:none;">
     <div class="wish-add-card">
-      <section class="wish-add-block wish-add-primary" aria-labelledby="wish-add-hd-item">
-        <h2 class="wish-section-title"><span class="wish-section-icon"><i class="fa-solid fa-cube"></i></span>What do you want to stock? <span class="add-required">*</span></h2>
+      <section class="wish-add-block wish-add-primary" aria-label="Main wishlist details">
         <div class="wish-add-vendor-grid">
           <div class="wish-add-field">
-            <label class="add-label" for="wish-name"><i class="fa-solid fa-magnifying-glass"></i> Name / Item</label>
-            <input class="add-input" id="wish-name" type="text" placeholder="e.g. YS5981 runner" required autofocus>
+            <input class="add-input" id="wish-name" type="text" placeholder="Name / item *" required autofocus>
           </div>
           <div class="wish-add-field">
-            <label class="add-label" for="wish-code"><i class="fa-solid fa-barcode"></i> Code <span class="wish-add-hint">(optional)</span></label>
-            <input class="add-input add-mono" id="wish-code" type="text" placeholder="YS5981" oninput="updateWishFormProgress()">
-          </div>
-          <div class="wish-add-field">
-            <label class="add-label" for="wish-qty"><i class="fa-solid fa-cubes"></i> Quantity</label>
-              <input class="add-input add-mono add-center" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="1">
-          </div>
-          <div class="wish-add-field">
-            <label class="add-label" for="wish-cost"><i class="fa-solid fa-coins"></i> Estimated cost <span class="wish-add-hint">(optional)</span></label>
-            <input class="add-input add-mono" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="0">
+            <textarea class="add-input wish-note-input" id="wish-note" maxlength="160" placeholder="Notes (optional)"></textarea>
           </div>
         </div>
       </section>
 
-      <section class="wish-add-block" aria-labelledby="wish-add-hd-purchase">
-        <h3 class="wish-section-title"><span class="wish-section-icon"><i class="fa-solid fa-basket-shopping"></i></span>Purchase details</h3>
+      <button type="button" id="wish-add-more-toggle" class="wish-add-more-toggle" aria-expanded="false" onclick="toggleWishAddMore()">
+        <span><i class="fa-solid fa-sliders"></i> Others</span><span class="wish-add-more-chevron" aria-hidden="true"></span>
+      </button>
+      <div id="wish-add-more" class="wish-add-more" hidden>
         <div class="wish-add-vendor-grid">
           <div class="wish-add-field">
-            <label class="add-label" for="wish-supplier"><i class="fa-solid fa-truck"></i> Supplier <span class="wish-add-hint">(optional)</span></label>
+            <input class="add-input add-mono" id="wish-code" type="text" placeholder="Code (optional)" oninput="updateWishFormProgress()">
+          </div>
+          <div class="wish-add-field">
+            <input class="add-input add-mono add-center" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="Quantity (optional)">
+          </div>
+          <div class="wish-add-field">
+            <input class="add-input add-mono" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Estimated cost (optional)">
+          </div>
+          <div class="wish-add-field">
             <select class="add-input" id="wish-supplier">
-              <option value="">Select supplier</option>
+              <option value="">Supplier (optional)</option>
             </select>
           </div>
         </div>
-      </section>
-
-      <section class="wish-add-block wish-add-block-optional" aria-labelledby="wish-add-hd-notes">
-        <h3 class="wish-section-title"><span class="wish-section-icon"><i class="fa-solid fa-file-lines"></i></span>Note <span class="wish-add-hint">(optional)</span></h3>
-        <div class="wish-add-field">
-          <label class="add-label" for="wish-note"><i class="fa-solid fa-pen"></i> Note</label>
-            <textarea class="add-input wish-note-input" id="wish-note" maxlength="160" placeholder="Size, colour, or other detail..."></textarea>
-        </div>
-      </section>
+      </div>
     </div>
 
     <footer class="wish-add-footer">
