@@ -4720,7 +4720,7 @@ function renderWishDetailItemInfo(wish) {
 
 function buildWishTableHtml(rows, wishById) {
   const showStocked = _wishlistFilterState.list.showStocked === true;
-  return '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th style="width:8%;"></th><th><span class="wish-item-header">Item <label class="wish-show-stocked"><input type="checkbox" id="wish-show-stocked"' + (showStocked ? ' checked' : '') + ' onchange="toggleWishlistShowStocked(this.checked)"><span>Show stocked?</span></label></span></th><th>Supply</th><th>Qty</th></tr></thead><tbody>' +
+  return '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th style="width:8%;"></th><th><span class="wish-item-header">Item <label class="wish-show-stocked"><input type="checkbox" id="wish-show-stocked"' + (showStocked ? ' checked' : '') + ' onchange="toggleWishlistShowStocked(this.checked)"><span>Show stocked?</span></label></span></th><th>Supply</th><th>Qty</th><th>Amount</th></tr></thead><tbody>' +
     rows.map((row) => {
       const wish = wishById.get(row.wishId) || {};
       const stocked = wishStatus(wish) === "stocked";
@@ -4728,11 +4728,15 @@ function buildWishTableHtml(rows, wishById) {
       const supply = String(wish.supplierId || wish.supplier || "").trim();
       const qty = Number(wish.qty || row.qty || 0);
       const unit = String(wish.unit || "").trim();
+      const estimatedPrice = Number(wish.estimatedCost || 0);
+      const amount = qty > 0 && estimatedPrice > 0 ? fmt(qty * estimatedPrice) : "";
+      const quantityLine = qty > 0 ? "x " + qty + (unit ? " " + unit : "") : "";
       return '<tr class="wish-row' + (stocked ? ' is-stocked' : '') + '" onclick="openWishlistDetail(' + row.wishId + ')">' +
         '<td class="wish-table-check-cell"><label class="wish-stock-toggle" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')"><input type="checkbox" ' + (stocked ? 'checked' : '') + ' onchange="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')"><span></span></label></td>' +
-        '<td class="wish-table-name"><div class="wish-table-name-main">' + escapeHtml(itemName) + '</div></td>' +
+        '<td class="wish-table-name"><div class="wish-table-name-main">' + escapeHtml(itemName) + '</div>' + (quantityLine ? '<div class="wish-table-name-meta">' + escapeHtml(quantityLine) + '</div>' : '') + '</td>' +
         '<td>' + escapeHtml(supply) + '</td>' +
         '<td>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td>' +
+        '<td>' + escapeHtml(amount) + '</td>' +
         '</tr>';
     }).join("") +
     '</tbody></table></div>';
@@ -15129,10 +15133,11 @@ function renderWishlistSupplierOptions() {
   const select = document.getElementById("wish-supplier");
   if (!select) return;
   const current = select.value;
-  select.innerHTML = '<option value="General">General</option><option value="">No supply</option>' + getWishlistSuppliers()
+  const suppliers = getWishlistSuppliers();
+  select.innerHTML = '<option value="">Select supply</option>' + suppliers
     .map((supplier) => '<option value="' + escapeHtml(supplier) + '">' + escapeHtml(supplier) + '</option>')
     .join("");
-  select.value = current || "General";
+  select.value = suppliers.includes(current) ? current : (suppliers[0] || "");
 }
 
 function renderWishlistUnitOptions() {
