@@ -6412,7 +6412,6 @@ async function renderWishlistPage() {
   }
   let filteredWishes = allWishes
     .filter((wish) => !isWishlistSaleMonitorEntry(wish))
-    .filter((wish) => !selectedPriority || wishPriority(wish) === selectedPriority)
     .filter((wish) => !selectedSupplier || String(wish.supplierId || wish.supplier || "").trim() === selectedSupplier)
     .filter((wish) => !selectedCategory || String(wish.type || wish.category || "").trim() === selectedCategory)
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
