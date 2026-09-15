@@ -612,13 +612,13 @@
       <div class="wishlist-hero-title">Wishlist</div>
       <div class="wishlist-hero-sub">Keep track of what you want to stock</div>
     </div>
-    <div class="wishlist-hero-side"><i class="fa-solid fa-list-check"></i><span>Manage your<br>stock plans</span></div>
+    <div class="wishlist-hero-side">
+      <button type="button" class="wishlist-hero-add" onclick="showWishlistSection('add')">
+        <i class="fa-solid fa-plus"></i> Add item
+      </button>
+    </div>
   </div>
 
-  <div class="wish-inv-tabs">
-    <button type="button" class="wish-inv-tab active" id="wish-tab-list" onclick="showWishlistSection('list')"><i class="fa-solid fa-list"></i> Wish list</button>
-    <button type="button" class="wish-inv-tab" id="wish-tab-add" onclick="showWishlistSection('add')"><i class="fa-solid fa-circle-plus"></i> Add</button>
-  </div>
   <div id="wishlist-controls" class="wish-list-controls" aria-label="Wishlist"></div>
 
   <div id="wishlist-list" class="wish-list-panel"></div>

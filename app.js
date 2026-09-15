@@ -4441,14 +4441,6 @@ const _wishlistFilterState = {
 };
 let _wishlistListSort = "newest";
 const KEY_WISHLIST_LIST_FILTERS = "mgs_wishlist_list_filters";
-let _activeWishlistListFilterName = "";
-const KEY_WISHLIST_ACTION_PLANS = "mgs_wishlist_action_plans";
-const KEY_ACTIVE_WISHLIST_PLAN = "mgs_active_wishlist_plan";
-let _wishlistPlannerRows = [];
-let _wishlistPlannerDirty = false;
-let _activeWishlistPlanId = localStorage.getItem(KEY_ACTIVE_WISHLIST_PLAN) || "";
-let _wishlistPlannerEditing = false;
-const _selectedWishlistPlanIds = new Set();
 const _selectedWishlistIds = new Set();
 
 function updateWishlistSelection() {
@@ -4485,7 +4477,6 @@ function resetWishlistFilters(section) {
   const key = section === "day" ? "day" : "list";
   if (key === "day") return renderWishlistPage();
   _wishlistFilterState[key] = { priority: "", supplier: "", category: "" };
-  _activeWishlistListFilterName = "";
   const prefix = key === "day" ? "day" : "list";
   ["priority", "supplier", "category"].forEach((name) => {
     const control = document.getElementById("wish-" + prefix + "-filter-" + name);
@@ -4716,26 +4707,6 @@ function renderWishDetailItemInfo(wish) {
     )
     .join("");
   el.innerHTML = html || '<p class="wish-vendor-empty">No details</p>';
-}
-
-function buildWishListCardHtml(row, wishRec) {
-  const stocked = wishStatus(wishRec) === "stocked";
-  const actionHtml = stocked
-    ? '<div class="wish-card-actions wish-card-stocked-actions"><button type="button" class="wish-card-return-btn" title="Move to To buy" aria-label="Move to To buy" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')"><i class="fa-solid fa-list"></i></button><button type="button" class="wish-card-day-btn" title="Move to Day Purchase" aria-label="Move to Day Purchase" onclick="event.stopPropagation();moveWishlistFromStocked(' + row.wishId + ',\'day\')"><i class="fa-solid fa-calendar-day"></i></button></div>'
-    : row.section === "day"
-      ? '<div class="wish-card-actions"><button type="button" class="wish-card-return-btn" title="Return to To buy" aria-label="Return to To buy" onclick="event.stopPropagation();moveWishlistFromDayToBuy(' + row.wishId + ')\"><i class="fa-solid fa-arrow-left"></i></button><button type="button" class="wish-card-mark-btn" title="Mark stocked" aria-label="Mark stocked" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')\"><i class="fa-solid fa-check"></i></button><button type="button" class="wish-card-stock-btn" title="Stock to track" aria-label="Stock to track" onclick="event.stopPropagation();startWishlistRestock(' + row.wishId + ')\"><i class="fa-solid fa-boxes-stacked"></i></button></div>'
-      : '<div class="wish-card-actions"><button type="button" class="wish-card-day-btn" title="Add to Day Purchase" aria-label="Add to Day Purchase" onclick="event.stopPropagation();addWishlistToDayPurchase(' + row.wishId + ')\"><i class="fa-solid fa-calendar-plus"></i></button><button type="button" class="wish-card-mark-btn" title="Mark stocked" aria-label="Mark stocked" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')\"><i class="fa-solid fa-check"></i></button></div>';
-  return (
-    '<article class="wish-card' + (stocked ? " wish-card-stocked" : "") + (row.section === "day" ? " wish-card-day" : "") + '" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')">' +
-    '<div class="wish-card-body">' +
-    '<div class="wish-card-name">' +
-    escapeHtml(row.name || row.code || "Item") +
-    "</div>" +
-    '<div class="wish-card-meta">' + (wishRec?.note ? escapeHtml(wishRec.note) : (row.code ? escapeHtml(row.code) + " · " : "") + row.qty + " pcs") + "</div>" +
-    "</div>" +
-    actionHtml +
-    "</article>"
-  );
 }
 
 function buildWishTableHtml(rows, wishById) {
@@ -6217,20 +6188,6 @@ async function renderStockMonitorSummary() {
   if (wishSub) wishSub.textContent = wishCount + " prospective items";
 }
 
-function renderWishlistTypeOptions() {
-  const typeEl = document.getElementById("wish-type");
-  if (typeEl && !typeEl.value) typeEl.value = "General";
-  mountCategoryCascadeField({
-    wrap: document.getElementById("wish-type-cascade"),
-    valueEl: typeEl,
-    breadcrumbEl: document.getElementById("wish-type-breadcrumb"),
-    idPrefix: "wish-type",
-    valueMode: "name",
-    requireLeaf: true,
-    placeholder: "Category...",
-  });
-}
-
 function renderOffstockTypeOptions() {
   mountOffTypeCascade();
 }
@@ -6347,8 +6304,6 @@ function showWishlistSection(section) {
   const listPanel = document.getElementById("wishlist-list");
   const addPanel = document.getElementById("wishlist-add-panel");
   const controls = document.getElementById("wishlist-controls");
-  const tabList = document.getElementById("wish-tab-list");
-  const tabAdd = document.getElementById("wish-tab-add");
   const normalizedSection = section === "day" || section === "stocked" ? "list" : (section === "add" ? "add" : "list");
   const isAdd = normalizedSection === "add";
   rememberWishlistFilters(_activeWishlistSection);
@@ -6357,8 +6312,6 @@ function showWishlistSection(section) {
   if (listPanel) listPanel.style.display = isAdd ? "none" : "block";
   if (addPanel) addPanel.style.display = isAdd ? "block" : "none";
   if (controls) controls.style.display = isAdd ? "none" : "block";
-  if (tabList) tabList.classList.toggle("active", !isAdd && _activeWishlistSection === "list");
-  if (tabAdd) tabAdd.classList.toggle("active", isAdd);
   if (isAdd) {
     renderWishlistSupplierOptions();
     setTimeout(() => document.getElementById("wish-name")?.focus(), 80);
