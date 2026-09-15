@@ -2161,7 +2161,7 @@ function restoreLastView() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY_LAST_VIEW) || "{}");
     if (["stock", "wishlist", "monitor", "add"].includes(saved.inventoryTab)) _activeInventoryTab = saved.inventoryTab;
-    if (["list", "day", "stocked", "add"].includes(saved.wishlistSection)) _activeWishlistSection = saved.wishlistSection;
+    if (saved.wishlistSection === "list") _activeWishlistSection = "list";
     if (["day", "finance"].includes(saved.operationsTab)) _activeOperationsTab = saved.operationsTab;
     if (["sell", "history"].includes(saved.salesTab)) _activeSalesTab = saved.salesTab;
   } catch (_) {}
@@ -2217,7 +2217,7 @@ function showInventoryTab(tab) {
   }
   if (_activeInventoryTab === "stock") renderList();
   if (_activeInventoryTab === "wishlist") {
-    if (typeof showWishlistSection === "function") showWishlistSection(_activeWishlistSection || "list");
+    if (typeof showWishlistSection === "function") showWishlistSection("list");
   }
   if (_activeInventoryTab === "monitor") renderStockMonitor();
   if (_activeInventoryTab === "add") {
