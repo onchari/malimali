@@ -6359,7 +6359,7 @@ function toggleWishAddMore(forceOpen) {
   btn.setAttribute("aria-expanded", open ? "true" : "false");
   btn.classList.toggle("is-open", open);
   const label = btn.querySelector(".wish-add-more-toggle-text");
-  if (label) label.textContent = open ? "Hide options" : "More options";
+  if (label) label.textContent = open ? "Hide other fields" : "Show other fields";
 }
 window.toggleWishAddMore = toggleWishAddMore;
 
