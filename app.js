@@ -4437,7 +4437,7 @@ let _wishStockingFromId = null;
 let _editingWishlistId = null;
 let _activeWishlistSection = "list";
 const _wishlistFilterState = {
-  list: { priority: "", supplier: "", category: "" },
+  list: { priority: "", supplier: "", category: "", showStocked: false },
 };
 const KEY_WISHLIST_LIST_FILTERS = "mgs_wishlist_list_filters";
 const _selectedWishlistIds = new Set();
@@ -4475,7 +4475,7 @@ function toggleAllWishlistSelection(checked) {
 function resetWishlistFilters(section) {
   const key = section === "day" ? "day" : "list";
   if (key === "day") return renderWishlistPage();
-  _wishlistFilterState[key] = { priority: "", supplier: "", category: "" };
+  _wishlistFilterState[key] = { priority: "", supplier: "", category: "", showStocked: false };
   const prefix = key === "day" ? "day" : "list";
   ["priority", "supplier", "category"].forEach((name) => {
     const control = document.getElementById("wish-" + prefix + "-filter-" + name);
@@ -4485,15 +4485,22 @@ function resetWishlistFilters(section) {
 }
 window.resetWishlistFilters = resetWishlistFilters;
 
+function toggleWishlistShowStocked(checked) {
+  _wishlistFilterState.list.showStocked = checked === true;
+  renderWishlistPage();
+}
+window.toggleWishlistShowStocked = toggleWishlistShowStocked;
+
 function wishlistFilteredRecords(allWishes, section) {
-  const showStocked = section === "stocked";
+  const filterState = _wishlistFilterState[section === "day" ? "day" : "list"] || {};
+  const stockedOnly = section === "stocked";
+  const showStocked = stockedOnly || filterState.showStocked === true;
   const showDay = section === "day";
   const showToBuy = !showStocked && !showDay;
-  const filterState = _wishlistFilterState[showDay ? "day" : "list"] || {};
   const records = allWishes
     .filter((wish) => {
-      if (showStocked) return wishStatus(wish) === "stocked";
-      if (showDay) return wishStatus(wish) !== "stocked";
+      if (stockedOnly) return wishStatus(wish) === "stocked";
+      if (!showStocked) return wishStatus(wish) !== "stocked";
       return true;
     })
     .filter((wish) => (!showDay && !showToBuy) || !filterState.priority || wishPriority(wish) === filterState.priority)
@@ -4710,19 +4717,11 @@ function buildWishTableHtml(rows, wishById) {
       const wish = wishById.get(row.wishId) || {};
       const stocked = wishStatus(wish) === "stocked";
       const itemName = String(row.name || row.code || "").trim();
-      const qty = Number(wish.qty || row.qty || 0);
       const supply = String(wish.supplierId || wish.supplier || "").trim();
       const priority = WISHLIST_PRIORITY_LABELS[wishPriority(wish)] || "";
-      const itemLabelParts = itemName ? [itemName] : [];
-      if (supply) itemLabelParts.push("from " + supply);
-      if (qty > 0) itemLabelParts.push("- " + qty + " pcs");
-      if (priority) itemLabelParts.push("- " + priority);
-      const itemLabel = itemLabelParts.join(" ");
-      const code = row.code ? escapeHtml(row.code) : "";
-      const details = [code && code !== itemName ? code : "", qty > 0 ? qty + " pcs" : ""].filter(Boolean).join(" • ");
       return '<tr class="wish-row' + (stocked ? ' is-stocked' : '') + '" onclick="openWishlistDetail(' + row.wishId + ')">' +
         '<td class="wish-table-check-cell"><label class="wish-stock-toggle" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')"><input type="checkbox" ' + (stocked ? 'checked' : '') + ' onchange="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')"><span></span></label></td>' +
-        '<td class="wish-table-name"><div class="wish-table-name-main">' + escapeHtml(itemLabel) + '</div>' + (details ? '<div class="wish-table-name-meta">' + escapeHtml(details) + '</div>' : '') + '</td>' +
+        '<td class="wish-table-name"><div class="wish-table-name-main">' + escapeHtml(itemName) + '</div></td>' +
         '<td>' + escapeHtml(supply) + '</td>' +
         '<td>' + escapeHtml(priority) + '</td>' +
         '</tr>';
@@ -6401,6 +6400,7 @@ async function renderWishlistPage() {
   const filterState = _wishlistFilterState.list;
   const selectedSupplier = filterState.supplier;
   const selectedCategory = filterState.category;
+  const showStocked = filterState.showStocked === true;
   if (controls) {
     if (showList) {
       const suppliers = [...new Set(allWishes.map((wish) => String(wish.supplierId || wish.supplier || "").trim()).filter(Boolean))].sort();
@@ -6408,7 +6408,8 @@ async function renderWishlistPage() {
       controls.innerHTML = '<div class="wish-day-filters" aria-label="Filter wishlist items">' +
         '<button type="button" class="wish-filter-reset-btn" title="Reset filters" aria-label="Reset filters" onclick="resetWishlistFilters(\'list\')"><i class="fa-solid fa-rotate-left"></i></button>' +
         '<select id="' + supplierFilterId + '" class="wish-filter-input" aria-label="Filter by supplier" onchange="renderWishlistPage()"><option value="">All suppliers</option>' + suppliers.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select>' +
-        '<select id="' + categoryFilterId + '" class="wish-filter-input" aria-label="Filter by category" onchange="renderWishlistPage()"><option value="">All categories</option>' + categories.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select></div>';
+        '<select id="' + categoryFilterId + '" class="wish-filter-input" aria-label="Filter by category" onchange="renderWishlistPage()"><option value="">All categories</option>' + categories.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select>' +
+        '<label class="wish-show-stocked"><input type="checkbox" id="wish-show-stocked"' + (showStocked ? ' checked' : '') + ' onchange="toggleWishlistShowStocked(this.checked)"> <span>Show stocked items</span></label></div>';
       document.getElementById(supplierFilterId).value = selectedSupplier;
       document.getElementById(categoryFilterId).value = selectedCategory;
     } else {
@@ -15148,10 +15149,10 @@ function renderWishlistSupplierOptions() {
   const select = document.getElementById("wish-supplier");
   if (!select) return;
   const current = select.value;
-  select.innerHTML = '<option value="">Select supplier</option>' + getWishlistSuppliers()
+  select.innerHTML = '<option value="General">General</option><option value="">No supply</option>' + getWishlistSuppliers()
     .map((supplier) => '<option value="' + escapeHtml(supplier) + '">' + escapeHtml(supplier) + '</option>')
     .join("");
-  select.value = current;
+  select.value = current || "General";
 }
 
 function renderWishlistSuppliers() {
