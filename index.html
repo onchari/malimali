@@ -618,26 +618,30 @@
   <div id="wishlist-add-panel" class="wish-add-panel" style="display:none;">
     <div class="wish-add-card">
       <section class="wish-add-block wish-add-primary" aria-label="Main wishlist details">
-        <div class="wish-add-vendor-grid">
+        <div class="wish-add-vendor-grid wish-add-name-row">
           <div class="wish-add-field">
             <input class="add-input" id="wish-name" type="text" placeholder="Name / item *" required autofocus>
           </div>
+        </div>
+        <div class="wish-add-vendor-grid wish-add-supply-row">
+          <div class="wish-add-field">
+            <select class="add-input" id="wish-supplier" aria-label="Supply">
+              <option value="General" selected>General</option>
+              <option value="">No supply</option>
+            </select>
+          </div>
+          <div class="wish-add-field">
+            <div id="wish-type-cascade" class="add-cascade" aria-label="Category"></div>
+            <div id="wish-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
+            <input type="hidden" id="wish-type" value="">
+          </div>
+        </div>
+        <div class="wish-add-vendor-grid wish-add-notes-row">
           <div class="wish-add-field">
             <textarea class="add-input wish-note-input" id="wish-note" maxlength="160" placeholder="Notes (optional)"></textarea>
           </div>
         </div>
       </section>
-
-      <div class="wish-add-vendor-grid wish-add-meta-grid">
-        <div class="wish-add-field">
-          <div id="wish-type-cascade" class="add-cascade" aria-label="Category"></div>
-          <div id="wish-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
-          <input type="hidden" id="wish-type" value="">
-        </div>
-        <div class="wish-add-field">
-          <input class="add-input" id="wish-planned-date" type="date" aria-label="Planned purchase date">
-        </div>
-      </div>
 
       <button type="button" id="wish-add-more-toggle" class="wish-add-more-toggle" aria-expanded="false" onclick="toggleWishAddMore()">
         <span><i class="fa-solid fa-sliders"></i> <span class="wish-add-more-toggle-text">Show other fields</span></span><span class="wish-add-more-chevron" aria-hidden="true"></span>
@@ -648,10 +652,10 @@
             <input class="add-input add-mono" id="wish-code" type="text" placeholder="Code (optional)" oninput="updateWishFormProgress()">
           </div>
           <div class="wish-add-field">
-            <input class="add-input add-mono add-center" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="Quantity (optional)">
+            <input class="add-input add-mono" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Estimated cost (optional)">
           </div>
           <div class="wish-add-field">
-            <input class="add-input add-mono" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Estimated cost (optional)">
+            <input class="add-input add-mono add-center" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="Quantity (optional)">
           </div>
           <div class="wish-add-field">
             <select class="add-input" id="wish-priority">
@@ -662,9 +666,7 @@
             </select>
           </div>
           <div class="wish-add-field">
-            <select class="add-input" id="wish-supplier">
-              <option value="">Supplier (optional)</option>
-            </select>
+            <input class="add-input" id="wish-planned-date" type="date" aria-label="Planned purchase date" placeholder="Planned purchase date">
           </div>
         </div>
       </div>

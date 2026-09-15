@@ -1943,6 +1943,23 @@ body {
   min-height: 34px;
   font-size: 12px;
 }
+.wish-show-stocked {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.wish-show-stocked input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+}
 .wish-bulk-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2259,7 +2276,7 @@ body {
 }
 .wish-table th,
 .wish-table td {
-  padding: 4px 5px;
+  padding: 2px 4px;
   border: 1px solid var(--border);
   text-align: left;
   vertical-align: middle;
@@ -2274,15 +2291,17 @@ body {
   font-weight: 800;
   text-transform: uppercase;
 }
-.wish-table td { font-weight: 400; font-size: 10px; }
+.wish-table td { font-weight: 400; font-size: 8px; }
 .wish-table tbody tr { cursor: pointer; }
 .wish-table-name-main {
-  font-size: 11px;
+  font-size: 9px;
   line-height: 1.2;
-  font-weight: 700;
+  font-weight: 400;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .wish-table-name-meta {
-  font-size: 9px;
+  font-size: 8px;
   line-height: 1.2;
   opacity: 0.8;
 }
@@ -2295,14 +2314,19 @@ body {
 .wish-table td:nth-child(3) { width: 25%; }
 .wish-table th:nth-child(4),
 .wish-table td:nth-child(4) { width: 21%; }
-.wish-table-name { color: var(--text); }
+.wish-table td.wish-table-name {
+  color: var(--text);
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
 .wish-table-check-cell { text-align: center; }
 .wish-stock-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   cursor: pointer;
 }
 .wish-stock-toggle input {
@@ -2312,10 +2336,10 @@ body {
 }
 .wish-stock-toggle span {
   display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid #2d8a62;
-  border-radius: 4px;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid #2d8a62;
+  border-radius: 3px;
   background: #fff;
   position: relative;
   transition: all .15s ease;
@@ -2327,12 +2351,12 @@ body {
 .wish-stock-toggle input:checked + span::after {
   content: "";
   position: absolute;
-  left: 4px;
+  left: 3px;
   top: 1px;
-  width: 4px;
-  height: 9px;
+  width: 3px;
+  height: 7px;
   border: solid #fff;
-  border-width: 0 2px 2px 0;
+  border-width: 0 1.5px 1.5px 0;
   transform: rotate(45deg);
 }
 .wish-row.is-stocked td,
@@ -2791,13 +2815,11 @@ body {
 .wish-add-primary {
   padding: 16px;
 }
-.wish-add-primary .wish-add-vendor-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-.wish-add-primary .wish-add-field:first-child {
-  grid-column: 1 / -1;
-}
+.wish-add-primary .wish-add-vendor-grid { gap: 12px; }
+.wish-add-primary .wish-add-name-row,
+.wish-add-primary .wish-add-notes-row { grid-template-columns: minmax(0, 1fr); }
+.wish-add-supply-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.wish-add-primary .wish-add-field { min-width: 0; }
 .wish-add-primary .wish-add-field:first-child .add-input {
   min-height: 48px;
   font-size: 17px;
