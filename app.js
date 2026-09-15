@@ -6305,7 +6305,6 @@ function showWishlistSection(section) {
   const controls = document.getElementById("wishlist-controls");
   const normalizedSection = section === "day" || section === "stocked" ? "list" : (section === "add" ? "add" : "list");
   const isAdd = normalizedSection === "add";
-  rememberWishlistFilters(_activeWishlistSection);
   _activeWishlistSection = normalizedSection;
   saveLastView();
   if (listPanel) listPanel.style.display = isAdd ? "none" : "block";
