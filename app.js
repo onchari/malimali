@@ -6451,7 +6451,7 @@ async function saveWishlistItem() {
   const plannedPurchaseDate = Input.raw("wish-planned-date") || "";
   const note = Input.text("wish-note");
   const supplierId = Input.text("wish-supplier");
-  const priority = document.querySelector('input[name="wish-priority"]:checked')?.value || "medium";
+  const priority = document.getElementById("wish-priority")?.value || "medium";
   if (!name) return Validate.fail("Enter item name", "wish-name");
   if (!Validate.intOptional(qtyRaw, "wish-qty", "Quantity")) return;
   const qty = qtyRaw === null || qtyRaw <= 0 ? 1 : qtyRaw;
@@ -6492,8 +6492,8 @@ async function saveWishlistItem() {
       const el = document.getElementById(id);
       if (el) el.value = "";
     });
-    const priorityEl = document.querySelector('input[name="wish-priority"][value="medium"]');
-    if (priorityEl) priorityEl.checked = true;
+    const priorityEl = document.getElementById("wish-priority");
+    if (priorityEl) priorityEl.value = "medium";
     scheduleSync();
     showWishlistSection("list");
     await renderWishlistPage();
@@ -6530,8 +6530,8 @@ async function saveWishlistItem() {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
-  const priorityEl = document.querySelector('input[name="wish-priority"][value="medium"]');
-  if (priorityEl) priorityEl.checked = true;
+  const priorityEl = document.getElementById("wish-priority");
+  if (priorityEl) priorityEl.value = "medium";
   clearWishPhotoForm();
   scheduleSync();
   showWishlistSection("list");
@@ -6554,13 +6554,10 @@ async function openEditWishlistItem(wishId) {
   }
   _editingWishlistId = Number(wishId);
   showWishlistSection("add");
+  toggleWishAddMore(true);
   renderWishlistSupplierOptions();
-  const typeEl = document.getElementById("wish-type");
-  if (typeEl) typeEl.value = wish.type || wish.category || "";
-  const priorityEls = document.querySelectorAll('input[name="wish-priority"]');
-  priorityEls.forEach((el) => {
-    el.checked = el.value === (wish.priority || "medium");
-  });
+  const priorityEl = document.getElementById("wish-priority");
+  if (priorityEl) priorityEl.value = wish.priority || "medium";
   [
     ["wish-name", wish.name || ""],
     ["wish-code", wish.code || ""],
@@ -6600,10 +6597,9 @@ function cancelWishlistEdit() {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
-  const priorityEl = document.querySelector('input[name="wish-priority"][value="medium"]');
-  if (priorityEl) priorityEl.checked = true;
-  const typeEl = document.getElementById("wish-type");
-  if (typeEl) typeEl.value = "";
+  const priorityEl = document.getElementById("wish-priority");
+  if (priorityEl) priorityEl.value = "medium";
+  toggleWishAddMore(false);
   showWishlistSection("list");
 }
 window.cancelWishlistEdit = cancelWishlistEdit;
