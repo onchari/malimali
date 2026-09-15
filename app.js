@@ -1,12 +1,12 @@
 // ===================================================================
-// DATABASE SCHEMA  v15 -  Mandela General Stores
+// DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
 let db;
 // DB_NAME is resolved per-environment in initDB() - production and development
 // use entirely separate local IndexedDB databases so dev work can never
 // touch real shop data. See getFirebaseEnv() / KEY_FIREBASE_ENV below.
 let DB_NAME = "InventoryApp";
-const DB_VER = 16;
+const DB_VER = 17;
 
 // ── APP CONSTANTS ─────────────────────────────────────────────────────
 const KEY_SESSION = "mg_session";
@@ -226,6 +226,22 @@ function initDB() {
         ct.createIndex("idx_date", "date", { unique: false });
         ct.createIndex("idx_fbid", "fbId", { unique: false });
       }
+    }
+
+    // ── v17: normalize wishlist fields ────────────────────────────
+    if (old < 17 && d.objectStoreNames.contains("wishlist")) {
+      const wl = req.transaction.objectStore("wishlist");
+      wl.openCursor().onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (!cursor) return;
+        const wish = cursor.value;
+        if (!wish.unit) wish.unit = "Pcs";
+        delete wish.code;
+        delete wish.priority;
+        delete wish.plannedPurchaseDate;
+        cursor.update(wish);
+        cursor.continue();
+      };
     }
   };
 
@@ -4326,12 +4342,7 @@ function applyWishPhotoFileName(fileName) {
   const parsed = parseWishPhotoFileName(fileName);
   if (!parsed) return false;
   const nameEl = document.getElementById("wish-name");
-  const codeEl = document.getElementById("wish-code");
   if (nameEl) nameEl.value = parsed.itemName;
-  if (codeEl && parsed.shoeCode) {
-    codeEl.value = parsed.shoeCode;
-    toggleWishAddMore(true);
-  }
   return true;
 }
 
@@ -4676,22 +4687,18 @@ function renderWishDetailItemInfo(wish) {
   const el = document.getElementById("wd-item-details");
   if (!el) return;
   const range =
-    parseWishShoeSizeRange(wish.name || "") ||
-    parseWishShoeSizeRange(wish.code || "");
+    parseWishShoeSizeRange(wish.name || "");
   const rows = [
     { label: "Name", value: wish.name },
-    { label: "Code", value: wish.code },
     { label: "Category", value: wish.type },
-    { label: "Qty", value: wish.qty > 0 ? wish.qty + " pcs" : "" },
+    { label: "Supply", value: wish.supplierId || wish.supplier },
+    { label: "Unit", value: wish.unit },
+    { label: "Qty", value: wish.qty > 0 ? wish.qty : "" },
     {
-      label: "BP est.",
+      label: "Estimated price",
       value: wish.estimatedCost > 0 ? fmt(wish.estimatedCost) : "",
     },
     { label: "Sizes", value: range ? range.label : "" },
-    { label: "Priority", value: WISHLIST_PRIORITY_LABELS[wishPriority(wish)] },
-    { label: "Planning category", value: wish.category },
-    { label: "Supplier", value: wish.supplierId || wish.supplier },
-    { label: "Purchase date", value: wishDateLabel(wish.plannedPurchaseDate) },
     { label: "Status", value: wishStatus(wish) === "prospective" ? "Planned" : wishStatus(wish) },
   ];
   const html = rows
@@ -4712,18 +4719,20 @@ function renderWishDetailItemInfo(wish) {
 }
 
 function buildWishTableHtml(rows, wishById) {
-  return '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th style="width:8%;"></th><th>Item</th><th>Supply</th><th>Priority</th></tr></thead><tbody>' +
+  const showStocked = _wishlistFilterState.list.showStocked === true;
+  return '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th style="width:8%;"></th><th><span class="wish-item-header">Item <label class="wish-show-stocked"><input type="checkbox" id="wish-show-stocked"' + (showStocked ? ' checked' : '') + ' onchange="toggleWishlistShowStocked(this.checked)"><span>Show stocked?</span></label></span></th><th>Supply</th><th>Qty</th></tr></thead><tbody>' +
     rows.map((row) => {
       const wish = wishById.get(row.wishId) || {};
       const stocked = wishStatus(wish) === "stocked";
       const itemName = String(row.name || row.code || "").trim();
       const supply = String(wish.supplierId || wish.supplier || "").trim();
-      const priority = WISHLIST_PRIORITY_LABELS[wishPriority(wish)] || "";
+      const qty = Number(wish.qty || row.qty || 0);
+      const unit = String(wish.unit || "").trim();
       return '<tr class="wish-row' + (stocked ? ' is-stocked' : '') + '" onclick="openWishlistDetail(' + row.wishId + ')">' +
         '<td class="wish-table-check-cell"><label class="wish-stock-toggle" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')"><input type="checkbox" ' + (stocked ? 'checked' : '') + ' onchange="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')"><span></span></label></td>' +
         '<td class="wish-table-name"><div class="wish-table-name-main">' + escapeHtml(itemName) + '</div></td>' +
         '<td>' + escapeHtml(supply) + '</td>' +
-        '<td>' + escapeHtml(priority) + '</td>' +
+        '<td>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td>' +
         '</tr>';
     }).join("") +
     '</tbody></table></div>';
@@ -4775,8 +4784,6 @@ async function openWishlistDetail(wishId) {
   if (noteInput) noteInput.value = wish.note || "";
   await renderPurchaseListOptions("wd-purchase-list", wish.purchaseBudgetId || "");
   [
-    ["wd-priority", wishPriority(wish)],
-    ["wd-planned-date", wish.plannedPurchaseDate || ""],
     ["wd-category", wish.category || ""],
     ["wd-supplier", wish.supplierId || wish.supplier || ""],
   ].forEach(([fieldId, value]) => {
@@ -4801,8 +4808,6 @@ async function saveWishlistDetail() {
 
   const noteInput = document.getElementById("wd-note-input");
   wish.note = noteInput ? String(noteInput.value || "").trim() : "";
-  wish.priority = document.getElementById("wd-priority")?.value || "medium";
-  wish.plannedPurchaseDate = document.getElementById("wd-planned-date")?.value || "";
   wish.category = Input.text("wd-category");
   wish.supplierId = Input.text("wd-supplier");
   wish.purchaseBudgetId = document.getElementById("wd-purchase-list")?.value || "";
@@ -6315,6 +6320,7 @@ function showWishlistSection(section) {
   if (controls) controls.style.display = isAdd ? "none" : "block";
   if (isAdd) {
     renderWishlistSupplierOptions();
+    renderWishlistUnitOptions();
     const typeInput = document.getElementById("wish-type");
     if (typeInput) typeInput.value = typeInput.value || "";
     mountWishTypeCascade();
@@ -6346,7 +6352,7 @@ function updateWishFormProgress() {
   const steps = [
     Boolean(Input.text("wish-name")),
     Boolean(Input.text("wish-type") || Input.text("wish-category") || Input.raw("wish-cost")),
-    Boolean(Input.raw("wish-planned-date") || Input.text("wish-supplier")),
+    Boolean(Input.text("wish-supplier")),
     Boolean(Input.text("wish-note") || _wishFormPhotoData),
   ];
   const answered = steps.filter(Boolean).length;
@@ -6400,7 +6406,6 @@ async function renderWishlistPage() {
   const filterState = _wishlistFilterState.list;
   const selectedSupplier = filterState.supplier;
   const selectedCategory = filterState.category;
-  const showStocked = filterState.showStocked === true;
   if (controls) {
     if (showList) {
       const suppliers = [...new Set(allWishes.map((wish) => String(wish.supplierId || wish.supplier || "").trim()).filter(Boolean))].sort();
@@ -6408,8 +6413,7 @@ async function renderWishlistPage() {
       controls.innerHTML = '<div class="wish-day-filters" aria-label="Filter wishlist items">' +
         '<button type="button" class="wish-filter-reset-btn" title="Reset filters" aria-label="Reset filters" onclick="resetWishlistFilters(\'list\')"><i class="fa-solid fa-rotate-left"></i></button>' +
         '<select id="' + supplierFilterId + '" class="wish-filter-input" aria-label="Filter by supplier" onchange="renderWishlistPage()"><option value="">All suppliers</option>' + suppliers.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select>' +
-        '<select id="' + categoryFilterId + '" class="wish-filter-input" aria-label="Filter by category" onchange="renderWishlistPage()"><option value="">All categories</option>' + categories.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select>' +
-        '<label class="wish-show-stocked"><input type="checkbox" id="wish-show-stocked"' + (showStocked ? ' checked' : '') + ' onchange="toggleWishlistShowStocked(this.checked)"> <span>Show stocked items</span></label></div>';
+        '<select id="' + categoryFilterId + '" class="wish-filter-input" aria-label="Filter by category" onchange="renderWishlistPage()"><option value="">All categories</option>' + categories.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select></div>';
       document.getElementById(supplierFilterId).value = selectedSupplier;
       document.getElementById(categoryFilterId).value = selectedCategory;
     } else {
@@ -6430,8 +6434,7 @@ async function renderWishlistPage() {
   const rows = filteredWishes.map((wish) => ({
     kind: "prospective",
     wishId: wish.id,
-    name: wish.name || wish.code || "Prospective item",
-    code: wish.code || "",
+    name: wish.name || "Prospective item",
     type: wish.type || "",
     qty: wish.qty || 0,
   }));
@@ -6472,14 +6475,12 @@ window.toggleWishlistStockedState = toggleWishlistStockedState;
 async function saveWishlistItem() {
   const isEditing = !!_editingWishlistId;
   const name = Input.text("wish-name");
-  const code = Input.text("wish-code").toUpperCase();
+  const unit = Input.text("wish-unit");
   const qtyRaw = Input.int("wish-qty");
   const type = Input.text("wish-type");
   const estimatedCost = Input.money("wish-cost");
-  const plannedPurchaseDate = Input.raw("wish-planned-date") || "";
   const note = Input.text("wish-note");
   const supplierId = Input.text("wish-supplier");
-  const priority = document.getElementById("wish-priority")?.value || "medium";
   if (!name) return Validate.fail("Enter item name", "wish-name");
   if (!Validate.intOptional(qtyRaw, "wish-qty", "Quantity")) return;
   const qty = qtyRaw === null || qtyRaw <= 0 ? 0 : qtyRaw;
@@ -6493,35 +6494,33 @@ async function saveWishlistItem() {
     }
     Object.assign(existing, {
       name,
-      code,
+      unit,
       qty,
       type,
       category: type,
       estimatedCost: estimatedCost > 0 ? estimatedCost : 0,
-      plannedPurchaseDate,
       note,
       supplierId,
-      priority,
       updatedAt: new Date().toISOString(),
       updatedBy: currentUser ? currentUser.username : "system",
     });
+    delete existing.code;
+    delete existing.priority;
+    delete existing.plannedPurchaseDate;
     await dbPut("wishlist", existing);
     _editingWishlistId = null;
     clearWishPhotoForm();
     [
       "wish-name",
-      "wish-code",
+      "wish-unit",
       "wish-qty",
       "wish-cost",
-      "wish-planned-date",
       "wish-supplier",
       "wish-note",
     ].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.value = "";
     });
-    const priorityEl = document.getElementById("wish-priority");
-    if (priorityEl) priorityEl.value = "medium";
     scheduleSync();
     showWishlistSection("list");
     await renderWishlistPage();
@@ -6532,15 +6531,13 @@ async function saveWishlistItem() {
 
   const entry = {
     name,
-    code,
+    unit,
     qty,
     type,
     category: type,
     estimatedCost: estimatedCost > 0 ? estimatedCost : 0,
-    plannedPurchaseDate,
     note,
     supplierId,
-    priority,
     status: "prospective",
     createdAt: new Date().toISOString(),
     createdBy: currentUser ? currentUser.username : "system",
@@ -6548,18 +6545,15 @@ async function saveWishlistItem() {
   entry.id = await dbAdd("wishlist", entry);
   [
     "wish-name",
-    "wish-code",
+    "wish-unit",
     "wish-qty",
     "wish-cost",
-    "wish-planned-date",
     "wish-supplier",
     "wish-note",
   ].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
-  const priorityEl = document.getElementById("wish-priority");
-  if (priorityEl) priorityEl.value = "medium";
   clearWishPhotoForm();
   scheduleSync();
   showWishlistSection("list");
@@ -6583,22 +6577,21 @@ async function openEditWishlistItem(wishId) {
   _editingWishlistId = Number(wishId);
   showWishlistSection("add");
   renderWishlistSupplierOptions();
+  renderWishlistUnitOptions();
   const typeInput = document.getElementById("wish-type");
   if (typeInput) typeInput.value = wish.type || wish.category || "";
   mountWishTypeCascade();
-  const priorityEl = document.getElementById("wish-priority");
-  if (priorityEl) priorityEl.value = wish.priority || "medium";
   [
     ["wish-name", wish.name || ""],
-    ["wish-code", wish.code || ""],
+    ["wish-unit", wish.unit || "Pcs"],
     ["wish-qty", Number(wish.qty || 0)],
     ["wish-cost", Number(wish.estimatedCost || 0)],
-    ["wish-planned-date", wish.plannedPurchaseDate || ""],
     ["wish-note", wish.note || ""],
   ].forEach(([id, value]) => {
     const el = document.getElementById(id);
     if (el) el.value = value;
   });
+  renderWishlistUnitOptions();
   const supplierEl = document.getElementById("wish-supplier");
   if (supplierEl) supplierEl.value = wish.supplierId || wish.supplier || "";
   const saveBtn = document.querySelector(".wish-save-btn");
@@ -6617,10 +6610,9 @@ function cancelWishlistEdit() {
   if (addTitle) addTitle.innerHTML = '<span class="wish-section-icon"><i class="fa-solid fa-cube"></i></span>What do you want to stock? <span class="add-required">*</span>';
   [
     "wish-name",
-    "wish-code",
+    "wish-unit",
     "wish-qty",
     "wish-cost",
-    "wish-planned-date",
     "wish-supplier",
     "wish-note",
   ].forEach((id) => {
@@ -6630,8 +6622,6 @@ function cancelWishlistEdit() {
   const typeInput = document.getElementById("wish-type");
   if (typeInput) typeInput.value = "";
   mountWishTypeCascade();
-  const priorityEl = document.getElementById("wish-priority");
-  if (priorityEl) priorityEl.value = "medium";
   toggleWishAddMore(false);
   showWishlistSection("list");
 }
@@ -9459,34 +9449,28 @@ async function seedDevDatabase() {
   const wishSeed = [
     {
       name: "Solar Lamp - Rechargeable",
-      code: "SOLAR-LAMP",
+      unit: "Pcs",
       qty: 10,
       estimatedCost: 850,
-      plannedPurchaseDate: _seedLocalDateStr(new Date()),
       note: "Customers keep asking for these",
-      priority: "urgent",
       supplierId: "Nairobi Wholesale",
       category: "Electronics",
     },
     {
       name: "School Bag - Junior",
-      code: "BAG-JUNIOR",
+      unit: "Pcs",
       qty: 15,
       estimatedCost: 1200,
-      plannedPurchaseDate: _seedLocalDateStr(new Date()),
       note: "Blue or black, durable material",
-      priority: "medium",
       supplierId: "City Traders",
       category: "Clothes",
     },
     {
       name: "Motorcycle Helmet",
-      code: "HELMET-MOTO",
+      unit: "Pcs",
       qty: 5,
       estimatedCost: 1800,
-      plannedPurchaseDate: _seedLocalDateStr(new Date()),
       note: "Check with boda riders on preferred brand",
-      priority: "low",
       supplierId: "Eastside Supplies",
       category: "General",
     },
@@ -9546,12 +9530,10 @@ async function seedDevDatabase() {
     const variation = Math.floor(i / wishNames.length) + 1;
     wishSeed.push({
       name: product + " " + variation,
-      code: "WISH-" + String(i + 1).padStart(3, "0"),
+      unit: "Pcs",
       qty: 2 + (i % 24),
       estimatedCost: 150 + (i % 8) * 100,
-      plannedPurchaseDate: i < 12 ? _seedLocalDateStr(now) : null,
       note: wishNotes[i % wishNotes.length],
-      priority: wishPriorities[i % wishPriorities.length],
       supplierId: wishSuppliers[i % wishSuppliers.length],
       category: wishCategories[i % wishCategories.length],
     });
@@ -9560,12 +9542,10 @@ async function seedDevDatabase() {
     const w = wishSeed[i];
     await dbAdd("wishlist", {
       name: w.name,
-      code: w.code,
+      unit: w.unit || "Pcs",
       qty: w.qty,
       estimatedCost: w.estimatedCost || 150 + (i % 8) * 100,
-      plannedPurchaseDate: w.plannedPurchaseDate || null,
       note: w.note,
-      priority: w.priority || wishPriorities[i % wishPriorities.length],
       supplierId: w.supplierId || wishSuppliers[i % wishSuppliers.length],
       category: w.category || wishCategories[i % wishCategories.length],
       dayPurchaseDate: i < 12 ? _seedLocalDateStr(now) : null,
@@ -15155,6 +15135,28 @@ function renderWishlistSupplierOptions() {
   select.value = current || "General";
 }
 
+function renderWishlistUnitOptions() {
+  const picker = document.getElementById("wish-unit-picker");
+  const valueInput = document.getElementById("wish-unit");
+  if (!picker || !valueInput) return;
+  const current = valueInput.value;
+  const units = getActiveUnits();
+  const selected = units.some((unit) => unit.abbr === current) ? current : (units[0]?.abbr || "");
+  valueInput.value = selected;
+  picker.innerHTML = units.length
+    ? units.map((unit) => '<button type="button" class="unit-chip wish-unit-chip' + (unit.abbr === selected ? ' unit-chip-on' : '') + '" role="radio" aria-checked="' + (unit.abbr === selected ? 'true' : 'false') + '" onclick="selectWishlistUnit(&quot;' + escapeHtml(unit.abbr) + '&quot;)"><span class="unit-chip-abbr">' + escapeHtml(unit.abbr) + '</span><span class="unit-chip-name">' + escapeHtml(unit.name) + '</span></button>').join("")
+    : '<span class="wish-unit-empty">No active units</span>';
+}
+
+function selectWishlistUnit(abbr) {
+  const valueInput = document.getElementById("wish-unit");
+  if (!valueInput) return;
+  const activeUnits = getActiveUnits();
+  valueInput.value = activeUnits.some((unit) => unit.abbr === abbr) ? abbr : (activeUnits[0]?.abbr || "");
+  renderWishlistUnitOptions();
+}
+window.selectWishlistUnit = selectWishlistUnit;
+
 function renderWishlistSuppliers() {
   const list = document.getElementById("wishlist-suppliers-list");
   if (!list) return;
@@ -15241,6 +15243,7 @@ function toggleUnit(abbr) {
   if (u) u.active = !u.active;
   _saveUnits(units);
   renderUnitsSettings();
+  if (typeof renderWishlistUnitOptions === "function") renderWishlistUnitOptions();
 }
 window.toggleUnit = toggleUnit;
 
@@ -15248,6 +15251,7 @@ function resetUnitsToDefault() {
   if (!confirm("Reset units to the default list?")) return;
   _saveUnits([...DEFAULT_UNITS]);
   renderUnitsSettings();
+  if (typeof renderWishlistUnitOptions === "function") renderWishlistUnitOptions();
   toast("Units reset to defaults", "ok");
 }
 window.resetUnitsToDefault = resetUnitsToDefault;
@@ -15273,6 +15277,7 @@ function addCustomUnit() {
   document.getElementById("unit-add-abbr").value = "";
   document.getElementById("unit-add-name").value = "";
   renderUnitsSettings();
+  if (typeof renderWishlistUnitOptions === "function") renderWishlistUnitOptions();
   toast("Unit added", "ok");
 }
 window.addCustomUnit = addCustomUnit;
@@ -15282,6 +15287,7 @@ function removeCustomUnit(abbr) {
   const units = getUnits().filter((u) => u.abbr !== abbr);
   _saveUnits(units);
   renderUnitsSettings();
+  if (typeof renderWishlistUnitOptions === "function") renderWishlistUnitOptions();
 }
 window.removeCustomUnit = removeCustomUnit;
 

@@ -1954,6 +1954,21 @@ body {
   white-space: nowrap;
   cursor: pointer;
 }
+.wish-item-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.wish-item-header .wish-show-stocked {
+  min-height: 0;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: none;
+}
+.wish-item-header .wish-show-stocked input {
+  width: 12px;
+  height: 12px;
+}
 .wish-show-stocked input {
   width: 15px;
   height: 15px;
@@ -2309,11 +2324,11 @@ body {
 .wish-table th:nth-child(1),
 .wish-table td:nth-child(1) { width: 8%; }
 .wish-table th:nth-child(2),
-.wish-table td:nth-child(2) { width: 46%; }
+.wish-table td:nth-child(2) { width: 45%; }
 .wish-table th:nth-child(3),
-.wish-table td:nth-child(3) { width: 25%; }
+.wish-table td:nth-child(3) { width: 20%; }
 .wish-table th:nth-child(4),
-.wish-table td:nth-child(4) { width: 21%; }
+.wish-table td:nth-child(4) { width: 12%; text-align: center; }
 .wish-table td.wish-table-name {
   color: var(--text);
   overflow: visible;
@@ -3061,6 +3076,32 @@ body {
 }
 .wish-add-more .add-cascade {
   width: 100%;
+}
+.wish-add-more .wish-add-field:first-child {
+  grid-column: 1 / -1;
+}
+.wish-unit-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: stretch;
+}
+.wish-unit-picker .wish-unit-chip {
+  appearance: none;
+  font-family: var(--sans);
+  min-width: 52px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.wish-unit-picker .wish-unit-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.wish-unit-empty {
+  color: var(--muted);
+  font-size: 11px;
+  padding: 8px 0;
 }
 .wish-add-footer {
   position: sticky;
