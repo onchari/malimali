@@ -4439,7 +4439,6 @@ let _activeWishlistSection = "list";
 const _wishlistFilterState = {
   list: { priority: "", supplier: "", category: "" },
 };
-let _wishlistListSort = "newest";
 const KEY_WISHLIST_LIST_FILTERS = "mgs_wishlist_list_filters";
 const _selectedWishlistIds = new Set();
 
@@ -4497,19 +4496,6 @@ function wishlistFilteredRecords(allWishes, section) {
     .filter((wish) => (!showDay && !showToBuy) || !filterState.supplier || String(wish.supplierId || wish.supplier || "").trim() === filterState.supplier)
     .filter((wish) => (!showDay && !showToBuy) || !filterState.category || String(wish.type || wish.category || "").trim() === filterState.category)
     ;
-  if (section === "list") {
-    const text = (value) => String(value || "").trim().toLowerCase();
-    const priorityRank = { urgent: 0, high: 1, medium: 2, low: 3 };
-    records.sort((a, b) => {
-      if (_wishlistListSort === "name") return text(a.name || a.code).localeCompare(text(b.name || b.code));
-      if (_wishlistListSort === "priority") return (priorityRank[wishPriority(a)] ?? 9) - (priorityRank[wishPriority(b)] ?? 9);
-      if (_wishlistListSort === "category") return text(a.type || a.category).localeCompare(text(b.type || b.category));
-      if (_wishlistListSort === "supplier") return text(a.supplierId || a.supplier).localeCompare(text(b.supplierId || b.supplier));
-      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-    });
-  } else {
-    records.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  }
   return records;
 }
 
@@ -6400,12 +6386,9 @@ async function renderWishlistPage() {
       controls.innerHTML = '<div class="wish-day-filters" aria-label="Filter wishlist items">' +
         '<button type="button" class="wish-filter-reset-btn" title="Reset filters" aria-label="Reset filters" onclick="resetWishlistFilters(\'list\')"><i class="fa-solid fa-rotate-left"></i></button>' +
         '<select id="' + supplierFilterId + '" class="wish-filter-input" aria-label="Filter by supplier" onchange="renderWishlistPage()"><option value="">All suppliers</option>' + suppliers.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select>' +
-        '<select id="' + categoryFilterId + '" class="wish-filter-input" aria-label="Filter by category" onchange="renderWishlistPage()"><option value="">All categories</option>' + categories.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select>' +
-        '</div><div class="wish-filter-actions"><select id="wish-list-sort" class="wish-filter-input wish-sort-input" aria-label="Sort To buy items" onchange="_wishlistListSort=this.value;renderWishlistPage()"><option value="newest">Newest first</option><option value="name">Name</option><option value="category">Category</option><option value="supplier">Supplier</option></select></div>';
+        '<select id="' + categoryFilterId + '" class="wish-filter-input" aria-label="Filter by category" onchange="renderWishlistPage()"><option value="">All categories</option>' + categories.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select></div>';
       document.getElementById(supplierFilterId).value = selectedSupplier;
       document.getElementById(categoryFilterId).value = selectedCategory;
-      const sortSelect = document.getElementById("wish-list-sort");
-      if (sortSelect) sortSelect.value = _wishlistListSort;
     } else {
       controls.innerHTML = "";
     }
