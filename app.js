@@ -4491,11 +4491,20 @@ function wishlistFilteredRecords(allWishes, section) {
   const showToBuy = !showStocked && !showDay;
   const filterState = _wishlistFilterState[showDay ? "day" : "list"] || {};
   const records = allWishes
-    .filter((wish) => showStocked ? wishStatus(wish) === "stocked" : wishStatus(wish) !== "stocked")
+    .filter((wish) => {
+      if (showStocked) return wishStatus(wish) === "stocked";
+      if (showDay) return wishStatus(wish) !== "stocked";
+      return true;
+    })
     .filter((wish) => (!showDay && !showToBuy) || !filterState.priority || wishPriority(wish) === filterState.priority)
     .filter((wish) => (!showDay && !showToBuy) || !filterState.supplier || String(wish.supplierId || wish.supplier || "").trim() === filterState.supplier)
     .filter((wish) => (!showDay && !showToBuy) || !filterState.category || String(wish.type || wish.category || "").trim() === filterState.category)
-    ;
+    .sort((a, b) => {
+      const aStocked = wishStatus(a) === "stocked" ? 1 : 0;
+      const bStocked = wishStatus(b) === "stocked" ? 1 : 0;
+      if (aStocked !== bStocked) return aStocked - bStocked;
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    });
   return records;
 }
 
@@ -4696,16 +4705,25 @@ function renderWishDetailItemInfo(wish) {
 }
 
 function buildWishTableHtml(rows, wishById) {
-  return '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th>Item</th><th>Category</th><th>Priority</th></tr></thead><tbody>' +
+  return '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th style="width:8%;"></th><th>Item</th><th>Supply</th><th>Priority</th></tr></thead><tbody>' +
     rows.map((row) => {
       const wish = wishById.get(row.wishId) || {};
-      const itemName = escapeHtml(row.name || row.code || "Item");
-      const details = [row.code ? escapeHtml(row.code) : "", row.qty ? row.qty + " pcs" : ""].filter(Boolean).join(" • ");
-      const category = wish.type || wish.category || "-";
-      const priority = WISHLIST_PRIORITY_LABELS[wishPriority(wish)] || "Medium";
-      return '<tr onclick="openWishlistDetail(' + row.wishId + ')">' +
-        '<td class="wish-table-name"><div class="wish-table-name-main">' + itemName + '</div>' + (details ? '<div class="wish-table-name-meta">' + details + '</div>' : '') + '</td>' +
-        '<td>' + escapeHtml(category) + '</td>' +
+      const stocked = wishStatus(wish) === "stocked";
+      const itemName = String(row.name || row.code || "").trim();
+      const qty = Number(wish.qty || row.qty || 0);
+      const supply = String(wish.supplierId || wish.supplier || "").trim();
+      const priority = WISHLIST_PRIORITY_LABELS[wishPriority(wish)] || "";
+      const itemLabelParts = itemName ? [itemName] : [];
+      if (supply) itemLabelParts.push("from " + supply);
+      if (qty > 0) itemLabelParts.push("- " + qty + " pcs");
+      if (priority) itemLabelParts.push("- " + priority);
+      const itemLabel = itemLabelParts.join(" ");
+      const code = row.code ? escapeHtml(row.code) : "";
+      const details = [code && code !== itemName ? code : "", qty > 0 ? qty + " pcs" : ""].filter(Boolean).join(" • ");
+      return '<tr class="wish-row' + (stocked ? ' is-stocked' : '') + '" onclick="openWishlistDetail(' + row.wishId + ')">' +
+        '<td class="wish-table-check-cell"><label class="wish-stock-toggle" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')"><input type="checkbox" ' + (stocked ? 'checked' : '') + ' onchange="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')"><span></span></label></td>' +
+        '<td class="wish-table-name"><div class="wish-table-name-main">' + escapeHtml(itemLabel) + '</div>' + (details ? '<div class="wish-table-name-meta">' + escapeHtml(details) + '</div>' : '') + '</td>' +
+        '<td>' + escapeHtml(supply) + '</td>' +
         '<td>' + escapeHtml(priority) + '</td>' +
         '</tr>';
     }).join("") +
@@ -6298,6 +6316,10 @@ function showWishlistSection(section) {
   if (controls) controls.style.display = isAdd ? "none" : "block";
   if (isAdd) {
     renderWishlistSupplierOptions();
+    const typeInput = document.getElementById("wish-type");
+    if (typeInput) typeInput.value = typeInput.value || "";
+    mountWishTypeCascade();
+    toggleWishAddMore(false);
     setTimeout(() => document.getElementById("wish-name")?.focus(), 80);
   } else if (listPanel) {
     listPanel.scrollTop = 0;
@@ -6397,7 +6419,12 @@ async function renderWishlistPage() {
     .filter((wish) => !isWishlistSaleMonitorEntry(wish))
     .filter((wish) => !selectedSupplier || String(wish.supplierId || wish.supplier || "").trim() === selectedSupplier)
     .filter((wish) => !selectedCategory || String(wish.type || wish.category || "").trim() === selectedCategory)
-    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    .sort((a, b) => {
+      const aStocked = wishStatus(a) === "stocked" ? 1 : 0;
+      const bStocked = wishStatus(b) === "stocked" ? 1 : 0;
+      if (aStocked !== bStocked) return aStocked - bStocked;
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    });
   if (showList) filteredWishes = wishlistFilteredRecords(filteredWishes, "list");
   const rows = filteredWishes.map((wish) => ({
     kind: "prospective",
@@ -6454,7 +6481,7 @@ async function saveWishlistItem() {
   const priority = document.getElementById("wish-priority")?.value || "medium";
   if (!name) return Validate.fail("Enter item name", "wish-name");
   if (!Validate.intOptional(qtyRaw, "wish-qty", "Quantity")) return;
-  const qty = qtyRaw === null || qtyRaw <= 0 ? 1 : qtyRaw;
+  const qty = qtyRaw === null || qtyRaw <= 0 ? 0 : qtyRaw;
 
   if (isEditing) {
     const existing = await dbGet("wishlist", _editingWishlistId);
@@ -6554,14 +6581,16 @@ async function openEditWishlistItem(wishId) {
   }
   _editingWishlistId = Number(wishId);
   showWishlistSection("add");
-  toggleWishAddMore(true);
   renderWishlistSupplierOptions();
+  const typeInput = document.getElementById("wish-type");
+  if (typeInput) typeInput.value = wish.type || wish.category || "";
+  mountWishTypeCascade();
   const priorityEl = document.getElementById("wish-priority");
   if (priorityEl) priorityEl.value = wish.priority || "medium";
   [
     ["wish-name", wish.name || ""],
     ["wish-code", wish.code || ""],
-    ["wish-qty", Number(wish.qty || 1)],
+    ["wish-qty", Number(wish.qty || 0)],
     ["wish-cost", Number(wish.estimatedCost || 0)],
     ["wish-planned-date", wish.plannedPurchaseDate || ""],
     ["wish-note", wish.note || ""],
@@ -6597,6 +6626,9 @@ function cancelWishlistEdit() {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
+  const typeInput = document.getElementById("wish-type");
+  if (typeInput) typeInput.value = "";
+  mountWishTypeCascade();
   const priorityEl = document.getElementById("wish-priority");
   if (priorityEl) priorityEl.value = "medium";
   toggleWishAddMore(false);
