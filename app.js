@@ -4434,6 +4434,7 @@ function clearAddFormPhoto() {
 
 let _currentWishDetailId = null;
 let _wishStockingFromId = null;
+let _editingWishlistId = null;
 let _activeWishlistSection = "list";
 const _wishlistFilterState = {
   list: { priority: "", supplier: "", category: "" },
