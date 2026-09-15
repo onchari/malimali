@@ -643,30 +643,17 @@
         </div>
       </section>
 
-      <button type="button" id="wish-add-more-toggle" class="wish-add-more-toggle" aria-expanded="false" onclick="toggleWishAddMore()">
-        <span><i class="fa-solid fa-sliders"></i> <span class="wish-add-more-toggle-text">Show other fields</span></span><span class="wish-add-more-chevron" aria-hidden="true"></span>
-      </button>
-      <div id="wish-add-more" class="wish-add-more" hidden>
+      <div id="wish-add-more" class="wish-add-more">
         <div class="wish-add-vendor-grid">
           <div class="wish-add-field">
-            <input class="add-input add-mono" id="wish-code" type="text" placeholder="Code (optional)" oninput="updateWishFormProgress()">
-          </div>
-          <div class="wish-add-field">
-            <input class="add-input add-mono" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Estimated cost (optional)">
+            <div id="wish-unit-picker" class="wish-unit-picker" role="radiogroup" aria-label="Unit of measurement"></div>
+            <input type="hidden" id="wish-unit" value="">
           </div>
           <div class="wish-add-field">
             <input class="add-input add-mono add-center" id="wish-qty" type="number" min="1" inputmode="numeric" placeholder="Quantity (optional)">
           </div>
           <div class="wish-add-field">
-            <select class="add-input" id="wish-priority">
-              <option value="medium">Priority (Medium)</option>
-              <option value="urgent">Priority (Urgent)</option>
-              <option value="high">Priority (High)</option>
-              <option value="low">Priority (Low)</option>
-            </select>
-          </div>
-          <div class="wish-add-field">
-            <input class="add-input" id="wish-planned-date" type="date" aria-label="Planned purchase date" placeholder="Planned purchase date">
+            <input class="add-input add-mono" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Estimated price (optional)">
           </div>
         </div>
       </div>
@@ -1893,19 +1880,6 @@
       <section class="wish-detail-block" aria-labelledby="wd-hd-planning">
         <h3 class="wish-detail-section-label" id="wd-hd-planning">Purchase planning</h3>
         <div class="wish-detail-edit-grid">
-          <div class="wish-detail-field">
-            <label class="add-label" for="wd-priority">Priority</label>
-            <select class="add-input" id="wd-priority">
-              <option value="medium">Medium</option>
-              <option value="urgent">Urgent</option>
-              <option value="high">High</option>
-              <option value="low">Low</option>
-            </select>
-          </div>
-          <div class="wish-detail-field">
-            <label class="add-label" for="wd-planned-date">Planned purchase date</label>
-            <input class="add-input" id="wd-planned-date" type="date">
-          </div>
           <div class="wish-detail-field">
             <label class="add-label" for="wd-category">Planning category</label>
             <input class="add-input" id="wd-category" type="text" maxlength="80">
