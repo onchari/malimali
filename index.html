@@ -607,13 +607,11 @@
      ============================================================== -->
 <div class="page" id="page-wishlist" style="padding:12px 12px 0;">
   <div class="wishlist-header">
-    <div class="wishlist-title">Wishlist</div>
+    <div id="wishlist-controls" class="wish-list-controls" aria-label="Wishlist"></div>
     <button type="button" class="wishlist-add-btn" onclick="window.showWishlistSection('add')">
       <i class="fa-solid fa-plus"></i> Add item
     </button>
   </div>
-
-  <div id="wishlist-controls" class="wish-list-controls" aria-label="Wishlist"></div>
 
   <div id="wishlist-list" class="wish-list-panel"></div>
 
@@ -629,6 +627,17 @@
           </div>
         </div>
       </section>
+
+      <div class="wish-add-vendor-grid wish-add-meta-grid">
+        <div class="wish-add-field">
+          <div id="wish-type-cascade" class="add-cascade" aria-label="Category"></div>
+          <div id="wish-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
+          <input type="hidden" id="wish-type" value="">
+        </div>
+        <div class="wish-add-field">
+          <input class="add-input" id="wish-planned-date" type="date" aria-label="Planned purchase date">
+        </div>
+      </div>
 
       <button type="button" id="wish-add-more-toggle" class="wish-add-more-toggle" aria-expanded="false" onclick="toggleWishAddMore()">
         <span><i class="fa-solid fa-sliders"></i> <span class="wish-add-more-toggle-text">Show other fields</span></span><span class="wish-add-more-chevron" aria-hidden="true"></span>
