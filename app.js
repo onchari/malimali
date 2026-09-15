@@ -4710,18 +4710,17 @@ function renderWishDetailItemInfo(wish) {
 }
 
 function buildWishTableHtml(rows, wishById) {
-  return '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th class="wish-select-cell"><input type="checkbox" id="wish-select-all" aria-label="Select all To buy items" onchange="toggleAllWishlistSelection(this.checked)"></th><th>Item</th><th>Supplier</th><th>Action</th></tr></thead><tbody>' +
-    rows.map((row, index) => {
+  return '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th>Item</th><th>Category</th><th>Priority</th></tr></thead><tbody>' +
+    rows.map((row) => {
       const wish = wishById.get(row.wishId) || {};
-      const supplier = String(wish.supplierId || wish.supplier || "").trim();
       const itemName = escapeHtml(row.name || row.code || "Item");
-      const details = [row.code ? escapeHtml(row.code) : "", row.qty ? row.qty + " pcs" : "", wish.note ? escapeHtml(wish.note) : ""].filter(Boolean).join(" • ");
-      const actionHtml = '<button type="button" class="wish-table-action wish-table-action-ok" title="Mark stocked" aria-label="Mark stocked" onclick="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')"><i class="fa-solid fa-check"></i></button>';
-      return '<tr>' +
-        '<td class="wish-select-cell"><input type="checkbox" class="wish-select-item" value="' + row.wishId + '" aria-label="Select ' + escapeHtml(row.name || row.code || "item") + '" onchange="updateWishlistSelection()"></td>' +
+      const details = [row.code ? escapeHtml(row.code) : "", row.qty ? row.qty + " pcs" : ""].filter(Boolean).join(" • ");
+      const category = wish.type || wish.category || "-";
+      const priority = WISHLIST_PRIORITY_LABELS[wishPriority(wish)] || "Medium";
+      return '<tr onclick="openWishlistDetail(' + row.wishId + ')">' +
         '<td class="wish-table-name"><div class="wish-table-name-main">' + itemName + '</div>' + (details ? '<div class="wish-table-name-meta">' + details + '</div>' : '') + '</td>' +
-        '<td>' + escapeHtml(supplier || "-") + '</td>' +
-        '<td class="wish-table-actions">' + actionHtml + '</td>' +
+        '<td>' + escapeHtml(category) + '</td>' +
+        '<td>' + escapeHtml(priority) + '</td>' +
         '</tr>';
     }).join("") +
     '</tbody></table></div>';
