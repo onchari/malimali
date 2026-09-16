@@ -4719,8 +4719,9 @@ function renderWishDetailItemInfo(wish) {
 
 function buildWishTableHtml(rows, wishById) {
   const showStocked = _wishlistFilterState.list.showStocked === true;
-  const totalQty = rows.reduce((sum, row) => sum + Number((wishById.get(row.wishId) || {}).qty || row.qty || 0), 0);
-  const totalAmount = rows.reduce((sum, row) => {
+  const activeRows = rows.filter((row) => wishStatus(wishById.get(row.wishId) || {}) !== "stocked");
+  const totalQty = activeRows.reduce((sum, row) => sum + Number((wishById.get(row.wishId) || {}).qty || row.qty || 0), 0);
+  const totalAmount = activeRows.reduce((sum, row) => {
     const wish = wishById.get(row.wishId) || {};
     return sum + Number(wish.qty || row.qty || 0) * Number(wish.estimatedCost || 0);
   }, 0);
@@ -4731,16 +4732,16 @@ function buildWishTableHtml(rows, wishById) {
       const itemName = String(row.name || row.code || "").trim();
       const supply = String(wish.supplierId || wish.supplier || "").trim();
       const qty = Number(wish.qty || row.qty || 0);
-      const unit = String(wish.unit || "").trim();
       const estimatedPrice = Number(wish.estimatedCost || 0);
       const amount = qty > 0 && estimatedPrice > 0 ? fmt(qty * estimatedPrice) : "";
-      const quantityLine = qty > 0 ? "x " + qty + (unit ? " " + unit : "") : "";
-      return '<tr class="wish-row' + (stocked ? ' is-stocked' : '') + '" onclick="openWishlistDetail(' + row.wishId + ')">' +
+      const unit = String(wish.unit || "").trim();
+      const openDetail = ' onclick="openWishlistDetail(' + row.wishId + ')"';
+      return '<tr class="wish-row' + (stocked ? ' is-stocked' : '') + '">' +
         '<td class="wish-table-check-cell"><label class="wish-stock-toggle"><input type="checkbox" ' + (stocked ? 'checked' : '') + ' onchange="event.stopPropagation();toggleWishlistStockedState(' + row.wishId + ')\"><span></span></label></td>' +
-        '<td class="wish-table-name"><div class="wish-table-name-main">' + escapeHtml(itemName) + '</div>' + (quantityLine ? '<div class="wish-table-name-meta">' + escapeHtml(quantityLine) + '</div>' : '') + '</td>' +
-        '<td>' + escapeHtml(supply) + '</td>' +
-        '<td>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td>' +
-        '<td>' + escapeHtml(amount) + '</td>' +
+        '<td class="wish-table-name"' + openDetail + '><div class="wish-table-name-main">' + escapeHtml(itemName) + '</div></td>' +
+        '<td' + openDetail + '>' + escapeHtml(supply) + '</td>' +
+        '<td' + openDetail + '>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td>' +
+        '<td class="wish-table-amount"' + openDetail + '>' + escapeHtml(amount) + '</td>' +
         '</tr>';
     }).join("") +
     '</tbody><tfoot><tr><th colspan="3">Visible totals</th><th>' + fmtN(totalQty) + '</th><th>' + escapeHtml(fmt(totalAmount)) + '</th></tr></tfoot></table></div>';
@@ -4787,6 +4788,8 @@ async function openWishlistDetail(wishId) {
   const nameEl = document.getElementById("wd-name");
   const noteInput = document.getElementById("wd-note-input");
   if (nameEl) nameEl.textContent = wish.name || wish.code || "Item";
+  const revertBtn = document.getElementById("wd-revert-btn");
+  if (revertBtn) revertBtn.disabled = wishStatus(wish) !== "stocked";
   renderWishDetailItemInfo(wish);
   renderWishShoeOverlay(wish);
   if (noteInput) noteInput.value = wish.note || "";
@@ -4873,6 +4876,24 @@ function wishlistDetailStock() {
   if (id) startWishlistRestock(id);
 }
 window.wishlistDetailStock = wishlistDetailStock;
+
+async function wishlistDetailRevert() {
+  const id = _currentWishDetailId;
+  if (!id) return;
+  const wish = await dbGet("wishlist", id);
+  if (!wish || wishStatus(wish) !== "stocked") return;
+  wish.status = "prospective";
+  wish.stockedAt = null;
+  wish.stockedItemId = null;
+  wish.dayPurchaseDate = null;
+  await dbPut("wishlist", wish);
+  scheduleSync();
+  closeWishlistDetail();
+  await renderWishlistPage();
+  await renderStockMonitorSummary();
+  toast("Moved back to wishlist", "ok");
+}
+window.wishlistDetailRevert = wishlistDetailRevert;
 
 async function wishlistDetailEdit() {
   const id = _currentWishDetailId;
@@ -6443,8 +6464,9 @@ async function renderWishlistPage() {
   const wishlistRecords = allWishes.filter((wish) => !isWishlistSaleMonitorEntry(wish));
   const activeCount = wishlistRecords.filter((wish) => wishStatus(wish) !== "stocked").length;
   const stockedCount = wishlistRecords.filter((wish) => wishStatus(wish) === "stocked").length;
-  const visibleQty = filteredWishes.reduce((sum, wish) => sum + Number(wish.qty || 0), 0);
-  const visibleValue = filteredWishes.reduce(
+  const visibleActiveWishes = filteredWishes.filter((wish) => wishStatus(wish) !== "stocked");
+  const visibleQty = visibleActiveWishes.reduce((sum, wish) => sum + Number(wish.qty || 0), 0);
+  const visibleValue = visibleActiveWishes.reduce(
     (sum, wish) => sum + Number(wish.qty || 0) * Number(wish.estimatedCost || 0),
     0,
   );
