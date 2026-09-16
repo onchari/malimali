@@ -2333,6 +2333,7 @@ body {
 }
 .wish-table td { font-weight: 400; font-size: 8px; }
 .wish-table tbody tr { cursor: pointer; }
+.wish-table-check-cell { cursor: default; }
 .wish-table-name-main {
   font-size: 9px;
   line-height: 1.2;
@@ -2349,13 +2350,20 @@ body {
 .wish-table th:nth-child(1),
 .wish-table td:nth-child(1) { width: 8%; }
 .wish-table th:nth-child(2),
-.wish-table td:nth-child(2) { width: 40%; }
+.wish-table td:nth-child(2) { width: 36%; }
 .wish-table th:nth-child(3),
 .wish-table td:nth-child(3) { width: 18%; }
 .wish-table th:nth-child(4),
 .wish-table td:nth-child(4) { width: 12%; text-align: center; }
 .wish-table th:nth-child(5),
-.wish-table td:nth-child(5) { width: 22%; text-align: right; }
+.wish-table td:nth-child(5) { width: 26%; text-align: right; }
+.wish-table td.wish-table-amount {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-weight: 700;
+}
 .wish-table td.wish-table-name {
   color: var(--text);
   overflow: visible;
@@ -3205,19 +3213,27 @@ body {
 }
 .wish-detail-sheet {
   padding: 0;
-  max-height: 92vh;
+  max-height: 78vh;
+  width: min(440px, calc(100% - 32px));
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
-.wish-detail-close {
+.wish-detail-top-actions {
   position: absolute;
   top: 10px;
+  left: 10px;
   right: 10px;
-  z-index: 2;
+  z-index: 3;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.wish-detail-top-actions button { pointer-events: auto; }
+.wish-detail-close {
   width: 32px;
   height: 32px;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, .45);
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.45);
   color: #fff;
@@ -3225,9 +3241,19 @@ body {
   font-weight: 700;
   cursor: pointer;
 }
+.wish-detail-top-actions .wish-detail-btn.edit {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .45);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .45);
+  color: #fff;
+  font-size: 14px;
+}
 .wish-detail-photo-wrap {
   width: 100%;
-  height: 220px;
+  height: 110px;
   flex-shrink: 0;
   background: var(--surface2);
   position: relative;
@@ -3244,7 +3270,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 48px;
+  font-size: 30px;
   color: var(--muted);
 }
 .wd-shoe-overlay {
@@ -3272,17 +3298,17 @@ body {
 .wish-detail-body {
   flex: 1;
   overflow-y: auto;
-  padding: 14px 16px 12px;
+  padding: 10px 14px 8px;
 }
 .wish-detail-name {
-  margin: 0 0 8px;
-  font-size: 20px;
+  margin: 0 0 6px;
+  font-size: 18px;
   font-weight: 800;
   color: var(--text);
   line-height: 1.2;
 }
 .wish-detail-block {
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 .wish-detail-block:last-child {
   margin-bottom: 4px;
@@ -3451,7 +3477,7 @@ body {
 }
 .wish-detail-footer {
   flex-shrink: 0;
-  padding: 12px 16px 16px;
+  padding: 8px 12px 10px;
   border-top: 1px solid var(--border);
   background: var(--surface);
   display: flex;
@@ -3460,15 +3486,16 @@ body {
 }
 .wish-detail-footer-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
 }
 .wish-detail-btn {
   width: 100%;
-  padding: 14px;
+  min-height: 40px;
+  padding: 8px 6px;
   border: none;
   border-radius: var(--r-lg);
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
   font-family: var(--sans);
@@ -3487,15 +3514,23 @@ body {
   background: var(--surface2);
   color: var(--accent);
   border: 1.5px solid var(--accent);
-  font-size: 14px;
-  padding: 12px;
+  font-size: 12px;
 }
 .wish-detail-btn.delete {
   background: var(--surface2);
   color: var(--red);
   border: 1.5px solid var(--border);
-  font-size: 14px;
-  padding: 12px;
+  font-size: 12px;
+}
+.wish-detail-btn.revert {
+  background: var(--surface2);
+  color: var(--text2);
+  border: 1.5px solid var(--border);
+  font-size: 12px;
+}
+.wish-detail-btn:disabled {
+  opacity: .42;
+  cursor: not-allowed;
 }
 .stock-monitor-body { flex: 1; min-width: 0; }
 .stock-monitor-name {

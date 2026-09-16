@@ -1833,7 +1833,14 @@
 <div class="sheet-overlay" id="wishlist-detail-sheet">
   <div class="sheet wish-detail-sheet">
     <div class="sheet-handle"></div>
-    <button type="button" class="wish-detail-close" onclick="closeWishlistDetail()" aria-label="Close"></button>
+    <div class="wish-detail-top-actions">
+      <button type="button" class="wish-detail-btn edit" onclick="wishlistDetailEdit()" aria-label="Edit wishlist item" title="Edit wishlist item">
+        <i class="fa-solid fa-pen"></i>
+      </button>
+      <button type="button" class="wish-detail-close" onclick="closeWishlistDetail()" aria-label="Close" title="Close">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
 
     <div id="wd-photo-wrap" class="wish-detail-photo-wrap">
       <img id="wd-photo-img" class="wish-detail-photo" src="" alt="" style="display:none;">
@@ -1898,12 +1905,12 @@
     </div>
 
     <footer class="wish-detail-footer">
-      <button type="button" class="wish-detail-btn save" onclick="saveWishlistDetail()">Save</button>
       <div class="wish-detail-footer-row">
-        <button type="button" class="wish-detail-btn stock" onclick="wishlistDetailEdit()"><i class="fa-solid fa-pen"></i> Edit</button>
+        <button type="button" class="wish-detail-btn save" onclick="saveWishlistDetail()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
         <button type="button" class="wish-detail-btn stock" onclick="wishlistDetailStock()"><i class="fa-solid fa-boxes-stacked"></i> Stock
         </button>
-        <button type="button" class="wish-detail-btn delete" onclick="wishlistDetailDelete()">Remove</button>
+        <button type="button" class="wish-detail-btn delete" onclick="wishlistDetailDelete()"><i class="fa-solid fa-trash"></i> Remove</button>
+        <button type="button" id="wd-revert-btn" class="wish-detail-btn revert" onclick="wishlistDetailRevert()"><i class="fa-solid fa-arrow-rotate-left"></i> Revert</button>
       </div>
     </footer>
   </div>
