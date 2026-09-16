@@ -1953,6 +1953,21 @@ body {
   min-width: 140px;
   width: 0;
 }
+.wish-list-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  padding: 6px 2px 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.wish-list-summary span { white-space: nowrap; }
+.wish-list-summary strong {
+  color: var(--text);
+  font-family: var(--mono);
+  font-weight: 800;
+}
 .wish-show-stocked {
   display: inline-flex;
   align-items: center;
@@ -2347,6 +2362,18 @@ body {
   text-overflow: clip;
   white-space: normal;
 }
+.wish-table tfoot th {
+  padding: 8px 6px;
+  background: var(--surface2);
+  color: var(--text2);
+  font-size: 11px;
+  text-transform: none;
+}
+.wish-table tfoot th:nth-last-child(-n + 2) {
+  color: var(--accent);
+  font-family: var(--mono);
+  text-align: right;
+}
 .wish-table-check-cell { text-align: center; }
 .wish-stock-toggle {
   display: inline-flex;
@@ -2720,6 +2747,44 @@ body {
   font-weight: 800;
   font-family: var(--sans);
   cursor: pointer;
+}
+
+/* Keep wishlist content at the same readable scale as the rest of the app. */
+#page-wishlist {
+  font-size: 14px;
+}
+#page-wishlist .wish-filter-input,
+#page-wishlist .wish-filter-reset-btn {
+  font-size: 14px;
+}
+#page-wishlist .wish-table th {
+  font-size: 12px;
+}
+#page-wishlist .wish-table td {
+  font-size: 13px;
+}
+#page-wishlist .wish-table-name-main {
+  font-size: 14px;
+}
+#page-wishlist .wish-table-name-meta {
+  font-size: 11px;
+}
+#page-wishlist .wish-card-name {
+  font-size: 14px;
+}
+#page-wishlist .wish-card-meta,
+#page-wishlist .wish-card-price-vendor {
+  font-size: 12px;
+}
+#page-wishlist .wish-chip,
+#page-wishlist .wish-card-stocked-label {
+  font-size: 11px;
+}
+#page-wishlist .wish-card-price-more {
+  font-size: 11px;
+}
+#page-wishlist .wish-add-hint {
+  font-size: 12px;
 }
 
 /* Wishlist add form */
