@@ -15133,11 +15133,11 @@ function renderWishlistSupplierOptions() {
   const select = document.getElementById("wish-supplier");
   if (!select) return;
   const current = select.value;
-  const suppliers = getWishlistSuppliers();
+  const suppliers = ["General", ...getWishlistSuppliers().filter((supplier) => supplier.toLowerCase() !== "general")];
   select.innerHTML = '<option value="">Select supply</option>' + suppliers
     .map((supplier) => '<option value="' + escapeHtml(supplier) + '">' + escapeHtml(supplier) + '</option>')
     .join("");
-  select.value = suppliers.includes(current) ? current : (suppliers[0] || "");
+  select.value = suppliers.includes(current) ? current : "General";
 }
 
 function renderWishlistUnitOptions() {

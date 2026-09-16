@@ -1928,8 +1928,8 @@ body {
   padding: 0 0 12px;
 }
 .wish-list-controls {
-  flex: 1;
-  padding: 0;
+  width: 100%;
+  padding: 0 0 8px;
 }
 .wish-day-filters {
   display: flex;
@@ -2078,11 +2078,11 @@ body {
 .wish-chooser-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 .wish-day-filters {
   display: grid;
-  grid-template-columns: 36px repeat(3, minmax(0, 1fr));
+  grid-template-columns: 36px repeat(2, minmax(0, 1fr));
   gap: 8px;
   padding: 0 12px 4px;
 }
-.wish-day-filters.has-save { grid-template-columns: 36px repeat(3, minmax(0, 1fr)) 36px; }
+.wish-day-filters.has-save { grid-template-columns: 36px repeat(2, minmax(0, 1fr)) 36px; }
 .wish-filter-save-btn {
   width: 36px;
   height: 38px;
@@ -3473,8 +3473,8 @@ body {
 }
 @media (max-width: 430px) {
   .wish-day-filters,
-  .wish-day-filters.has-save { grid-template-columns: 34px repeat(3, minmax(0, 1fr)) 34px; gap: 4px; }
-  .wish-day-filters:not(.has-save) { grid-template-columns: 34px repeat(3, minmax(0, 1fr)); }
+  .wish-day-filters.has-save { grid-template-columns: 34px repeat(2, minmax(0, 1fr)) 34px; gap: 4px; }
+  .wish-day-filters:not(.has-save) { grid-template-columns: 34px repeat(2, minmax(0, 1fr)); }
   .wish-day-filters .wish-filter-reset-btn { width: 100%; }
   .wish-add-vendor-grid { grid-template-columns: 1fr; }
   .wish-add-primary .wish-add-vendor-grid { grid-template-columns: 1fr 1fr; }
