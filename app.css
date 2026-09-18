@@ -6013,6 +6013,25 @@ body.photo-lightbox-open { overflow: hidden; }
 .hist-stat-val.green { color: #86efac; }
 .hist-stat-lbl   { font-size: 9px; color: rgba(255,255,255,.65); text-transform: uppercase; letter-spacing: .3px; }
 
+.hist-custom-range {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.hist-custom-range label {
+  flex: 1;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.hist-custom-range .add-input {
+  width: 100%;
+  height: 34px;
+  margin-top: 3px;
+  box-sizing: border-box;
+  font-size: 12px;
+}
+
 .hist-period-totals {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
