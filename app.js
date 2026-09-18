@@ -16962,20 +16962,16 @@ async function renderHistoryPage() {
 
   const periodTotals = Object.values(byDate).reduce(
     (totals, day) => {
-      totals.sales += day.sales.length;
       totals.qty += day.sales.reduce((qty, sale) => qty + (sale.qty || 1), 0);
       totals.revenue += day.revenue;
+      totals.cost += day.cost;
       totals.profit += day.profit;
       return totals;
     },
-    { sales: 0, qty: 0, revenue: 0, profit: 0 },
+    { qty: 0, revenue: 0, cost: 0, profit: 0 },
   );
   const totalsMarkup = `
     <div class="hist-period-totals" aria-label="Cumulative totals for ${escapeHtml(rangeLabel)}">
-      <div class="hist-period-total">
-        <div class="hist-period-total-val">${fmtN(periodTotals.sales)}</div>
-        <div class="hist-period-total-lbl">Sales</div>
-      </div>
       <div class="hist-period-total">
         <div class="hist-period-total-val">${fmtN(periodTotals.qty)}</div>
         <div class="hist-period-total-lbl">Items sold</div>
@@ -16985,8 +16981,12 @@ async function renderHistoryPage() {
         <div class="hist-period-total-lbl">Revenue</div>
       </div>
       <div class="hist-period-total">
+        <div class="hist-period-total-val">${_fmtNum(periodTotals.cost)}</div>
+        <div class="hist-period-total-lbl">Cost</div>
+      </div>
+      <div class="hist-period-total">
         <div class="hist-period-total-val ${periodTotals.profit >= 0 ? "hist-total-positive" : "hist-total-negative"}">${_fmtNum(periodTotals.profit)}</div>
-        <div class="hist-period-total-lbl">Earning</div>
+        <div class="hist-period-total-lbl">Earnings</div>
       </div>
     </div>`;
 
@@ -17125,11 +17125,6 @@ async function renderHistoryPage() {
 
     </div>`;
 
-  // Auto-expand today's card when "Today" filter is selected
-  if (filterVal === "today" && byDate[today]) {
-    _expandedHistDay = null; // reset so expandHistDay doesn't collapse
-    setTimeout(() => expandHistDay(today.replace(/-/g, "")), 0);
-  }
 }
 
 // Money formatted for a table cell (no currency prefix - shown once in the header instead)
