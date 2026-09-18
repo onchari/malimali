@@ -16997,94 +16997,139 @@ async function renderHistoryPage() {
     return;
   }
 
+  // Insights are calculated from the records currently included by the filter.
+  const bestRevDay = datesSorted.reduce(
+    (best, d) => (byDate[d].revenue > (byDate[best]?.revenue || 0) ? d : best),
+    datesSorted[0],
+  );
   const itemTotals = {};
   Object.values(byDate).forEach((day) =>
-    day.sales.forEach((sale) => {
-      const key = sale.itemCode || sale.itemName || "Item";
-      if (!itemTotals[key]) {
-        const item = allItems.find(
-          (candidate) =>
-            (sale.itemId && candidate.id === sale.itemId) ||
-            (sale.itemCode && candidate.code === sale.itemCode),
-        );
-        const type = item ? getTypeObj(item.type) : null;
+    day.sales.forEach((s) => {
+      const key = s.itemCode || s.itemName || "Item";
+      if (!itemTotals[key])
         itemTotals[key] = {
-          name: sale.itemName || sale.itemCode || "Item",
-          code: sale.itemCode || "",
+          name: s.itemName || s.itemCode || "Item",
           qty: 0,
-          cost: 0,
-          revenue: 0,
           profit: 0,
-          emoji: type?.emoji || "📦",
-          color: type?.color || "var(--surface2)",
         };
-      }
-      const qty = sale.qty || 1;
-      const revenue = sale.revenue || (sale.actualPrice || sale.sellPrice || 0) * qty;
-      const cost = (sale.buyPrice || 0) * qty;
-      itemTotals[key].qty += qty;
-      itemTotals[key].cost += cost;
-      itemTotals[key].revenue += revenue;
-      itemTotals[key].profit += sale.profit ?? revenue - cost;
+      itemTotals[key].qty += s.qty || 1;
+      itemTotals[key].profit += s.profit || 0;
     }),
   );
+  const itemStats = Object.values(itemTotals);
+  const bestEarning = itemStats.reduce(
+    (best, item) => (item.profit > (best?.profit || -Infinity) ? item : best),
+    null,
+  );
+  const bestSold = itemStats.reduce(
+    (best, item) => (item.qty > (best?.qty || 0) ? item : best),
+    null,
+  );
+  const insightText =
+    bestEarning && bestSold
+      ? `<div class="pr-insight-line pr-insight-earning"><span class="pr-insight-label">Top earning</span><strong>${escapeHtml(bestEarning.name)}</strong><span>${_fmtNum(bestEarning.profit)}</span></div>
+       <div class="pr-insight-line pr-insight-sold"><span class="pr-insight-label">Best seller</span><strong>${escapeHtml(bestSold.name)}</strong><span>${fmtN(bestSold.qty)} sold</span></div>`
+      : '<div class="pr-insight-line">No item sales in this period.</div>';
 
-  const itemSearch = (window._histItemSearch || "").toLowerCase().trim();
-  const itemStats = Object.values(itemTotals)
-    .filter(
-      (item) =>
-        !itemSearch ||
-        item.name.toLowerCase().includes(itemSearch) ||
-        item.code.toLowerCase().includes(itemSearch),
-    )
-    .sort((a, b) => {
-      const key = window._histItemSort?.key || "revenue";
-      const direction = window._histItemSort?.direction || -1;
-      const left = key === "item" ? a.name.toLowerCase() : a[key];
-      const right = key === "item" ? b.name.toLowerCase() : b[key];
-      return (left < right ? -1 : left > right ? 1 : 0) * direction;
+  // Store byDate for click access
+  window._histByDate = byDate;
+
+  // Helper: build a 6-bar sparkline SVG from hourly data
+  function _sparkline(hours) {
+    const slots = [
+      [5, 9, "Morning"],
+      [9, 12, "Late morning"],
+      [12, 15, "Afternoon"],
+      [15, 18, "Eve"],
+      [18, 22, "Night"],
+      [22, 5, "Late night"],
+    ];
+    const vals = slots.map(([from, to]) => {
+      let v = 0;
+      for (let h = from; h !== to; h = (h + 1) % 24) v += hours[h] || 0;
+      return v;
     });
-  const pageSize = 8;
-  const totalPages = Math.max(1, Math.ceil(itemStats.length / pageSize));
-  const currentPage = Math.min(Math.max(1, window._histItemPage || 1), totalPages);
-  window._histItemPage = currentPage;
-  const pageItems = itemStats.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const sortButton = (label, key) =>
-    `<button type="button" class="hist-dashboard-sort" onclick="sortHistoryItems('${key}')">${label}<i class="fa-solid fa-sort"></i></button>`;
-  const itemRows = pageItems.length
-    ? pageItems
-        .map((item, index) => {
-          const margin = item.revenue ? (item.profit / item.revenue) * 100 : 0;
-          const rowNumber = (currentPage - 1) * pageSize + index + 1;
-          return `<tr>
-            <td class="hist-dashboard-num">${rowNumber}</td>
-            <td><div class="hist-dashboard-item"><span class="hist-dashboard-icon" style="background:${item.color};">${escapeHtml(item.emoji)}</span><span>${escapeHtml(item.name)}</span></div></td>
-            <td>${_fmtNum(item.cost)}</td>
-            <td>${_fmtNum(item.revenue)}</td>
-            <td class="hist-dashboard-profit">${_fmtNum(item.profit)}</td>
-            <td><span class="hist-dashboard-performance">${margin.toFixed(1)}%</span></td>
-            <td><button class="hist-dashboard-action" title="View item sales" onclick="filterHistoryItem('${escapeHtml(item.name).replace(/'/g, "\\'")}')"><i class="fa-solid fa-eye"></i></button></td>
-          </tr>`;
-        })
-        .join("")
-    : '<tr><td colspan="7" class="hist-dashboard-empty">No sales found for this filter.</td></tr>';
-  const fromRow = itemStats.length ? (currentPage - 1) * pageSize + 1 : 0;
-  const toRow = Math.min(currentPage * pageSize, itemStats.length);
-  const kpiMarkup = `
-    <div class="hist-dashboard-kpis">
-      <div class="hist-dashboard-kpi hist-kpi-revenue"><span class="hist-dashboard-kpi-icon"><i class="fa-solid fa-coins"></i></span><div><b>${_fmtNum(periodTotals.revenue)}</b><small>Revenue</small></div></div>
-      <div class="hist-dashboard-kpi hist-kpi-items"><span class="hist-dashboard-kpi-icon"><i class="fa-solid fa-tags"></i></span><div><b>${fmtN(periodTotals.qty)}</b><small>Items sold</small></div></div>
-      <div class="hist-dashboard-kpi hist-kpi-cost"><span class="hist-dashboard-kpi-icon"><i class="fa-solid fa-wallet"></i></span><div><b>${_fmtNum(Object.values(itemTotals).reduce((sum, item) => sum + item.cost, 0))}</b><small>Cost</small></div></div>
-      <div class="hist-dashboard-kpi hist-kpi-earning"><span class="hist-dashboard-kpi-icon"><i class="fa-solid fa-chart-line"></i></span><div><b>${_fmtNum(periodTotals.profit)}</b><small>Earning</small></div></div>
+    const max = Math.max(...vals, 1);
+    const bars = vals
+      .map((v, i) => {
+        const h = Math.round((v / max) * 20) || 1;
+        const x = i * 9 + 1;
+        return `<rect x="${x}" y="${22 - h}" width="7" height="${h}" rx="1" fill="${v > 0 ? "#16a34a" : "#e5e7eb"}"/>`;
+      })
+      .join("");
+    return `<svg width="56" height="24" viewBox="0 0 56 24" class="hdc-spark">${bars}</svg>`;
+  }
+
+  // Running total for cumulative profit
+  let runningProfit = 0;
+
+  // Day table rows, newest first
+  const dayRows = datesSorted
+    .map((date) => {
+      const day = byDate[date];
+      const safeId = date.replace(/-/g, "");
+      const dt = new Date(date + "T12:00:00");
+      const label = dt.toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+      const earningColor = day.profit >= 0 ? "#16a34a" : "#dc2626";
+      const isBest = date === bestRevDay && datesSorted.length > 1;
+      const isToday = date === today;
+      const rowCls = isToday
+        ? " hist-row-today"
+        : isBest
+          ? " hist-row-best"
+          : "";
+      return `<tr class="hist-day-tr${rowCls}" onclick="expandHistDay('${safeId}')" style="cursor:pointer;">
+      <td class="hdt-date">${label}${isBest ? " ★" : ""}</td>
+      <td class="hdt-num">${day.sales.length}</td>
+      <td class="hdt-num">${_fmtNum(day.revenue)}</td>
+      <td class="hdt-num" style="color:${earningColor};font-weight:800;">${_fmtNum(day.profit)}</td>
+      <td class="hdt-chev"><i class="fa-solid fa-chevron-right"></i></td>
+    </tr>`;
+    })
+    .join("");
+  const dayCards = `<table class="hist-days-table">
+    <thead><tr>
+      <th class="hdt-date">Date</th>
+      <th class="hdt-num">Sales</th>
+      <th class="hdt-num">Revenue</th>
+      <th class="hdt-num">Earning</th>
+      <th class="hdt-chev"></th>
+    </tr></thead>
+    <tbody>${dayRows}</tbody>
+  </table>`;
+
+  recList.innerHTML = `
+    ${totalsMarkup}
+
+    <!-- Day list rows -->
+    <div class="pr-days-list">${dayCards}</div>
+
+    <!-- Expanded detail area -->
+    <div id="hist-expanded-area" class="hist-expanded-area" style="display:none;"></div>
+
+    <!-- Insights + export -->
+    <div class="pr-insights">
+      <div class="pr-insights-icon"><i class="fa-solid fa-lightbulb"></i></div>
+      <div class="pr-insights-body">
+        <div class="pr-insights-title">Insights</div>
+        <div class="pr-insights-text">${insightText}</div>
+      </div>
+      <button class="pr-export-btn" onclick="exportSalesReport()">
+        <i class="fa-solid fa-download"></i> Export Report
+      </button>
+    </div>
+
     </div>`;
 
-  recList.innerHTML = `${kpiMarkup}
-    <section class="hist-dashboard-panel">
-      <div class="hist-dashboard-panel-head"><h2><i class="fa-solid fa-list-check"></i> Items Sold</h2><label class="hist-dashboard-search"><i class="fa-solid fa-magnifying-glass"></i><input id="hist-item-search" value="${escapeHtml(window._histItemSearch || "")}" placeholder="Search items..." oninput="searchHistoryItems(this.value)"></label></div>
-      <div class="hist-dashboard-table-wrap"><table class="hist-dashboard-table"><thead><tr><th>#</th><th>${sortButton("Item", "item")}</th><th>${sortButton("Cost (KSh)", "cost")}</th><th>${sortButton("Revenue (KSh)", "revenue")}</th><th>${sortButton("Earning (KSh)", "profit")}</th><th>Performance</th><th>Actions</th></tr></thead><tbody>${itemRows}</tbody></table></div>
-      <div class="hist-dashboard-footer"><span>Showing ${fromRow} – ${toRow} of ${itemStats.length} items</span><div class="hist-dashboard-pagination"><button onclick="setHistoryItemPage(${currentPage - 1})" ${currentPage <= 1 ? "disabled" : ""}><i class="fa-solid fa-chevron-left"></i></button><strong>${currentPage}</strong><button onclick="setHistoryItemPage(${currentPage + 1})" ${currentPage >= totalPages ? "disabled" : ""}><i class="fa-solid fa-chevron-right"></i></button></div></div>
-    </section>`;
-
+  // Auto-expand today's card when "Today" filter is selected
+  if (filterVal === "today" && byDate[today]) {
+    _expandedHistDay = null; // reset so expandHistDay doesn't collapse
+    setTimeout(() => expandHistDay(today.replace(/-/g, "")), 0);
+  }
 }
 
 // Money formatted for a table cell (no currency prefix - shown once in the header instead)
@@ -17094,34 +17139,6 @@ function _fmtNum(n) {
     maximumFractionDigits: 2,
   });
 }
-
-function searchHistoryItems(value) {
-  window._histItemSearch = value || "";
-  window._histItemPage = 1;
-  renderHistoryPage();
-}
-window.searchHistoryItems = searchHistoryItems;
-
-function sortHistoryItems(key) {
-  if (!window._histItemSort || window._histItemSort.key !== key) {
-    window._histItemSort = { key, direction: key === "item" ? 1 : -1 };
-  } else {
-    window._histItemSort.direction *= -1;
-  }
-  renderHistoryPage();
-}
-window.sortHistoryItems = sortHistoryItems;
-
-function setHistoryItemPage(page) {
-  window._histItemPage = Math.max(1, page);
-  renderHistoryPage();
-}
-window.setHistoryItemPage = setHistoryItemPage;
-
-function filterHistoryItem(name) {
-  searchHistoryItems(name);
-}
-window.filterHistoryItem = filterHistoryItem;
 
 let _histSort = { key: "date", dir: -1 };
 
