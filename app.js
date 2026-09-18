@@ -17125,6 +17125,12 @@ async function renderHistoryPage() {
 
     </div>`;
 
+  // Today opens directly to its sale records; the four period cards remain the only summary cards.
+  if (filterVal === "today" && byDate[today]) {
+    _expandedHistDay = null;
+    setTimeout(() => expandHistDay(today.replace(/-/g, "")), 0);
+  }
+
 }
 
 // Money formatted for a table cell (no currency prefix - shown once in the header instead)
@@ -17286,8 +17292,6 @@ function expandHistDay(safeId) {
   const rows = [...day.sales].sort(
     (a, b) => new Date(b.date) - new Date(a.date),
   );
-  const profColor = day.profit >= 0 ? "#16a34a" : "#dc2626";
-  const totalPcs = rows.reduce((s, r) => s + (r.qty || 1), 0);
   const isToday = date === todayDateStr();
 
   area.innerHTML = `
@@ -17300,24 +17304,6 @@ function expandHistDay(safeId) {
   </div>`
       : ""
   }
-    <div class="hist-day-stats-row">
-      <div class="hdsr-card">
-        <div class="hdsr-val pr-col-blue">${_fmtNum(day.revenue)}</div>
-        <div class="hdsr-lbl">Revenue</div>
-      </div>
-      <div class="hdsr-card">
-        <div class="hdsr-val pr-col-orange">${_fmtNum(day.cost)}</div>
-        <div class="hdsr-lbl">Cost</div>
-      </div>
-      <div class="hdsr-card hdsr-card-earn">
-        <div class="hdsr-val" style="color:${profColor};">${_fmtNum(day.profit)}</div>
-        <div class="hdsr-lbl">Earning</div>
-      </div>
-      <div class="hdsr-card">
-        <div class="hdsr-val">${fmtN(totalPcs)}</div>
-        <div class="hdsr-lbl">Sold</div>
-      </div>
-    </div>
     ${_histTable(rows)}`;
 
   // Hide the grid, show detail
@@ -18883,6 +18869,7 @@ async function renderCustomerList(query) {
         </div>
         <div id="cust-recycle-body" style="display:none;">${binCards}</div>
       </div>`;
+
   }
 }
 window.renderCustomerList = renderCustomerList;
