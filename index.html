@@ -1595,8 +1595,13 @@
         <option value="today"     selected>Today</option>
         <option value="yesterday">Yesterday</option>
         <option value="month">This Month</option>
+        <option value="custom">Custom range</option>
         <option value="all">All</option>
       </select>
+    </div>
+    <div id="hist-custom-range" class="hist-custom-range" style="display:none;">
+      <label>From <input id="hist-custom-from" class="add-input" type="date" onchange="renderHistoryPage()"></label>
+      <label>To <input id="hist-custom-to" class="add-input" type="date" onchange="renderHistoryPage()"></label>
     </div>
     <div id="hist-records-list" style="padding:0 0 80px;"></div>
   </div>

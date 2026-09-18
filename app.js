@@ -16858,6 +16858,10 @@ async function renderHistoryPage() {
   let ceilingStr = null;
   let includeToday = false;
   let rangeLabel = "Records";
+  const customRangeEl = document.getElementById("hist-custom-range");
+  const customFromEl = document.getElementById("hist-custom-from");
+  const customToEl = document.getElementById("hist-custom-to");
+  if (customRangeEl) customRangeEl.style.display = filterVal === "custom" ? "flex" : "none";
 
   if (filterVal === "today") {
     cutoffStr = today; // only today (00:00 → now)
@@ -16869,6 +16873,18 @@ async function renderHistoryPage() {
       month: "long",
       year: "numeric",
     });
+  } else if (filterVal === "yesterday") {
+    cutoffStr = _localDateStr(-1);
+    ceilingStr = today;
+    rangeLabel = new Date(_localDateStr(-1) + "T12:00:00").toLocaleDateString(
+      "en-GB",
+      {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      },
+    );
   } else if (filterVal === "week") {
     cutoffStr = _localDateStr(-6); // 7 days incl. today
     includeToday = true;
@@ -16885,6 +16901,25 @@ async function renderHistoryPage() {
     cutoffStr = _localDateStr(-29); // rolling 30 days incl. today
     includeToday = true;
     rangeLabel = _localDateStr(-29) + " – " + today;
+  } else if (filterVal === "custom") {
+    const customFrom = customFromEl?.value || "";
+    const customTo = customToEl?.value || "";
+    if (customFrom && customTo && customFrom <= customTo) {
+      cutoffStr = customFrom;
+      const [y, m, d] = customTo.split("-").map(Number);
+      const nextDay = new Date(y, m - 1, d + 1);
+      ceilingStr =
+        nextDay.getFullYear() +
+        "-" +
+        String(nextDay.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(nextDay.getDate()).padStart(2, "0");
+      includeToday = customTo >= today;
+      rangeLabel = customFrom + " – " + customTo;
+    } else {
+      cutoffStr = "9999-12-31";
+      rangeLabel = customFrom && customTo ? "Invalid date range" : "Choose a date range";
+    }
   } else if (filterVal === "all") {
     cutoffStr = null;
     includeToday = true;
