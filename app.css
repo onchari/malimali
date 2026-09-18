@@ -6013,6 +6013,38 @@ body.photo-lightbox-open { overflow: hidden; }
 .hist-stat-val.green { color: #86efac; }
 .hist-stat-lbl   { font-size: 9px; color: rgba(255,255,255,.65); text-transform: uppercase; letter-spacing: .3px; }
 
+.hist-period-totals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.hist-period-total {
+  background: var(--surface);
+  padding: 9px 4px;
+  text-align: center;
+}
+.hist-period-total-val {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+.hist-period-total-lbl {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+.hist-total-positive { color: var(--green); }
+.hist-total-negative { color: var(--red); }
+
 .hist-table-wrap { width: 100%; overflow-x: auto; }
 .hist-table {
   width: 100%;

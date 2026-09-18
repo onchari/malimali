@@ -16925,8 +16925,39 @@ async function renderHistoryPage() {
   const recList = UI.el("hist-records-list");
   if (!recList) return;
 
+  const periodTotals = Object.values(byDate).reduce(
+    (totals, day) => {
+      totals.sales += day.sales.length;
+      totals.qty += day.sales.reduce((qty, sale) => qty + (sale.qty || 1), 0);
+      totals.revenue += day.revenue;
+      totals.profit += day.profit;
+      return totals;
+    },
+    { sales: 0, qty: 0, revenue: 0, profit: 0 },
+  );
+  const totalsMarkup = `
+    <div class="hist-period-totals" aria-label="Cumulative totals for ${escapeHtml(rangeLabel)}">
+      <div class="hist-period-total">
+        <div class="hist-period-total-val">${fmtN(periodTotals.sales)}</div>
+        <div class="hist-period-total-lbl">Sales</div>
+      </div>
+      <div class="hist-period-total">
+        <div class="hist-period-total-val">${fmtN(periodTotals.qty)}</div>
+        <div class="hist-period-total-lbl">Items sold</div>
+      </div>
+      <div class="hist-period-total">
+        <div class="hist-period-total-val">${_fmtNum(periodTotals.revenue)}</div>
+        <div class="hist-period-total-lbl">Revenue</div>
+      </div>
+      <div class="hist-period-total">
+        <div class="hist-period-total-val ${periodTotals.profit >= 0 ? "hist-total-positive" : "hist-total-negative"}">${_fmtNum(periodTotals.profit)}</div>
+        <div class="hist-period-total-lbl">Earning</div>
+      </div>
+    </div>`;
+
   if (!datesSorted.length) {
     recList.innerHTML =
+      totalsMarkup +
       '<div style="color:var(--muted);font-size:13px;padding:24px 0;text-align:center;">No records in this period.</div>';
     return;
   }
@@ -17037,6 +17068,8 @@ async function renderHistoryPage() {
   </table>`;
 
   recList.innerHTML = `
+    ${totalsMarkup}
+
     <!-- Day list rows -->
     <div class="pr-days-list">${dayCards}</div>
 
