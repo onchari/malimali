@@ -713,6 +713,143 @@ function persistOffStockSaleAtomically(sale, monitorRow) {
   });
 }
 
+function persistStockMutationAtomically({ item, delta, reason, refId, actor } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!_dbReady(reject)) return;
+    const hasLedger = db.objectStoreNames.contains("stock_moves");
+    const syncable =
+      _appDbReady &&
+      db.objectStoreNames.contains("sync_queue") &&
+      db.objectStoreNames.contains("sync_meta");
+    const stores = ["items"];
+    if (hasLedger) stores.push("stock_moves");
+    if (syncable) stores.push("sync_queue", "sync_meta");
+    try {
+      const tx = db.transaction(stores, "readwrite");
+      const moveId = _stockMoveId({ reason, refId, itemId: item.id });
+      const move = {
+        id: moveId,
+        itemId: String(item.id),
+        sizeId: null,
+        delta: Number(delta),
+        reason: String(reason || "adjust"),
+        refId: String(refId || ""),
+        actor: String(actor || _syncClient()),
+        source: "app",
+        createdAt: new Date().toISOString(),
+        _hlc: _nextHlc(),
+        _serverUpdatedAt: new Date().toISOString(),
+        fbId: moveId,
+      };
+      tx.objectStore("items").put(item);
+      if (hasLedger) tx.objectStore("stock_moves").put(move);
+      if (syncable) {
+        const stateRequest = tx.objectStore("sync_meta").get("state");
+        stateRequest.onsuccess = () => {
+          const meta = stateRequest.result || { key: "state", clock: 0, clientId: _syncClient() };
+          let clock = Math.max(Number(meta.clock) || 0, _syncClock);
+          const now = new Date().toISOString();
+          const queue = (collection, record) => {
+            _prepareSyncRecord(collection, record);
+            clock += 1;
+            record._syncMutationId = _syncUuid();
+            record._syncVersion = clock;
+            record._syncClient = _syncClient();
+            record._syncUpdatedAt = now;
+            record._syncDeleted = false;
+            tx.objectStore(collection).put(record);
+            tx.objectStore("sync_queue").add(_queueRecord(collection, record, "upsert", clock, now));
+          };
+          queue("items", item);
+          if (hasLedger) queue("stock_moves", move);
+          tx.objectStore("sync_meta").put({ ...meta, key: "state", clock, clientId: _syncClient(), updatedAt: now });
+          _syncClock = clock;
+        };
+      }
+      tx.onerror = (event) => reject(event.target.error || tx.error);
+      tx.onabort = () => reject(tx.error || new Error("Stock mutation aborted"));
+      tx.oncomplete = () => {
+        _notifySyncLocalChange("items");
+        resolve(move);
+      };
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function persistSaleEditAtomically({ item, shoeSize = null, sale, delta, actor } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!_dbReady(reject)) return;
+    const hasSize = !!shoeSize && db.objectStoreNames.contains("shoe_sizes");
+    const hasLedger = db.objectStoreNames.contains("stock_moves") && Number(delta) !== 0;
+    const syncable =
+      _appDbReady &&
+      db.objectStoreNames.contains("sync_queue") &&
+      db.objectStoreNames.contains("sync_meta");
+    const stores = ["items", "sales"];
+    if (hasSize) stores.push("shoe_sizes");
+    if (hasLedger) stores.push("stock_moves");
+    if (syncable) stores.push("sync_queue", "sync_meta");
+    try {
+      const tx = db.transaction(stores, "readwrite");
+      const move = hasLedger
+        ? {
+            id: _stockMoveId({ reason: "sale_edit", refId: `sale:${sale.id}:edit`, itemId: item.id, sizeId: hasSize ? shoeSize.id : null }),
+            itemId: String(item.id),
+            sizeId: hasSize ? String(shoeSize.id) : null,
+            delta: Number(delta),
+            reason: "sale_edit",
+            refId: `sale:${sale.id}:edit:${sale.updatedAt}`,
+            actor: String(actor || _syncClient()),
+            source: "app",
+            createdAt: new Date().toISOString(),
+            _hlc: _nextHlc(),
+            _serverUpdatedAt: new Date().toISOString(),
+            fbId: _stockMoveId({ reason: "sale_edit", refId: `sale:${sale.id}:edit`, itemId: item.id, sizeId: hasSize ? shoeSize.id : null }),
+          }
+        : null;
+      tx.objectStore("items").put(item);
+      if (hasSize) tx.objectStore("shoe_sizes").put(shoeSize);
+      tx.objectStore("sales").put(sale);
+      if (move) tx.objectStore("stock_moves").put(move);
+      if (syncable) {
+        const stateRequest = tx.objectStore("sync_meta").get("state");
+        stateRequest.onsuccess = () => {
+          const meta = stateRequest.result || { key: "state", clock: 0, clientId: _syncClient() };
+          let clock = Math.max(Number(meta.clock) || 0, _syncClock);
+          const now = new Date().toISOString();
+          const queue = (collection, record) => {
+            _prepareSyncRecord(collection, record);
+            clock += 1;
+            record._syncMutationId = _syncUuid();
+            record._syncVersion = clock;
+            record._syncClient = _syncClient();
+            record._syncUpdatedAt = now;
+            record._syncDeleted = false;
+            tx.objectStore(collection).put(record);
+            tx.objectStore("sync_queue").add(_queueRecord(collection, record, "upsert", clock, now));
+          };
+          queue("items", item);
+          if (hasSize) queue("shoe_sizes", shoeSize);
+          queue("sales", sale);
+          if (move) queue("stock_moves", move);
+          tx.objectStore("sync_meta").put({ ...meta, key: "state", clock, clientId: _syncClient(), updatedAt: now });
+          _syncClock = clock;
+        };
+      }
+      tx.onerror = (event) => reject(event.target.error || tx.error);
+      tx.onabort = () => reject(tx.error || new Error("Sale edit transaction aborted"));
+      tx.oncomplete = () => {
+        _notifySyncLocalChange("sales");
+        resolve();
+      };
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 async function deriveQty(itemId, sizeId = null) {
   if (!itemId || !db || !db.objectStoreNames.contains("stock_moves")) {
     if (itemId == null) return 0;
@@ -6099,6 +6236,16 @@ async function renderList() {
 
   // Load all shoe sizes once
   const allSizes = await dbAll("shoe_sizes");
+  const ledgerSizeQty = new Map(
+    await Promise.all(
+      allSizes.map(async (size) => [size.id, await readableStockQty(size, size.id)]),
+    ),
+  );
+  const ledgerItemQty = new Map(
+    await Promise.all(
+      filtered.map(async (item) => [item.id, await displayStockQty(item)]),
+    ),
+  );
 
   const cards = [];
 
@@ -6149,7 +6296,7 @@ async function renderList() {
       }
 
       // ── Aggregates for the group header ──────────────────────
-      const groupTotalPcs = sizes.reduce((s, sz) => s + (sz.qty || 0), 0);
+      const groupTotalPcs = sizes.reduce((s, sz) => s + (ledgerSizeQty.get(sz.id) || 0), 0);
       const groupSoldPcs = sizes.reduce(
         (s, sz) => s + (salesBySize[item.code + "_" + sz.size] || 0),
         0,
@@ -6165,8 +6312,8 @@ async function renderList() {
         .forEach((s) => {
           _grpRevenue += s.revenue || 0;
         });
-      const allOut = sizes.every((sz) => sz.qty <= 0);
-      const hasOut = sizes.some((sz) => sz.qty <= 0);
+      const allOut = sizes.every((sz) => (ledgerSizeQty.get(sz.id) || 0) <= 0);
+      const hasOut = sizes.some((sz) => (ledgerSizeQty.get(sz.id) || 0) <= 0);
       const isExpanded =
         (UI.el("search")?.value || "").length > 0 ||
         (_expandedShoeGroups && _expandedShoeGroups.has(item.code));
@@ -6206,14 +6353,15 @@ async function renderList() {
         filteredSizes.forEach((sz) => {
           const price = sz.sellPrice || item.sellPrice || 0;
           const buy = sz.buyPrice || item.buyPrice || 0;
-          const isOut = sz.qty <= 0;
-          const isLow = !isOut && sz.qty <= LOW_STOCK_LEVEL;
+          const availableQty = ledgerSizeQty.get(sz.id) || 0;
+          const isOut = availableQty <= 0;
+          const isLow = !isOut && availableQty <= LOW_STOCK_LEVEL;
           const stockColor = isOut
             ? "tag-red"
             : isLow
               ? "tag-amber"
               : "tag-green";
-          const stockLabel = isOut ? "Out" : sz.qty + " pcs";
+          const stockLabel = isOut ? "Out" : availableQty + " pcs";
           const soldQty = salesBySize[item.code + "_" + sz.size] || 0;
           cards.push(`
             <div class="item-card shoe-size-row${isOut ? " shoe-out-card" : ""}" onclick="openShoeSizeCard('${escapeHtml(item.code)}',${sz.size})">
@@ -6263,7 +6411,7 @@ async function renderList() {
         continue;
       }
 
-      const groupTotalPcs = variants.reduce((s, v) => s + (v.qty || 0), 0);
+      const groupTotalPcs = variants.reduce((s, v) => s + (ledgerSizeQty.get(v.id) || 0), 0);
       const groupSoldPcs = variants.reduce(
         (s, v) => s + (salesBySize[item.code + "_" + v.sizeGroup] || 0),
         0,
@@ -6271,8 +6419,8 @@ async function renderList() {
       const groupRevenue = allSales
         .filter((s) => s.itemCode === item.code)
         .reduce((s, x) => s + (x.revenue || 0), 0);
-      const allOut = variants.every((v) => v.qty <= 0);
-      const hasOut = variants.some((v) => v.qty <= 0);
+      const allOut = variants.every((v) => (ledgerSizeQty.get(v.id) || 0) <= 0);
+      const hasOut = variants.some((v) => (ledgerSizeQty.get(v.id) || 0) <= 0);
       const isExpanded =
         (UI.el("search")?.value || "").length > 0 ||
         (_expandedShoeGroups && _expandedShoeGroups.has(item.code));
@@ -6303,10 +6451,11 @@ async function renderList() {
         cards.push('<div style="height:4px;"></div>');
       } else {
         variants.forEach((v) => {
-          const isOut = v.qty <= 0;
-          const isLow = !isOut && v.qty <= LOW_STOCK_LEVEL;
+          const availableQty = ledgerSizeQty.get(v.id) || 0;
+          const isOut = availableQty <= 0;
+          const isLow = !isOut && availableQty <= LOW_STOCK_LEVEL;
           const sc = isOut ? "tag-red" : isLow ? "tag-amber" : "tag-green";
-          const sl = isOut ? "Out" : v.qty + " pcs";
+          const sl = isOut ? "Out" : availableQty + " pcs";
           const sq = salesBySize[item.code + "_" + v.sizeGroup] || 0;
           const sp = v.sellPrice || item.sellPrice || 0;
           const bp = v.buyPrice || item.buyPrice || 0;
@@ -6341,12 +6490,12 @@ async function renderList() {
       const isExpanded =
         (UI.el("search")?.value || "").length > 0 ||
         _expandedTypeGroups.has(ptId);
-      const groupTotalQty = groupItems.reduce((s, i) => s + (i.qty || 0), 0);
+      const groupTotalQty = groupItems.reduce((s, i) => s + (ledgerItemQty.get(i.id) || 0), 0);
       const groupRevenue = allSales
         .filter((s) => groupItems.some((i) => i.id === s.itemId))
         .reduce((s, x) => s + (x.revenue || 0), 0);
-      const allOut = groupItems.every((i) => i.qty <= 0);
-      const hasOut = groupItems.some((i) => i.qty <= 0);
+      const allOut = groupItems.every((i) => (ledgerItemQty.get(i.id) || 0) <= 0);
+      const hasOut = groupItems.some((i) => (ledgerItemQty.get(i.id) || 0) <= 0);
 
       cards.push(`
         <div class="type-group-header" onclick="toggleTypeGroup(${ptId})" style="cursor:pointer;">
@@ -6372,19 +6521,20 @@ async function renderList() {
       } else {
         for (const ci of groupItems) {
           const ct = getTypeObj(ci.type);
+          const ciQty = ledgerItemQty.get(ci.id) || 0;
           const sc =
-            ci.qty === 0
+            ciQty === 0
               ? "tag-red"
-              : ci.qty <= LOW_STOCK_LEVEL
+              : ciQty <= LOW_STOCK_LEVEL
                 ? "tag-amber"
                 : "tag-green";
-          const sl = ci.qty === 0 ? "Out" : ci.qty + " pcs";
+          const sl = ciQty === 0 ? "Out" : ciQty + " pcs";
           const sq = (salesByItem[ci.id] || {}).qty || 0;
           const sp = ci.sellPrice || ci.sell || 0;
           const bp = ci.buyPrice || ci.buy || 0;
           cards.push(`
-            <div class="item-card type-group-child-row${ci.qty <= 0 ? " shoe-out-card" : ""}" onclick="openSheet(${ci.id})">
-              ${ci.qty <= 0 ? '<div class="out-of-stock-overlay"><span>OUT OF STOCK - RESTOCK</span></div>' : ""}
+            <div class="item-card type-group-child-row${ciQty <= 0 ? " shoe-out-card" : ""}" onclick="openSheet(${ci.id})">
+              ${ciQty <= 0 ? '<div class="out-of-stock-overlay"><span>OUT OF STOCK - RESTOCK</span></div>' : ""}
               <div class="item-top">
                 <div class="item-icon" style="background:${ct.color || "var(--surface2)"};">${ct.emoji || "📦"}</div>
                 <div class="item-body">
@@ -6408,31 +6558,32 @@ async function renderList() {
     } else {
       // ── STANDARD ITEM - single card ───────────────────────────────
       const isRec = !!item.isRecord;
+      const availableQty = ledgerItemQty.get(item.id) || 0;
       const stockColor = isRec
         ? "tag-amber"
-        : item.qty === 0
+        : availableQty === 0
           ? "tag-red"
-          : item.qty <= LOW_STOCK_LEVEL
+          : availableQty <= LOW_STOCK_LEVEL
             ? "tag-amber"
             : "tag-green";
       const stockLabel = isRec
         ? "Record"
-        : item.qty === 0
+        : availableQty === 0
           ? "Out"
-          : item.qty + " pcs";
+          : availableQty + " pcs";
       const soldQty = (salesByItem[item.id] || {}).qty || 0;
       const sellPrice = item.sellPrice || item.sell || 0;
       const buyPrice = item.buyPrice || item.buy || 0;
 
       const stockDot = isRec
         ? "#f59e0b"
-        : item.qty === 0
+        : availableQty === 0
           ? "var(--red)"
-          : item.qty <= LOW_STOCK_LEVEL
+          : availableQty <= LOW_STOCK_LEVEL
             ? "#f59e0b"
             : "var(--green)";
       cards.push(`
-        <div class="item-card item-card-compact${isRec ? " item-card-record" : item.qty <= 0 ? " shoe-out-card" : ""}" onclick="openSheet(${item.id})">
+        <div class="item-card item-card-compact${isRec ? " item-card-record" : availableQty <= 0 ? " shoe-out-card" : ""}" onclick="openSheet(${item.id})">
           <div class="item-top">
             <div class="item-icon" style="background:${t.color || "var(--surface2)"};">${t.emoji}</div>
             <div class="item-body">
@@ -6471,12 +6622,12 @@ async function getStockMonitorRows() {
     : [];
   const rows = [];
 
-  items.forEach((item) => {
+  for (const item of items) {
     if (item.isShoe) {
-      sizes
-        .filter((sz) => sz.itemCode === item.code && (sz.qty || 0) <= 0)
-        .forEach((sz) =>
-          rows.push({
+      for (const sz of sizes.filter((record) => record.itemCode === item.code)) {
+        const availableQty = await readableStockQty(sz, sz.id);
+        if (availableQty > 0) continue;
+        rows.push({
             kind: "out",
             itemId: item.id,
             size: sz.size,
@@ -6486,9 +6637,9 @@ async function getStockMonitorRows() {
             qty: 0,
             buyPrice: sz.buyPrice || item.buyPrice || item.buy || 0,
             label: "Out of stock - size " + sz.size,
-          }),
-        );
-    } else if (!item.isRecord && (item.qty || 0) <= 0) {
+          });
+      }
+    } else if (!item.isRecord && (await readableStockQty(item)) <= 0) {
       rows.push({
         kind: "out",
         itemId: item.id,
@@ -6500,7 +6651,7 @@ async function getStockMonitorRows() {
         label: "Out of stock",
       });
     }
-  });
+  }
 
   wishlist
     .filter((w) => (w.status || "prospective") !== "stocked")
@@ -8762,6 +8913,7 @@ function adjOffStockQty(delta) {
 }
 
 async function confirmOffStockSale() {
+  if (!requireOpenDay()) return;
   const name = Input.text("off-name");
   const code = sanitiseCode(Input.text("off-code"));
   const selectedType = getCascadeCommittedValue("off-type", {
@@ -9047,18 +9199,13 @@ function adjSellQty(d) {
 
 async function confirmSale() {
   if (!currentSellItemId) return;
-  const lockName = "mgs-sale-" + String(currentSellItemId);
-  if (navigator.locks?.request) {
-    await navigator.locks.request(lockName, { mode: "exclusive" }, () =>
-      confirmSaleUnlocked(),
-    );
-    return;
-  }
-  await confirmSaleUnlocked();
+  if (!requireOpenDay()) return;
+  await withSaleLock(currentSellItemId, () => confirmSaleUnlocked());
 }
 
 async function confirmSaleUnlocked() {
   if (!currentSellItemId) return;
+  if (!requireOpenDay()) return;
 
   // Gray out confirm button + show progress overlay
   const _confirmBtn = document.getElementById("confirm-sale-btn");
@@ -11529,6 +11676,60 @@ async function saleSaveStatus() {
   return { pending: false, label: "synced" };
 }
 
+async function withSaleLock(itemId, work) {
+  const lockName = "mgs-sale-" + String(itemId);
+  if (navigator.locks?.request) {
+    return navigator.locks.request(lockName, { mode: "exclusive" }, work);
+  }
+  if (!db.objectStoreNames.contains("sync_meta")) return work();
+  const owner = _syncUuid();
+  const key = "sale_lock:" + String(itemId);
+  let acquired = false;
+  for (let attempt = 0; attempt < 40 && !acquired; attempt += 1) {
+    acquired = await new Promise((resolve, reject) => {
+      try {
+        const tx = db.transaction("sync_meta", "readwrite");
+        const store = tx.objectStore("sync_meta");
+        const request = store.get(key);
+        request.onsuccess = () => {
+          const current = request.result;
+          if (current && current.expiresAt > Date.now() && current.owner !== owner) {
+            tx.abort();
+            resolve(false);
+            return;
+          }
+          store.put({ key, owner, expiresAt: Date.now() + 10000 });
+          resolve(true);
+        };
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => resolve(false);
+      } catch (error) {
+        reject(error);
+      }
+    });
+    if (!acquired) await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  if (!acquired) throw new Error("Another sale is being processed");
+  try {
+    return await work();
+  } finally {
+    await new Promise((resolve) => {
+      try {
+        const tx = db.transaction("sync_meta", "readwrite");
+        const store = tx.objectStore("sync_meta");
+        const request = store.get(key);
+        request.onsuccess = () => {
+          if (request.result?.owner === owner) store.delete(key);
+        };
+        tx.oncomplete = resolve;
+        tx.onerror = tx.onabort = resolve;
+      } catch (_) {
+        resolve();
+      }
+    });
+  }
+}
+
 async function fbSyncItem(item) {
   try {
     await ensureItemFbId(item);
@@ -12654,12 +12855,13 @@ function fmtFullDate(dateStr) {
   });
 }
 
-// Legacy helpers - day state no longer gates the rest of the app
 function isDayOpen() {
-  return true;
+  return !!activeDay && activeDay.status === "OPEN";
 }
 function requireOpenDay() {
-  return true;
+  if (isDayOpen()) return true;
+  toast("Open the business day before recording sales", "err");
+  return false;
 }
 
 // ── LOAD ACTIVE DAY ON APP START ─────────────────────────────────────
@@ -13003,9 +13205,27 @@ async function voidSale(saleId) {
       toast("Sale not found", "err");
       return;
     }
+    const item = await dbGet("items", sale.itemId);
+    if (item?.isShoe && (sale.itemSize || sale.size)) {
+      const sizes = await getShoeSizes(item.code);
+      const size = sizes.find(
+        (record) => record.size === parseInt(sale.itemSize || sale.size, 10),
+      );
+      if (!size) {
+        toast("Cannot void sale: original shoe size is missing", "err");
+        return;
+      }
+    }
+    if (!sale.fbId) {
+      sale.fbId = stableSaleFbId(sale);
+      await dbPut("sales", sale);
+    }
+    if (!(await fbDeleteSale(sale))) {
+      toast("Sale was not voided because sync deletion could not be queued", "err");
+      return;
+    }
 
     // Restore stock
-    const item = await dbGet("items", sale.itemId);
     const restoreQty = Number(sale.qty) || 1;
     if (item && !item.isRecord) {
       if (item.isShoe && (sale.itemSize || sale.size)) {
@@ -13028,15 +13248,6 @@ async function voidSale(saleId) {
           });
           const allSz = await getShoeSizes(item.code);
           item.qty = allSz.reduce((t, s) => t + s.qty, 0);
-        } else {
-          item.qty += restoreQty;
-          await appendStockMove({
-            itemId: item.id,
-            delta: restoreQty,
-            reason: "void",
-            refId: `sale:${sale.id}`,
-            actor: currentUser ? currentUser.username : "system",
-          });
         }
       } else {
         item.qty += restoreQty;
@@ -13055,7 +13266,6 @@ async function voidSale(saleId) {
 
     // Delete sale record
     _rememberDeletedSale(sale);
-    await fbDeleteSale(sale);
     const finPayload = {
       type: "revenue",
       saleId: sale.id,
@@ -13565,9 +13775,8 @@ async function confirmRestock() {
     }
     item.qty += qty;
     item.updatedAt = new Date().toISOString();
-    await dbPut("items", item);
-    await appendStockMove({
-      itemId: item.id,
+    await persistStockMutationAtomically({
+      item,
       delta: qty,
       reason: "receive",
       refId: `restock:${item.id}:${item.updatedAt}`,
@@ -16231,11 +16440,7 @@ async function _gscSearch(raw) {
     const sell = item.sellPrice || item.sell || 0;
     const sellMin = item.sellPriceMin || 0;
     const isRec = !!item.isRecord;
-    const qty = item.isShoe
-      ? allSizes
-          .filter((s) => s.itemCode === item.code)
-          .reduce((n, s) => n + (s.qty || 0), 0)
-      : item.qty || 0;
+    const qty = isRec ? 0 : await displayStockQty(item);
     const sold = soldMap[item.id] || 0;
 
     const stockCls = isRec
@@ -18012,25 +18217,15 @@ async function saveSaleEdit() {
     if (stockDelta !== 0 && !item.isRecord) {
       if (size) {
         size.qty = Math.max(0, Number(size.qty || 0) + stockDelta);
+        size.qtyCache = Number(size.qty);
         size.updatedAt = new Date().toISOString();
-        await dbPut("shoe_sizes", size);
         const allSizes = await getShoeSizes(item.code);
         item.qty = allSizes.reduce((total, record) => total + Number(record.qty || 0), 0);
       } else {
         item.qty = Math.max(0, Number(item.qty || 0) + stockDelta);
       }
+      item.qtyCache = Number(item.qty || 0);
       item.updatedAt = new Date().toISOString();
-      await dbPut("items", item);
-      await appendStockMove({
-        itemId: item.id,
-        sizeId: size?.id || null,
-        delta: stockDelta,
-        reason: "sale_edit",
-        refId: `sale:${sale.id}:edit:${Date.now()}`,
-        actor: currentUser.username,
-      });
-      fbSyncItem(item);
-      if (size) fbSyncShoeSize(size);
     }
 
     sale.qty = qty;
@@ -18040,8 +18235,17 @@ async function saveSaleEdit() {
     sale.revenue = qty * price;
     sale.profit = qty * (price - buy);
     sale.updatedAt = new Date().toISOString();
-    await dbPut("sales", sale);
-    fbSyncSale(sale);
+    if (item) {
+      await persistSaleEditAtomically({
+        item,
+        shoeSize: size && !item.isRecord ? size : null,
+        sale,
+        delta: item.isRecord ? 0 : stockDelta,
+        actor: currentUser.username,
+      });
+    } else {
+      await dbPut("sales", sale);
+    }
     closeSaleDetailSheet();
     await refreshUI();
     await renderHistoryPage();
