@@ -1931,6 +1931,40 @@ body {
   width: 100%;
   padding: 0 0 8px;
 }
+.wish-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding: 0 0 7px;
+  border-bottom: 1px solid rgba(18, 79, 67, .16);
+}
+.wish-view-tab {
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font: 800 11px var(--sans);
+  cursor: pointer;
+}
+.wish-view-tab.active {
+  border-color: #9acbb5;
+  background: #eef8f2;
+  color: #176b38;
+}
+.wish-view-select {
+  min-height: 34px;
+  min-width: 130px;
+  flex: 1 1 130px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font: 600 11px var(--sans);
+}
 .wish-control-row {
   display: flex;
   align-items: center;

@@ -4870,8 +4870,10 @@ let _currentWishDetailId = null;
 let _wishStockingFromId = null;
 let _editingWishlistId = null;
 let _activeWishlistSection = "list";
+let _activeWishlistView = "main";
+let _activeWishlistSavedList = "";
 const _wishlistFilterState = {
-  list: { priority: "", supplier: "", category: "", showStocked: false },
+  list: { priority: "", supplier: "", category: "" },
 };
 const KEY_WISHLIST_LIST_FILTERS = "mgs_wishlist_list_filters";
 const KEY_WISHLIST_FILTER_PRESETS = "mgs_wishlist_filter_presets";
@@ -4930,7 +4932,6 @@ function applyWishlistFilterPreset(name) {
     priority: preset.filters?.priority || "",
     supplier: preset.filters?.supplier || "",
     category: preset.filters?.category || "",
-    showStocked: preset.filters?.showStocked === true,
   };
   renderWishlistPage();
 }
@@ -4994,6 +4995,15 @@ function createSavedWishlistList() {
   toast('Saved list "' + name + '" created', "ok");
 }
 window.createSavedWishlistList = createSavedWishlistList;
+
+function setWishlistView(view, savedListName) {
+  const nextView = ["main", "stocked", "saved"].includes(view) ? view : "main";
+  _activeWishlistView = nextView;
+  if (nextView === "saved" && savedListName) _activeWishlistSavedList = String(savedListName);
+  _selectedWishlistIds.clear();
+  renderWishlistPage();
+}
+window.setWishlistView = setWishlistView;
 
 function addVisibleWishlistItemsToSavedList(selectedListName) {
   const listName = String(selectedListName || "").trim();
@@ -5193,7 +5203,7 @@ window.addSelectedWishlistItemsToSavedList = addSelectedWishlistItemsToSavedList
 function resetWishlistFilters(section) {
   const key = section === "day" ? "day" : "list";
   if (key === "day") return renderWishlistPage();
-  _wishlistFilterState[key] = { priority: "", supplier: "", category: "", showStocked: false };
+  _wishlistFilterState[key] = { priority: "", supplier: "", category: "" };
   const prefix = key === "day" ? "day" : "list";
   ["priority", "supplier", "category"].forEach((name) => {
     const control = document.getElementById("wish-" + prefix + "-filter-" + name);
@@ -5203,16 +5213,10 @@ function resetWishlistFilters(section) {
 }
 window.resetWishlistFilters = resetWishlistFilters;
 
-function toggleWishlistShowStocked(checked) {
-  _wishlistFilterState.list.showStocked = checked === true;
-  renderWishlistPage();
-}
-window.toggleWishlistShowStocked = toggleWishlistShowStocked;
-
 function wishlistFilteredRecords(allWishes, section) {
   const filterState = _wishlistFilterState[section === "day" ? "day" : "list"] || {};
   const stockedOnly = section === "stocked";
-  const showStocked = stockedOnly || filterState.showStocked === true;
+  const showStocked = stockedOnly;
   const showDay = section === "day";
   const showToBuy = !showStocked && !showDay;
   const records = allWishes
@@ -5445,7 +5449,6 @@ function renderWishDetailItemInfo(wish) {
 }
 
 function buildWishTableHtml(rows, wishById) {
-  const showStocked = _wishlistFilterState.list.showStocked === true;
   const savedLists = getSavedWishlistLists();
   const activeRows = rows.filter((row) => wishStatus(wishById.get(row.wishId) || {}) !== "stocked");
   const totalQty = activeRows.reduce((sum, row) => sum + Number((wishById.get(row.wishId) || {}).qty || row.qty || 0), 0);
@@ -5460,7 +5463,7 @@ function buildWishTableHtml(rows, wishById) {
     '<button type="button" class="wish-bulk-btn" onclick="const list = document.getElementById(\'wish-bulk-list\'); if (list) addSelectedWishlistItemsToSavedList(list.value);"><i class="fa-solid fa-list"></i> Add to list</button>' +
     '<button type="button" class="wish-bulk-btn wish-bulk-danger" onclick="deleteSelectedWishlistItems()"><i class="fa-solid fa-trash"></i> Delete</button>' +
     '</div>';
-  return bulkActions + '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th scope="col" style="width:8%;"><span class="wish-column-label">Select</span><input type="checkbox" id="wish-select-all" aria-label="Select all visible wishlist items" onchange="toggleAllWishlistSelection(this.checked)"></th><th scope="col"><span class="wish-item-header">Item <label class="wish-show-stocked"><input type="checkbox" id="wish-show-stocked"' + (showStocked ? ' checked' : '') + ' onchange="toggleWishlistShowStocked(this.checked)"><span>Show stocked?</span></label></span></th><th scope="col">Supplier</th><th scope="col">Quantity</th><th scope="col">Estimated amount</th></tr></thead><tbody>' +
+  return bulkActions + '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th scope="col" style="width:8%;"><span class="wish-column-label">Select</span><input type="checkbox" id="wish-select-all" aria-label="Select all visible wishlist items" onchange="toggleAllWishlistSelection(this.checked)"></th><th scope="col">Item</th><th scope="col">Supplier</th><th scope="col">Quantity</th><th scope="col">Estimated amount</th></tr></thead><tbody>' +
     rows.map((row) => {
       const wish = wishById.get(row.wishId) || {};
       const stocked = wishStatus(wish) === "stocked";
@@ -7230,13 +7233,21 @@ async function renderWishlistPage() {
   const selectedCategory = filterState.category;
   const savedFilterPresetId = "wish-filter-preset-select";
   const savedListSelectId = "wish-saved-list-select";
+  const savedViewSelectId = "wish-saved-view-select";
   const savedFilters = getSavedWishlistFilterPresets();
   const savedLists = getSavedWishlistLists();
   if (controls) {
     if (showList) {
       const suppliers = [...new Set(allWishes.map((wish) => String(wish.supplierId || wish.supplier || "").trim()).filter(Boolean))].sort();
       const categories = [...new Set(allWishes.map((wish) => String(wish.type || wish.category || "").trim()).filter(Boolean))].sort();
-      controls.innerHTML = '<div class="wish-control-row wish-filter-row" aria-label="Filter wishlist items">' +
+      controls.innerHTML = '<div class="wish-view-tabs" role="tablist" aria-label="Wishlist views">' +
+        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "main" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "main") + '" onclick="setWishlistView(\'main\')">Main list</button>' +
+        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "stocked" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "stocked") + '" onclick="setWishlistView(\'stocked\')">Stocked</button>' +
+        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "saved" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "saved") + '" onclick="setWishlistView(\'saved\', document.getElementById(\'' + savedViewSelectId + '\')?.value)">Saved list</button>' +
+        '<select id="' + savedViewSelectId + '" class="wish-view-select" aria-label="Choose saved wishlist list" onchange="if (this.value) setWishlistView(\'saved\', this.value)"><option value="">Choose list</option>' + savedLists.map((list) => '<option value="' + escapeHtml(list.name) + '">' + escapeHtml(list.name) + '</option>').join("") + '</select>' +
+        '<button type="button" class="wish-filter-btn" title="Create a saved list" aria-label="Create a saved list" onclick="createSavedWishlistList()"><i class="fa-solid fa-list"></i><span>New list</span></button>' +
+        '</div>' +
+        '<div class="wish-control-row wish-filter-row" aria-label="Filter wishlist items">' +
         '<span class="wish-control-label">Filter</span>' +
         '<select id="' + supplierFilterId + '" class="wish-filter-input" aria-label="Filter by supplier" onchange="renderWishlistPage()"><option value="">All suppliers</option>' + suppliers.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select>' +
         '<select id="' + categoryFilterId + '" class="wish-filter-input" aria-label="Filter by category" onchange="renderWishlistPage()"><option value="">All categories</option>' + categories.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select>' +
@@ -7248,7 +7259,6 @@ async function renderWishlistPage() {
         '<button type="button" class="wish-filter-btn" title="Save current filter" aria-label="Save current filter" onclick="saveWishlistFilterPreset()"><i class="fa-solid fa-floppy-disk"></i><span>Save filter</span></button>' +
         (savedFilters.length ? '<button type="button" class="wish-filter-reset-btn" title="Delete selected saved filter" aria-label="Delete selected saved filter" onclick="const selectedPreset = document.getElementById(\'' + savedFilterPresetId + '\'); if (selectedPreset && selectedPreset.value) deleteWishlistFilterPreset(selectedPreset.value);"><i class="fa-solid fa-trash"></i></button>' : '') +
         '<select id="' + savedListSelectId + '" class="wish-filter-input" aria-label="Saved wishlist lists"><option value="">Saved lists</option>' + savedLists.map((list) => '<option value="' + escapeHtml(list.name) + '">' + escapeHtml(list.name) + '</option>').join("") + '</select>' +
-        '<button type="button" class="wish-filter-btn" title="Create a saved list" aria-label="Create a saved list" onclick="createSavedWishlistList()"><i class="fa-solid fa-list"></i><span>New list</span></button>' +
         '<button type="button" class="wish-filter-btn" title="Add the current visible list to the chosen saved list" aria-label="Add the current visible list to the chosen saved list" onclick="const selectedList = document.getElementById(\'' + savedListSelectId + '\'); if (selectedList && selectedList.value) addVisibleWishlistItemsToSavedList(selectedList.value); else toast(\'Choose a saved list first\', \'info\');"><i class="fa-solid fa-eye"></i><span>Add visible</span></button>' +
         '</div>' +
         '<div id="wish-list-summary" class="wish-list-summary" aria-live="polite"></div>';
@@ -7258,12 +7268,22 @@ async function renderWishlistPage() {
       if (savedFilterSelect) savedFilterSelect.value = "";
       const savedListSelect = document.getElementById(savedListSelectId);
       if (savedListSelect) savedListSelect.value = "";
+      const savedViewSelect = document.getElementById(savedViewSelectId);
+      if (savedViewSelect) savedViewSelect.value = _activeWishlistSavedList;
     } else {
       controls.innerHTML = "";
     }
   }
   let filteredWishes = allWishes
     .filter((wish) => !isWishlistSaleMonitorEntry(wish))
+    .filter((wish) => {
+      if (_activeWishlistView === "stocked") return wishStatus(wish) === "stocked";
+      if (_activeWishlistView === "saved") {
+        const savedList = savedLists.find((list) => list.name === _activeWishlistSavedList);
+        return Boolean(savedList && savedList.itemIds.includes(wish.id));
+      }
+      return wishStatus(wish) !== "stocked";
+    })
     .filter((wish) => !selectedSupplier || String(wish.supplierId || wish.supplier || "").trim() === selectedSupplier)
     .filter((wish) => !selectedCategory || String(wish.type || wish.category || "").trim() === selectedCategory)
     .sort((a, b) => {
@@ -7272,7 +7292,7 @@ async function renderWishlistPage() {
       if (aStocked !== bStocked) return aStocked - bStocked;
       return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
     });
-  if (showList) filteredWishes = wishlistFilteredRecords(filteredWishes, "list");
+  if (_activeWishlistView === "main") filteredWishes = wishlistFilteredRecords(filteredWishes, "list");
   const wishlistRecords = allWishes.filter((wish) => !isWishlistSaleMonitorEntry(wish));
   const activeCount = wishlistRecords.filter((wish) => wishStatus(wish) !== "stocked").length;
   const stockedCount = wishlistRecords.filter((wish) => wishStatus(wish) === "stocked").length;
