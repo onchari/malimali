@@ -5088,10 +5088,89 @@ window.deleteSelectedWishlistItems = deleteSelectedWishlistItems;
 
 async function editSelectedWishlistItem() {
   const ids = getSelectedWishlistIds();
-  if (ids.length !== 1) return toast("Select one item to edit", "info");
-  await openEditWishlistItem(ids[0]);
+  if (!ids.length) return toast("Select wishlist items first", "info");
+  if (ids.length === 1) return openEditWishlistItem(ids[0]);
+  await openWishlistBulkEdit(ids);
 }
 window.editSelectedWishlistItem = editSelectedWishlistItem;
+
+async function openWishlistBulkEdit(ids) {
+  const records = (await Promise.all(ids.map((id) => dbGet("wishlist", id)))).filter(Boolean);
+  if (!records.length) return toast("Selected wishlist items were not found", "err");
+  const fields = {
+    status: records.map((wish) => normalizeWishlistStatus(wish.status)),
+    category: records.map((wish) => String(wish.type || wish.category || "")),
+    supplierId: records.map((wish) => String(wish.supplierId || wish.supplier || "")),
+    note: records.map((wish) => String(wish.note || "")),
+  };
+  const values = {
+    status: document.getElementById("wish-bulk-status"),
+    category: document.getElementById("wish-bulk-category"),
+    supplierId: document.getElementById("wish-bulk-supplier"),
+    note: document.getElementById("wish-bulk-note"),
+  };
+  Object.entries(values).forEach(([field, input]) => {
+    if (!input) return;
+    const first = fields[field][0];
+    const common = fields[field].every((value) => value === first);
+    input.value = common ? first : "";
+    input.placeholder = common ? "" : "Mixed values";
+  });
+  document.querySelectorAll("[data-bulk-edit-field]").forEach((checkbox) => {
+    checkbox.checked = false;
+    const input = values[checkbox.dataset.bulkEditField];
+    if (input) input.disabled = false;
+  });
+  const sheet = document.getElementById("wishlist-bulk-edit-sheet");
+  if (sheet) sheet.classList.add("open");
+}
+window.openWishlistBulkEdit = openWishlistBulkEdit;
+
+function closeWishlistBulkEdit() {
+  const sheet = document.getElementById("wishlist-bulk-edit-sheet");
+  if (sheet) sheet.classList.remove("open");
+}
+window.closeWishlistBulkEdit = closeWishlistBulkEdit;
+
+async function saveWishlistBulkEdit() {
+  const ids = getSelectedWishlistIds();
+  const selectedFields = [...document.querySelectorAll("[data-bulk-edit-field]:checked")]
+    .map((checkbox) => checkbox.dataset.bulkEditField);
+  if (!ids.length) return closeWishlistBulkEdit();
+  if (!selectedFields.length) return toast("Choose at least one field to update", "info");
+  const values = {
+    status: normalizeWishlistStatus(document.getElementById("wish-bulk-status")?.value),
+    category: Input.text("wish-bulk-category"),
+    supplierId: Input.text("wish-bulk-supplier"),
+    note: Input.text("wish-bulk-note"),
+  };
+  const now = new Date().toISOString();
+  let updated = 0;
+  for (const id of ids) {
+    const wish = await dbGet("wishlist", id);
+    if (!wish) continue;
+    selectedFields.forEach((field) => {
+      if (field === "category") {
+        wish.category = values.category;
+        wish.type = values.category;
+      } else if (field === "supplierId") {
+        wish.supplierId = values.supplierId;
+      } else {
+        wish[field] = values[field];
+      }
+    });
+    wish.updatedAt = now;
+    wish.updatedBy = currentUser ? currentUser.username : "system";
+    await dbPut("wishlist", wish);
+    updated++;
+  }
+  closeWishlistBulkEdit();
+  scheduleSync();
+  await renderWishlistPage();
+  await renderStockMonitorSummary();
+  toast(updated + " wishlist item" + (updated === 1 ? "" : "s") + " updated", "ok");
+}
+window.saveWishlistBulkEdit = saveWishlistBulkEdit;
 
 function addSelectedWishlistItemsToSavedList(selectedListName) {
   const listName = String(selectedListName || "").trim();
