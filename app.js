@@ -4876,7 +4876,77 @@ const _wishlistFilterState = {
   list: { priority: "", supplier: "", category: "", showStocked: false },
 };
 const KEY_WISHLIST_LIST_FILTERS = "mgs_wishlist_list_filters";
+const KEY_WISHLIST_FILTER_PRESETS = "mgs_wishlist_filter_presets";
 const _selectedWishlistIds = new Set();
+
+function getSavedWishlistFilterPresets() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY_WISHLIST_FILTER_PRESETS) || "[]");
+    return Array.isArray(saved)
+      ? saved.filter(
+          (preset) =>
+            preset &&
+            typeof preset === "object" &&
+            typeof preset.name === "string" &&
+            preset.name.trim() &&
+            preset.filters &&
+            typeof preset.filters === "object",
+        )
+      : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveWishlistFilterPreset() {
+  const rawName = window.prompt("Name this wishlist filter", "");
+  if (rawName === null) return;
+  const name = String(rawName).trim();
+  if (!name) {
+    toast("Enter a name for the filter", "err");
+    return;
+  }
+  const presets = getSavedWishlistFilterPresets();
+  const nextPreset = {
+    name,
+    filters: {
+      ..._wishlistFilterState.list,
+    },
+  };
+  const existingIndex = presets.findIndex(
+    (preset) => preset.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (existingIndex >= 0) presets[existingIndex] = nextPreset;
+  else presets.push(nextPreset);
+  localStorage.setItem(KEY_WISHLIST_FILTER_PRESETS, JSON.stringify(presets));
+  renderWishlistPage();
+  toast('Filter "' + name + '" saved', "ok");
+}
+window.saveWishlistFilterPreset = saveWishlistFilterPreset;
+
+function applyWishlistFilterPreset(name) {
+  const preset = getSavedWishlistFilterPresets().find((item) => item.name === name);
+  if (!preset) return;
+  _wishlistFilterState.list = {
+    priority: preset.filters?.priority || "",
+    supplier: preset.filters?.supplier || "",
+    category: preset.filters?.category || "",
+    showStocked: preset.filters?.showStocked === true,
+  };
+  renderWishlistPage();
+}
+window.applyWishlistFilterPreset = applyWishlistFilterPreset;
+
+function deleteWishlistFilterPreset(name) {
+  const presetName = String(name || "").trim();
+  if (!presetName) return;
+  const presets = getSavedWishlistFilterPresets().filter(
+    (preset) => preset.name !== presetName,
+  );
+  localStorage.setItem(KEY_WISHLIST_FILTER_PRESETS, JSON.stringify(presets));
+  renderWishlistPage();
+}
+window.deleteWishlistFilterPreset = deleteWishlistFilterPreset;
 
 function updateWishlistSelection() {
   document.querySelectorAll(".wish-select-item").forEach((checkbox) => {
@@ -6910,17 +6980,28 @@ async function renderWishlistPage() {
   const filterState = _wishlistFilterState.list;
   const selectedSupplier = filterState.supplier;
   const selectedCategory = filterState.category;
+  const savedFilterPresetId = "wish-filter-preset-select";
+  const savedFilters = getSavedWishlistFilterPresets();
   if (controls) {
     if (showList) {
       const suppliers = [...new Set(allWishes.map((wish) => String(wish.supplierId || wish.supplier || "").trim()).filter(Boolean))].sort();
       const categories = [...new Set(allWishes.map((wish) => String(wish.type || wish.category || "").trim()).filter(Boolean))].sort();
+      const presetOptions = savedFilters.length
+        ? '<option value="">Saved filters</option>' + savedFilters.map((preset) => '<option value="' + escapeHtml(preset.name) + '">' + escapeHtml(preset.name) + '</option>').join("")
+        : '<option value="">No saved filters</option>';
       controls.innerHTML = '<div class="wish-day-filters" aria-label="Filter wishlist items">' +
         '<button type="button" class="wish-filter-reset-btn" title="Reset filters" aria-label="Reset filters" onclick="resetWishlistFilters(\'list\')"><i class="fa-solid fa-rotate-left"></i></button>' +
         '<select id="' + supplierFilterId + '" class="wish-filter-input" aria-label="Filter by supplier" onchange="renderWishlistPage()"><option value="">All suppliers</option>' + suppliers.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select>' +
-        '<select id="' + categoryFilterId + '" class="wish-filter-input" aria-label="Filter by category" onchange="renderWishlistPage()"><option value="">All categories</option>' + categories.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select></div>' +
+        '<select id="' + categoryFilterId + '" class="wish-filter-input" aria-label="Filter by category" onchange="renderWishlistPage()"><option value="">All categories</option>' + categories.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select>' +
+        '<button type="button" class="wish-filter-btn" title="Save current filter" aria-label="Save current filter" onclick="saveWishlistFilterPreset()"><i class="fa-solid fa-floppy-disk"></i> Save filter</button>' +
+        '<select id="' + savedFilterPresetId + '" class="wish-filter-input" aria-label="Saved wishlist filters" onchange="const nextValue = this.value; this.value = \"\"; if (nextValue) applyWishlistFilterPreset(nextValue);"><option value="">Saved filters</option>' + savedFilters.map((preset) => '<option value="' + escapeHtml(preset.name) + '">' + escapeHtml(preset.name) + '</option>').join("") + '</select>' +
+        (savedFilters.length ? '<button type="button" class="wish-filter-reset-btn" title="Delete selected saved filter" aria-label="Delete selected saved filter" onclick="const selectedPreset = document.getElementById(\'' + savedFilterPresetId + '\'); if (selectedPreset && selectedPreset.value) deleteWishlistFilterPreset(selectedPreset.value);"><i class="fa-solid fa-trash"></i></button>' : '') +
+        '</div>' +
         '<div id="wish-list-summary" class="wish-list-summary" aria-live="polite"></div>';
       document.getElementById(supplierFilterId).value = selectedSupplier;
       document.getElementById(categoryFilterId).value = selectedCategory;
+      const savedFilterSelect = document.getElementById(savedFilterPresetId);
+      if (savedFilterSelect) savedFilterSelect.value = "";
     } else {
       controls.innerHTML = "";
     }
