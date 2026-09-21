@@ -12801,9 +12801,36 @@ async function _deleteLocalRevenueForSale(saleId) {
   }
 }
 
+function canMutateSale(sale) {
+  if (!currentUser || !["super", "user"].includes(currentUser.role)) return false;
+  if (!activeDay || activeDay.status !== "OPEN") return false;
+  const saleDate = sale?.businessDate || sale?.business_date;
+  const activeDate = activeDay.businessDate || activeDay.business_date;
+  return !saleDate || saleDate === activeDate;
+}
+
+async function deleteSaleMonitorRows(saleId) {
+  if (!db.objectStoreNames.contains("wishlist")) return;
+  const monitorRows = (await dbAll("wishlist")).filter(
+    (wish) =>
+      wish.source === "sale-monitor" && String(wish.saleId) === String(saleId),
+  );
+  for (const row of monitorRows) {
+    await cascadeDeleteRecord("wishlist", row.id, row);
+  }
+}
+
 async function voidSale(saleId) {
   try {
     const _voidSale = await dbGet("sales", saleId);
+    if (!_voidSale) {
+      toast("Sale not found", "err");
+      return;
+    }
+    if (!canMutateSale(_voidSale)) {
+      toast("This sale cannot be voided by your account or on this day", "err");
+      return;
+    }
     const _voidMsg = _voidSale
       ? 'Void sale of "' +
         (_voidSale.itemName || _voidSale.itemCode || "item") +
@@ -12883,6 +12910,7 @@ async function voidSale(saleId) {
     };
     await fbDeleteFinanceEntry(finPayload);
     await _deleteLocalRevenueForSale(saleId);
+    await deleteSaleMonitorRows(sale.id);
     await dbDelete("sales", saleId);
 
     // Refresh
@@ -17700,6 +17728,12 @@ async function openSaleDetail(saleId) {
   const pmSel = document.getElementById("sds-edit-payment");
   if (pmSel) pmSel.value = sale.paymentMethod || "cash";
 
+  const canMutate = canMutateSale(sale);
+  const editButton = document.getElementById("sds-edit-btn");
+  const deleteButton = document.getElementById("sds-delete-btn");
+  if (editButton) editButton.style.display = canMutate ? "flex" : "none";
+  if (deleteButton) deleteButton.style.display = canMutate ? "flex" : "none";
+
   // Reset to view mode
   document.getElementById("sds-edit-form").style.display = "none";
   document.getElementById("sds-view").style.display = "block";
@@ -17870,24 +17904,7 @@ window.saveSaleEdit = saveSaleEdit;
 async function deleteSaleFromDetail() {
   const id = parseInt(document.getElementById("sds-id").value);
   if (!id) return;
-  const sale = await dbGet("sales", id);
-  const label = sale
-    ? sale.itemName || sale.itemCode || "this sale"
-    : "this sale";
-  if (!confirm('⚠ Delete sale of "' + label + '"?\n\nThis cannot be undone.'))
-    return;
-  closeSaleDetailSheet();
-  // Skip deleteSale's own confirm — already confirmed above
-  if (sale) {
-    _rememberDeletedSale(sale);
-    await fbDeleteSale(sale);
-    await _deleteLocalRevenueForSale(id);
-  }
-  await dbDelete("sales", id);
-  await refreshUI();
-  refreshSalesViews();
-  renderFinancePage();
-  toast("Sale deleted", "");
+  await voidSale(id);
 }
 window.deleteSaleFromDetail = deleteSaleFromDetail;
 
