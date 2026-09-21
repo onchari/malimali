@@ -633,6 +633,86 @@ function persistSaleAtomically({ item, shoeSize = null, sale, delta, actor } = {
   });
 }
 
+function persistOffStockSaleAtomically(sale, monitorRow) {
+  return new Promise((resolve, reject) => {
+    if (!_dbReady(reject)) return;
+    const syncable =
+      _appDbReady &&
+      db.objectStoreNames.contains("sync_queue") &&
+      db.objectStoreNames.contains("sync_meta");
+    const stores = ["sales", "wishlist"];
+    if (syncable) stores.push("sync_queue", "sync_meta");
+    try {
+      const tx = db.transaction(stores, "readwrite");
+      const saleRequest = tx.objectStore("sales").add(sale);
+      const stateRequest = syncable
+        ? tx.objectStore("sync_meta").get("state")
+        : null;
+      let state;
+      let saleId;
+      let finalized = false;
+      const finalize = () => {
+        if (finalized || saleId == null || (syncable && state === undefined)) return;
+        finalized = true;
+        sale.id = saleId;
+        sale.fbId = stableSaleFbId(sale);
+        monitorRow.saleId = sale.id;
+        const monitorRequest = tx.objectStore("wishlist").add(monitorRow);
+        monitorRequest.onsuccess = (event) => {
+          monitorRow.id = event.target.result;
+          if (!syncable) return;
+          const meta = state || { key: "state", clock: 0, clientId: _syncClient() };
+          let clock = Math.max(Number(meta.clock) || 0, _syncClock);
+          const now = new Date().toISOString();
+          const queue = (collection, record) => {
+            _prepareSyncRecord(collection, record);
+            clock += 1;
+            record._syncMutationId = _syncUuid();
+            record._syncVersion = clock;
+            record._syncClient = _syncClient();
+            record._syncUpdatedAt = now;
+            record._syncDeleted = false;
+            tx.objectStore(collection).put(record);
+            tx.objectStore("sync_queue").add(
+              _queueRecord(collection, record, "upsert", clock, now),
+            );
+          };
+          queue("sales", sale);
+          queue("wishlist", monitorRow);
+          tx.objectStore("sync_meta").put({
+            ...meta,
+            key: "state",
+            clock,
+            clientId: _syncClient(),
+            updatedAt: now,
+          });
+          _syncClock = clock;
+        };
+      };
+      saleRequest.onsuccess = (event) => {
+        saleId = event.target.result;
+        finalize();
+      };
+      if (stateRequest) {
+        stateRequest.onsuccess = (event) => {
+          state = event.target.result || { key: "state", clock: 0, clientId: _syncClient() };
+          finalize();
+        };
+      } else {
+        state = null;
+      }
+      tx.onerror = (event) => reject(event.target.error || tx.error);
+      tx.onabort = () => reject(tx.error || new Error("Off-stock sale transaction aborted"));
+      tx.oncomplete = () => {
+        _notifySyncLocalChange("sales");
+        resolve({ sale, monitorRow });
+      };
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 async function deriveQty(itemId, sizeId = null) {
   if (!itemId || !db || !db.objectStoreNames.contains("stock_moves")) {
     if (itemId == null) return 0;
@@ -702,6 +782,18 @@ async function readableStockQty(item, sizeId = null) {
     return hasLedgerMoves ? await deriveQty(item.id, null) : Number(item.qty ?? 0);
   }
   return Number(item.qty || 0);
+}
+
+async function displayStockQty(item) {
+  if (!item || !item.isShoe) return readableStockQty(item);
+  const sizes = (await dbAll("shoe_sizes")).filter(
+    (size) =>
+      String(size.itemId) === String(item.id) || size.itemCode === item.code,
+  );
+  const quantities = await Promise.all(
+    sizes.map((size) => readableStockQty(size, size.id)),
+  );
+  return quantities.reduce((total, quantity) => total + quantity, 0);
 }
 
 async function markStockLedgerMigrationCutover() {
@@ -7038,10 +7130,11 @@ async function openShoeSizeCard(itemCode, size) {
   const price = sizeRec.sellPrice || item.sellPrice || 0;
   const buy = sizeRec.buyPrice || item.buyPrice || 0;
   const profit = price - buy;
-  const isOut = sizeRec.qty <= 0;
-  const isLow = !isOut && sizeRec.qty <= LOW_STOCK_LEVEL;
+  const availableQty = await readableStockQty(sizeRec, sizeRec.id);
+  const isOut = availableQty <= 0;
+  const isLow = !isOut && availableQty <= LOW_STOCK_LEVEL;
   const stockCol = isOut ? "var(--red)" : isLow ? "#d97706" : "var(--green)";
-  const stockLbl = isOut ? "Out of stock" : sizeRec.qty + " pcs in stock";
+  const stockLbl = isOut ? "Out of stock" : availableQty + " pcs in stock";
   const groupLbl =
     sizeRec.sizeGroup === "S"
       ? "Children"
@@ -7078,7 +7171,7 @@ async function openShoeSizeCard(itemCode, size) {
       <div class="sh-stat-box"><div class="sh-stat-lbl">Buying</div><div class="sh-stat-val muted">${fmt(buy)}</div></div>
       <div class="sh-stat-box"><div class="sh-stat-lbl">Selling</div><div class="sh-stat-val accent2">${fmt(price)}</div></div>
       <div class="sh-stat-box accent-bg"><div class="sh-stat-lbl">Profit</div><div class="sh-stat-val ${profit > 0 ? "green" : "muted"}">${fmt(profit)}</div></div>
-      <div class="sh-stat-box"><div class="sh-stat-lbl">Stock</div><div class="sh-stat-val accent">${sizeRec.qty} pcs</div></div>
+      <div class="sh-stat-box"><div class="sh-stat-lbl">Stock</div><div class="sh-stat-val accent">${availableQty} pcs</div></div>
     </div>
     <div class="detail-action-row">
       <button type="button" class="btn-del detail-action-btn" onclick="closeShoeSizeActions();openSheet(${item.id})">
@@ -7118,15 +7211,20 @@ async function renderShoeDetailGrid(item) {
     return;
   }
 
+  const quantities = await Promise.all(
+    sizes.map((size) => readableStockQty(size, size.id)),
+  );
+
   wrap.style.display = "block";
   wrap.innerHTML =
     '<div class="sh-detail-size-grid">' +
     sizes
-      .map((s) => {
+      .map((s, index) => {
         const n = Number(s.size);
         const selected = _selectedShoeSizes.has(n);
+        const quantity = quantities[index];
         const state =
-          s.qty <= 0 ? " out" : s.qty <= LOW_STOCK_LEVEL ? " low" : "";
+          quantity <= 0 ? " out" : quantity <= LOW_STOCK_LEVEL ? " low" : "";
         return (
           '<button type="button" class="sh-detail-size-btn' +
           state +
@@ -7419,7 +7517,10 @@ async function openSheet(id) {
 
   if (item.isShoe) {
     const freshSizes = await getShoeSizes(item.code);
-    const totalQty = freshSizes.reduce((t, s) => t + s.qty, 0);
+    const sizeQtys = await Promise.all(
+      freshSizes.map((size) => readableStockQty(size, size.id)),
+    );
+    const totalQty = sizeQtys.reduce((total, qty) => total + qty, 0);
     item.qty = totalQty;
     // Show shoe buy/sell from defaults
     set("sh-buy", fmt(item.buyPrice || item.defaultBuy || 0));
@@ -7432,6 +7533,7 @@ async function openSheet(id) {
     }
     await renderShoeDetailGrid(item);
   } else {
+    item.qty = await readableStockQty(item);
     set("sh-buy", fmt(item.buyPrice || item.buy || 0));
     set("sh-sell", fmt(item.sellPrice || item.sell || 0));
     set("sh-qty", item.qty + " pcs");
@@ -8026,8 +8128,18 @@ async function renderDashboard() {
     totalRevenue > 0 ? (totalProfitEarned / totalRevenue) * 100 : 0;
   const avgSale = totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0;
 
-  const outStk = allItems.filter((i) => i.qty === 0);
-  const lowStk = allItems.filter((i) => i.qty > 0 && i.qty <= LOW_STOCK_LEVEL);
+  const itemQuantities = await Promise.all(
+    allItems.map((item) => displayStockQty(item)),
+  );
+  const outStk = allItems.filter(
+    (item, index) => !item.isRecord && itemQuantities[index] <= 0,
+  );
+  const lowStk = allItems.filter(
+    (item, index) =>
+      !item.isRecord &&
+      itemQuantities[index] > 0 &&
+      itemQuantities[index] <= LOW_STOCK_LEVEL,
+  );
   const todayDashSales = allSales.filter(
     (s) => (s.businessDate || (s.date || "").split("T")[0]) === today,
   );
@@ -8475,16 +8587,16 @@ async function searchSell() {
 
     const rows = [];
 
-    items.forEach((item) => {
+    for (const item of items) {
       const score = q ? _gscScore(item, q) : 1;
-      if (q && score === 0) return;
+      if (q && score === 0) continue;
 
       const t = getTypeObj(item.type);
 
       if (item.isShoe) {
-        sizes
-          .filter((sz) => sz.itemCode === item.code && (sz.qty || 0) > 0)
-          .forEach((sz) => {
+        for (const sz of sizes.filter((record) => record.itemCode === item.code)) {
+            const availableQty = await readableStockQty(sz, sz.id);
+            if (availableQty <= 0) continue;
             // Also score against size number
             const szScore = q
               ? Math.max(score, String(sz.size).includes(q) ? 20 : 0)
@@ -8498,20 +8610,21 @@ async function searchSell() {
               score: szScore,
               label: item.name || item.code,
               meta: item.code + " · Size " + sz.size,
-              qty: sz.qty || 0,
+              qty: availableQty,
               price,
               profit: price - buy,
               isRec: false,
               action: `openSellShoeModal(${item.id},${sz.size})`,
               extraTag: `<span class="tag tag-gray">Sz ${escapeHtml(String(sz.size))}</span>`,
             });
-          });
-        return;
+        }
+        continue;
       }
 
       // Standard + Record Only items
-      const sellable = item.isRecord || (item.qty || 0) > 0;
-      if (!sellable) return;
+      const availableQty = item.isRecord ? 0 : await readableStockQty(item);
+      const sellable = item.isRecord || availableQty > 0;
+      if (!sellable) continue;
 
       const price = item.sellPrice || item.sell || 0;
       const buy = item.buyPrice || item.buy || 0;
@@ -8524,7 +8637,7 @@ async function searchSell() {
         score,
         label: item.name || item.code,
         meta,
-        qty: item.qty || 0,
+        qty: availableQty,
         price,
         profit: price - buy,
         isRec: !!item.isRecord,
@@ -8533,7 +8646,7 @@ async function searchSell() {
           ? '<span class="tag tag-record">RECORD</span>'
           : "",
       });
-    });
+    }
 
     // Sort: by score desc (with query) or alphabetically (no query)
     rows.sort((a, b) =>
@@ -8699,13 +8812,6 @@ async function confirmOffStockSale() {
     businessDate: todayDateStr(),
     date: new Date().toISOString(),
   };
-  sale.id = await dbAdd("sales", sale);
-  try {
-    fbSyncSale(sale);
-  } catch (_) {
-    /* intentionally ignored */
-  }
-
   const monitorRow = {
     name: name || code,
     code,
@@ -8719,7 +8825,7 @@ async function confirmOffStockSale() {
     createdAt: new Date().toISOString(),
     createdBy: currentUser ? currentUser.username : "system",
   };
-  monitorRow.id = await dbAdd("wishlist", monitorRow);
+  await persistOffStockSaleAtomically(sale, monitorRow);
 
   ["off-name", "off-code", "off-size", "off-buy", "off-sell"].forEach((id) => {
     const el = document.getElementById(id);
@@ -8744,7 +8850,13 @@ async function confirmOffStockSale() {
     /* intentionally ignored */
   }
   scheduleSync();
-  toast("Sale recorded - monitor marked NOT ACCOUNTED", "ok");
+  const syncStatus = await saleSaveStatus();
+  toast(
+    syncStatus.pending
+      ? "Sale saved locally, sync pending - monitor marked NOT ACCOUNTED"
+      : "Sale recorded - monitor marked NOT ACCOUNTED",
+    syncStatus.pending ? "" : "ok",
+  );
   showSaleSuccess(profit);
 }
 
@@ -9172,7 +9284,13 @@ async function confirmSaleUnlocked() {
       /* intentionally ignored */
     }
 
-    toast("" + fmt(revenue) + " - Profit: " + fmt(profit), "ok");
+    const syncStatus = await saleSaveStatus();
+    toast(
+      syncStatus.pending
+        ? fmt(revenue) + " - Sale saved locally, sync pending"
+        : fmt(revenue) + " - Profit: " + fmt(profit),
+      syncStatus.pending ? "" : "ok",
+    );
     showSaleSuccess(profit);
   } catch (err) {
     console.error("[confirmSale]", err);
@@ -11396,6 +11514,19 @@ async function _queueSyncUnlocked(collection, record, operation = "upsert") {
 async function _queueSync(collection, record, operation = "upsert") {
   await _withSyncLock(() => _queueSyncUnlocked(collection, record, operation));
   scheduleSync(50);
+}
+
+async function saleSaveStatus() {
+  if (!db.objectStoreNames.contains("sync_queue")) {
+    return { pending: true, label: "saved locally, sync pending" };
+  }
+  const pending = (await dbAll("sync_queue")).filter(
+    (entry) => entry.status !== "done",
+  ).length;
+  if (pending || !fbReady || !navigator.onLine) {
+    return { pending: true, label: "saved locally, sync pending" };
+  }
+  return { pending: false, label: "synced" };
 }
 
 async function fbSyncItem(item) {
