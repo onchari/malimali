@@ -18048,6 +18048,7 @@ async function openSaleDetail(saleId) {
     toast("Sale not found", "err");
     return;
   }
+  const linkedItem = sale.itemId == null ? null : await dbGet("items", sale.itemId);
 
   document.getElementById("sds-id").value = saleId;
 
@@ -18091,8 +18092,10 @@ async function openSaleDetail(saleId) {
   const canMutate = canMutateSale(sale);
   const editButton = document.getElementById("sds-edit-btn");
   const deleteButton = document.getElementById("sds-delete-btn");
+  const addButton = document.getElementById("sds-add-btn");
   if (editButton) editButton.style.display = canMutate ? "flex" : "none";
   if (deleteButton) deleteButton.style.display = canMutate ? "flex" : "none";
+  if (addButton) addButton.style.display = linkedItem ? "none" : "flex";
 
   // Reset to view mode
   document.getElementById("sds-edit-form").style.display = "none";
@@ -18291,11 +18294,12 @@ async function saleAddToInventoryFromDetail() {
   const el = (id) => document.getElementById(id);
   if (el("f-code")) el("f-code").value = sale.itemCode || "";
   if (el("f-name")) el("f-name").value = sale.itemName || "";
+  if (el("f-qty")) el("f-qty").value = sale.qty || 1;
   if (el("f-buy")) el("f-buy").value = sale.buyPrice > 0 ? sale.buyPrice : "";
   if (el("f-sell"))
     el("f-sell").value = sale.sellPrice > 0 ? sale.sellPrice : "";
   updateProfitPreview();
-  setItemMode(true); // Default to Record Only
+  setItemMode(false);
   toast("Pre-filled from sale — save to link across system", "");
 }
 window.saleAddToInventoryFromDetail = saleAddToInventoryFromDetail;
