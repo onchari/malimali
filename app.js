@@ -18144,21 +18144,21 @@ async function openSaleDetail(saleId) {
   const addButton = document.getElementById("sds-add-btn");
   if (editButton) {
     editButton.style.display = "flex";
-    editButton.disabled = !canMutate;
-    editButton.style.opacity = canMutate ? "1" : "0.45";
-    editButton.style.cursor = canMutate ? "pointer" : "not-allowed";
+    editButton.disabled = false;
+    editButton.style.opacity = "1";
+    editButton.style.cursor = "pointer";
     editButton.title = canMutate
       ? "Edit this sale"
-      : "Editing requires an open business day and an authorized account";
+      : "Editing is restricted until the business day is open and an authorized account is signed in";
   }
   if (deleteButton) {
     deleteButton.style.display = "flex";
-    deleteButton.disabled = !canMutate;
-    deleteButton.style.opacity = canMutate ? "1" : "0.45";
-    deleteButton.style.cursor = canMutate ? "pointer" : "not-allowed";
+    deleteButton.disabled = false;
+    deleteButton.style.opacity = "1";
+    deleteButton.style.cursor = "pointer";
     deleteButton.title = canMutate
       ? "Delete or void this sale"
-      : "Deletion requires an open business day and an authorized account";
+      : "Deletion is restricted until the business day is open and an authorized account is signed in";
   }
   if (addButton) {
     addButton.style.display = "flex";
@@ -18183,6 +18183,19 @@ function closeSaleDetailSheet() {
 window.closeSaleDetailSheet = closeSaleDetailSheet;
 
 function toggleSaleEditForm() {
+  const saleId = parseInt(document.getElementById("sds-id")?.value, 10);
+  if (!currentUser || !["super", "user"].includes(currentUser.role)) {
+    toast("Only authorized users can edit sales", "err");
+    return;
+  }
+  if (!activeDay || activeDay.status !== "OPEN") {
+    toast("Open the business day before editing a sale", "err");
+    return;
+  }
+  if (!Number.isInteger(saleId)) {
+    toast("Sale record not found", "err");
+    return;
+  }
   const form = document.getElementById("sds-edit-form");
   const view = document.getElementById("sds-view");
   const acts = document.getElementById("sds-actions");
