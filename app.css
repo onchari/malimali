@@ -2357,6 +2357,18 @@ body {
 .wish-table td { font-weight: 400; font-size: 8px; }
 .wish-table tbody tr { cursor: pointer; }
 .wish-table-check-cell { cursor: default; }
+.wish-column-label {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 8px;
+  line-height: 1;
+}
+.wish-table thead th:first-child input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+}
 .wish-table-name-main {
   font-size: 9px;
   line-height: 1.2;
