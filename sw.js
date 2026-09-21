@@ -1,4 +1,4 @@
-﻿// ===== MANDELA GENERALS SERVICE WORKER v14 =====
+// ===== MANDELA GENERALS SERVICE WORKER v14 =====
 // Strategy:
 //   App files   to  Network-first (always try fresh, fallback to cache offline)
 //   Firebase SDK  to  Cache-first (static SDK, rarely changes)
