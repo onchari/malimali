@@ -2028,37 +2028,129 @@ body {
 .wish-view-tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-  padding: 0 0 7px;
-  border-bottom: 1px solid rgba(18, 79, 67, .16);
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 10px;
 }
 .wish-view-tab {
+  flex: 1 1 0;
   min-height: 34px;
-  padding: 7px 11px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
+  padding: 8px 10px;
+  border: 1px solid #c6ded2;
+  border-radius: 8px;
+  background: #f4faf7;
   color: var(--muted);
   font: 800 11px var(--sans);
   cursor: pointer;
 }
 .wish-view-tab.active {
-  border-color: #9acbb5;
-  background: #eef8f2;
-  color: #176b38;
+  border-color: #208d59;
+  background: #208d59;
+  color: #fff;
 }
-.wish-view-select {
-  min-height: 34px;
-  min-width: 130px;
-  flex: 1 1 130px;
-  padding: 6px 8px;
+.wish-saved-lists-panel {
+  margin: 0 0 10px;
+  padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 9px;
   background: var(--surface);
-  color: var(--text);
-  font: 600 11px var(--sans);
 }
+.wish-saved-lists-head,
+.wish-saved-list-card,
+.wish-saved-list-open,
+.wish-saved-list-actions {
+  display: flex;
+  align-items: center;
+}
+.wish-saved-lists-head {
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 12px;
+}
+.wish-saved-list-grid {
+  display: grid;
+  gap: 6px;
+}
+.wish-saved-list-card {
+  gap: 6px;
+  justify-content: space-between;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface2);
+}
+.wish-saved-list-card.active {
+  border-color: #61ad89;
+  background: #eef8f2;
+}
+.wish-saved-list-open {
+  min-width: 0;
+  flex: 1;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.wish-saved-list-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 7px;
+  background: #d8f1e3;
+  color: #188052;
+}
+.wish-saved-list-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.wish-saved-list-copy strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wish-saved-list-copy small {
+  color: var(--muted);
+  font-size: 9px;
+}
+.wish-saved-list-actions {
+  gap: 3px;
+}
+.wish-saved-list-actions button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.wish-saved-list-actions button:hover { color: var(--accent); }
+.wish-saved-list-actions button:last-child:hover { color: var(--red); }
+.wish-saved-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.wish-saved-empty i { color: var(--accent); }
+.wish-saved-empty button { margin-left: auto; }
 .wish-control-row {
   display: flex;
   align-items: center;
@@ -2517,9 +2609,9 @@ body {
 .wish-table th {
   background: #eef8f4;
   color: #124f43;
-  font-size: 9px;
-  font-weight: 800;
-  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: none;
 }
 .wish-table td { font-weight: 400; font-size: 8px; }
 .wish-table tbody tr { cursor: pointer; }
@@ -2997,7 +3089,9 @@ body {
   font-size: 14px;
 }
 #page-wishlist .wish-table th {
-  font-size: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: none;
 }
 #page-wishlist .wish-table td {
   font-size: 13px;
@@ -3878,6 +3972,18 @@ body {
   padding: 10px 4px;
   font-size: 11px;
   min-width: 0;
+}
+.inventory-tabs.wishlist-focus {
+  grid-template-columns: 1fr;
+}
+.inventory-tabs.wishlist-focus .ops-tab:not(#inventory-tab-wishlist) {
+  display: none;
+}
+.inventory-tabs.wishlist-focus #inventory-tab-wishlist.active {
+  background: #e5e7eb;
+  border-color: #cbd5e1;
+  color: #64748b;
+  cursor: default;
 }
 .sales-tabs {
   grid-template-columns: repeat(2, minmax(0, 1fr));
