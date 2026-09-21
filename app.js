@@ -13962,14 +13962,6 @@ if ("serviceWorker" in navigator) {
       reg.addEventListener("statechange", () => {
         if (reg.waiting) onNewWorker(reg.waiting);
       });
-      setInterval(
-        () =>
-          reg
-            .update()
-            .then(() => _setUpdateLastCheck())
-            .catch(() => {}),
-        30 * 60 * 1000,
-      );
       setInterval(checkPublishedAppVersion, 30 * 60 * 1000);
     })
     .catch(() => {});
@@ -14942,7 +14934,7 @@ function _setUpdateLastCheck() {
   }
 }
 
-async function checkPublishedAppVersion() {
+async function checkPublishedAppVersion({ refreshWorker = true } = {}) {
   try {
     const response = await fetch("./version.json?" + Date.now(), {
       cache: "no-store",
@@ -14959,7 +14951,7 @@ async function checkPublishedAppVersion() {
       versionLine.textContent =
         "Version " + APP_VERSION + " -> " + version + " is ready to install";
     }
-    if (swRegistration && typeof swRegistration.update === "function") {
+    if (refreshWorker && swRegistration && typeof swRegistration.update === "function") {
       await swRegistration.update();
     }
     return true;
@@ -14971,12 +14963,15 @@ async function checkPublishedAppVersion() {
 
 async function checkForAppUpdate() {
   const found = await checkPublishedAppVersion();
-  if (found || _pendingWorker || swRegistration?.waiting) {
+  if (_pendingWorker || swRegistration?.waiting) {
     _showUpdateState("available");
     _showUpdateBanner();
     return true;
   }
-  if (swRegistration?.update) await swRegistration.update().catch(() => {});
+  if (found) {
+    toast("New version detected. Downloading update...", "");
+    return true;
+  }
   _setUpdateLastCheck();
   toast("App is up to date", "ok");
   return false;
