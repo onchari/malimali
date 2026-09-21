@@ -672,6 +672,31 @@
   </div>
 </div>
 
+<div class="sheet-overlay" id="wishlist-bulk-edit-sheet">
+  <div class="sheet wishlist-bulk-edit-sheet">
+    <div class="sheet-handle"></div>
+    <div class="wishlist-bulk-edit-head">
+      <div>
+        <div class="sheet-title">Edit selected items</div>
+        <div class="sheet-code">Update shared planning fields only</div>
+      </div>
+      <button type="button" class="stock-icon-btn" onclick="closeWishlistBulkEdit()" aria-label="Close bulk edit" title="Close">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div class="wishlist-bulk-edit-fields">
+      <label class="wishlist-bulk-edit-field"><input type="checkbox" data-bulk-edit-field="status"><span>Status</span><select id="wish-bulk-status" class="add-input"><option value="">Mixed values</option><option value="planned">Planned</option><option value="in_progress">In progress</option><option value="stocked">Stocked</option><option value="cancelled">Cancelled</option></select></label>
+      <label class="wishlist-bulk-edit-field"><input type="checkbox" data-bulk-edit-field="category"><span>Category</span><input id="wish-bulk-category" class="add-input" type="text" maxlength="80" placeholder="Mixed values"></label>
+      <label class="wishlist-bulk-edit-field"><input type="checkbox" data-bulk-edit-field="supplierId"><span>Supplier</span><input id="wish-bulk-supplier" class="add-input" type="text" maxlength="80" placeholder="Mixed values"></label>
+      <label class="wishlist-bulk-edit-field"><input type="checkbox" data-bulk-edit-field="note"><span>Note</span><textarea id="wish-bulk-note" class="add-input" rows="3" maxlength="160" placeholder="Mixed values"></textarea></label>
+    </div>
+    <div class="wishlist-bulk-edit-actions">
+      <button type="button" class="wish-detail-btn" onclick="closeWishlistBulkEdit()">Cancel</button>
+      <button type="button" class="wish-detail-btn save" onclick="saveWishlistBulkEdit()"><i class="fa-solid fa-floppy-disk"></i> Apply changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============================================================== 
      PAGE: OPERATIONS  (id="page-operations")
      Contains Day and Finance as inner tabs.
