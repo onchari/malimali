@@ -1921,6 +1921,17 @@ body {
   white-space: nowrap;
 }
 .wishlist-add-btn i { margin-right: 4px; }
+.wish-add-context {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid #b9dfcd;
+  border-radius: 8px;
+  background: #edf9f2;
+  color: #176b38;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.wish-add-context i { margin-right: 5px; }
 .wishlist-task-panel {
   margin: 0 0 10px;
   padding: 12px;
