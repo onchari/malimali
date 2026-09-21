@@ -18139,9 +18139,31 @@ async function openSaleDetail(saleId) {
   const editButton = document.getElementById("sds-edit-btn");
   const deleteButton = document.getElementById("sds-delete-btn");
   const addButton = document.getElementById("sds-add-btn");
-  if (editButton) editButton.style.display = canMutate ? "flex" : "none";
-  if (deleteButton) deleteButton.style.display = canMutate ? "flex" : "none";
-  if (addButton) addButton.style.display = linkedItem ? "none" : "flex";
+  if (editButton) {
+    editButton.style.display = "flex";
+    editButton.disabled = !canMutate;
+    editButton.style.opacity = canMutate ? "1" : "0.45";
+    editButton.style.cursor = canMutate ? "pointer" : "not-allowed";
+    editButton.title = canMutate
+      ? "Edit this sale"
+      : "Editing requires an open business day and an authorized account";
+  }
+  if (deleteButton) {
+    deleteButton.style.display = "flex";
+    deleteButton.disabled = !canMutate;
+    deleteButton.style.opacity = canMutate ? "1" : "0.45";
+    deleteButton.style.cursor = canMutate ? "pointer" : "not-allowed";
+    deleteButton.title = canMutate
+      ? "Delete or void this sale"
+      : "Deletion requires an open business day and an authorized account";
+  }
+  if (addButton) {
+    addButton.style.display = "flex";
+    addButton.disabled = false;
+    addButton.title = linkedItem
+      ? "This sale is already linked to inventory"
+      : "Add this sale to inventory";
+  }
 
   // Reset to view mode
   document.getElementById("sds-edit-form").style.display = "none";
@@ -18321,6 +18343,10 @@ async function saleAddToInventoryFromDetail() {
   const sale = await dbGet("sales", id);
   if (!sale) {
     toast("Sale not found", "err");
+    return;
+  }
+  if (sale.itemId != null && (await dbGet("items", sale.itemId))) {
+    toast("This sale is already linked to inventory", "");
     return;
   }
   closeSaleDetailSheet();
