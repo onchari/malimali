@@ -5028,22 +5028,21 @@ function getSelectedWishlistIds() {
 }
 
 function updateWishlistSelection() {
-  const selected = new Set(
-    [...document.querySelectorAll(".wish-select-item:checked")]
-      .map((checkbox) => Number(checkbox.value))
-      .filter((id) => Number.isFinite(id)),
+  const visible = [...document.querySelectorAll(".wish-select-item")];
+  const visibleIds = new Set(
+    visible.map((checkbox) => Number(checkbox.value)).filter((id) => Number.isFinite(id)),
   );
-  _selectedWishlistIds.clear();
-  selected.forEach((id) => _selectedWishlistIds.add(id));
-  const count = selected.size;
+  visible.forEach((checkbox) => {
+    const id = Number(checkbox.value);
+    if (checkbox.checked) _selectedWishlistIds.add(id);
+    else _selectedWishlistIds.delete(id);
+  });
+  const count = _selectedWishlistIds.size;
   const bar = document.getElementById("wishlist-bulk-actions");
   if (bar) bar.hidden = count === 0;
-  const label = document.getElementById("wishlist-selected-count");
-  if (label) label.textContent = count + " selected";
   const selectAll = document.getElementById("wish-select-all");
-  const visible = [...document.querySelectorAll(".wish-select-item")];
   if (selectAll) {
-    selectAll.checked = visible.length > 0 && visible.every((checkbox) => checkbox.checked);
+    selectAll.checked = visibleIds.size > 0 && visible.every((checkbox) => checkbox.checked);
     selectAll.indeterminate = visible.some((checkbox) => checkbox.checked) && !selectAll.checked;
   }
 }
@@ -5376,14 +5375,13 @@ function buildWishTableHtml(rows, wishById) {
     return sum + Number(wish.qty || row.qty || 0) * Number(wish.estimatedCost || 0);
   }, 0);
   const bulkActions = '<div id="wishlist-bulk-actions" class="wishlist-bulk-actions" hidden>' +
-    '<span id="wishlist-selected-count">0 selected</span>' +
     '<button type="button" class="wish-bulk-btn" onclick="markSelectedWishlistItemsStocked()"><i class="fa-solid fa-box"></i> Stocked</button>' +
     '<button type="button" class="wish-bulk-btn" onclick="editSelectedWishlistItem()"><i class="fa-solid fa-pen"></i> Edit</button>' +
     '<select id="wish-bulk-list" class="wish-bulk-planner" aria-label="Saved list for selected items"><option value="">Add to list</option>' + savedLists.map((list) => '<option value="' + escapeHtml(list.name) + '">' + escapeHtml(list.name) + '</option>').join("") + '</select>' +
     '<button type="button" class="wish-bulk-btn" onclick="const list = document.getElementById(\'wish-bulk-list\'); if (list) addSelectedWishlistItemsToSavedList(list.value);"><i class="fa-solid fa-list"></i> Add to list</button>' +
     '<button type="button" class="wish-bulk-btn wish-bulk-danger" onclick="deleteSelectedWishlistItems()"><i class="fa-solid fa-trash"></i> Delete</button>' +
     '</div>';
-  return bulkActions + '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th style="width:8%;"><input type="checkbox" id="wish-select-all" aria-label="Select all visible wishlist items" onchange="toggleAllWishlistSelection(this.checked)"></th><th><span class="wish-item-header">Item <label class="wish-show-stocked"><input type="checkbox" id="wish-show-stocked"' + (showStocked ? ' checked' : '') + ' onchange="toggleWishlistShowStocked(this.checked)"><span>Show stocked?</span></label></span></th><th>Supply</th><th>Qty</th><th>Amount</th></tr></thead><tbody>' +
+  return bulkActions + '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th scope="col" style="width:8%;"><span class="wish-column-label">Select</span><input type="checkbox" id="wish-select-all" aria-label="Select all visible wishlist items" onchange="toggleAllWishlistSelection(this.checked)"></th><th scope="col"><span class="wish-item-header">Item <label class="wish-show-stocked"><input type="checkbox" id="wish-show-stocked"' + (showStocked ? ' checked' : '') + ' onchange="toggleWishlistShowStocked(this.checked)"><span>Show stocked?</span></label></span></th><th scope="col">Supplier</th><th scope="col">Quantity</th><th scope="col">Estimated amount</th></tr></thead><tbody>' +
     rows.map((row) => {
       const wish = wishById.get(row.wishId) || {};
       const stocked = wishStatus(wish) === "stocked";
@@ -5403,9 +5401,10 @@ function buildWishTableHtml(rows, wishById) {
               ? "wish-status-indicator cancelled"
               : "wish-status-indicator planned";
       const openDetail = ' onclick="openWishlistDetail(' + row.wishId + ')"';
+      const isSelected = _selectedWishlistIds.has(Number(row.wishId));
       return '<tr class="wish-row' + (stocked ? ' is-stocked' : '') + '" data-wish-id="' + row.wishId + '">' +
-        '' +
-        '<td class="wish-table-check-cell"><input type="checkbox" class="wish-select-item" value="' + row.wishId + '" aria-label="Select ' + escapeHtml(itemName) + '" onchange="event.stopPropagation();updateWishlistSelection()"></td>' +
+        '<td class="wish-table-check-cell"><input type="checkbox" class="wish-select-item" value="' + row.wishId + '" aria-label="Select ' + escapeHtml(itemName) + '"' + (isSelected ? ' checked' : '') + ' onchange="event.stopPropagation();updateWishlistSelection()"></td>' +
+        '<td class="wish-table-name"' + openDetail + '><div class="wish-table-name-main">' + escapeHtml(itemName) + '</div><div class="wish-row-status"><span class="' + statusClass + '">' + escapeHtml(statusLabel) + '</span></div></td>' +
         '<td' + openDetail + '>' + escapeHtml(supply) + '</td>' +
         '<td' + openDetail + '>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td>' +
         '<td class="wish-table-amount"' + openDetail + '>' + escapeHtml(amount) + '</td>' +
@@ -7236,6 +7235,7 @@ async function renderWishlistPage() {
     (await dbAll("wishlist")).forEach((w) => wishById.set(w.id, w));
   }
   list.innerHTML = buildWishTableHtml(rows, wishById);
+  updateWishlistSelection();
 }
 
 async function toggleWishlistStockedState(wishId) {
