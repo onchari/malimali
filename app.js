@@ -4877,6 +4877,7 @@ const _wishlistFilterState = {
 };
 const KEY_WISHLIST_LIST_FILTERS = "mgs_wishlist_list_filters";
 const KEY_WISHLIST_FILTER_PRESETS = "mgs_wishlist_filter_presets";
+const KEY_WISHLIST_SAVED_LISTS = "mgs_wishlist_saved_lists";
 const _selectedWishlistIds = new Set();
 
 function getSavedWishlistFilterPresets() {
@@ -4947,6 +4948,86 @@ function deleteWishlistFilterPreset(name) {
   renderWishlistPage();
 }
 window.deleteWishlistFilterPreset = deleteWishlistFilterPreset;
+
+function getSavedWishlistLists() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY_WISHLIST_SAVED_LISTS) || "[]");
+    return Array.isArray(saved)
+      ? saved.filter(
+          (list) =>
+            list &&
+            typeof list === "object" &&
+            typeof list.name === "string" &&
+            list.name.trim() &&
+            Array.isArray(list.itemIds),
+        )
+      : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function persistSavedWishlistLists(lists) {
+  localStorage.setItem(KEY_WISHLIST_SAVED_LISTS, JSON.stringify(lists));
+}
+
+function createSavedWishlistList() {
+  const rawName = window.prompt("Name this saved list", "");
+  if (rawName === null) return;
+  const name = String(rawName).trim();
+  if (!name) {
+    toast("Enter a name for the list", "err");
+    return;
+  }
+  const lists = getSavedWishlistLists();
+  const existing = lists.find((list) => list.name.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    toast('"' + name + '" already exists', "info");
+    renderWishlistPage();
+    return;
+  }
+  lists.push({
+    id: "wish-list-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+    name,
+    itemIds: [],
+  });
+  persistSavedWishlistLists(lists);
+  renderWishlistPage();
+  toast('Saved list "' + name + '" created', "ok");
+}
+window.createSavedWishlistList = createSavedWishlistList;
+
+function addSelectedWishlistItemsToSavedList(selectedListName) {
+  const listName = String(selectedListName || "").trim();
+  if (!listName) {
+    toast("Choose a saved list first", "info");
+    return;
+  }
+  const selectedIds = [...document.querySelectorAll(".wish-select-item:checked")]
+    .map((checkbox) => Number(checkbox.value))
+    .filter((id) => Number.isFinite(id));
+  if (!selectedIds.length) {
+    toast("Select items from the wishlist before adding them", "info");
+    return;
+  }
+  const lists = getSavedWishlistLists();
+  const list = lists.find((entry) => entry.name === listName);
+  if (!list) {
+    toast("Saved list not found", "err");
+    return;
+  }
+  const existing = new Set(list.itemIds || []);
+  const newItems = selectedIds.filter((id) => !existing.has(id));
+  if (!newItems.length) {
+    toast("Those items are already in the list", "info");
+    return;
+  }
+  list.itemIds = [...new Set([...(list.itemIds || []), ...newItems])];
+  persistSavedWishlistLists(lists);
+  renderWishlistPage();
+  toast(newItems.length + " item" + (newItems.length === 1 ? "" : "s") + " added to \"" + listName + "\"", "ok");
+}
+window.addSelectedWishlistItemsToSavedList = addSelectedWishlistItemsToSavedList;
 
 function updateWishlistSelection() {
   document.querySelectorAll(".wish-select-item").forEach((checkbox) => {
@@ -6981,7 +7062,9 @@ async function renderWishlistPage() {
   const selectedSupplier = filterState.supplier;
   const selectedCategory = filterState.category;
   const savedFilterPresetId = "wish-filter-preset-select";
+  const savedListSelectId = "wish-saved-list-select";
   const savedFilters = getSavedWishlistFilterPresets();
+  const savedLists = getSavedWishlistLists();
   if (controls) {
     if (showList) {
       const suppliers = [...new Set(allWishes.map((wish) => String(wish.supplierId || wish.supplier || "").trim()).filter(Boolean))].sort();
@@ -6996,12 +7079,17 @@ async function renderWishlistPage() {
         '<button type="button" class="wish-filter-btn" title="Save current filter" aria-label="Save current filter" onclick="saveWishlistFilterPreset()"><i class="fa-solid fa-floppy-disk"></i> Save filter</button>' +
         '<select id="' + savedFilterPresetId + '" class="wish-filter-input" aria-label="Saved wishlist filters" onchange="const nextValue = this.value; this.value = \"\"; if (nextValue) applyWishlistFilterPreset(nextValue);"><option value="">Saved filters</option>' + savedFilters.map((preset) => '<option value="' + escapeHtml(preset.name) + '">' + escapeHtml(preset.name) + '</option>').join("") + '</select>' +
         (savedFilters.length ? '<button type="button" class="wish-filter-reset-btn" title="Delete selected saved filter" aria-label="Delete selected saved filter" onclick="const selectedPreset = document.getElementById(\'' + savedFilterPresetId + '\'); if (selectedPreset && selectedPreset.value) deleteWishlistFilterPreset(selectedPreset.value);"><i class="fa-solid fa-trash"></i></button>' : '') +
+        '<button type="button" class="wish-filter-btn" title="Create a saved list" aria-label="Create a saved list" onclick="createSavedWishlistList()"><i class="fa-solid fa-list"></i> New list</button>' +
+        '<select id="' + savedListSelectId + '" class="wish-filter-input" aria-label="Saved wishlist lists" onchange="const nextValue = this.value; this.value = \"\"; if (nextValue) { const selected = document.getElementById(\'' + savedListSelectId + '\'); if (selected && selected.value) addSelectedWishlistItemsToSavedList(selected.value); }"><option value="">Saved lists</option>' + savedLists.map((list) => '<option value="' + escapeHtml(list.name) + '">' + escapeHtml(list.name) + '</option>').join("") + '</select>' +
+        '<button type="button" class="wish-filter-btn" title="Add selected items to the chosen saved list" aria-label="Add selected items to the chosen saved list" onclick="const selectedList = document.getElementById(\'' + savedListSelectId + '\'); if (selectedList && selectedList.value) addSelectedWishlistItemsToSavedList(selectedList.value); else toast(\'Choose a saved list first\', \'info\');"><i class="fa-solid fa-plus"></i> Add selected</button>' +
         '</div>' +
         '<div id="wish-list-summary" class="wish-list-summary" aria-live="polite"></div>';
       document.getElementById(supplierFilterId).value = selectedSupplier;
       document.getElementById(categoryFilterId).value = selectedCategory;
       const savedFilterSelect = document.getElementById(savedFilterPresetId);
       if (savedFilterSelect) savedFilterSelect.value = "";
+      const savedListSelect = document.getElementById(savedListSelectId);
+      if (savedListSelect) savedListSelect.value = "";
     } else {
       controls.innerHTML = "";
     }
