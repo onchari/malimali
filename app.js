@@ -4873,12 +4873,20 @@ let _activeWishlistSection = "list";
 let _activeWishlistView = "main";
 let _activeWishlistSavedList = "";
 const _wishlistFilterState = {
-  list: { priority: "", supplier: "", category: "" },
+  main: { priority: "", supplier: "", category: "" },
+  stocked: { priority: "", supplier: "", category: "" },
+  saved: { priority: "", supplier: "", category: "" },
 };
 const KEY_WISHLIST_LIST_FILTERS = "mgs_wishlist_list_filters";
 const KEY_WISHLIST_FILTER_PRESETS = "mgs_wishlist_filter_presets";
 const KEY_WISHLIST_SAVED_LISTS = "mgs_wishlist_saved_lists";
 const _selectedWishlistIds = new Set();
+
+function getWishlistFilterKey() {
+  return ["main", "stocked", "saved"].includes(_activeWishlistView)
+    ? _activeWishlistView
+    : "main";
+}
 
 function getSavedWishlistFilterPresets() {
   try {
@@ -4911,7 +4919,7 @@ function saveWishlistFilterPreset() {
   const nextPreset = {
     name,
     filters: {
-      ..._wishlistFilterState.list,
+      ..._wishlistFilterState[getWishlistFilterKey()],
     },
   };
   const existingIndex = presets.findIndex(
@@ -4928,7 +4936,7 @@ window.saveWishlistFilterPreset = saveWishlistFilterPreset;
 function applyWishlistFilterPreset(name) {
   const preset = getSavedWishlistFilterPresets().find((item) => item.name === name);
   if (!preset) return;
-  _wishlistFilterState.list = {
+  _wishlistFilterState[getWishlistFilterKey()] = {
     priority: preset.filters?.priority || "",
     supplier: preset.filters?.supplier || "",
     category: preset.filters?.category || "",
@@ -5255,10 +5263,10 @@ function addSelectedWishlistItemsToSavedList(selectedListName) {
 window.addSelectedWishlistItemsToSavedList = addSelectedWishlistItemsToSavedList;
 
 function resetWishlistFilters(section) {
-  const key = section === "day" ? "day" : "list";
+  const key = section === "day" ? "day" : getWishlistFilterKey();
   if (key === "day") return renderWishlistPage();
   _wishlistFilterState[key] = { priority: "", supplier: "", category: "" };
-  const prefix = key === "day" ? "day" : "list";
+  const prefix = "list";
   ["priority", "supplier", "category"].forEach((name) => {
     const control = document.getElementById("wish-" + prefix + "-filter-" + name);
     if (control) control.value = "";
@@ -5268,7 +5276,7 @@ function resetWishlistFilters(section) {
 window.resetWishlistFilters = resetWishlistFilters;
 
 function wishlistFilteredRecords(allWishes, section) {
-  const filterState = _wishlistFilterState[section === "day" ? "day" : "list"] || {};
+  const filterState = _wishlistFilterState[getWishlistFilterKey()] || {};
   const stockedOnly = section === "stocked";
   const showStocked = stockedOnly;
   const showDay = section === "day";
@@ -5279,9 +5287,9 @@ function wishlistFilteredRecords(allWishes, section) {
       if (!showStocked) return wishStatus(wish) !== "stocked";
       return true;
     })
-    .filter((wish) => (!showDay && !showToBuy) || !filterState.priority || wishPriority(wish) === filterState.priority)
-    .filter((wish) => (!showDay && !showToBuy) || !filterState.supplier || String(wish.supplierId || wish.supplier || "").trim() === filterState.supplier)
-    .filter((wish) => (!showDay && !showToBuy) || !filterState.category || String(wish.type || wish.category || "").trim() === filterState.category)
+    .filter((wish) => showDay || !filterState.priority || wishPriority(wish) === filterState.priority)
+    .filter((wish) => showDay || !filterState.supplier || String(wish.supplierId || wish.supplier || "").trim() === filterState.supplier)
+    .filter((wish) => showDay || !filterState.category || String(wish.type || wish.category || "").trim() === filterState.category)
     .sort((a, b) => {
       const aStocked = wishStatus(a) === "stocked" ? 1 : 0;
       const bStocked = wishStatus(b) === "stocked" ? 1 : 0;
@@ -7283,7 +7291,7 @@ async function renderWishlistPage() {
   const filterPrefix = "list";
   const supplierFilterId = "wish-" + filterPrefix + "-filter-supplier";
   const categoryFilterId = "wish-" + filterPrefix + "-filter-category";
-  const filterState = _wishlistFilterState.list;
+  const filterState = _wishlistFilterState[getWishlistFilterKey()];
   const selectedSupplier = filterState.supplier;
   const selectedCategory = filterState.category;
   const savedFilterPresetId = "wish-filter-preset-select";
@@ -7347,7 +7355,10 @@ async function renderWishlistPage() {
       if (aStocked !== bStocked) return aStocked - bStocked;
       return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
     });
-  if (_activeWishlistView === "main") filteredWishes = wishlistFilteredRecords(filteredWishes, "list");
+  filteredWishes = wishlistFilteredRecords(
+    filteredWishes,
+    _activeWishlistView === "stocked" ? "stocked" : "list",
+  );
   const wishlistRecords = allWishes.filter((wish) => !isWishlistSaleMonitorEntry(wish));
   const activeCount = wishlistRecords.filter((wish) => wishStatus(wish) !== "stocked").length;
   const stockedCount = wishlistRecords.filter((wish) => wishStatus(wish) === "stocked").length;
