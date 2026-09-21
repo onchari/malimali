@@ -2370,6 +2370,35 @@ body {
   text-overflow: clip;
   white-space: normal;
 }
+.wish-row-status {
+  margin-top: 4px;
+}
+.wish-status-indicator {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-transform: none;
+  line-height: 1.5;
+}
+.wish-status-indicator.planned {
+  background: #fff3bf;
+  color: #8a6100;
+}
+.wish-status-indicator.in-progress {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.wish-status-indicator.stocked {
+  background: #d1fae5;
+  color: #047857;
+}
+.wish-status-indicator.cancelled {
+  background: #fee2e2;
+  color: #b91c1c;
+}
 .wish-table tfoot th {
   padding: 8px 6px;
   background: var(--surface2);
