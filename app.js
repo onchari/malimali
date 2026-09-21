@@ -8935,6 +8935,18 @@ function adjSellQty(d) {
 
 async function confirmSale() {
   if (!currentSellItemId) return;
+  const lockName = "mgs-sale-" + String(currentSellItemId);
+  if (navigator.locks?.request) {
+    await navigator.locks.request(lockName, { mode: "exclusive" }, () =>
+      confirmSaleUnlocked(),
+    );
+    return;
+  }
+  await confirmSaleUnlocked();
+}
+
+async function confirmSaleUnlocked() {
+  if (!currentSellItemId) return;
 
   // Gray out confirm button + show progress overlay
   const _confirmBtn = document.getElementById("confirm-sale-btn");
@@ -8947,6 +8959,18 @@ async function confirmSale() {
       closeSellModal();
       _overlay.hide();
       return;
+    }
+    if (_isShoeSale && _sellShoeSize) {
+      const currentSizes = await getShoeSizes(item.code);
+      const currentSize = currentSizes.find(
+        (size) => String(size.id) === String(_sellShoeSize.id),
+      );
+      if (!currentSize) {
+        toast("Shoe size is no longer available", "err");
+        closeSellModal();
+        return;
+      }
+      _sellShoeSize = currentSize;
     }
 
     // ── Read form values ───────────────────────────────────────────
