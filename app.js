@@ -17741,41 +17741,129 @@ function adjEditedSaleQty(delta) {
 window.adjEditedSaleQty = adjEditedSaleQty;
 
 async function saveSaleEdit() {
-  const id = parseInt(document.getElementById("sds-id").value);
-  const qty = parseInt(document.getElementById("sds-edit-qty").value) || 1;
-  const price =
-    parseFloat(document.getElementById("sds-edit-price").value) || 0;
-  const pm = document.getElementById("sds-edit-payment").value || "cash";
-  if (qty <= 0) {
-    toast("Qty must be at least 1", "err");
-    return;
-  }
-  if (price < 0) {
-    toast("Price cannot be negative", "err");
-    return;
-  }
-  const sale = await dbGet("sales", id);
-  if (!sale) {
-    toast("Sale not found", "err");
-    return;
-  }
-  const buy = sale.buyPrice || 0;
-  sale.qty = qty;
-  sale.actualPrice = price;
-  sale.sellPrice = price;
-  sale.paymentMethod = pm;
-  sale.revenue = qty * price;
-  sale.profit = qty * (price - buy);
-  sale.updatedAt = new Date().toISOString();
-  await dbPut("sales", sale);
-  fbSyncSale(sale);
-  closeSaleDetailSheet();
-  await refreshUI();
-  await renderHistoryPage();
   try {
-    await renderSellPage();
-  } catch (_) {}
-  toast("Sale updated", "ok");
+    if (!currentUser || !["super", "user"].includes(currentUser.role)) {
+      toast("You do not have permission to edit sales", "err");
+      return;
+    }
+    if (!activeDay || activeDay.status !== "OPEN") {
+      toast("Sales can only be edited while the business day is open", "err");
+      return;
+    }
+
+    const id = parseInt(document.getElementById("sds-id").value, 10);
+    const qtyInput = document.getElementById("sds-edit-qty").value;
+    const priceInput = document.getElementById("sds-edit-price").value;
+    const qty = Number(qtyInput);
+    const price = Number(priceInput);
+    const pm = document.getElementById("sds-edit-payment").value || "cash";
+    if (!Number.isInteger(qty) || qty <= 0) {
+      toast("Quantity must be a positive whole number", "err");
+      return;
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      toast("Price must be greater than zero", "err");
+      return;
+    }
+    if (!["cash", "mpesa", "till", "credit"].includes(pm)) {
+      toast("Invalid payment method", "err");
+      return;
+    }
+
+    const sale = await dbGet("sales", id);
+    if (!sale) {
+      toast("Sale not found", "err");
+      return;
+    }
+    const saleDate = sale.businessDate || sale.business_date;
+    const activeDate = activeDay.businessDate || activeDay.business_date;
+    if (saleDate && saleDate !== activeDate) {
+      toast("Only sales from the open business day can be edited", "err");
+      return;
+    }
+
+    const item = sale.itemId == null ? null : await dbGet("items", sale.itemId);
+    const buy = Number(sale.buyPrice);
+    if (!Number.isFinite(buy) || buy <= 0) {
+      toast("The sale has no valid buy price", "err");
+      return;
+    }
+    const size = item?.isShoe && sale.itemSize
+      ? (await getShoeSizes(item.code)).find(
+          (record) => String(record.size) === String(sale.itemSize),
+        )
+      : null;
+    const minimumPrice = Number(
+      size?.sellPriceMin || item?.sellPriceMin || 0,
+    );
+    if (minimumPrice > 0 && price < minimumPrice) {
+      toast("Price cannot be below the minimum sale price", "err");
+      return;
+    }
+    if (price <= buy) {
+      toast("Price must be greater than the buy price", "err");
+      return;
+    }
+
+    const oldQty = Number(sale.qty) || 0;
+    const stockDelta = oldQty - qty;
+    if (stockDelta !== 0 && !item) {
+      toast("The original inventory item could not be found", "err");
+      return;
+    }
+    if (stockDelta < 0 && !item.isRecord) {
+      const available = size
+        ? await readableStockQty(size, size.id)
+        : await readableStockQty(item);
+      if (-stockDelta > available) {
+        toast("Not enough stock for the increased sale quantity", "err");
+        return;
+      }
+    }
+    if (stockDelta !== 0 && !item.isRecord) {
+      if (size) {
+        size.qty = Math.max(0, Number(size.qty || 0) + stockDelta);
+        size.updatedAt = new Date().toISOString();
+        await dbPut("shoe_sizes", size);
+        const allSizes = await getShoeSizes(item.code);
+        item.qty = allSizes.reduce((total, record) => total + Number(record.qty || 0), 0);
+      } else {
+        item.qty = Math.max(0, Number(item.qty || 0) + stockDelta);
+      }
+      item.updatedAt = new Date().toISOString();
+      await dbPut("items", item);
+      await appendStockMove({
+        itemId: item.id,
+        sizeId: size?.id || null,
+        delta: stockDelta,
+        reason: "sale_edit",
+        refId: `sale:${sale.id}:edit:${Date.now()}`,
+        actor: currentUser.username,
+      });
+      fbSyncItem(item);
+      if (size) fbSyncShoeSize(size);
+    }
+
+    sale.qty = qty;
+    sale.actualPrice = price;
+    sale.sellPrice = price;
+    sale.paymentMethod = pm;
+    sale.revenue = qty * price;
+    sale.profit = qty * (price - buy);
+    sale.updatedAt = new Date().toISOString();
+    await dbPut("sales", sale);
+    fbSyncSale(sale);
+    closeSaleDetailSheet();
+    await refreshUI();
+    await renderHistoryPage();
+    try {
+      await renderSellPage();
+    } catch (_) {}
+    toast("Sale updated", "ok");
+  } catch (error) {
+    console.error("[saveSaleEdit]", error);
+    toast("Sale update failed: " + (error.message || "Unknown error"), "err");
+  }
 }
 window.saveSaleEdit = saveSaleEdit;
 
