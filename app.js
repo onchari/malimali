@@ -8943,16 +8943,6 @@ async function confirmSale() {
         item.qty = allSz.reduce((t, s) => t + s.qty, 0);
         _sellShoeSize.qtyCache = Number(_sellShoeSize.qty || 0);
         item.qtyCache = Number(item.qty || 0);
-        if (db.objectStoreNames.contains("stock_moves")) {
-          await appendStockMove({
-            itemId: item.id,
-            sizeId: _sellShoeSize.id,
-            delta: -qty,
-            reason: "sale",
-            refId: `sale:${sale.id}`,
-            actor: currentUser ? currentUser.username : "system",
-          });
-        }
         fbSyncShoeSize(_sellShoeSize);
       } else {
         item.qty = Math.max(0, item.qty - qty);
