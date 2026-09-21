@@ -7762,6 +7762,13 @@ textarea:focus-visible,
   box-shadow: 0 -8px 28px rgba(23, 32, 27, .18);
 }
 
+/* Sale records are centered dialogs, so keep all four corners rounded. */
+#sale-detail-sheet > .sheet {
+  border-radius: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .sheet-handle,
 .cat-picker-handle { background: var(--muted); }
 
