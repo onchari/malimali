@@ -4874,6 +4874,7 @@ let _editingWishlistId = null;
 let _activeWishlistSection = "list";
 let _activeWishlistView = "main";
 let _activeWishlistSavedList = "";
+let _wishlistAddToSavedListId = "";
 const _wishlistFilterState = {
   main: { priority: "", supplier: "", category: "" },
   stocked: { priority: "", supplier: "", category: "" },
@@ -4980,6 +4981,24 @@ function persistSavedWishlistLists(lists) {
   localStorage.setItem(KEY_WISHLIST_SAVED_LISTS, JSON.stringify(lists));
 }
 
+function assignWishlistItemToSavedList(itemId, listId) {
+  const lists = getSavedWishlistLists();
+  const target = lists.find((list) => list.id === listId);
+  if (!target) return false;
+  for (const list of lists) {
+    list.itemIds = (list.itemIds || []).filter((id) => id !== itemId);
+  }
+  target.itemIds = [...new Set([...(target.itemIds || []), itemId])];
+  persistSavedWishlistLists(lists);
+  return true;
+}
+
+function getSavedWishlistListForAdd() {
+  if (_activeWishlistView !== "saved") return null;
+  const lists = getSavedWishlistLists();
+  return lists.find((list) => list.name === _activeWishlistSavedList) || null;
+}
+
 function createSavedWishlistList() {
   const rawName = window.prompt("Name this saved list", "");
   if (rawName === null) return;
@@ -5073,6 +5092,9 @@ async function addActiveWishlistItemsToSavedList(listId) {
     .map((wish) => wish.id);
   const existing = new Set(list.itemIds || []);
   const added = activeIds.filter((id) => !existing.has(id));
+  for (const other of lists) {
+    other.itemIds = (other.itemIds || []).filter((id) => !activeIds.includes(id));
+  }
   list.itemIds = [...new Set([...(list.itemIds || []), ...activeIds])];
   persistSavedWishlistLists(lists);
   renderWishlistPage();
@@ -7282,6 +7304,17 @@ function showWishlistSection(section) {
   const controls = document.getElementById("wishlist-controls");
   const normalizedSection = section === "day" || section === "stocked" ? "list" : (section === "add" ? "add" : "list");
   const isAdd = normalizedSection === "add";
+  if (isAdd) {
+    const currentList = getSavedWishlistListForAdd();
+    _wishlistAddToSavedListId = currentList ? currentList.id : "";
+    const context = document.getElementById("wish-add-context");
+    if (context) {
+      context.hidden = !currentList;
+      context.innerHTML = currentList
+        ? '<i class="fa-solid fa-list-check"></i> New item will be added to Main list and tracked in <strong>' + escapeHtml(currentList.name) + '</strong>.'
+        : "";
+    }
+  }
   _activeWishlistSection = normalizedSection;
   saveLastView();
   if (listPanel) listPanel.style.display = isAdd ? "none" : "block";
@@ -7560,6 +7593,9 @@ async function saveWishlistItem() {
     createdBy: currentUser ? currentUser.username : "system",
   };
   entry.id = await dbAdd("wishlist", entry);
+  const addList = _wishlistAddToSavedListId;
+  _wishlistAddToSavedListId = "";
+  if (addList) assignWishlistItemToSavedList(entry.id, addList);
   [
     "wish-name",
     "wish-unit",
@@ -7576,6 +7612,7 @@ async function saveWishlistItem() {
   if (statusEl) statusEl.value = "planned";
   clearWishPhotoForm();
   scheduleSync();
+  if (addList) _activeWishlistView = "saved";
   showWishlistSection("list");
   await renderWishlistPage();
   await renderStockMonitorSummary();
