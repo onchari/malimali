@@ -265,6 +265,13 @@ function initDB() {
       .then(async () => {
         updateCurrencyUI();
         await migrateData();
+        if (db.objectStoreNames.contains("stock_moves")) {
+          try {
+            await runStockLedgerMigrationCutover();
+          } catch (ledgerError) {
+            console.warn("[stock-ledger] startup migration failed:", ledgerError.message);
+          }
+        }
         await initPhotoStore();
         _appDbReady = true;
         setLoginReady(true);
@@ -425,13 +432,29 @@ async function recomputeDerivedQtyForItem(itemId, sizeId = null) {
   if (!itemId || !db) return 0;
   const duty = sizeId == null || sizeId === "" ? null : String(sizeId);
   const derived = await deriveQty(itemId, duty);
-  if (db.objectStoreNames.contains("items")) {
-    const item = await dbGet("items", itemId);
-    if (item) {
-      item.qtyCache = Number(derived || 0);
-      await dbPut("items", item);
+  if (!db.objectStoreNames.contains("items")) return Number(derived || 0);
+
+  const item = await dbGet("items", itemId);
+  if (!item) return Number(derived || 0);
+
+  if (duty !== null && db.objectStoreNames.contains("shoe_sizes")) {
+    const sizes = await dbAll("shoe_sizes");
+    const size = sizes.find(
+      (record) =>
+        String(record.itemId) === String(itemId) &&
+        String(record.id) === String(sizeId),
+    );
+    if (size) {
+      size.qtyCache = Number(derived || 0);
+      await dbPut("shoe_sizes", size);
     }
+    item.qtyCache = sizes
+      .filter((record) => String(record.itemId) === String(itemId))
+      .reduce((total, record) => total + Number(record.qtyCache ?? record.qty ?? 0), 0);
+  } else {
+    item.qtyCache = Number(derived || 0);
   }
+  await dbPut("items", item);
   return Number(derived || 0);
 }
 
@@ -497,18 +520,44 @@ async function readableStockQty(item, sizeId = null) {
   if (sizeId != null && sizeId !== "") {
     const itemId = item.itemId ?? item.id;
     if (item.qtyCache != null && Number.isFinite(Number(item.qtyCache))) {
-      return Number(item.qtyCache);
+      const moves = await dbAll("stock_moves");
+      const hasLedgerMoves = moves.some(
+        (move) =>
+          String(move.itemId) === String(itemId) &&
+          String(move.sizeId) === String(sizeId),
+      );
+      if (hasLedgerMoves) return Number(item.qtyCache);
+      return Number(item.qty ?? 0);
     }
     if (item.id != null || item.itemId != null) {
-      return await deriveQty(itemId, sizeId);
+      const moves = await dbAll("stock_moves");
+      const hasLedgerMoves = moves.some(
+        (move) =>
+          String(move.itemId) === String(itemId) &&
+          String(move.sizeId) === String(sizeId),
+      );
+      return hasLedgerMoves ? await deriveQty(itemId, sizeId) : Number(item.qty ?? 0);
     }
     return Number(item.qty || 0);
   }
   if (item.qtyCache != null && Number.isFinite(Number(item.qtyCache))) {
-    return Number(item.qtyCache);
+    const moves = await dbAll("stock_moves");
+    const hasLedgerMoves = moves.some(
+      (move) =>
+        String(move.itemId) === String(item.id) &&
+        (move.sizeId == null || move.sizeId === ""),
+    );
+    if (hasLedgerMoves) return Number(item.qtyCache);
+    return Number(item.qty ?? 0);
   }
   if (item.id != null) {
-    return await deriveQty(item.id, null);
+    const moves = await dbAll("stock_moves");
+    const hasLedgerMoves = moves.some(
+      (move) =>
+        String(move.itemId) === String(item.id) &&
+        (move.sizeId == null || move.sizeId === ""),
+    );
+    return hasLedgerMoves ? await deriveQty(item.id, null) : Number(item.qty ?? 0);
   }
   return Number(item.qty || 0);
 }
@@ -5011,6 +5060,7 @@ async function saveItem() {
         return;
       }
       const qty = parseInt(UI.el("f-qty")?.value);
+      const previousQty = Number(sizeRec.qty || 0);
       const buy = parseFloat(UI.el("f-buy")?.value) || sizeRec.buyPrice || 0;
       const sell = parseFloat(UI.el("f-sell")?.value) || sizeRec.sellPrice || 0;
       if (isNaN(qty) || qty < 0)
@@ -5022,6 +5072,16 @@ async function saveItem() {
       sizeRec.profit = sell - buy;
       sizeRec.updatedAt = new Date().toISOString();
       await dbPut("shoe_sizes", sizeRec);
+      if (qty !== previousQty) {
+        await appendStockMove({
+          itemId: item?.id || sizeRec.itemId,
+          sizeId: sizeRec.id,
+          delta: qty - previousQty,
+          reason: "adjust",
+          refId: `edit:${item?.id || sizeRec.itemId}:${sizeRec.id}:${sizeRec.updatedAt}`,
+          actor: currentUser ? currentUser.username : "system",
+        });
+      }
       if (item) {
         const updSz = await getShoeSizes(item.code);
         item.qty = updSz.reduce((t, s) => t + s.qty, 0);
@@ -5085,6 +5145,13 @@ async function saveItem() {
       existing.qty = newQty;
       existing.updatedAt = new Date().toISOString();
       await dbPut("items", existing);
+      await appendStockMove({
+        itemId: existing.id,
+        delta: addQty,
+        reason: "receive",
+        refId: `restock:${existing.id}:${existing.updatedAt}`,
+        actor: currentUser ? currentUser.username : "system",
+      });
       fbSyncItem(existing);
       const actualBuy = _purchaseProcessing?.wishId === _wishStockingFromId
         ? _purchaseProcessing.unitBuy
@@ -5268,6 +5335,7 @@ async function saveItem() {
         return;
       }
       const original = await dbGet("items", resolvedId);
+      const previousQty = Number(original?.qty || 0);
       // Merge: start from original to preserve all fields (isShoe, photo refs, etc)
       // then overwrite only what the form controls
       const saved = Object.assign({}, original || {}, {
@@ -5290,6 +5358,15 @@ async function saveItem() {
         fbId: original ? original.fbId : undefined,
       });
       await dbPut("items", saved);
+      if (!isRecord && qty !== previousQty) {
+        await appendStockMove({
+          itemId: saved.id,
+          delta: qty - previousQty,
+          reason: "adjust",
+          refId: `edit:${saved.id}:${saved.updatedAt}`,
+          actor: currentUser ? currentUser.username : "system",
+        });
+      }
       if (_addFormPhotoData) await setItemPhoto(saved.id, _addFormPhotoData);
       fbSyncItem(saved);
       await _backfillSalesForItem(saved); // keep itemId in sync with any code changes
@@ -5310,6 +5387,13 @@ async function saveItem() {
       item.fbId = stableItemFbId(item);
       const newId = await dbAdd("items", item);
       item.id = newId;
+      await appendStockMove({
+        itemId: newId,
+        delta: qty,
+        reason: "receive",
+        refId: `initial:${newId}`,
+        actor: currentUser ? currentUser.username : "system",
+      });
       if (_addFormPhotoData) await setItemPhoto(newId, _addFormPhotoData);
       const actualBuy = _purchaseProcessing?.wishId === _wishStockingFromId
         ? _purchaseProcessing.unitBuy
@@ -8749,7 +8833,7 @@ async function confirmSale() {
 
     // ── Validate stock ─────────────────────────────────────────────
     const maxQty = _isShoeSale && _sellShoeSize
-      ? Number(_sellShoeSize.qtyCache ?? _sellShoeSize.qty ?? 0)
+      ? await readableStockQty(_sellShoeSize, _sellShoeSize.id)
       : await readableStockQty(item);
     const itemLabel = item.name || item.code;
     if (!Number.isFinite(qty) || qty <= 0) {
@@ -12626,7 +12710,8 @@ async function voidSale(saleId) {
 
     // Restore stock
     const item = await dbGet("items", sale.itemId);
-    if (item) {
+    const restoreQty = Number(sale.qty) || 1;
+    if (item && !item.isRecord) {
       if (item.isShoe && (sale.itemSize || sale.size)) {
         // Restore shoe size qty
         const sizes = await getShoeSizes(item.code);
@@ -12634,16 +12719,38 @@ async function voidSale(saleId) {
           (s) => s.size === parseInt(sale.itemSize || sale.size),
         );
         if (sz) {
-          sz.qty += sale.qty || 1;
+          sz.qty += restoreQty;
           sz.updatedAt = new Date().toISOString();
           await dbPut("shoe_sizes", sz);
+          await appendStockMove({
+            itemId: item.id,
+            sizeId: sz.id,
+            delta: restoreQty,
+            reason: "void",
+            refId: `sale:${sale.id}`,
+            actor: currentUser ? currentUser.username : "system",
+          });
           const allSz = await getShoeSizes(item.code);
           item.qty = allSz.reduce((t, s) => t + s.qty, 0);
         } else {
-          item.qty += sale.qty || 1;
+          item.qty += restoreQty;
+          await appendStockMove({
+            itemId: item.id,
+            delta: restoreQty,
+            reason: "void",
+            refId: `sale:${sale.id}`,
+            actor: currentUser ? currentUser.username : "system",
+          });
         }
       } else {
-        item.qty += sale.qty || 1;
+        item.qty += restoreQty;
+        await appendStockMove({
+          itemId: item.id,
+          delta: restoreQty,
+          reason: "void",
+          refId: `sale:${sale.id}`,
+          actor: currentUser ? currentUser.username : "system",
+        });
       }
       item.updatedAt = new Date().toISOString();
       await dbPut("items", item);
@@ -13162,6 +13269,13 @@ async function confirmRestock() {
     item.qty += qty;
     item.updatedAt = new Date().toISOString();
     await dbPut("items", item);
+    await appendStockMove({
+      itemId: item.id,
+      delta: qty,
+      reason: "receive",
+      refId: `restock:${item.id}:${item.updatedAt}`,
+      actor: currentUser ? currentUser.username : "system",
+    });
     await recordStockInvestment(item, qty * unitBuy, qty, "Restock");
     fbSyncItem(item);
     scheduleSync();
