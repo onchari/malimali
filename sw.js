@@ -4,7 +4,8 @@
 //   Firebase SDK  to  Cache-first (static SDK, rarely changes)
 //   Firestore API  to  Network-only (never cache live data)
 
-const CACHE_NAME = 'mandela-v20260915-wishlist-flow';   // bump this on every deploy
+const APP_VERSION = '2026.09.21.1';
+const CACHE_NAME = `mandela-${APP_VERSION}`;
 const FIREBASE_CACHE = 'firebase-sdk-v1';
 
 const APP_FILES = [
@@ -13,6 +14,7 @@ const APP_FILES = [
   './app.css',
   './app.js',
   './manifest.json',
+  './version.json',
   './icon-192.png',
   './icon-512.png'
 ];
@@ -26,7 +28,12 @@ const FIREBASE_URLS = [
 self.addEventListener('install', e => {
   e.waitUntil(
     Promise.all([
-      caches.open(CACHE_NAME).then(c => c.addAll(APP_FILES)),
+      caches.open(CACHE_NAME).then(async c => {
+        await Promise.allSettled(APP_FILES.map(async url => {
+          const response = await fetch(url);
+          if (response.ok) await c.put(url, response);
+        }));
+      }),
       caches.open(FIREBASE_CACHE).then(c =>
         Promise.allSettled(FIREBASE_URLS.map(url =>
           fetch(url).then(res => c.put(url, res)).catch(() => {})
@@ -42,7 +49,7 @@ self.addEventListener('activate', e => {
     caches.keys().then(keys =>
       Promise.all(
         keys
-          .filter(k => k !== CACHE_NAME && k !== FIREBASE_CACHE)
+          .filter(k => k.startsWith('mandela-') && k !== CACHE_NAME && k !== FIREBASE_CACHE)
           .map(k => {
             console.log('[SW] Deleting old cache:', k);
             return caches.delete(k);

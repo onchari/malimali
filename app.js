@@ -1,4 +1,10 @@
 // ===================================================================
+// APPLICATION RELEASE
+// Keep this separate from DB_VER: code releases do not imply schema changes.
+// ===================================================================
+const APP_VERSION = "2026.09.21.1";
+
+// ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
 let db;
@@ -13916,6 +13922,7 @@ if ("serviceWorker" in navigator) {
     .then((reg) => {
       swRegistration = reg;
       _setUpdateLastCheck();
+      checkPublishedAppVersion();
       navigator.serviceWorker.addEventListener("message", (e) => {
         if (e.data && e.data.type === "BACKGROUND_SYNC") {
           if (fbReady && fbDb && navigator.onLine)
@@ -13963,6 +13970,7 @@ if ("serviceWorker" in navigator) {
             .catch(() => {}),
         30 * 60 * 1000,
       );
+      setInterval(checkPublishedAppVersion, 30 * 60 * 1000);
     })
     .catch(() => {});
   let _reloading = false;
@@ -14914,7 +14922,9 @@ function _setUpdateLastCheck() {
   const el = document.getElementById("update-last-check");
   if (el)
     el.textContent =
-      "Checked: " +
+      "Version " +
+      APP_VERSION +
+      " - checked: " +
       new Date().toLocaleTimeString("en-GB", {
         hour: "2-digit",
         minute: "2-digit",
@@ -14930,6 +14940,46 @@ function _setUpdateLastCheck() {
           : "current",
     );
   }
+}
+
+async function checkPublishedAppVersion() {
+  try {
+    const response = await fetch("./version.json?" + Date.now(), {
+      cache: "no-store",
+    });
+    if (!response.ok) return false;
+    const published = await response.json();
+    const version = String(published.version || "");
+    if (!version || version === APP_VERSION) {
+      _setUpdateLastCheck();
+      return false;
+    }
+    const versionLine = document.getElementById("upd-version-line");
+    if (versionLine) {
+      versionLine.textContent =
+        "Version " + APP_VERSION + " -> " + version + " is ready to install";
+    }
+    if (swRegistration && typeof swRegistration.update === "function") {
+      await swRegistration.update();
+    }
+    return true;
+  } catch (error) {
+    console.warn("[UPDATE] version check failed:", error.message);
+    return false;
+  }
+}
+
+async function checkForAppUpdate() {
+  const found = await checkPublishedAppVersion();
+  if (found || _pendingWorker || swRegistration?.waiting) {
+    _showUpdateState("available");
+    _showUpdateBanner();
+    return true;
+  }
+  if (swRegistration?.update) await swRegistration.update().catch(() => {});
+  _setUpdateLastCheck();
+  toast("App is up to date", "ok");
+  return false;
 }
 
 function _showUpdateBanner() {
@@ -17369,6 +17419,7 @@ window.editItem = editItem;
 window.filterFinance = filterFinance;
 window.forcePushToFirebase = forcePushToFirebase;
 window.installAppUpdate = installAppUpdate;
+window.checkForAppUpdate = checkForAppUpdate;
 window.onCodeInput = onCodeInput;
 window.openStockMonitor = openStockMonitor;
 window.openOffStockSale = openOffStockSale;
