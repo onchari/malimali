@@ -491,6 +491,148 @@ async function appendStockMove({
   return move;
 }
 
+function persistSaleAtomically({ item, shoeSize = null, sale, delta, actor } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!_dbReady(reject)) return;
+    const hasShoeSize = !!shoeSize && db.objectStoreNames.contains("shoe_sizes");
+    const hasLedger =
+      db.objectStoreNames.contains("stock_moves") && Number(delta) !== 0;
+    const syncable =
+      _appDbReady &&
+      db.objectStoreNames.contains("sync_queue") &&
+      db.objectStoreNames.contains("sync_meta");
+    const stores = ["items", "sales"];
+    if (hasShoeSize) stores.push("shoe_sizes");
+    if (hasLedger) stores.push("stock_moves");
+    if (syncable) stores.push("sync_queue", "sync_meta");
+
+    try {
+      const tx = db.transaction(stores, "readwrite");
+      const itemStore = tx.objectStore("items");
+      const saleStore = tx.objectStore("sales");
+      const ledgerStore = hasLedger ? tx.objectStore("stock_moves") : null;
+      const saleRequest = saleStore.add(sale);
+      const movesRequest = hasLedger ? ledgerStore.getAll() : null;
+      const stateRequest = syncable
+        ? tx.objectStore("sync_meta").get("state")
+        : null;
+      let saleId;
+      let moves = [];
+      let state;
+      let finalized = false;
+
+      const finalize = () => {
+        if (finalized || saleId == null || (syncable && state === undefined)) return;
+        finalized = true;
+        sale.id = saleId;
+
+        const moveId = _stockMoveId({
+          reason: "sale",
+          refId: `sale:${sale.id}`,
+          itemId: item.id,
+          sizeId: hasShoeSize ? shoeSize.id : null,
+        });
+        const move = {
+          id: moveId,
+          itemId: String(item.id),
+          sizeId: hasShoeSize ? String(shoeSize.id) : null,
+          delta: Number(delta),
+          reason: "sale",
+          refId: `sale:${sale.id}`,
+          actor: String(actor || _syncClient()),
+          source: "app",
+          createdAt: new Date().toISOString(),
+          _hlc: _nextHlc(),
+          _serverUpdatedAt: new Date().toISOString(),
+          fbId: moveId,
+        };
+
+        const matchingMoves = moves.filter(
+          (existing) =>
+            String(existing.itemId) === String(item.id) &&
+            (hasShoeSize
+              ? String(existing.sizeId) === String(shoeSize.id)
+              : existing.sizeId == null || existing.sizeId === ""),
+        );
+        const derivedQty = matchingMoves.length
+          ? matchingMoves.reduce((total, existing) => total + Number(existing.delta || 0), 0) + Number(delta)
+          : Number(hasShoeSize ? shoeSize.qty : item.qty);
+        if (hasShoeSize) shoeSize.qtyCache = Number(derivedQty || 0);
+        item.qtyCache = hasShoeSize
+          ? moves
+              .filter((existing) => String(existing.itemId) === String(item.id))
+              .reduce((total, existing) => total + Number(existing.delta || 0), 0) +
+            Number(delta)
+          : Number(item.qty || 0);
+
+        itemStore.put(item);
+        if (hasShoeSize) tx.objectStore("shoe_sizes").put(shoeSize);
+        if (hasLedger) ledgerStore.put(move);
+
+        if (syncable) {
+          const meta = state || { key: "state", clock: 0, clientId: _syncClient() };
+          let clock = Math.max(Number(meta.clock) || 0, _syncClock);
+          const now = new Date().toISOString();
+          const queue = (store, record) => {
+            _prepareSyncRecord(store, record);
+            clock += 1;
+            record._syncMutationId = _syncUuid();
+            record._syncVersion = clock;
+            record._syncClient = _syncClient();
+            record._syncUpdatedAt = now;
+            record._syncDeleted = false;
+            tx.objectStore(store).put(record);
+            tx.objectStore("sync_queue").add(
+              _queueRecord(store, record, "upsert", clock, now),
+            );
+          };
+          queue("items", item);
+          if (hasShoeSize) queue("shoe_sizes", shoeSize);
+          queue("sales", sale);
+          if (hasLedger) queue("stock_moves", move);
+          tx.objectStore("sync_meta").put({
+            ...meta,
+            key: "state",
+            clock,
+            clientId: _syncClient(),
+            updatedAt: now,
+          });
+          _syncClock = clock;
+        }
+      };
+
+      saleRequest.onsuccess = (event) => {
+        saleId = event.target.result;
+        finalize();
+      };
+      if (movesRequest) {
+        movesRequest.onsuccess = (event) => {
+          moves = event.target.result || [];
+          finalize();
+        };
+      } else {
+        finalize();
+      }
+      if (stateRequest) {
+        stateRequest.onsuccess = (event) => {
+          state = event.target.result || { key: "state", clock: 0, clientId: _syncClient() };
+          finalize();
+        };
+      } else {
+        state = null;
+      }
+      tx.onerror = (event) => reject(event.target.error || tx.error);
+      tx.onabort = () => reject(tx.error || new Error("Sale transaction aborted"));
+      tx.oncomplete = () => {
+        _notifySyncLocalChange("sales");
+        resolve(sale.id);
+      };
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 async function deriveQty(itemId, sizeId = null) {
   if (!itemId || !db || !db.objectStoreNames.contains("stock_moves")) {
     if (itemId == null) return 0;
@@ -8939,45 +9081,26 @@ async function confirmSale() {
       if (_isShoeSale && _sellShoeSize) {
         _sellShoeSize.qty = Math.max(0, (_sellShoeSize.qty || 0) - qty);
         _sellShoeSize.updatedAt = new Date().toISOString();
-        await dbPut("shoe_sizes", _sellShoeSize);
         const allSz = await getShoeSizes(item.code);
         item.qty = allSz.reduce((t, s) => t + s.qty, 0);
         _sellShoeSize.qtyCache = Number(_sellShoeSize.qty || 0);
         item.qtyCache = Number(item.qty || 0);
-        fbSyncShoeSize(_sellShoeSize);
       } else {
         item.qty = Math.max(0, item.qty - qty);
         item.qtyCache = Number(item.qty || 0);
       }
     }
-    await dbPut("items", item);
 
     // ── Record sale ────────────────────────────────────────────────
     // Pre-assign fbId so IndexedDB stores it immediately
     sale.fbId = stableSaleFbId(sale);
-    const newSaleId = await dbAdd("sales", sale);
-    sale.id = newSaleId;
-    if (!item.isRecord && !(item.isShoe && _sellShoeSize)) {
-      await appendStockMove({
-        itemId: item.id,
-        sizeId: _isShoeSale && _sellShoeSize ? _sellShoeSize.id : null,
-        delta: -qty,
-        reason: "sale",
-        refId: `sale:${sale.id}`,
-        actor: currentUser ? currentUser.username : "system",
-      });
-    } else if (!item.isRecord && _isShoeSale && _sellShoeSize) {
-      await appendStockMove({
-        itemId: item.id,
-        sizeId: _sellShoeSize.id,
-        delta: -qty,
-        reason: "sale",
-        refId: `sale:${sale.id}`,
-        actor: currentUser ? currentUser.username : "system",
-      });
-    }
-    fbSyncItem(item);
-    fbSyncSale(sale);
+    await persistSaleAtomically({
+      item,
+      shoeSize: !item.isRecord && _isShoeSale ? _sellShoeSize : null,
+      sale,
+      delta: item.isRecord ? 0 : -qty,
+      actor: currentUser ? currentUser.username : "system",
+    });
 
     // Sales are the source of truth for revenue - no duplicate finance row.
 
