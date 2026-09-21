@@ -15845,7 +15845,7 @@ function toggleShoeGroup(code) {
 window.toggleShoeGroup = toggleShoeGroup;
 
 // ══════════════════════════════════════════════════════════════════
-// AI ASSISTANT  —  Google Gemini Flash (free)
+// AI ASSISTANT  —  Google Gemini 2.5 Flash
 // ══════════════════════════════════════════════════════════════════
 const KEY_GEMINI = "mg_gemini_key";
 const KEY_UNITS = "mg_units";
@@ -16112,7 +16112,7 @@ async function _callGemini(userPrompt, systemPrompt) {
     return null;
   }
   const url =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" +
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" +
     key;
   const body = {
     system_instruction: { parts: [{ text: systemPrompt }] },
@@ -16125,7 +16125,10 @@ async function _callGemini(userPrompt, systemPrompt) {
     body: JSON.stringify(body),
   });
   const data = await res.json();
-  if (data.error) throw new Error(data.error.message || "Gemini error");
+  if (!res.ok || data.error)
+    throw new Error(
+      data.error?.message || "Gemini request failed (HTTP " + res.status + ")",
+    );
   return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
