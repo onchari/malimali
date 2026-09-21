@@ -8621,7 +8621,8 @@ async function openSellModal(itemId) {
       toast("Warning: Item not found", "err");
       return;
     }
-    if (item.qty <= 0 && !item.isRecord) {
+    const availableQty = item.isRecord ? 0 : await readableStockQty(item);
+    if (availableQty <= 0 && !item.isRecord) {
       toast(
         "Warning: " +
           (item.name || item.code) +
@@ -8642,7 +8643,7 @@ async function openSellModal(itemId) {
       (item.isRecord ? " · Record" : "");
     document.getElementById("sm-stock").textContent = item.isRecord
       ? "∞"
-      : item.qty;
+      : availableQty;
     const _itemSell = item.sellPrice || item.sell || 0;
     const _itemBuy = item.buyPrice || item.buy || 0;
     const _itemSellMin = item.sellPriceMin || 0;
@@ -8674,7 +8675,7 @@ async function openSellModal(itemId) {
     document.getElementById("sm-cur").textContent = currency;
     document.getElementById("sm-qty").value = 0;
     document.getElementById("sm-qty").min = 0;
-    document.getElementById("sm-qty").max = item.isRecord ? 999999 : item.qty;
+    document.getElementById("sm-qty").max = item.isRecord ? 999999 : availableQty;
     document.getElementById("sm-actual").value = "";
     _toggleSmBuyField(_itemBuy);
     updateSellModal();
@@ -8709,12 +8710,12 @@ async function updateSellModal() {
         : item.buy || item.buyPrice || 0;
     const buyRaw = parseFloat(document.getElementById("sm-buy")?.value);
     const baseBuy = !isNaN(buyRaw) && buyRaw >= 0 ? buyRaw : buyOnRecord;
-    const maxStock =
-      _isShoeSale && _sellShoeSize
-        ? _sellShoeSize.qty || 0
-        : item.isRecord
-          ? 999999
-          : item.qty || 0;
+    const maxStock = item.isRecord
+      ? 999999
+      : await readableStockQty(
+          _isShoeSale && _sellShoeSize ? _sellShoeSize : item,
+          _isShoeSale && _sellShoeSize ? _sellShoeSize.id : null,
+        );
     const qtyEl = document.getElementById("sm-qty");
     let qty = parseInt(qtyEl?.value || "0");
     if (!Number.isFinite(qty) || qty < 0) qty = 0;
@@ -18180,7 +18181,8 @@ async function openSellShoeModal(itemId, size) {
   }
   const sizes = await getShoeSizes(item.code);
   const sizeRec = sizes.find((s) => s.size === size);
-  if (!sizeRec || sizeRec.qty <= 0) {
+  const availableQty = sizeRec ? await readableStockQty(sizeRec, sizeRec.id) : 0;
+  if (!sizeRec || availableQty <= 0) {
     toast("Size " + size + " is out of stock", "err");
     return;
   }
@@ -18197,14 +18199,14 @@ async function openSellShoeModal(itemId, size) {
   if (el("sm-name"))
     el("sm-name").textContent = item.name + " (Size " + size + ")";
   if (el("sm-meta")) el("sm-meta").textContent = item.code + " - Size " + size;
-  if (el("sm-stock")) el("sm-stock").textContent = sizeRec.qty;
+  if (el("sm-stock")) el("sm-stock").textContent = availableQty;
   if (el("sm-sell"))
     el("sm-sell").textContent = fmt(sizeRec.sellPrice || item.sellPrice || 0);
   if (el("sm-cur")) el("sm-cur").textContent = currency;
   if (el("sm-qty")) {
     el("sm-qty").value = 0;
     el("sm-qty").min = 0;
-    el("sm-qty").max = sizeRec.qty;
+    el("sm-qty").max = availableQty;
   }
   if (el("sm-actual")) el("sm-actual").value = "";
   _toggleSmBuyField(sizeRec.buyPrice || item.buyPrice || 0);
