@@ -7059,19 +7059,20 @@ async function renderWishlistPage() {
     if (showList) {
       const suppliers = [...new Set(allWishes.map((wish) => String(wish.supplierId || wish.supplier || "").trim()).filter(Boolean))].sort();
       const categories = [...new Set(allWishes.map((wish) => String(wish.type || wish.category || "").trim()).filter(Boolean))].sort();
-      const presetOptions = savedFilters.length
-        ? '<option value="">Saved filters</option>' + savedFilters.map((preset) => '<option value="' + escapeHtml(preset.name) + '">' + escapeHtml(preset.name) + '</option>').join("")
-        : '<option value="">No saved filters</option>';
-      controls.innerHTML = '<div class="wish-day-filters" aria-label="Filter wishlist items">' +
-        '<button type="button" class="wish-filter-reset-btn" title="Reset filters" aria-label="Reset filters" onclick="resetWishlistFilters(\'list\')"><i class="fa-solid fa-rotate-left"></i></button>' +
+      controls.innerHTML = '<div class="wish-control-row wish-filter-row" aria-label="Filter wishlist items">' +
+        '<span class="wish-control-label">Filter</span>' +
         '<select id="' + supplierFilterId + '" class="wish-filter-input" aria-label="Filter by supplier" onchange="renderWishlistPage()"><option value="">All suppliers</option>' + suppliers.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select>' +
         '<select id="' + categoryFilterId + '" class="wish-filter-input" aria-label="Filter by category" onchange="renderWishlistPage()"><option value="">All categories</option>' + categories.map((value) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join("") + '</select>' +
-        '<button type="button" class="wish-filter-btn" title="Save current filter" aria-label="Save current filter" onclick="saveWishlistFilterPreset()"><i class="fa-solid fa-floppy-disk"></i> Save filter</button>' +
+        '<button type="button" class="wish-filter-reset-btn" title="Reset filters" aria-label="Reset filters" onclick="resetWishlistFilters(\'list\')"><i class="fa-solid fa-rotate-left"></i></button>' +
+        '</div>' +
+        '<div class="wish-control-row wish-saved-row" aria-label="Saved wishlist views">' +
+        '<span class="wish-control-label">Saved</span>' +
         '<select id="' + savedFilterPresetId + '" class="wish-filter-input" aria-label="Saved wishlist filters" onchange="const nextValue = this.value; this.value = \"\"; if (nextValue) applyWishlistFilterPreset(nextValue);"><option value="">Saved filters</option>' + savedFilters.map((preset) => '<option value="' + escapeHtml(preset.name) + '">' + escapeHtml(preset.name) + '</option>').join("") + '</select>' +
+        '<button type="button" class="wish-filter-btn" title="Save current filter" aria-label="Save current filter" onclick="saveWishlistFilterPreset()"><i class="fa-solid fa-floppy-disk"></i><span>Save filter</span></button>' +
         (savedFilters.length ? '<button type="button" class="wish-filter-reset-btn" title="Delete selected saved filter" aria-label="Delete selected saved filter" onclick="const selectedPreset = document.getElementById(\'' + savedFilterPresetId + '\'); if (selectedPreset && selectedPreset.value) deleteWishlistFilterPreset(selectedPreset.value);"><i class="fa-solid fa-trash"></i></button>' : '') +
-        '<button type="button" class="wish-filter-btn" title="Create a saved list" aria-label="Create a saved list" onclick="createSavedWishlistList()"><i class="fa-solid fa-list"></i> New list</button>' +
-        '<select id="' + savedListSelectId + '" class="wish-filter-input" aria-label="Saved wishlist lists" onchange="const nextValue = this.value; this.value = \"\"; if (nextValue) { const selected = document.getElementById(\'' + savedListSelectId + '\'); if (selected && selected.value) { /* keep selection for manual actions */ } }"><option value="">Saved lists</option>' + savedLists.map((list) => '<option value="' + escapeHtml(list.name) + '">' + escapeHtml(list.name) + '</option>').join("") + '</select>' +
-        '<button type="button" class="wish-filter-btn" title="Add the current visible list to the chosen saved list" aria-label="Add the current visible list to the chosen saved list" onclick="const selectedList = document.getElementById(\'' + savedListSelectId + '\'); if (selectedList && selectedList.value) addVisibleWishlistItemsToSavedList(selectedList.value); else toast(\'Choose a saved list first\', \'info\');"><i class="fa-solid fa-eye"></i> Add visible</button>' +
+        '<select id="' + savedListSelectId + '" class="wish-filter-input" aria-label="Saved wishlist lists"><option value="">Saved lists</option>' + savedLists.map((list) => '<option value="' + escapeHtml(list.name) + '">' + escapeHtml(list.name) + '</option>').join("") + '</select>' +
+        '<button type="button" class="wish-filter-btn" title="Create a saved list" aria-label="Create a saved list" onclick="createSavedWishlistList()"><i class="fa-solid fa-list"></i><span>New list</span></button>' +
+        '<button type="button" class="wish-filter-btn" title="Add the current visible list to the chosen saved list" aria-label="Add the current visible list to the chosen saved list" onclick="const selectedList = document.getElementById(\'' + savedListSelectId + '\'); if (selectedList && selectedList.value) addVisibleWishlistItemsToSavedList(selectedList.value); else toast(\'Choose a saved list first\', \'info\');"><i class="fa-solid fa-eye"></i><span>Add visible</span></button>' +
         '</div>' +
         '<div id="wish-list-summary" class="wish-list-summary" aria-live="polite"></div>';
       document.getElementById(supplierFilterId).value = selectedSupplier;

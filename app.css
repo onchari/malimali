@@ -1931,13 +1931,36 @@ body {
   width: 100%;
   padding: 0 0 8px;
 }
-.wish-day-filters {
+.wish-control-row {
   display: flex;
   align-items: center;
-  justify-content: stretch;
+  flex-wrap: wrap;
   gap: 8px;
   width: 100%;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(18, 79, 67, .12);
 }
+.wish-control-row + .wish-control-row { border-top: 0; }
+.wish-control-label {
+  flex: 0 0 54px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.wish-control-row .wish-filter-input {
+  flex: 1 1 150px;
+  min-width: 130px;
+  width: auto;
+}
+.wish-control-row .wish-filter-btn {
+  flex: 0 0 auto;
+}
+.wish-control-row .wish-filter-reset-btn {
+  flex: 0 0 34px;
+}
+.wish-saved-row .wish-filter-input { flex-basis: 145px; }
 .wish-filter-reset-btn,
 .wish-filter-input {
   min-height: 34px;
@@ -1947,11 +1970,6 @@ body {
   flex: 0 0 34px;
   width: 34px;
   padding: 0;
-}
-.wish-day-filters .wish-filter-input {
-  flex: 1 1 0;
-  min-width: 140px;
-  width: 0;
 }
 .wish-list-summary {
   display: flex;
