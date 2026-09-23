@@ -2108,6 +2108,10 @@ body {
   color: var(--muted);
   font-size: 10px;
 }
+.wish-saved-list-items .wish-table-wrap {
+  padding-right: 0;
+  padding-left: 0;
+}
 .wish-saved-list-items strong {
   color: var(--text);
   font-size: 10px;
@@ -2134,7 +2138,6 @@ body {
   justify-content: space-between;
   gap: 8px;
 }
-.wish-saved-list-item-search,
 .wish-list-search,
 .wish-list-filter {
   min-height: 32px;
@@ -2147,27 +2150,6 @@ body {
 }
 .wish-list-search { flex: 1; min-width: 140px; }
 .wish-list-filter { flex: 0 0 125px; }
-.wish-saved-list-item-search { width: 100%; margin-top: 7px; }
-.wish-saved-list-item-tools {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-top: 7px;
-}
-.wish-saved-list-item-tools .wish-saved-list-item-search {
-  flex: 1;
-  min-width: 0;
-  margin-top: 0;
-}
-.wish-saved-list-item-status {
-  min-height: 32px;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 10px;
-}
 .wish-saved-list-items ul { padding-left: 0; list-style: none; }
 .wish-saved-list-items li {
   display: flex;
@@ -2191,10 +2173,7 @@ body {
   cursor: pointer;
 }
 .wish-saved-list-table .wish-table-name {
-  min-width: 180px;
-}
-.wish-saved-list-table {
-  min-width: 520px;
+  min-width: 0;
 }
 .wish-saved-list-item-actions {
   display: flex;
