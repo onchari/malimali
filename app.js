@@ -7350,6 +7350,7 @@ window.showWishlistSection = showWishlistSection;
 async function renderWishlistPage() {
   const list = document.getElementById("wishlist-list");
   if (!list) return;
+  list.style.display = _activeWishlistView === "saved" ? "none" : "";
   const allWishes = db.objectStoreNames.contains("wishlist") ? await dbAll("wishlist") : [];
   const showList = _activeWishlistSection === "list";
   const showAdd = _activeWishlistSection === "add";
