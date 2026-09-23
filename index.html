@@ -644,6 +644,12 @@
             </select>
           </div>
         </div>
+        <div class="wish-add-vendor-grid wish-add-list-row">
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-add-destination">Add to list</label>
+            <select class="add-input" id="wish-add-destination" aria-label="Add wishlist item to list"></select>
+          </div>
+        </div>
       </section>
 
       <div id="wish-add-more" class="wish-add-more">
@@ -665,6 +671,33 @@
     <footer class="wish-add-footer">
       <button type="button" class="wish-save-btn" onclick="saveWishlistItem()"><i class="fa-solid fa-floppy-disk"></i> Save to wishlist</button>
     </footer>
+  </div>
+</div>
+
+<div class="sheet-overlay" id="wishlist-list-form-sheet">
+  <div class="sheet wishlist-list-form-sheet">
+    <div class="sheet-handle"></div>
+    <div class="wishlist-bulk-edit-head">
+      <div>
+        <div class="sheet-title">Add stock list</div>
+        <div class="sheet-code">Create a list for planned stock</div>
+      </div>
+      <button type="button" class="stock-icon-btn" onclick="closeSavedWishlistListForm()" aria-label="Close" title="Close">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div class="wishlist-list-form-fields">
+      <label class="wishlist-list-form-field"><span>List name *</span><input id="wish-list-name" class="add-input" type="text" maxlength="80" required autocomplete="off" placeholder="e.g. December restock"></label>
+      <label class="wishlist-list-form-field"><span>Category</span><input id="wish-list-category" class="add-input" type="text" maxlength="80" autocomplete="off" placeholder="Optional"></label>
+      <label class="wishlist-list-form-field"><span>Supply</span><input id="wish-list-supply" class="add-input" type="text" maxlength="100" autocomplete="off" placeholder="Optional"></label>
+      <label class="wishlist-list-form-field"><span>Budget</span><input id="wish-list-budget" class="add-input add-mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Optional amount"></label>
+      <label class="wishlist-list-form-field"><span>Status</span><select id="wish-list-status" class="add-input"><option value="planned">Planned</option><option value="ordering">Ordering</option><option value="partial">Partially stocked</option><option value="complete">Complete</option><option value="archived">Archived</option></select></label>
+      <label class="wishlist-list-form-field"><span>Target date</span><input id="wish-list-due-date" class="add-input" type="date"></label>
+    </div>
+    <div class="wishlist-list-form-actions">
+      <button type="button" class="wish-detail-btn" onclick="closeSavedWishlistListForm()">Cancel</button>
+      <button type="button" class="wish-detail-btn save" onclick="saveSavedWishlistList()"><i class="fa-solid fa-floppy-disk"></i> Add list</button>
+    </div>
   </div>
 </div>
 
