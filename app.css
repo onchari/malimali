@@ -2176,6 +2176,24 @@ body {
 .wish-saved-list-table .wish-table-name {
   min-width: 0;
 }
+.wish-saved-list-table th,
+.wish-saved-list-table td {
+  height: 22px;
+  padding: 1px 3px;
+  line-height: 1.1;
+}
+.wish-saved-list-table .wish-saved-list-item-name {
+  padding: 1px 0;
+  line-height: 1.1;
+}
+.wish-saved-list-table th:nth-child(1),
+.wish-saved-list-table td:nth-child(1) { width: 9%; }
+.wish-saved-list-table th:nth-child(2),
+.wish-saved-list-table td:nth-child(2) { width: 67%; }
+.wish-saved-list-table th:nth-child(3),
+.wish-saved-list-table td:nth-child(3),
+.wish-saved-list-table th:nth-child(4),
+.wish-saved-list-table td:nth-child(4) { width: 12%; }
 .wish-saved-list-item-actions {
   display: flex;
   align-items: center;
