@@ -5116,11 +5116,12 @@ function renderSavedWishlistListsPanel(savedLists, allWishes) {
             ? '<ul>' + items.slice(0, 8).map((wish) => '<li>' + escapeHtml(wish.name || "Unnamed item") + '</li>').join("") + '</ul>' +
               (items.length > 8 ? '<small>+' + (items.length - 8) + ' more</small>' : '')
             : '<span>No items in this list yet.</span>') +
+          '<button type="button" class="wish-saved-list-add-items" onclick="window.showWishlistSection(\'add\')"><i class="fa-solid fa-plus"></i> Add item</button>' +
           '</div>'
         : "";
       return '<article class="wish-saved-list-card' + (_activeWishlistSavedList === list.name ? ' active' : '') + '">' +
         '<button type="button" class="wish-saved-list-open" onclick="openSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><span class="wish-saved-list-icon"><i class="fa-solid fa-list-check"></i></span><span class="wish-saved-list-copy"><strong>' + escapeHtml(list.name) + '</strong><small>' + items.length + ' item' + (items.length === 1 ? '' : 's') + ' · ' + active + ' active · ' + stocked + ' stocked</small></span></button>' +
-        '<div class="wish-saved-list-actions"><button type="button" title="Add active wishlist items" aria-label="Add active items to ' + escapeHtml(list.name) + '" onclick="addActiveWishlistItemsToSavedList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-plus"></i></button><button type="button" title="Rename list" aria-label="Rename ' + escapeHtml(list.name) + '" onclick="renameSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-pen"></i></button><button type="button" title="Delete list" aria-label="Delete ' + escapeHtml(list.name) + '" onclick="deleteSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-trash"></i></button></div>' +
+        '<div class="wish-saved-list-actions"><button type="button" title="Edit list" aria-label="Edit list ' + escapeHtml(list.name) + '" onclick="renameSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-pen"></i></button><button type="button" title="Delete list" aria-label="Delete list ' + escapeHtml(list.name) + '" onclick="deleteSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-trash"></i></button></div>' +
         itemPreview +
         '</article>';
     }).join('') + '</div></div>';
@@ -7360,9 +7361,9 @@ async function renderWishlistPage() {
   if (controls) {
     if (showList) {
       controls.innerHTML = '<div class="wish-view-tabs" role="tablist" aria-label="Wishlist views">' +
+        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "saved" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "saved") + '" onclick="chooseWishlistSavedList()">Stock Lists</button>' +
         '<button type="button" class="wish-view-tab' + (_activeWishlistView === "main" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "main") + '" onclick="setWishlistView(\'main\')">Main list</button>' +
         '<button type="button" class="wish-view-tab' + (_activeWishlistView === "stocked" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "stocked") + '" onclick="setWishlistView(\'stocked\')">Stocked</button>' +
-        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "saved" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "saved") + '" onclick="chooseWishlistSavedList()">Stock Lists</button>' +
         '</div>' + (_activeWishlistView === "saved" ? renderSavedWishlistListsPanel(savedLists, allWishes) : '') + '<div id="wish-list-summary" class="wish-list-summary" aria-live="polite"></div>';
     } else {
       controls.innerHTML = "";
