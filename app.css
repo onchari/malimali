@@ -2102,7 +2102,8 @@ body {
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
-  margin: 4px 0 0 36px;
+  width: 100%;
+  margin: 4px 0 0;
   padding: 7px 9px;
   border-top: 1px solid #cfe8d9;
   color: var(--muted);
