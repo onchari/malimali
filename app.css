@@ -2083,8 +2083,13 @@ body {
 }
 .wish-saved-list-actions-row {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   width: 100%;
+}
+.wish-saved-list-actions-row > .wish-saved-list-add-items {
+  margin-top: 0;
+  margin-right: auto;
 }
 .wish-saved-list-actions button {
   width: 28px;
@@ -2098,6 +2103,10 @@ body {
 }
 .wish-saved-list-actions button:hover { color: var(--accent); }
 .wish-saved-list-actions button:last-child:hover { color: var(--red); }
+.wish-saved-list-actions .wish-saved-list-whatsapp {
+  color: #25d366;
+  cursor: not-allowed;
+}
 .wish-saved-list-items {
   min-width: 0;
   max-width: 100%;
