@@ -2638,8 +2638,6 @@ function showInventoryTab(tab) {
   const allowed = ["stock", "wishlist", "monitor", "add"];
   _activeInventoryTab = allowed.includes(tab) ? tab : "stock";
   mountInventoryPage();
-  const inventoryTabs = document.querySelector(".inventory-tabs");
-  if (inventoryTabs) inventoryTabs.classList.toggle("wishlist-focus", _activeInventoryTab === "wishlist");
   allowed.forEach((name) => {
     const btn = document.getElementById("inventory-tab-" + name);
     const slot = document.getElementById("inventory-" + name + "-slot");

@@ -3984,18 +3984,6 @@ body {
   font-size: 11px;
   min-width: 0;
 }
-.inventory-tabs.wishlist-focus {
-  grid-template-columns: 1fr;
-}
-.inventory-tabs.wishlist-focus .ops-tab:not(#inventory-tab-wishlist) {
-  display: none;
-}
-.inventory-tabs.wishlist-focus #inventory-tab-wishlist.active {
-  background: #e5e7eb;
-  border-color: #cbd5e1;
-  color: #64748b;
-  cursor: default;
-}
 .sales-tabs {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
