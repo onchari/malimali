@@ -5126,60 +5126,6 @@ function renderSavedWishlistListsPanel(savedLists, allWishes) {
     }).join('') + '</div></div>';
 }
 
-function selectWishlistTaskItems(task) {
-  dbAll("wishlist").then((wishes) => {
-    const ids = wishes
-      .filter((wish) => !isWishlistSaleMonitorEntry(wish) && wishStatus(wish) !== "stocked" && wishStatus(wish) !== "cancelled")
-      .filter((wish) => {
-        if (task === "supplier") return !String(wish.supplierId || wish.supplier || "").trim();
-        if (task === "quantity") return Number(wish.qty || 0) <= 0;
-        return wishStatus(wish) === "in_progress";
-      })
-      .map((wish) => Number(wish.id));
-    _activeWishlistView = "main";
-    _selectedWishlistIds.clear();
-    ids.forEach((id) => _selectedWishlistIds.add(id));
-    renderWishlistPage();
-  });
-}
-window.selectWishlistTaskItems = selectWishlistTaskItems;
-
-function renderWishlistTaskPanel(allWishes) {
-  const panel = document.getElementById("wishlist-task-panel");
-  if (!panel) return;
-  const active = allWishes.filter((wish) => !isWishlistSaleMonitorEntry(wish) && wishStatus(wish) !== "stocked" && wishStatus(wish) !== "cancelled");
-  const tasks = [
-    {
-      key: "supplier",
-      icon: "fa-store",
-      title: "Add suppliers",
-      count: active.filter((wish) => !String(wish.supplierId || wish.supplier || "").trim()).length,
-      detail: "Items without a preferred supplier",
-    },
-    {
-      key: "quantity",
-      icon: "fa-hashtag",
-      title: "Set quantities",
-      count: active.filter((wish) => Number(wish.qty || 0) <= 0).length,
-      detail: "Items still missing a target quantity",
-    },
-    {
-      key: "progress",
-      icon: "fa-bolt",
-      title: "Act now",
-      count: active.filter((wish) => wishStatus(wish) === "in_progress").length,
-      detail: "Items already being worked on",
-    },
-  ];
-  panel.innerHTML = '<div class="wishlist-task-head"><div><span class="wishlist-task-kicker">NEXT ACTIONS</span><strong>Turn intentions into stock</strong></div><span class="wishlist-task-total">' + active.length + ' active</span></div>' +
-    '<div class="wishlist-task-grid">' + tasks.map((task) =>
-      '<button type="button" class="wishlist-task-card' + (task.count ? " has-items" : "") + '" onclick="selectWishlistTaskItems(\'' + task.key + '\')"' + (task.count ? "" : " disabled") + '>' +
-      '<span class="wishlist-task-icon"><i class="fa-solid ' + task.icon + '"></i></span>' +
-      '<span class="wishlist-task-copy"><strong>' + task.title + '</strong><small>' + task.detail + '</small></span>' +
-      '<span class="wishlist-task-count">' + task.count + '</span>' +
-      '</button>').join("") + '</div>';
-}
-
 function addVisibleWishlistItemsToSavedList(selectedListName) {
   const listName = String(selectedListName || "").trim();
   if (!listName) {
@@ -7405,7 +7351,6 @@ async function renderWishlistPage() {
   const list = document.getElementById("wishlist-list");
   if (!list) return;
   const allWishes = db.objectStoreNames.contains("wishlist") ? await dbAll("wishlist") : [];
-  renderWishlistTaskPanel(allWishes);
   const showList = _activeWishlistSection === "list";
   const showAdd = _activeWishlistSection === "add";
   const controls = document.getElementById("wishlist-controls");
