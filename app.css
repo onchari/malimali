@@ -2166,6 +2166,28 @@ body {
   white-space: nowrap;
   cursor: pointer;
 }
+.wish-saved-list-table .wish-table-name {
+  min-width: 180px;
+}
+.wish-saved-list-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+}
+.wish-saved-list-item-actions .wish-saved-list-item-name {
+  margin-top: 0;
+}
+.wish-saved-list-item-actions select {
+  width: 90px;
+  min-height: 24px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 9px;
+}
 .wish-saved-list-items li select {
   width: 90px;
   min-height: 26px;
