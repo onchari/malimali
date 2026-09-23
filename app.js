@@ -5013,16 +5013,6 @@ function getSavedWishlistListForAdd() {
   return lists.find((list) => list.name === _activeWishlistSavedList) || null;
 }
 
-function renderWishlistAddDestinationOptions(selectedId) {
-  const select = document.getElementById("wish-add-destination");
-  if (!select) return;
-  const savedLists = getSavedWishlistLists();
-  select.innerHTML = '<option value="main">Main list</option>' + savedLists
-    .map((list) => '<option value="' + escapeHtml(list.id) + '">' + escapeHtml(list.name) + '</option>')
-    .join("");
-  select.value = selectedId && savedLists.some((list) => list.id === selectedId) ? selectedId : "main";
-}
-
 function createSavedWishlistList() {
   const rawName = window.prompt("Name this saved list", "");
   if (rawName === null) return;
@@ -7430,7 +7420,6 @@ function showWishlistSection(section) {
   if (isAdd) {
     const currentList = getSavedWishlistListForAdd();
     _wishlistAddToSavedListId = currentList ? currentList.id : "";
-    renderWishlistAddDestinationOptions(_wishlistAddToSavedListId || "main");
     const context = document.getElementById("wish-add-context");
     if (context) {
       context.hidden = !currentList;
@@ -7708,8 +7697,7 @@ async function saveWishlistItem() {
     createdBy: currentUser ? currentUser.username : "system",
   };
   entry.id = await dbAdd("wishlist", entry);
-  const destination = document.getElementById("wish-add-destination")?.value || "main";
-  const addList = destination === "main" ? "" : destination;
+  const addList = _wishlistAddToSavedListId;
   _wishlistAddToSavedListId = "";
   if (addList) assignWishlistItemToSavedList(entry.id, addList);
   [
