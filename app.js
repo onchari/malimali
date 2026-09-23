@@ -5025,19 +5025,27 @@ function renderWishlistAddDestinationOptions(selectedId) {
 }
 
 function createSavedWishlistList() {
-  const sheet = document.getElementById("wishlist-list-form-sheet");
-  const nameInput = document.getElementById("wish-list-name");
-  if (!sheet || !nameInput) return;
-  _editingSavedWishlistListId = null;
-  nameInput.value = "";
-  ["wish-list-category", "wish-list-supply", "wish-list-budget", "wish-list-status", "wish-list-due-date"].forEach((id) => {
-    const input = document.getElementById(id);
-    if (input) input.value = "";
+  const rawName = window.prompt("Name this saved list", "");
+  if (rawName === null) return;
+  const name = String(rawName).trim();
+  if (!name) return toast("Enter a name for the list", "err");
+  const lists = getSavedWishlistLists();
+  if (lists.some((list) => list.name.toLowerCase() === name.toLowerCase())) {
+    return toast('"' + name + '" already exists', "info");
+  }
+  lists.push({
+    id: "wish-list-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+    name,
+    category: "",
+    supply: "",
+    budget: 0,
+    status: "planned",
+    dueDate: "",
+    itemIds: [],
   });
-  const status = document.getElementById("wish-list-status");
-  if (status) status.value = "planned";
-  sheet.classList.add("open");
-  setTimeout(() => nameInput.focus(), 80);
+  persistSavedWishlistLists(lists);
+  renderWishlistPage();
+  toast('Stock list "' + name + '" created', "ok");
 }
 window.createSavedWishlistList = createSavedWishlistList;
 
