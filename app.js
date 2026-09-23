@@ -5361,7 +5361,7 @@ function renderSavedWishlistListsPanel(savedLists, allWishes) {
     const budget = Number(list.budget || 0);
     const budgetText = budget ? fmt(budget) + ' budget · ' + fmt(metrics.estimated) + ' planned · ' + fmt(metrics.remaining) + ' remaining' : fmt(metrics.estimated) + ' planned · No budget';
     const dueText = list.dueDate ? 'Due ' + escapeHtml(list.dueDate) : "No target date";
-    return '<article class="wish-saved-list-card' + (isActive ? ' active' : '') + '"><button type="button" class="wish-saved-list-open" onclick="openSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><span class="wish-saved-list-icon"><i class="fa-solid fa-list-check"></i></span><span class="wish-saved-list-copy"><strong>' + escapeHtml(list.name) + '</strong><small>' + escapeHtml(list.category || "Uncategorized") + ' · ' + metrics.items.length + ' items · ' + fmtN(metrics.quantity) + ' units</small><small>' + escapeHtml(list.supply || "No supply") + ' · ' + budgetText + ' · ' + dueText + ' · ' + wishlistListStatusLabel(list.status) + '</small></span></button><div class="wish-saved-list-actions"><button type="button" title="Edit list" aria-label="Edit list ' + escapeHtml(list.name) + '" onclick="editSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-pen"></i></button><button type="button" title="Duplicate list" aria-label="Duplicate list ' + escapeHtml(list.name) + '" onclick="duplicateSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-copy"></i></button><button type="button" title="' + (list.status === "archived" ? "Restore list" : "Archive list") + '" aria-label="' + (list.status === "archived" ? "Restore list" : "Archive list") + '" onclick="archiveSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-box-archive"></i></button><button type="button" title="Delete list" aria-label="Delete list ' + escapeHtml(list.name) + '" onclick="deleteSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-trash"></i></button><button type="button" title="Export CSV" aria-label="Export ' + escapeHtml(list.name) + '" onclick="exportSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-download"></i></button></div>' + itemPreview + '</article>';
+    return '<article class="wish-saved-list-card' + (isActive ? ' active' : '') + '"><div class="wish-saved-list-card-head"><button type="button" class="wish-saved-list-open" onclick="openSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><span class="wish-saved-list-icon"><i class="fa-solid fa-list-check"></i></span><span class="wish-saved-list-copy"><strong>' + escapeHtml(list.name) + '</strong><small>' + escapeHtml(list.category || "Uncategorized") + ' · ' + metrics.items.length + ' items · ' + fmtN(metrics.quantity) + ' units</small><small>' + escapeHtml(list.supply || "No supply") + ' · ' + budgetText + ' · ' + dueText + ' · ' + wishlistListStatusLabel(list.status) + '</small></span></button></div><div class="wish-saved-list-actions-row"><div class="wish-saved-list-actions"><button type="button" title="Edit list" aria-label="Edit list ' + escapeHtml(list.name) + '" onclick="editSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-pen"></i></button><button type="button" title="Duplicate list" aria-label="Duplicate list ' + escapeHtml(list.name) + '" onclick="duplicateSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-copy"></i></button><button type="button" title="' + (list.status === "archived" ? "Restore list" : "Archive list") + '" aria-label="' + (list.status === "archived" ? "Restore list" : "Archive list") + '" onclick="archiveSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-box-archive"></i></button><button type="button" title="Delete list" aria-label="Delete list ' + escapeHtml(list.name) + '" onclick="deleteSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-trash"></i></button><button type="button" title="Export CSV" aria-label="Export ' + escapeHtml(list.name) + '" onclick="exportSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-download"></i></button></div></div>' + itemPreview + '</article>';
   }).join("");
   return '<div class="wish-saved-lists-panel"><div class="wish-saved-lists-head"><strong>Stock Lists</strong><button type="button" class="wish-filter-btn" onclick="createSavedWishlistList()"><i class="fa-solid fa-plus"></i> Add list</button></div><div class="wish-saved-list-toolbar"><input class="wish-list-search" value="' + escapeHtml(_activeWishlistListSearch) + '" onchange="setWishlistListSearch(this.value)" placeholder="Search lists" aria-label="Search stock lists"><select class="wish-list-filter" onchange="setWishlistListFilter(this.value)" aria-label="Filter stock lists"><option value="active"' + (_activeWishlistListFilter === "active" ? " selected" : "") + '>Active lists</option><option value="all"' + (_activeWishlistListFilter === "all" ? " selected" : "") + '>All lists</option><option value="archived"' + (_activeWishlistListFilter === "archived" ? " selected" : "") + '>Archived</option></select></div><div class="wish-saved-list-grid">' + (cards || '<div class="wish-saved-empty"><i class="fa-solid fa-list"></i><span>No lists match your search.</span></div>') + '</div></div>';
 }
@@ -7714,13 +7714,10 @@ window.toggleWishlistStockedState = toggleWishlistStockedState;
 async function saveWishlistItem() {
   const isEditing = !!_editingWishlistId;
   const name = Input.text("wish-name");
-  const unit = Input.text("wish-unit");
+  const unit = "Pcs";
   const qtyRaw = Input.int("wish-qty");
-  const type = Input.text("wish-type");
   const estimatedCost = Input.money("wish-cost");
-  const note = Input.text("wish-note");
   const supplierId = Input.text("wish-supplier");
-  const status = normalizeWishlistStatus(Input.text("wish-status"));
   if (!name) return Validate.fail("Enter item name", "wish-name");
   if (!Validate.intOptional(qtyRaw, "wish-qty", "Quantity")) return;
   const qty = qtyRaw === null || qtyRaw <= 0 ? 0 : qtyRaw;
@@ -7736,11 +7733,7 @@ async function saveWishlistItem() {
       name,
       unit,
       qty,
-      type,
-      category: type,
-      status,
       estimatedCost: estimatedCost > 0 ? estimatedCost : 0,
-      note,
       supplierId,
       updatedAt: new Date().toISOString(),
       updatedBy: currentUser ? currentUser.username : "system",
@@ -7753,18 +7746,13 @@ async function saveWishlistItem() {
     clearWishPhotoForm();
     [
       "wish-name",
-      "wish-unit",
       "wish-qty",
       "wish-cost",
       "wish-supplier",
-      "wish-note",
-      "wish-status",
     ].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.value = "";
     });
-    const statusEl = document.getElementById("wish-status");
-    if (statusEl) statusEl.value = "planned";
     scheduleSync();
     showWishlistSection("list");
     await renderWishlistPage();
@@ -7777,11 +7765,11 @@ async function saveWishlistItem() {
     name,
     unit,
     qty,
-    type,
-    category: type,
-    status,
+    type: "",
+    category: "",
+    status: "planned",
     estimatedCost: estimatedCost > 0 ? estimatedCost : 0,
-    note,
+    note: "",
     supplierId,
     createdAt: new Date().toISOString(),
     createdBy: currentUser ? currentUser.username : "system",
@@ -7793,18 +7781,13 @@ async function saveWishlistItem() {
   if (addList) assignWishlistItemToSavedList(entry.id, addList);
   [
     "wish-name",
-    "wish-unit",
     "wish-qty",
     "wish-cost",
     "wish-supplier",
-    "wish-note",
-    "wish-status",
   ].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
-  const statusEl = document.getElementById("wish-status");
-  if (statusEl) statusEl.value = "planned";
   clearWishPhotoForm();
   scheduleSync();
   if (addList) _activeWishlistView = "saved";
