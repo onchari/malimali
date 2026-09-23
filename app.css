@@ -2093,8 +2093,13 @@ body {
   background: var(--surface2);
 }
 .wish-saved-list-card.active {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   border-color: #61ad89;
   background: #eef8f2;
+}
+.wish-saved-list-card.active .wish-saved-list-items {
+  grid-column: 1 / -1;
 }
 .wish-saved-list-open {
   min-width: 0;
@@ -2149,6 +2154,33 @@ body {
 }
 .wish-saved-list-actions button:hover { color: var(--accent); }
 .wish-saved-list-actions button:last-child:hover { color: var(--red); }
+.wish-saved-list-items {
+  margin: 4px 0 0 36px;
+  padding: 7px 9px;
+  border-top: 1px solid #cfe8d9;
+  color: var(--muted);
+  font-size: 10px;
+}
+.wish-saved-list-items strong {
+  color: var(--text);
+  font-size: 10px;
+}
+.wish-saved-list-items ul {
+  display: grid;
+  gap: 3px;
+  margin: 5px 0 0;
+  padding-left: 16px;
+}
+.wish-saved-list-items li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wish-saved-list-items > span,
+.wish-saved-list-items > small {
+  display: block;
+  margin-top: 4px;
+}
 .wish-saved-empty {
   display: flex;
   align-items: center;

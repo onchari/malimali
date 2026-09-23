@@ -5110,9 +5110,18 @@ function renderSavedWishlistListsPanel(savedLists, allWishes) {
       const items = (list.itemIds || []).map((id) => wishesById.get(id)).filter(Boolean);
       const stocked = items.filter((wish) => wishStatus(wish) === "stocked").length;
       const active = items.length - stocked;
+      const itemPreview = _activeWishlistSavedList === list.name
+        ? '<div class="wish-saved-list-items"><strong>Items in this list</strong>' +
+          (items.length
+            ? '<ul>' + items.slice(0, 8).map((wish) => '<li>' + escapeHtml(wish.name || "Unnamed item") + '</li>').join("") + '</ul>' +
+              (items.length > 8 ? '<small>+' + (items.length - 8) + ' more</small>' : '')
+            : '<span>No items in this list yet.</span>') +
+          '</div>'
+        : "";
       return '<article class="wish-saved-list-card' + (_activeWishlistSavedList === list.name ? ' active' : '') + '">' +
         '<button type="button" class="wish-saved-list-open" onclick="openSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><span class="wish-saved-list-icon"><i class="fa-solid fa-list-check"></i></span><span class="wish-saved-list-copy"><strong>' + escapeHtml(list.name) + '</strong><small>' + items.length + ' item' + (items.length === 1 ? '' : 's') + ' · ' + active + ' active · ' + stocked + ' stocked</small></span></button>' +
         '<div class="wish-saved-list-actions"><button type="button" title="Add active wishlist items" aria-label="Add active items to ' + escapeHtml(list.name) + '" onclick="addActiveWishlistItemsToSavedList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-plus"></i></button><button type="button" title="Rename list" aria-label="Rename ' + escapeHtml(list.name) + '" onclick="renameSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-pen"></i></button><button type="button" title="Delete list" aria-label="Delete ' + escapeHtml(list.name) + '" onclick="deleteSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-trash"></i></button></div>' +
+        itemPreview +
         '</article>';
     }).join('') + '</div></div>';
 }
