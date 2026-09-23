@@ -1968,6 +1968,9 @@ body {
 .wish-saved-lists-panel {
   margin: 0 0 10px;
   padding: 10px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--surface);
@@ -1992,11 +1995,20 @@ body {
 }
 .wish-saved-list-card {
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   justify-content: space-between;
   padding: 7px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface2);
+  flex-wrap: wrap;
+}
+.wish-saved-list-card-head {
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 100%;
 }
 .wish-saved-list-card.active {
   display: grid;
@@ -2005,6 +2017,10 @@ body {
   background: #eef8f2;
 }
 .wish-saved-list-card.active .wish-saved-list-items {
+  grid-column: 1 / -1;
+}
+.wish-saved-list-card.active .wish-saved-list-card-head,
+.wish-saved-list-card.active .wish-saved-list-actions-row {
   grid-column: 1 / -1;
 }
 .wish-saved-list-open {
@@ -2065,6 +2081,11 @@ body {
 .wish-saved-list-actions {
   gap: 3px;
 }
+.wish-saved-list-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
 .wish-saved-list-actions button {
   width: 28px;
   height: 28px;
@@ -2078,6 +2099,9 @@ body {
 .wish-saved-list-actions button:hover { color: var(--accent); }
 .wish-saved-list-actions button:last-child:hover { color: var(--red); }
 .wish-saved-list-items {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   margin: 4px 0 0 36px;
   padding: 7px 9px;
   border-top: 1px solid #cfe8d9;
@@ -2168,6 +2192,9 @@ body {
 }
 .wish-saved-list-table .wish-table-name {
   min-width: 180px;
+}
+.wish-saved-list-table {
+  min-width: 520px;
 }
 .wish-saved-list-item-actions {
   display: flex;
@@ -3334,8 +3361,8 @@ body {
 }
 .wish-add-primary .wish-add-vendor-grid { gap: 12px; }
 .wish-add-primary .wish-add-name-row,
-.wish-add-primary .wish-add-notes-row { grid-template-columns: minmax(0, 1fr); }
-.wish-add-supply-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.wish-add-supply-row { grid-template-columns: minmax(0, 1fr); }
+.wish-add-amount-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .wish-add-primary .wish-add-field { min-width: 0; }
 .wish-add-primary .wish-add-field:first-child .add-input {
   min-height: 48px;
