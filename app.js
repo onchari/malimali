@@ -4870,7 +4870,7 @@ let _currentWishDetailId = null;
 let _wishStockingFromId = null;
 let _editingWishlistId = null;
 let _activeWishlistSection = "list";
-let _activeWishlistView = "main";
+let _activeWishlistView = "saved";
 let _activeWishlistSavedList = "";
 let _wishlistAddToSavedListId = "";
 const _wishlistFilterState = {
@@ -7407,7 +7407,7 @@ async function renderWishlistPage() {
       controls.innerHTML = '<div class="wish-view-tabs" role="tablist" aria-label="Wishlist views">' +
         '<button type="button" class="wish-view-tab' + (_activeWishlistView === "main" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "main") + '" onclick="setWishlistView(\'main\')">Main list</button>' +
         '<button type="button" class="wish-view-tab' + (_activeWishlistView === "stocked" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "stocked") + '" onclick="setWishlistView(\'stocked\')">Stocked</button>' +
-        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "saved" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "saved") + '" onclick="chooseWishlistSavedList()">Saved list</button>' +
+        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "saved" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "saved") + '" onclick="chooseWishlistSavedList()">Stock Lists</button>' +
         '</div>' + (_activeWishlistView === "saved" ? renderSavedWishlistListsPanel(savedLists, allWishes) : '') + '<div id="wish-list-summary" class="wish-list-summary" aria-live="polite"></div>';
     } else {
       controls.innerHTML = "";
