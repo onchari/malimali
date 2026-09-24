@@ -1994,12 +1994,12 @@ body {
   gap: 6px;
 }
 .wish-saved-list-card {
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
   justify-content: space-between;
-  padding: 7px;
+  padding: 5px 6px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface2);
@@ -2023,6 +2023,9 @@ body {
 .wish-saved-list-card.active .wish-saved-list-actions-row {
   grid-column: 1 / -1;
 }
+.wish-saved-list-card:not(.active) .wish-saved-list-actions-row {
+  display: none;
+}
 .wish-saved-list-open {
   min-width: 0;
   flex: 1;
@@ -2038,12 +2041,13 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   border-radius: 7px;
   background: #d8f1e3;
   color: #188052;
+  font-size: 10px;
 }
 .wish-saved-list-copy {
   display: flex;
@@ -2053,7 +2057,7 @@ body {
 }
 .wish-saved-list-copy strong {
   overflow: hidden;
-  font-size: 12px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2084,16 +2088,27 @@ body {
 .wish-saved-list-actions-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
+}
+.wish-saved-list-card.active .wish-saved-list-actions-row {
+  width: 100%;
+}
+.wish-saved-list-card.active .wish-saved-list-add-items {
+  flex: 1 1 auto;
+  width: auto;
+  justify-content: center;
+  margin: 0;
+  min-height: 26px;
 }
 .wish-saved-list-actions-row > .wish-saved-list-add-items {
   margin-top: 0;
   margin-right: auto;
 }
 .wish-saved-list-actions button {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -2112,8 +2127,8 @@ body {
   max-width: 100%;
   box-sizing: border-box;
   width: 100%;
-  margin: 4px 0 0;
-  padding: 7px 9px;
+  margin: 3px 0 0;
+  padding: 6px 7px;
   border-top: 1px solid #cfe8d9;
   color: var(--muted);
   font-size: 10px;
@@ -2187,9 +2202,9 @@ body {
 }
 .wish-saved-list-table th,
 .wish-saved-list-table td {
-  height: 22px;
-  padding: 1px 3px;
-  line-height: 1.1;
+  height: 18px;
+  padding: 1px 2px;
+  line-height: 1.05;
 }
 .wish-saved-list-table .wish-saved-list-item-name {
   padding: 1px 0;
@@ -2251,8 +2266,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 8px;
-  padding: 6px 9px;
+  margin-top: 0;
+  padding: 4px 7px;
   border: 1px solid #a8d6ba;
   border-radius: 6px;
   background: var(--surface);
@@ -2260,10 +2275,48 @@ body {
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
+  min-height: 24px;
+}
+.wish-saved-list-card.active .wish-saved-list-add-items {
+  width: auto;
+  justify-content: center;
+  margin-top: 0;
 }
 .wish-saved-list-add-items:hover {
   background: #dff3e7;
 }
+.wish-saved-list-add-group {
+  position: relative;
+  display: inline-flex;
+}
+.wish-saved-list-add-menu {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 4px);
+  left: 0;
+  display: grid;
+  gap: 4px;
+  min-width: 150px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.wish-saved-list-add-menu[hidden] { display: none; }
+.wish-saved-list-add-menu button,
+.wish-saved-list-add-menu select,
+.wish-bulk-destination {
+  min-height: 24px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 10px;
+}
+.wish-saved-list-add-menu button { cursor: pointer; text-align: left; }
+.wish-saved-list-add-menu button:hover { background: #eef8f2; }
 .wish-saved-empty {
   display: flex;
   align-items: center;
@@ -2433,11 +2486,6 @@ body {
   cursor: pointer;
 }
 .wish-bulk-btn i { margin-right: 4px; }
-.wish-bulk-btn.wish-bulk-danger {
-  border-color: #e2a7a7;
-  background: #fff4f4;
-  color: var(--red);
-}
 .wish-bulk-planner {
   min-height: 32px;
   max-width: 150px;
