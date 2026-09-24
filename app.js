@@ -5240,31 +5240,100 @@ function dropWishlistItem(event, listId, beforeItemId) {
 window.beginWishlistItemDrag = beginWishlistItemDrag;
 window.dropWishlistItem = dropWishlistItem;
 
+function chooseWishlistShareOptions() {
+  const modal = document.getElementById("wish-share-modal");
+  if (!modal) return Promise.resolve(null);
+  const close = document.getElementById("wish-share-close");
+  const cancel = document.getElementById("wish-share-cancel");
+  const submit = document.getElementById("wish-share-submit");
+  const prices = document.getElementById("wish-share-include-prices");
+  const finish = (result) => {
+    modal.hidden = true;
+    modal.onkeydown = null;
+    return result;
+  };
+  modal.hidden = false;
+  document.querySelector('input[name="wish-share-scope"][value="all"]')?.focus();
+  return new Promise((resolve) => {
+    close.onclick = () => resolve(finish(null));
+    cancel.onclick = () => resolve(finish(null));
+    modal.onclick = (event) => {
+      if (event.target === modal) resolve(finish(null));
+    };
+    submit.onclick = () => {
+      const scope = document.querySelector('input[name="wish-share-scope"]:checked')?.value || "all";
+      resolve(finish({ scope, includePrices: !!prices?.checked }));
+    };
+    modal.onkeydown = (event) => {
+      if (event.key === "Escape") resolve(finish(null));
+    };
+  });
+}
+window.chooseWishlistShareOptions = chooseWishlistShareOptions;
+
 async function shareSavedWishlistListViaWhatsApp(listId) {
   const list = getSavedWishlistLists().find((entry) => entry.id === listId);
   if (!list) return toast("Saved list not found", "err");
   const wishesById = new Map((await dbAll("wishlist")).map((wish) => [wish.id, wish]));
-  const items = (list.itemIds || [])
+  const shareOptions = await chooseWishlistShareOptions();
+  if (!shareOptions) return;
+  const allItems = (list.itemIds || [])
     .map((id) => wishesById.get(id))
     .filter(Boolean);
+  const items = allItems.filter((wish) =>
+    shareOptions.scope === "all" ||
+    (shareOptions.scope === "stocked" && wishStatus(wish) === "stocked") ||
+    (shareOptions.scope === "not-stocked" && wishStatus(wish) !== "stocked"),
+  );
   if (!items.length) return toast("There are no items to share", "info");
+  const includePrices = shareOptions.includePrices;
   const totalEstimated = items.reduce(
     (sum, wish) => sum + Number(wish.qty || 0) * Number(wish.estimatedCost || 0),
     0,
   );
-  const lines = ["*" + list.name + "*", ""];
-  items.forEach((wish, index) => {
+  const stockedItems = items.filter((wish) => wishStatus(wish) === "stocked");
+  const notStockedItems = items.filter((wish) => wishStatus(wish) !== "stocked");
+  const dateParts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).formatToParts(new Date()).map((part) => [part.type, part.value]),
+  );
+  const sharedAt = dateParts.dayPeriod
+    ? dateParts.weekday + " " + dateParts.day + ", " + dateParts.month + " " + dateParts.year +
+      " – " + dateParts.hour + ":" + dateParts.minute + dateParts.dayPeriod.toLowerCase()
+    : "";
+  const itemLine = (wish, index) => {
     const qty = Number(wish.qty || 0);
     const unit = String(wish.unit || "").trim();
     const amount = qty > 0 && Number(wish.estimatedCost || 0) > 0
       ? fmt(qty * Number(wish.estimatedCost || 0))
       : "";
-    const status = wishStatus(wish) === "stocked" ? " (Stocked)" : "";
-    lines.push((index + 1) + ". *" + String(wish.name || "Unnamed item") + "*" + status);
-    if (qty > 0) lines.push("   Qty: " + qty + (unit ? " " + unit : ""));
-    if (amount) lines.push("   Est. amount: " + amount);
-  });
-  lines.push("", "Total items: " + items.length, "Estimated total: " + fmt(totalEstimated));
+    const details = [String(wish.name || "Unnamed item")];
+    if (qty > 0) details.push(qty + (unit ? " " + unit : ""));
+    if (includePrices && amount) details.push(amount);
+    return (index + 1) + ". *" + details.join(" — ") + "*";
+  };
+  const lines = ["*🏠 " + String(list.name || "Wishlist").toLocaleUpperCase() + "*", ""];
+  if (sharedAt) lines.push("*" + sharedAt + "*", "");
+  if (stockedItems.length) {
+    lines.push("*Items Already Stocked:*", "");
+    stockedItems.forEach((wish, index) => lines.push(itemLine(wish, index)));
+    lines.push("");
+  }
+  if (notStockedItems.length) {
+    lines.push("*Items Not Yet Stocked:*", "");
+    notStockedItems.forEach((wish, index) => lines.push(itemLine(wish, index)));
+    lines.push("");
+  }
+  lines.push("📦 *Total Items:* " + items.length);
+  if (includePrices) lines.push("💰 *Estimated Total:* " + fmt(totalEstimated));
+  lines.push("✅ *Stocked:* " + stockedItems.length, "⏳ *Not Yet Stocked:* " + notStockedItems.length);
   const shareUrl = "https://wa.me/?text=" + encodeURIComponent(lines.join("\n"));
   const shareWindow = window.open(shareUrl, "_blank", "noopener,noreferrer");
   if (!shareWindow) toast("Allow popups to share this list", "info");
