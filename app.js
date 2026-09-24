@@ -5006,6 +5006,26 @@ function removeWishlistItemsFromLists(lists, itemIds) {
   });
 }
 
+async function runAtomicWishlistOperation(itemIds, updateRecord, updateLists) {
+  const ids = [...new Set(itemIds.map((id) => Number(id)).filter((id) => Number.isInteger(id)))];
+  const previousRecords = (await Promise.all(ids.map((id) => dbGet("wishlist", id)))).filter(Boolean);
+  const previousLists = localStorage.getItem(KEY_WISHLIST_SAVED_LISTS);
+  try {
+    for (const record of previousRecords) {
+      updateRecord(record);
+      await dbPut("wishlist", record);
+    }
+    updateLists();
+  } catch (error) {
+    for (const record of previousRecords) {
+      try { await dbPut("wishlist", record); } catch (_) {}
+    }
+    if (previousLists === null) localStorage.removeItem(KEY_WISHLIST_SAVED_LISTS);
+    else localStorage.setItem(KEY_WISHLIST_SAVED_LISTS, previousLists);
+    throw error;
+  }
+}
+
 function moveWishlistItemsToSavedList(itemIds, targetListId) {
   const lists = getSavedWishlistLists();
   const target = lists.find((list) => list.id === targetListId);
@@ -5097,16 +5117,24 @@ function duplicateSavedWishlistList(listId) {
 }
 window.duplicateSavedWishlistList = duplicateSavedWishlistList;
 
-function deleteSavedWishlistList(listId) {
+async function deleteSavedWishlistList(listId) {
   const lists = getSavedWishlistLists();
   const list = lists.find((entry) => entry.id === listId);
   if (!list) return toast("Saved list not found", "err");
-  const warning = list.itemIds.length
-    ? 'Move its live items to the General List and delete "' + list.name + '"? Stocked items will remain in Stocked.'
-    : 'Delete saved list "' + list.name + '"?';
-  if (!confirm(warning)) return;
-  const itemIds = [...(list.itemIds || [])];
-  removeWishlistItemsFromLists(lists, itemIds);
+  const wishes = db.objectStoreNames.contains("wishlist") ? await dbAll("wishlist") : [];
+  const liveIds = (list.itemIds || []).filter((id) => {
+    const wish = wishes.find((entry) => String(entry.id) === String(id));
+    return wish && wishStatus(wish) !== "stocked" && wishStatus(wish) !== "discarded";
+  });
+  if (liveIds.length) {
+    if (!confirm('This wishlist contains ' + liveIds.length + ' live item' + (liveIds.length === 1 ? "" : "s") + '. Move them to the General List now?')) return;
+    moveWishlistItemsToGeneralList(liveIds);
+    await renderWishlistPage();
+    toast("Live items moved to General List. Delete the empty wishlist to continue.", "info");
+    return;
+  }
+  if (!confirm('Delete saved list "' + list.name + '"?')) return;
+  removeWishlistItemsFromLists(lists, list.itemIds || []);
   persistSavedWishlistLists(lists.filter((entry) => entry.id !== listId));
   if (_activeWishlistSavedList === list.name) {
     _activeWishlistSavedList = "";
@@ -5433,14 +5461,14 @@ async function markSelectedWishlistItemsStocked() {
   const ids = getSelectedWishlistIds();
   if (!ids.length) return toast("Select wishlist items first", "info");
   const now = new Date().toISOString();
-  for (const id of ids) {
-    const wish = await dbGet("wishlist", id);
-    if (!wish) continue;
-    wish.status = "stocked";
-    wish.stockedAt = now;
-    await dbPut("wishlist", wish);
+  try {
+    await runAtomicWishlistOperation(ids, (wish) => {
+      wish.status = "stocked";
+      wish.stockedAt = now;
+    }, () => moveWishlistItemsToGeneralList(ids));
+  } catch (_) {
+    return toast("Could not mark the selected items stocked", "err");
   }
-  moveWishlistItemsToGeneralList(ids);
   _selectedWishlistIds.clear();
   scheduleSync();
   await renderWishlistPage();
@@ -5456,17 +5484,19 @@ async function moveSelectedWishlistItemsToGeneral() {
   const movable = wishes.filter((wish) => wishStatus(wish) !== "discarded");
   if (!movable.length) return toast("Discarded items cannot move to the General List", "info");
   const now = new Date().toISOString();
-  for (const wish of movable) {
-    if (wishStatus(wish) === "stocked") {
+  try {
+    await runAtomicWishlistOperation(movable.map((wish) => wish.id), (wish) => {
+      if (wishStatus(wish) === "stocked") {
       wish.status = "planned";
       wish.stockedAt = null;
       wish.stockedItemId = null;
       wish.dayPurchaseDate = null;
       wish.updatedAt = now;
-      await dbPut("wishlist", wish);
-    }
+      }
+    }, () => moveWishlistItemsToGeneralList(movable.map((wish) => wish.id)));
+  } catch (_) {
+    return toast("Could not move the selected items to General List", "err");
   }
-  moveWishlistItemsToGeneralList(movable.map((wish) => wish.id));
   _selectedWishlistIds.clear();
   scheduleSync();
   await renderWishlistPage();
@@ -5485,16 +5515,20 @@ async function moveSelectedStockedItemsToList(targetListId) {
     if (duplicate) return toast("One or more items already exist in the destination list", "info");
   }
   const now = new Date().toISOString();
-  for (const wish of wishes) {
+  try {
+    await runAtomicWishlistOperation(wishes.map((wish) => wish.id), (wish) => {
     wish.status = "planned";
     wish.stockedAt = null;
     wish.stockedItemId = null;
     wish.dayPurchaseDate = null;
     wish.updatedAt = now;
-    await dbPut("wishlist", wish);
+    }, () => {
+      if (target) moveWishlistItemsToSavedList(wishes.map((wish) => wish.id), target.id);
+      else moveWishlistItemsToGeneralList(wishes.map((wish) => wish.id));
+    });
+  } catch (_) {
+    return toast("Could not move the stocked items", "err");
   }
-  if (target) moveWishlistItemsToSavedList(wishes.map((wish) => wish.id), target.id);
-  else moveWishlistItemsToGeneralList(wishes.map((wish) => wish.id));
   _selectedWishlistIds.clear();
   scheduleSync();
   await renderWishlistPage();
@@ -5510,13 +5544,15 @@ async function discardSelectedWishlistItems() {
   if (!stocked.length) return toast("Select stocked items to discard", "info");
   if (!confirm("Discard " + stocked.length + " stocked item" + (stocked.length === 1 ? "" : "s") + "?")) return;
   const now = new Date().toISOString();
-  for (const wish of stocked) {
-    wish.status = "discarded";
-    wish.discardedAt = now;
-    wish.updatedAt = now;
-    await dbPut("wishlist", wish);
+  try {
+    await runAtomicWishlistOperation(stocked.map((wish) => wish.id), (wish) => {
+      wish.status = "discarded";
+      wish.discardedAt = now;
+      wish.updatedAt = now;
+    }, () => moveWishlistItemsToGeneralList(stocked.map((wish) => wish.id)));
+  } catch (_) {
+    return toast("Could not discard the selected items", "err");
   }
-  moveWishlistItemsToGeneralList(stocked.map((wish) => wish.id));
   _selectedWishlistIds.clear();
   scheduleSync();
   await renderWishlistPage();
@@ -6124,11 +6160,16 @@ async function wishlistDetailDelete() {
   const label = wish ? wish.name || wish.code || "this item" : "this item";
   if (wish && wishStatus(wish) === "stocked") {
     if (!confirm('Discard "' + label + '"?')) return;
-    wish.status = "discarded";
-    wish.discardedAt = new Date().toISOString();
-    wish.updatedAt = wish.discardedAt;
-    await dbPut("wishlist", wish);
-    moveWishlistItemsToGeneralList([id]);
+    const now = new Date().toISOString();
+    try {
+      await runAtomicWishlistOperation([id], (record) => {
+        record.status = "discarded";
+        record.discardedAt = now;
+        record.updatedAt = now;
+      }, () => moveWishlistItemsToGeneralList([id]));
+    } catch (_) {
+      return toast("Could not discard the item", "err");
+    }
     scheduleSync();
     closeWishlistDetail();
     await renderWishlistPage();
@@ -7826,8 +7867,16 @@ async function toggleWishlistStockedState(wishId) {
   wish.stockedAt = new Date().toISOString();
   wish.stockedItemId = null;
   wish.dayPurchaseDate = null;
-  await dbPut("wishlist", wish);
-  moveWishlistItemsToGeneralList([wishId]);
+  try {
+    await runAtomicWishlistOperation([wishId], (record) => {
+      record.status = wish.status;
+      record.stockedAt = wish.stockedAt;
+      record.stockedItemId = null;
+      record.dayPurchaseDate = null;
+    }, () => moveWishlistItemsToGeneralList([wishId]));
+  } catch (_) {
+    return toast("Could not mark the item stocked", "err");
+  }
   scheduleSync();
   await renderWishlistPage();
   await renderStockMonitorSummary();

@@ -2117,7 +2117,7 @@ body {
   cursor: pointer;
 }
 .wish-saved-list-actions button:hover { color: var(--accent); }
-.wish-saved-list-actions button:last-child:hover { color: var(--red); }
+.wish-saved-list-actions button:last-child:hover { color: var(--accent); }
 .wish-saved-list-actions .wish-saved-list-whatsapp {
   color: #25d366;
   cursor: not-allowed;
@@ -2256,7 +2256,7 @@ body {
   color: var(--muted);
   cursor: pointer;
 }
-.wish-saved-list-item-remove:hover { color: var(--red); }
+.wish-saved-list-item-remove:hover { color: var(--accent); }
 .wish-saved-list-toolbar {
   display: flex;
   gap: 7px;
@@ -2517,9 +2517,9 @@ body {
 .wish-filter-action i { margin-right: 5px; }
 .wish-filter-action:disabled { opacity: .45; cursor: not-allowed; }
 .wish-filter-action-danger {
-  border-color: #e2a7a7;
-  background: #fff4f4;
-  color: var(--red);
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text);
 }
 .wish-sort-input { min-width: 125px; }
 .wish-chooser-overlay {
@@ -2864,8 +2864,8 @@ body {
   color: #047857;
 }
 .wish-status-indicator.cancelled {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--surface2);
+  color: var(--muted);
 }
 .wish-table tfoot th {
   padding: 8px 6px;
