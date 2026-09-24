@@ -4983,7 +4983,7 @@ function getSavedWishlistLists() {
               ? list.status
               : "planned",
             dueDate: String(list.dueDate || "").trim(),
-            itemIds: [...new Set(list.itemIds)],
+            itemIds: [...new Set(list.itemIds.map((id) => Number(id)).filter((id) => Number.isInteger(id)))],
           }))
       : [];
   } catch (_) {
@@ -4995,16 +4995,39 @@ function persistSavedWishlistLists(lists) {
   localStorage.setItem(KEY_WISHLIST_SAVED_LISTS, JSON.stringify(lists));
 }
 
-function assignWishlistItemToSavedList(itemId, listId) {
+function getWishlistListMembership(itemId, lists) {
+  return lists.find((list) => (list.itemIds || []).some((id) => String(id) === String(itemId))) || null;
+}
+
+function removeWishlistItemsFromLists(lists, itemIds) {
+  const ids = new Set(itemIds.map((id) => String(id)));
+  lists.forEach((list) => {
+    list.itemIds = (list.itemIds || []).filter((id) => !ids.has(String(id)));
+  });
+}
+
+function moveWishlistItemsToSavedList(itemIds, targetListId) {
   const lists = getSavedWishlistLists();
-  const target = lists.find((list) => list.id === listId);
-  if (!target) return false;
-  for (const list of lists) {
-    list.itemIds = (list.itemIds || []).filter((id) => id !== itemId);
-  }
-  target.itemIds = [...new Set([...(target.itemIds || []), itemId])];
+  const target = lists.find((list) => list.id === targetListId);
+  if (!target) return { ok: false, reason: "Saved list not found" };
+  const targetIds = new Set((target.itemIds || []).map((id) => String(id)));
+  const ids = [...new Set(itemIds.map((id) => Number(id)).filter((id) => Number.isInteger(id)))];
+  const duplicates = ids.filter((id) => targetIds.has(String(id)));
+  if (duplicates.length) return { ok: false, reason: "One or more items already exist in the destination list" };
+  removeWishlistItemsFromLists(lists, ids);
+  target.itemIds = [...new Set([...(target.itemIds || []), ...ids])];
   persistSavedWishlistLists(lists);
-  return true;
+  return { ok: true, target };
+}
+
+function moveWishlistItemsToGeneralList(itemIds) {
+  const lists = getSavedWishlistLists();
+  removeWishlistItemsFromLists(lists, itemIds);
+  persistSavedWishlistLists(lists);
+}
+
+function assignWishlistItemToSavedList(itemId, listId) {
+  return moveWishlistItemsToSavedList([itemId], listId).ok;
 }
 
 function getSavedWishlistListForAdd() {
@@ -5079,9 +5102,11 @@ function deleteSavedWishlistList(listId) {
   const list = lists.find((entry) => entry.id === listId);
   if (!list) return toast("Saved list not found", "err");
   const warning = list.itemIds.length
-    ? 'Delete saved list "' + list.name + '"? Its ' + list.itemIds.length + ' items will remain in the Main list.'
+    ? 'Move its live items to the General List and delete "' + list.name + '"? Stocked items will remain in Stocked.'
     : 'Delete saved list "' + list.name + '"?';
   if (!confirm(warning)) return;
+  const itemIds = [...(list.itemIds || [])];
+  removeWishlistItemsFromLists(lists, itemIds);
   persistSavedWishlistLists(lists.filter((entry) => entry.id !== listId));
   if (_activeWishlistSavedList === list.name) {
     _activeWishlistSavedList = "";
@@ -5146,7 +5171,9 @@ async function addActiveWishlistItemsToSavedList(listId) {
 }
 window.addActiveWishlistItemsToSavedList = addActiveWishlistItemsToSavedList;
 function getWishlistListMetrics(list, wishesById) {
-  const items = (list.itemIds || []).map((id) => wishesById.get(id)).filter(Boolean);
+  const items = (list.itemIds || [])
+    .map((id) => wishesById.get(id))
+    .filter((wish) => wish && wishStatus(wish) !== "stocked" && wishStatus(wish) !== "discarded");
   const quantity = items.reduce((sum, wish) => sum + Number(wish.qty || 0), 0);
   const estimated = items.reduce((sum, wish) => sum + Number(wish.qty || 0) * Number(wish.estimatedCost || 0), 0);
   return {
@@ -5207,15 +5234,10 @@ window.removeWishlistItemFromSavedList = removeWishlistItemFromSavedList;
 
 function moveWishlistItemToList(itemId, targetListId, sourceListId) {
   if (!targetListId) return;
-  const lists = getSavedWishlistLists();
-  const source = lists.find((list) => list.id === sourceListId);
-  const target = lists.find((list) => list.id === targetListId);
-  if (!source || !target) return;
-  source.itemIds = (source.itemIds || []).filter((id) => String(id) !== String(itemId));
-  target.itemIds = [...new Set([...(target.itemIds || []), itemId])];
-  persistSavedWishlistLists(lists);
+  const result = moveWishlistItemsToSavedList([itemId], targetListId);
+  if (!result.ok) return toast(result.reason, "info");
   renderWishlistPage();
-  toast('Item moved to "' + target.name + '"', "ok");
+  toast('Item moved to "' + result.target.name + '"', "ok");
 }
 window.moveWishlistItemToList = moveWishlistItemToList;
 
@@ -5281,9 +5303,18 @@ function renderSavedWishlistListsPanel(savedLists, allWishes) {
     const itemPreview = isActive
       ? '<div class="wish-saved-list-items"><div class="wish-saved-list-items-head"><strong>Items in this list</strong></div>' + (itemRows ? '<div class="wish-table-wrap"><table class="wish-table wish-saved-list-table"><thead><tr><th scope="col">Select</th><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Est. amount</th></tr></thead><tbody>' + itemRows + '</tbody><tfoot><tr><th colspan="2">List totals</th><th>' + fmtN(metrics.quantity) + '</th><th>' + fmtN(metrics.estimated) + '</th></tr></tfoot></table></div>' : '<span>No items in this list yet.</span>') + '</div>'
       : "";
-    return '<article class="wish-saved-list-card' + (isActive ? ' active' : '') + '"><div class="wish-saved-list-card-head"><button type="button" class="wish-saved-list-open" onclick="openSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><span class="wish-saved-list-icon"><i class="fa-solid fa-list-check"></i></span><span class="wish-saved-list-copy"><strong>' + escapeHtml(list.name) + '</strong></span></button></div><div class="wish-saved-list-actions-row"><button type="button" class="wish-saved-list-add-items" onclick="window.showWishlistSection(\'add\')"><i class="fa-solid fa-plus"></i> Add item</button><div class="wish-saved-list-actions"><button type="button" title="Edit list" aria-label="Edit list ' + escapeHtml(list.name) + '" onclick="editSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-pen"></i></button><button type="button" title="Delete list" aria-label="Delete list ' + escapeHtml(list.name) + '" onclick="deleteSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-trash"></i></button><button type="button" class="wish-saved-list-whatsapp" title="Send list via WhatsApp (coming soon)" aria-label="Send list via WhatsApp" disabled><i class="fa-brands fa-whatsapp"></i></button></div></div>' + itemPreview + '</article>';
+    const listActions = '<div class="wish-saved-list-actions"><button type="button" title="Edit list" aria-label="Edit list ' + escapeHtml(list.name) + '" onclick="editSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-pen"></i></button><button type="button" title="Delete list" aria-label="Delete list ' + escapeHtml(list.name) + '" onclick="deleteSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-trash"></i></button><button type="button" class="wish-saved-list-whatsapp" title="Send list via WhatsApp (coming soon)" aria-label="Send list via WhatsApp" disabled><i class="fa-brands fa-whatsapp"></i></button></div>';
+    const otherListOptions = savedLists
+      .filter((source) => source.id !== list.id && source.status !== "archived")
+      .map((source) => '<option value="' + escapeHtml(source.id) + '">' + escapeHtml(source.name) + '</option>')
+      .join("");
+    const addMenu = isActive
+      ? '<div class="wish-saved-list-add-menu" id="wish-add-menu-' + escapeHtml(list.id) + '" hidden><button type="button" onclick="beginWishlistAddFromSource(\'' + escapeHtml(list.id) + '\',\'general\')">General List</button>' + (otherListOptions ? '<select aria-label="Add from another list" onchange="if(this.value){beginWishlistAddFromSource(\'' + escapeHtml(list.id) + '\',this.value);this.value=\'\';}"><option value="">Other active list...</option>' + otherListOptions + '</select>' : '') + '</div>'
+      : '';
+    const actionRow = '<div class="wish-saved-list-actions-row">' + (isActive ? '<div class="wish-saved-list-add-group"><button type="button" class="wish-saved-list-add-items" onclick="toggleWishlistAddMenu(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-plus"></i> Add item</button>' + addMenu + '</div>' : '') + listActions + '</div>';
+    return '<article class="wish-saved-list-card' + (isActive ? ' active' : '') + '"><div class="wish-saved-list-card-head"><button type="button" class="wish-saved-list-open" onclick="openSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><span class="wish-saved-list-icon"><i class="fa-solid fa-list-check"></i></span><span class="wish-saved-list-copy"><strong>' + escapeHtml(list.name) + '</strong></span></button></div>' + actionRow + itemPreview + '</article>';
   }).join("");
-  return '<div class="wish-saved-lists-panel"><div class="wish-saved-lists-head"><strong>Stock Lists</strong><button type="button" class="wish-filter-btn" onclick="createSavedWishlistList()"><i class="fa-solid fa-plus"></i> Add list</button></div><div class="wish-saved-list-grid">' + (cards || '<div class="wish-saved-empty"><i class="fa-solid fa-list"></i><span>No saved lists yet.</span></div>') + '</div></div>';
+  return '<div class="wish-saved-lists-panel"><div class="wish-saved-lists-head"><strong><i class="fa-solid fa-list-ul"></i> Wish lists</strong><button type="button" class="wish-filter-btn" onclick="createSavedWishlistList()"><i class="fa-solid fa-plus"></i> Add list</button></div><div class="wish-saved-list-grid">' + (cards || '<div class="wish-saved-empty"><i class="fa-solid fa-list"></i><span>No saved lists yet.</span></div>') + '</div></div>';
 }
 
 function addVisibleWishlistItemsToSavedList(selectedListName) {
@@ -5305,14 +5336,58 @@ function addVisibleWishlistItemsToSavedList(selectedListName) {
     toast("Saved list not found", "err");
     return;
   }
-  const existing = new Set(list.itemIds || []);
-  const newItems = visibleIds.filter((id) => !existing.has(id));
-  list.itemIds = [...new Set([...(list.itemIds || []), ...visibleIds])];
-  persistSavedWishlistLists(lists);
+  const result = moveWishlistItemsToSavedList(visibleIds, list.id);
+  if (!result.ok) return toast(result.reason, "info");
   renderWishlistPage();
-  toast((newItems.length || visibleIds.length) + " visible item" + ((newItems.length || visibleIds.length) === 1 ? "" : "s") + " synced to \"" + listName + "\"", "ok");
+  toast(visibleIds.length + " visible item" + (visibleIds.length === 1 ? "" : "s") + " moved to \"" + listName + "\"", "ok");
 }
 window.addVisibleWishlistItemsToSavedList = addVisibleWishlistItemsToSavedList;
+
+function toggleWishlistAddMenu(targetListId) {
+  const menu = document.getElementById("wish-add-menu-" + targetListId);
+  if (menu) menu.hidden = !menu.hidden;
+}
+window.toggleWishlistAddMenu = toggleWishlistAddMenu;
+
+function beginWishlistAddFromSource(targetListId, sourceListId) {
+  const lists = getSavedWishlistLists();
+  const target = lists.find((list) => list.id === targetListId);
+  if (!target) return toast("Saved list not found", "err");
+  _wishlistAddToSavedListId = target.id;
+  if (sourceListId === "general") {
+    _activeWishlistView = "main";
+    _activeWishlistSavedList = "";
+    _activeWishlistSection = "list";
+    _selectedWishlistIds.clear();
+    renderWishlistPage();
+    toast("Select General List items, then use Add to current list", "info");
+    return;
+  }
+  const source = lists.find((list) => list.id === sourceListId && list.id !== target.id && list.status !== "archived");
+  if (!source) return toast("Source list not found", "err");
+  _activeWishlistView = "saved";
+  _activeWishlistSavedList = source.name;
+  _activeWishlistSection = "list";
+  _selectedWishlistIds.clear();
+  renderWishlistPage();
+  toast("Select items from " + source.name + ", then use Add to current list", "info");
+}
+window.beginWishlistAddFromSource = beginWishlistAddFromSource;
+
+function addSelectedItemsToPendingWishlistList() {
+  if (!_wishlistAddToSavedListId) return toast("Choose a destination list first", "info");
+  const ids = getSelectedWishlistIds();
+  if (!ids.length) return toast("Select wishlist items first", "info");
+  const result = moveWishlistItemsToSavedList(ids, _wishlistAddToSavedListId);
+  if (!result.ok) return toast(result.reason, "info");
+  _wishlistAddToSavedListId = "";
+  _selectedWishlistIds.clear();
+  _activeWishlistView = "saved";
+  _activeWishlistSavedList = result.target.name;
+  renderWishlistPage();
+  toast(ids.length + " item" + (ids.length === 1 ? "" : "s") + " moved to " + result.target.name, "ok");
+}
+window.addSelectedItemsToPendingWishlistList = addSelectedItemsToPendingWishlistList;
 
 function getSelectedWishlistIds() {
   return [..._selectedWishlistIds].filter((id) => Number.isFinite(id));
@@ -5331,6 +5406,15 @@ function updateWishlistSelection() {
   const count = _selectedWishlistIds.size;
   const bar = document.getElementById("wishlist-bulk-actions");
   if (bar) bar.hidden = count === 0;
+  const discardButton = document.getElementById("wishlist-discard-btn");
+  if (discardButton) {
+    const selected = [..._selectedWishlistIds]
+      .map((id) => document.querySelector('.wish-select-item[value="' + id + '"]')?.closest("tr"))
+      .filter(Boolean);
+    discardButton.hidden = !selected.length || !selected.every((row) => row.classList.contains("is-stocked"));
+  }
+  const addSelectedButton = document.getElementById("wishlist-add-selected-btn");
+  if (addSelectedButton) addSelectedButton.hidden = count === 0 || !_wishlistAddToSavedListId;
   const selectAll = document.getElementById("wish-select-all");
   if (selectAll) {
     selectAll.checked = visibleIds.size > 0 && visible.every((checkbox) => checkbox.checked);
@@ -5356,6 +5440,7 @@ async function markSelectedWishlistItemsStocked() {
     wish.stockedAt = now;
     await dbPut("wishlist", wish);
   }
+  moveWishlistItemsToGeneralList(ids);
   _selectedWishlistIds.clear();
   scheduleSync();
   await renderWishlistPage();
@@ -5363,6 +5448,81 @@ async function markSelectedWishlistItemsStocked() {
   toast(ids.length + " item" + (ids.length === 1 ? "" : "s") + " marked stocked", "ok");
 }
 window.markSelectedWishlistItemsStocked = markSelectedWishlistItemsStocked;
+
+async function moveSelectedWishlistItemsToGeneral() {
+  const ids = getSelectedWishlistIds();
+  if (!ids.length) return toast("Select wishlist items first", "info");
+  const wishes = (await Promise.all(ids.map((id) => dbGet("wishlist", id)))).filter(Boolean);
+  const movable = wishes.filter((wish) => wishStatus(wish) !== "discarded");
+  if (!movable.length) return toast("Discarded items cannot move to the General List", "info");
+  const now = new Date().toISOString();
+  for (const wish of movable) {
+    if (wishStatus(wish) === "stocked") {
+      wish.status = "planned";
+      wish.stockedAt = null;
+      wish.stockedItemId = null;
+      wish.dayPurchaseDate = null;
+      wish.updatedAt = now;
+      await dbPut("wishlist", wish);
+    }
+  }
+  moveWishlistItemsToGeneralList(movable.map((wish) => wish.id));
+  _selectedWishlistIds.clear();
+  scheduleSync();
+  await renderWishlistPage();
+  toast(movable.length + " item" + (movable.length === 1 ? "" : "s") + " moved to General List", "ok");
+}
+window.moveSelectedWishlistItemsToGeneral = moveSelectedWishlistItemsToGeneral;
+
+async function moveSelectedStockedItemsToList(targetListId) {
+  const ids = getSelectedWishlistIds();
+  const wishes = (await Promise.all(ids.map((id) => dbGet("wishlist", id)))).filter((wish) => wish && wishStatus(wish) === "stocked");
+  if (!wishes.length) return toast("Select stocked items first", "info");
+  const target = targetListId === "general" ? null : getSavedWishlistLists().find((list) => list.id === targetListId);
+  if (targetListId !== "general" && !target) return toast("Choose an active destination list", "info");
+  if (target) {
+    const duplicate = wishes.some((wish) => (target.itemIds || []).some((id) => String(id) === String(wish.id)));
+    if (duplicate) return toast("One or more items already exist in the destination list", "info");
+  }
+  const now = new Date().toISOString();
+  for (const wish of wishes) {
+    wish.status = "planned";
+    wish.stockedAt = null;
+    wish.stockedItemId = null;
+    wish.dayPurchaseDate = null;
+    wish.updatedAt = now;
+    await dbPut("wishlist", wish);
+  }
+  if (target) moveWishlistItemsToSavedList(wishes.map((wish) => wish.id), target.id);
+  else moveWishlistItemsToGeneralList(wishes.map((wish) => wish.id));
+  _selectedWishlistIds.clear();
+  scheduleSync();
+  await renderWishlistPage();
+  toast(wishes.length + " item" + (wishes.length === 1 ? "" : "s") + " moved to " + (target ? target.name : "General List"), "ok");
+}
+window.moveSelectedStockedItemsToList = moveSelectedStockedItemsToList;
+
+async function discardSelectedWishlistItems() {
+  const ids = getSelectedWishlistIds();
+  if (!ids.length) return toast("Select stocked items first", "info");
+  const wishes = (await Promise.all(ids.map((id) => dbGet("wishlist", id)))).filter(Boolean);
+  const stocked = wishes.filter((wish) => wishStatus(wish) === "stocked");
+  if (!stocked.length) return toast("Select stocked items to discard", "info");
+  if (!confirm("Discard " + stocked.length + " stocked item" + (stocked.length === 1 ? "" : "s") + "?")) return;
+  const now = new Date().toISOString();
+  for (const wish of stocked) {
+    wish.status = "discarded";
+    wish.discardedAt = now;
+    wish.updatedAt = now;
+    await dbPut("wishlist", wish);
+  }
+  moveWishlistItemsToGeneralList(stocked.map((wish) => wish.id));
+  _selectedWishlistIds.clear();
+  scheduleSync();
+  await renderWishlistPage();
+  toast(stocked.length + " item" + (stocked.length === 1 ? "" : "s") + " discarded", "ok");
+}
+window.discardSelectedWishlistItems = discardSelectedWishlistItems;
 
 async function deleteSelectedWishlistItems() {
   const ids = getSelectedWishlistIds();
@@ -5389,12 +5549,20 @@ async function openWishlistBulkEdit(ids) {
   const records = (await Promise.all(ids.map((id) => dbGet("wishlist", id)))).filter(Boolean);
   if (!records.length) return toast("Selected wishlist items were not found", "err");
   const fields = {
+    name: records.map((wish) => String(wish.name || "")),
+    unit: records.map((wish) => String(wish.unit || "Pcs")),
+    qty: records.map((wish) => String(Number(wish.qty || 0))),
+    estimatedCost: records.map((wish) => String(Number(wish.estimatedCost || 0))),
     status: records.map((wish) => normalizeWishlistStatus(wish.status)),
     category: records.map((wish) => String(wish.type || wish.category || "")),
     supplierId: records.map((wish) => String(wish.supplierId || wish.supplier || "")),
     note: records.map((wish) => String(wish.note || "")),
   };
   const values = {
+    name: document.getElementById("wish-bulk-name"),
+    unit: document.getElementById("wish-bulk-unit"),
+    qty: document.getElementById("wish-bulk-qty"),
+    estimatedCost: document.getElementById("wish-bulk-cost"),
     status: document.getElementById("wish-bulk-status"),
     category: document.getElementById("wish-bulk-category"),
     supplierId: document.getElementById("wish-bulk-supplier"),
@@ -5429,8 +5597,14 @@ async function saveWishlistBulkEdit() {
     .map((checkbox) => checkbox.dataset.bulkEditField);
   if (!ids.length) return closeWishlistBulkEdit();
   if (!selectedFields.length) return toast("Choose at least one field to update", "info");
+  const statusRaw = document.getElementById("wish-bulk-status")?.value || "";
+  if (selectedFields.includes("status") && !statusRaw) return toast("Choose a status before applying it", "info");
   const values = {
-    status: normalizeWishlistStatus(document.getElementById("wish-bulk-status")?.value),
+    name: Input.text("wish-bulk-name"),
+    unit: Input.text("wish-bulk-unit") || "Pcs",
+    qty: Number(document.getElementById("wish-bulk-qty")?.value || 0),
+    estimatedCost: Number(document.getElementById("wish-bulk-cost")?.value || 0),
+    status: normalizeWishlistStatus(statusRaw),
     category: Input.text("wish-bulk-category"),
     supplierId: Input.text("wish-bulk-supplier"),
     note: Input.text("wish-bulk-note"),
@@ -5446,6 +5620,10 @@ async function saveWishlistBulkEdit() {
         wish.type = values.category;
       } else if (field === "supplierId") {
         wish.supplierId = values.supplierId;
+      } else if (field === "qty") {
+        wish.qty = Math.max(0, values.qty);
+      } else if (field === "estimatedCost") {
+        wish.estimatedCost = Math.max(0, values.estimatedCost);
       } else {
         wish[field] = values[field];
       }
@@ -5454,6 +5632,9 @@ async function saveWishlistBulkEdit() {
     wish.updatedBy = currentUser ? currentUser.username : "system";
     await dbPut("wishlist", wish);
     updated++;
+  }
+  if (selectedFields.includes("status") && values.status === "stocked") {
+    moveWishlistItemsToGeneralList(ids);
   }
   closeWishlistBulkEdit();
   scheduleSync();
@@ -5468,16 +5649,13 @@ function addSelectedWishlistItemsToSavedList(selectedListName) {
   const selectedIds = getSelectedWishlistIds();
   if (!listName) return toast("Choose a saved list first", "info");
   if (!selectedIds.length) return toast("Select wishlist items first", "info");
-  const lists = getSavedWishlistLists();
-  const list = lists.find((entry) => entry.name === listName);
+  const list = getSavedWishlistLists().find((entry) => entry.name === listName);
   if (!list) return toast("Saved list not found", "err");
-  const existing = new Set(list.itemIds || []);
-  const newItems = selectedIds.filter((id) => !existing.has(id));
-  list.itemIds = [...new Set([...(list.itemIds || []), ...selectedIds])];
-  persistSavedWishlistLists(lists);
+  const result = moveWishlistItemsToSavedList(selectedIds, list.id);
+  if (!result.ok) return toast(result.reason, "info");
   _selectedWishlistIds.clear();
   renderWishlistPage();
-  toast(newItems.length + " item" + (newItems.length === 1 ? "" : "s") + " added to \"" + listName + "\"", "ok");
+  toast(selectedIds.length + " item" + (selectedIds.length === 1 ? "" : "s") + " moved to \"" + listName + "\"", "ok");
 }
 window.addSelectedWishlistItemsToSavedList = addSelectedWishlistItemsToSavedList;
 
@@ -5537,6 +5715,7 @@ function normalizeWishlistStatus(value) {
   if (status === "planned" || status === "prospective" || status === "new") return "planned";
   if (status === "in_progress" || status === "in-progress" || status === "inprogress") return "in_progress";
   if (status === "stocked" || status === "completed") return "stocked";
+  if (status === "discarded") return "discarded";
   if (status === "cancelled" || status === "canceled") return "cancelled";
   return "planned";
 }
@@ -5546,6 +5725,7 @@ function labelWishlistStatus(value) {
     case "planned": return "Planned";
     case "in_progress": return "In progress";
     case "stocked": return "Stocked";
+    case "discarded": return "Discarded";
     case "cancelled": return "Cancelled";
     default: return "Planned";
   }
@@ -5600,7 +5780,10 @@ async function markWishlistStockedById(wishId, itemId, stockedQty, actualBuyPric
     }
   }
   await dbPut("wishlist", wish);
-  if (totalPurchased >= requestedQty) removeWishFromAllPlanners(wishId);
+  if (totalPurchased >= requestedQty) {
+    moveWishlistItemsToGeneralList([wishId]);
+    removeWishFromAllPlanners(wishId);
+  }
 }
 
 function normalizeWishVendorQuotes(wish) {
@@ -5736,10 +5919,15 @@ function buildWishTableHtml(rows, wishById) {
     const wish = wishById.get(row.wishId) || {};
     return sum + Number(wish.qty || row.qty || 0) * Number(wish.estimatedCost || 0);
   }, 0);
+  const stockedMoveOptions = getSavedWishlistLists().map((list) => '<option value="' + escapeHtml(list.id) + '">' + escapeHtml(list.name) + '</option>').join("");
   const bulkActions = '<div id="wishlist-bulk-actions" class="wishlist-bulk-actions" hidden>' +
-    '<button type="button" class="wish-bulk-btn" onclick="markSelectedWishlistItemsStocked()"><i class="fa-solid fa-box"></i> Stocked</button>' +
+    '<button type="button" id="wishlist-add-selected-btn" class="wish-bulk-btn" onclick="addSelectedItemsToPendingWishlistList()" hidden><i class="fa-solid fa-arrow-right"></i> Add to current list</button>' +
+    '<button type="button" class="wish-bulk-btn wish-bulk-stocked" onclick="markSelectedWishlistItemsStocked()"><i class="fa-solid fa-check"></i> Mark Stocked</button>' +
+    '<button type="button" class="wish-bulk-btn" onclick="moveSelectedWishlistItemsToGeneral()"><i class="fa-solid fa-arrow-left"></i> General List</button>' +
+    '<select id="wishlist-stocked-destination" class="wish-bulk-destination" aria-label="Move stocked items to active list" onchange="if(this.value){moveSelectedStockedItemsToList(this.value);this.value=\'\';}"><option value="">Move stocked to...</option><option value="general">General List</option>' + stockedMoveOptions + '</select>' +
     '<button type="button" class="wish-bulk-btn" onclick="editSelectedWishlistItem()"><i class="fa-solid fa-pen"></i> Edit</button>' +
-    '<button type="button" class="wish-bulk-btn wish-bulk-danger" onclick="deleteSelectedWishlistItems()"><i class="fa-solid fa-trash"></i> Delete</button>' +
+    '<button type="button" id="wishlist-discard-btn" class="wish-bulk-btn" onclick="discardSelectedWishlistItems()" hidden><i class="fa-solid fa-trash"></i> Discard</button>' +
+    '<button type="button" class="wish-bulk-btn" onclick="deleteSelectedWishlistItems()"><i class="fa-solid fa-trash"></i> Delete</button>' +
     '</div>';
   return bulkActions + '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th scope="col" style="width:8%;"><span class="wish-column-label">Sel.</span><input type="checkbox" id="wish-select-all" aria-label="Select all visible wishlist items" onchange="toggleAllWishlistSelection(this.checked)"></th><th scope="col">Item</th><th scope="col">Supplier</th><th scope="col">Qty</th><th scope="col">Est. amount</th></tr></thead><tbody>' +
     rows.map((row) => {
@@ -5934,6 +6122,19 @@ async function wishlistDetailDelete() {
   if (!id) return;
   const wish = await dbGet("wishlist", id);
   const label = wish ? wish.name || wish.code || "this item" : "this item";
+  if (wish && wishStatus(wish) === "stocked") {
+    if (!confirm('Discard "' + label + '"?')) return;
+    wish.status = "discarded";
+    wish.discardedAt = new Date().toISOString();
+    wish.updatedAt = wish.discardedAt;
+    await dbPut("wishlist", wish);
+    moveWishlistItemsToGeneralList([id]);
+    scheduleSync();
+    closeWishlistDetail();
+    await renderWishlistPage();
+    toast("Item discarded", "ok");
+    return;
+  }
   if (!confirm('Remove "' + label + '" from wishlist?')) return;
   closeWishlistDetail();
   await deleteWishlistItem(id);
@@ -7520,8 +7721,8 @@ async function renderWishlistPage() {
   if (controls) {
     if (showList) {
       controls.innerHTML = '<div class="wish-view-tabs" role="tablist" aria-label="Wishlist views">' +
-        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "saved" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "saved") + '" onclick="chooseWishlistSavedList()">Stock Lists</button>' +
-        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "main" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "main") + '" onclick="setWishlistView(\'main\')">Main list</button>' +
+        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "saved" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "saved") + '" onclick="chooseWishlistSavedList()"><i class="fa-solid fa-list-ul"></i> Wish lists</button>' +
+        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "main" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "main") + '" onclick="setWishlistView(\'main\')"><i class="fa-solid fa-layer-group"></i> Main list</button>' +
         '<button type="button" class="wish-view-tab' + (_activeWishlistView === "stocked" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "stocked") + '" onclick="setWishlistView(\'stocked\')">Stocked</button>' +
         '</div>' + (_activeWishlistView === "saved" ? renderSavedWishlistListsPanel(savedLists, allWishes) : '') + '<div id="wish-list-summary" class="wish-list-summary" aria-live="polite"></div>';
     } else {
@@ -7534,9 +7735,9 @@ async function renderWishlistPage() {
       if (_activeWishlistView === "stocked") return wishStatus(wish) === "stocked";
       if (_activeWishlistView === "saved") {
         const savedList = savedLists.find((list) => list.name === _activeWishlistSavedList);
-        return Boolean(savedList && savedList.itemIds.includes(wish.id));
+        return Boolean(savedList && savedList.itemIds.includes(wish.id) && wishStatus(wish) !== "stocked" && wishStatus(wish) !== "discarded");
       }
-      return wishStatus(wish) !== "stocked";
+      return wishStatus(wish) !== "stocked" && wishStatus(wish) !== "discarded" && !getWishlistListMembership(wish.id, savedLists);
     })
     .sort((a, b) => {
       const aStocked = wishStatus(a) === "stocked" ? 1 : 0;
@@ -7548,7 +7749,7 @@ async function renderWishlistPage() {
     filteredWishes,
     _activeWishlistView === "stocked" ? "stocked" : "list",
   );
-  const wishlistRecords = allWishes.filter((wish) => !isWishlistSaleMonitorEntry(wish));
+  const wishlistRecords = allWishes.filter((wish) => !isWishlistSaleMonitorEntry(wish) && wishStatus(wish) !== "discarded");
   const activeCount = wishlistRecords.filter((wish) => wishStatus(wish) !== "stocked").length;
   const stockedCount = wishlistRecords.filter((wish) => wishStatus(wish) === "stocked").length;
   const visibleActiveWishes = filteredWishes.filter((wish) => wishStatus(wish) !== "stocked");
@@ -7626,6 +7827,7 @@ async function toggleWishlistStockedState(wishId) {
   wish.stockedItemId = null;
   wish.dayPurchaseDate = null;
   await dbPut("wishlist", wish);
+  moveWishlistItemsToGeneralList([wishId]);
   scheduleSync();
   await renderWishlistPage();
   await renderStockMonitorSummary();
@@ -7636,7 +7838,14 @@ window.toggleWishlistStockedState = toggleWishlistStockedState;
 async function saveWishlistItem() {
   const isEditing = !!_editingWishlistId;
   const name = Input.text("wish-name");
-  const unit = "Pcs";
+  const unitField = document.getElementById("wish-unit");
+  const typeField = document.getElementById("wish-type");
+  const noteField = document.getElementById("wish-note");
+  const statusField = document.getElementById("wish-status");
+  const unit = unitField ? Input.text("wish-unit") || "Pcs" : "Pcs";
+  const type = typeField ? Input.text("wish-type") : "";
+  const note = noteField ? Input.text("wish-note") : "";
+  const status = statusField ? normalizeWishlistStatus(Input.text("wish-status")) : "planned";
   const qtyRaw = Input.int("wish-qty");
   const estimatedCost = Input.money("wish-cost");
   const supplierId = Input.text("wish-supplier");
@@ -7654,9 +7863,13 @@ async function saveWishlistItem() {
     Object.assign(existing, {
       name,
       unit,
+      type: typeField ? type : existing.type || existing.category || "",
+      category: typeField ? type : existing.category || existing.type || "",
       qty,
       estimatedCost: estimatedCost > 0 ? estimatedCost : 0,
       supplierId,
+      note: noteField ? note : existing.note || "",
+      status: statusField ? status : existing.status || "planned",
       updatedAt: new Date().toISOString(),
       updatedBy: currentUser ? currentUser.username : "system",
     });
@@ -7664,6 +7877,9 @@ async function saveWishlistItem() {
     delete existing.priority;
     delete existing.plannedPurchaseDate;
     await dbPut("wishlist", existing);
+    if (wishStatus(existing) === "stocked" || wishStatus(existing) === "discarded") {
+      moveWishlistItemsToGeneralList([existing.id]);
+    }
     _editingWishlistId = null;
     clearWishPhotoForm();
     [
@@ -7687,11 +7903,11 @@ async function saveWishlistItem() {
     name,
     unit,
     qty,
-    type: "",
-    category: "",
-    status: "planned",
+    type,
+    category: type,
+    status,
     estimatedCost: estimatedCost > 0 ? estimatedCost : 0,
-    note: "",
+    note,
     supplierId,
     createdAt: new Date().toISOString(),
     createdBy: currentUser ? currentUser.username : "system",
@@ -7791,6 +8007,7 @@ async function deleteWishlistItem(id, skipRender) {
   const wishId = Number(id);
   if (!Number.isInteger(wishId) || wishId < 1) return;
   const wish = await dbGet("wishlist", wishId);
+  moveWishlistItemsToGeneralList([wishId]);
   await removeWishPhoto(wishId);
   await cascadeDeleteRecord("wishlist", wishId, wish);
   if (!skipRender) {
@@ -7816,6 +8033,7 @@ async function markWishlistStockedForItem(item) {
     wish.stockedAt = new Date().toISOString();
     wish.stockedItemId = item.id || null;
     await dbPut("wishlist", wish);
+    moveWishlistItemsToGeneralList([wish.id]);
   }
 }
 
@@ -10624,36 +10842,10 @@ async function seedDevDatabase() {
   }
 
   // ── Wishlist entries ─────────────────────────────────────────────
-  const wishSeed = [
-    {
-      name: "Solar Lamp - Rechargeable",
-      unit: "Pcs",
-      qty: 10,
-      estimatedCost: 850,
-      note: "Customers keep asking for these",
-      supplierId: "Nairobi Wholesale",
-      category: "Electronics",
-    },
-    {
-      name: "School Bag - Junior",
-      unit: "Pcs",
-      qty: 15,
-      estimatedCost: 1200,
-      note: "Blue or black, durable material",
-      supplierId: "City Traders",
-      category: "Clothes",
-    },
-    {
-      name: "Motorcycle Helmet",
-      unit: "Pcs",
-      qty: 5,
-      estimatedCost: 1800,
-      note: "Check with boda riders on preferred brand",
-      supplierId: "Eastside Supplies",
-      category: "General",
-    },
-  ];
   const wishNames = [
+    "Solar Lamp - Rechargeable",
+    "School Bag - Junior",
+    "Motorcycle Helmet",
     "LED Bulb 12W",
     "Extension Cable 5m",
     "Phone Charger Type C",
@@ -10678,6 +10870,10 @@ async function seedDevDatabase() {
     "Ballpoint Pens Pack",
     "School Uniform Shirt",
     "Lunch Box",
+    "Rice Cooker 2L",
+    "Water Filter Jug",
+    "Batteries AA Pack",
+    "Cleaning Bucket",
   ];
   const wishNotes = [
     "Add to next stock order",
@@ -10688,13 +10884,18 @@ async function seedDevDatabase() {
     "Preferred colour is black",
     "Ask supplier for bulk price",
     "Restock when current stock is low",
+    "Confirm warranty before ordering",
+    "Check seasonal demand before buying",
   ];
-  const wishPriorities = ["urgent", "medium", "low"];
+  const wishUnits = ["Pcs", "Boxes", "Bags", "Sets", "Pairs"];
+  const wishPriorities = ["urgent", "high", "medium", "low"];
+  const wishStatuses = ["planned", "in_progress", "stocked", "cancelled"];
   const wishSuppliers = [
     "Nairobi Wholesale",
     "City Traders",
     "Eastside Supplies",
     "Market Centre",
+    "Corner Depot",
   ];
   const wishCategories = [
     "Electronics",
@@ -10702,36 +10903,140 @@ async function seedDevDatabase() {
     "General",
     "Plastics",
     "Food",
+    "Household",
   ];
-  for (let i = wishSeed.length; i < 100; i++) {
-    const product = wishNames[i % wishNames.length];
-    const variation = Math.floor(i / wishNames.length) + 1;
+  const wishSources = ["app", "manual", "sale-monitor", "backfill"];
+  const wishSeed = [];
+
+  for (let i = 0; i < 30; i++) {
+    const name = wishNames[i % wishNames.length];
+    const priority = wishPriorities[i % wishPriorities.length];
+    const status = wishStatuses[i % wishStatuses.length];
+    const category = wishCategories[i % wishCategories.length];
+    const supplierId = wishSuppliers[i % wishSuppliers.length];
+    const unit = wishUnits[i % wishUnits.length];
+    const qty = 2 + ((i * 3) % 24);
+    const requestedQty = qty + ((i % 4) * 2);
+    const purchasedQty = status === "stocked" ? requestedQty : status === "in_progress" ? Math.max(0, Math.floor(requestedQty / 2)) : 0;
+    const estimatedCost = 150 + ((i * 211) % 2600);
+    const note = wishNotes[i % wishNotes.length];
+    const source = wishSources[i % wishSources.length];
+    const purchaseStatus = status === "stocked" ? "stocked" : status === "cancelled" ? "cancelled" : purchasedQty > 0 ? "partial" : "unstocked";
+    const dateOffset = ((i % 9) + 1) * 2;
+    const purchaseDate = status === "stocked" || status === "in_progress"
+      ? new Date(now)
+      : new Date(now);
+    purchaseDate.setDate(purchaseDate.getDate() - dateOffset);
+    const dayPurchaseDate = status === "stocked" || status === "in_progress" ? _seedLocalDateStr(purchaseDate) : null;
+    const stockedAt = status === "stocked" ? new Date(now).toISOString() : null;
+    const vendorQuotes = [
+      { supplier: supplierId, price: estimatedCost, qty: requestedQty, currency: "KES", updatedAt: now.toISOString() },
+      { supplier: wishSuppliers[(i + 1) % wishSuppliers.length], price: Math.max(120, estimatedCost - 180), qty: Math.max(1, requestedQty - 1), currency: "KES", updatedAt: now.toISOString() },
+    ];
+
     wishSeed.push({
-      name: product + " " + variation,
-      unit: "Pcs",
-      qty: 2 + (i % 24),
-      estimatedCost: 150 + (i % 8) * 100,
-      note: wishNotes[i % wishNotes.length],
-      supplierId: wishSuppliers[i % wishSuppliers.length],
-      category: wishCategories[i % wishCategories.length],
+      name,
+      unit,
+      qty,
+      requestedQty,
+      purchasedQty,
+      estimatedCost,
+      note,
+      supplierId,
+      category,
+      status,
+      priority,
+      source,
+      purchaseStatus,
+      purchaseBudgetId: i % 3 === 0 ? "budget-" + (i + 1) : "",
+      type: category,
+      dayPurchaseDate,
+      stockedAt,
+      stockedItemId: status === "stocked" ? i + 100 : null,
+      vendorQuotes,
+      createdAt: now.toISOString(),
+      createdBy: "system",
+      updatedAt: now.toISOString(),
+      updatedBy: "system",
     });
   }
+
+  const existingWishlist = (await dbAll("wishlist")) || [];
+  const existingWishlistByName = new Map(
+    existingWishlist
+      .filter((item) => item && item.name)
+      .map((item) => [String(item.name).trim().toLowerCase(), item]),
+  );
+
   for (let i = 0; i < wishSeed.length; i++) {
     const w = wishSeed[i];
-    await dbAdd("wishlist", {
+    const normalizedName = String(w.name || "").trim().toLowerCase();
+    const match = normalizedName ? existingWishlistByName.get(normalizedName) : null;
+    const seedEntry = {
+      ...w,
       name: w.name,
       unit: w.unit || "Pcs",
       qty: w.qty,
+      requestedQty: w.requestedQty || w.qty,
+      purchasedQty: w.purchasedQty || 0,
       estimatedCost: w.estimatedCost || 150 + (i % 8) * 100,
-      note: w.note,
+      note: w.note || "",
       supplierId: w.supplierId || wishSuppliers[i % wishSuppliers.length],
       category: w.category || wishCategories[i % wishCategories.length],
-      dayPurchaseDate: i < 12 ? _seedLocalDateStr(now) : null,
-      status: "prospective",
+      status: normalizeWishlistStatus(w.status),
+      priority: w.priority || wishPriorities[i % wishPriorities.length],
+      source: w.source || "app",
+      purchaseStatus: w.purchaseStatus || "unstocked",
+      purchaseBudgetId: w.purchaseBudgetId || "",
+      type: w.type || w.category || "",
+      dayPurchaseDate: w.dayPurchaseDate || null,
+      stockedAt: w.stockedAt || null,
+      stockedItemId: w.stockedItemId || null,
+      vendorQuotes: Array.isArray(w.vendorQuotes) ? w.vendorQuotes : [],
+      updatedAt: now.toISOString(),
+      updatedBy: "system",
+    };
+
+    if (match) {
+      Object.assign(match, seedEntry, {
+        updatedAt: now.toISOString(),
+        updatedBy: "system",
+      });
+      await dbPut("wishlist", match);
+      continue;
+    }
+
+    await dbAdd("wishlist", {
+      ...seedEntry,
       createdAt: now.toISOString(),
       createdBy: "system",
     });
   }
+
+  const seededWishlistItems = await dbAll("wishlist");
+  const seededWishListMaps = {
+    Electronics: seededWishlistItems.filter((item) => String(item.category || "").toLowerCase() === "electronics"),
+    Clothes: seededWishlistItems.filter((item) => String(item.category || "").toLowerCase() === "clothes"),
+    General: seededWishlistItems.filter((item) => String(item.category || "").toLowerCase() === "general"),
+    Plastics: seededWishlistItems.filter((item) => String(item.category || "").toLowerCase() === "plastics"),
+    Food: seededWishlistItems.filter((item) => String(item.category || "").toLowerCase() === "food"),
+    Household: seededWishlistItems.filter((item) => String(item.category || "").toLowerCase() === "household"),
+  };
+
+  const savedLists = [
+    { name: "Electronics Run", category: "Electronics", supply: "Nairobi Wholesale", budget: 60000, status: "planned", dueDate: _seedLocalDateStr(new Date(now.getTime() + 5 * 86400000)), itemIds: (seededWishListMaps.Electronics || []).slice(0, 4).map((item) => item.id) },
+    { name: "Apparel & Accessories", category: "Clothes", supply: "City Traders", budget: 42500, status: "ordering", dueDate: _seedLocalDateStr(new Date(now.getTime() + 7 * 86400000)), itemIds: (seededWishListMaps.Clothes || []).slice(0, 4).map((item) => item.id) },
+    { name: "Household Essentials", category: "Household", supply: "Market Centre", budget: 35000, status: "partial", dueDate: _seedLocalDateStr(new Date(now.getTime() + 9 * 86400000)), itemIds: (seededWishListMaps.Household || []).slice(0, 4).map((item) => item.id) },
+    { name: "General Supplies", category: "General", supply: "Eastside Supplies", budget: 28000, status: "planned", dueDate: _seedLocalDateStr(new Date(now.getTime() + 10 * 86400000)), itemIds: (seededWishListMaps.General || []).slice(0, 4).map((item) => item.id) },
+    { name: "Plastics & Storage", category: "Plastics", supply: "Corner Depot", budget: 32000, status: "planned", dueDate: _seedLocalDateStr(new Date(now.getTime() + 12 * 86400000)), itemIds: (seededWishListMaps.Plastics || []).slice(0, 4).map((item) => item.id) },
+    { name: "Food & Pantry", category: "Food", supply: "Nairobi Wholesale", budget: 26000, status: "planned", dueDate: _seedLocalDateStr(new Date(now.getTime() + 14 * 86400000)), itemIds: (seededWishListMaps.Food || []).slice(0, 4).map((item) => item.id) },
+  ].map((list) => ({
+    ...list,
+    id: "wish-list-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + "-" + list.category.toLowerCase().replace(/[^a-z]+/g, "-"),
+    itemIds: [...new Set((list.itemIds || []).filter((id) => id !== undefined && id !== null))],
+  }));
+
+  localStorage.setItem(KEY_WISHLIST_SAVED_LISTS, JSON.stringify(savedLists));
 
   // ── Finance entries ──────────────────────────────────────────────
   const financeSeed = [
