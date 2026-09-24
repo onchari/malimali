@@ -2013,6 +2013,24 @@ body {
   max-width: 100%;
   flex: 1 1 100%;
 }
+.wish-saved-list-card-head .wish-saved-list-transfer {
+  width: auto;
+  min-width: 0;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  padding: 0;
+}
+.wish-saved-list-card-head .wish-saved-list-transfer label {
+  white-space: nowrap;
+}
+.wish-saved-list-card-head .wish-saved-list-transfer-select {
+  min-width: 88px;
+  width: 112px;
+  flex: 0 1 112px;
+}
+.wish-saved-list-card-head .wish-saved-list-transfer-btn {
+  flex: 0 0 auto;
+}
 .wish-saved-list-select {
   width: 15px;
   height: 15px;
@@ -2118,6 +2136,44 @@ body {
 .wish-saved-list-actions-row > .wish-saved-list-add-items {
   margin-top: 0;
   margin-right: auto;
+}
+.wish-saved-list-transfer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  width: 100%;
+  padding: 6px 0 2px;
+}
+.wish-saved-list-transfer label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.wish-saved-list-transfer-select {
+  min-width: 130px;
+  min-height: 26px;
+  flex: 1 1 130px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 10px;
+}
+.wish-saved-list-transfer-btn {
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid #9acbb5;
+  border-radius: 6px;
+  background: #eef8f2;
+  color: #176b38;
+  font: 700 10px var(--sans);
+  cursor: pointer;
+}
+.wish-saved-list-transfer-btn:disabled {
+  cursor: not-allowed;
+  opacity: .45;
 }
 .wish-saved-list-actions button {
   width: 24px;

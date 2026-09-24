@@ -625,6 +625,19 @@
             </select>
           </div>
         </div>
+        <div class="wish-add-vendor-grid">
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-type-cascade">Category</label>
+            <input id="wish-type" type="hidden">
+            <div id="wish-type-cascade" class="add-cascade"></div>
+            <span id="wish-type-breadcrumb" hidden></span>
+          </div>
+          <div class="wish-add-field">
+            <label class="add-label" for="wish-unit-picker">Unit</label>
+            <input id="wish-unit" type="hidden" value="Pcs">
+            <div id="wish-unit-picker" class="wish-unit-picker"></div>
+          </div>
+        </div>
       </section>
 
       <div class="wish-add-vendor-grid wish-add-amount-row">
@@ -633,6 +646,21 @@
         </div>
         <div class="wish-add-field">
           <input class="add-input add-mono" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Estimated price? (optional)">
+        </div>
+      </div>
+      <div class="wish-add-vendor-grid" style="padding:0 16px 16px;">
+        <div class="wish-add-field">
+          <label class="add-label" for="wish-status">Status</label>
+          <select class="add-input" id="wish-status">
+            <option value="planned">Planned</option>
+            <option value="in_progress">In progress</option>
+            <option value="stocked">Stocked</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div class="wish-add-field">
+          <label class="add-label" for="wish-note">Note</label>
+          <textarea class="add-input wish-note-input" id="wish-note" rows="2" maxlength="160" placeholder="Optional note"></textarea>
         </div>
       </div>
       <footer class="wish-add-footer">
