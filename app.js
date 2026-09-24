@@ -5126,15 +5126,17 @@ async function deleteSavedWishlistList(listId) {
     const wish = wishes.find((entry) => String(entry.id) === String(id));
     return wish && wishStatus(wish) !== "stocked" && wishStatus(wish) !== "discarded";
   });
-  if (liveIds.length) {
-    if (!confirm('This wishlist contains ' + liveIds.length + ' live item' + (liveIds.length === 1 ? "" : "s") + '. Move them to the General List now?')) return;
-    moveWishlistItemsToGeneralList(liveIds);
-    await renderWishlistPage();
-    toast("Live items moved to General List. Delete the empty wishlist to continue.", "info");
-    return;
-  }
-  if (!confirm('Delete saved list "' + list.name + '"?')) return;
-  removeWishlistItemsFromLists(lists, list.itemIds || []);
+  const stockedIds = (list.itemIds || []).filter((id) => {
+    const wish = wishes.find((entry) => String(entry.id) === String(id));
+    return wish && wishStatus(wish) === "stocked";
+  });
+  const transferMessage = [
+    "Items in this list will be moved across:",
+    liveIds.length + " live item" + (liveIds.length === 1 ? "" : "s") + " to Main list",
+    stockedIds.length + " item" + (stockedIds.length === 1 ? "" : "s") + " marked as stocked to Stocked list",
+  ].join("\n");
+  if (!confirm(transferMessage + '\n\nDelete wishlist "' + list.name + '"?')) return;
+  removeWishlistItemsFromLists(lists, [...liveIds, ...stockedIds]);
   persistSavedWishlistLists(lists.filter((entry) => entry.id !== listId));
   if (_activeWishlistSavedList === list.name) {
     _activeWishlistSavedList = "";
@@ -5144,7 +5146,11 @@ async function deleteSavedWishlistList(listId) {
   }
   _selectedWishlistIds.clear();
   renderWishlistPage();
-  toast("Saved list deleted", "ok");
+  const movedSummary = [
+    liveIds.length ? liveIds.length + " live item" + (liveIds.length === 1 ? "" : "s") + " moved to General List" : "",
+    stockedIds.length ? stockedIds.length + " stocked item" + (stockedIds.length === 1 ? "" : "s") + " kept in Stocked" : "",
+  ].filter(Boolean).join("; ");
+  toast(movedSummary ? "Saved list deleted. " + movedSummary : "Saved list deleted", "ok");
 }
 window.deleteSavedWishlistList = deleteSavedWishlistList;
 
