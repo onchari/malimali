@@ -673,6 +673,27 @@
   </div>
 </div>
 
+<div class="wish-share-modal" id="wish-share-modal" hidden>
+  <div class="wish-share-dialog" role="dialog" aria-modal="true" aria-labelledby="wish-share-title">
+    <button type="button" class="wish-share-close" id="wish-share-close" aria-label="Close share options" title="Close">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+    <h2 id="wish-share-title">Share wishlist</h2>
+    <p class="wish-share-subtitle">Choose which items to send to WhatsApp.</p>
+    <fieldset class="wish-share-scope">
+      <legend>Items</legend>
+      <label><input type="radio" name="wish-share-scope" value="all" checked> All items</label>
+      <label><input type="radio" name="wish-share-scope" value="stocked"> Stocked items only</label>
+      <label><input type="radio" name="wish-share-scope" value="not-stocked"> Not Yet Stocked only</label>
+    </fieldset>
+    <label class="wish-share-price-option"><input type="checkbox" id="wish-share-include-prices" checked> Include prices and estimated total</label>
+    <div class="wish-share-actions">
+      <button type="button" class="wish-share-cancel" id="wish-share-cancel">Cancel</button>
+      <button type="button" class="wish-share-submit" id="wish-share-submit"><i class="fa-brands fa-whatsapp"></i> Share to WhatsApp</button>
+    </div>
+  </div>
+</div>
+
 <div class="sheet-overlay" id="wishlist-bulk-edit-sheet">
   <div class="sheet wishlist-bulk-edit-sheet">
     <div class="sheet-handle"></div>
