@@ -611,7 +611,6 @@
   <div id="wishlist-list" class="wish-list-panel"></div>
 
   <div id="wishlist-add-panel" class="wish-add-panel" style="display:none;">
-    <div id="wish-add-context" class="wish-add-context" hidden></div>
     <div class="wish-add-card">
       <section class="wish-add-block wish-add-primary" aria-label="Main wishlist details">
         <div class="wish-add-vendor-grid wish-add-name-row">
@@ -636,11 +635,13 @@
           <input class="add-input add-mono" id="wish-cost" type="number" min="0" inputmode="decimal" placeholder="Estimated price (optional)">
         </div>
       </div>
+      <footer class="wish-add-footer">
+        <div class="wish-add-footer-actions">
+          <button type="button" class="wish-back-btn" onclick="cancelWishlistEdit()"><i class="fa-solid fa-arrow-left"></i> Back to list</button>
+          <button type="button" class="wish-save-btn" onclick="saveWishlistItem()"><i class="fa-solid fa-floppy-disk"></i> Save to wishlist</button>
+        </div>
+      </footer>
     </div>
-
-    <footer class="wish-add-footer">
-      <button type="button" class="wish-save-btn" onclick="saveWishlistItem()"><i class="fa-solid fa-floppy-disk"></i> Save to wishlist</button>
-    </footer>
   </div>
 </div>
 
