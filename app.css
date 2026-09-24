@@ -2006,9 +2006,19 @@ body {
   flex-wrap: wrap;
 }
 .wish-saved-list-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
   max-width: 100%;
   flex: 1 1 100%;
+}
+.wish-saved-list-select {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  margin: 0;
+  accent-color: var(--accent);
 }
 .wish-saved-list-card.active {
   display: grid;
