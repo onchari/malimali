@@ -6051,11 +6051,14 @@ function buildWishTableHtml(rows, wishById) {
             : wishStatus(wish) === "cancelled"
               ? "wish-status-indicator cancelled"
               : "wish-status-indicator planned";
+      const statusMarkup = wishStatus(wish) === "stocked" || _activeWishlistView === "stocked"
+        ? ""
+        : '<div class="wish-row-status"><span class="' + statusClass + '">' + escapeHtml(statusLabel) + '</span></div>';
       const openDetail = ' onclick="openWishlistDetail(' + row.wishId + ')"';
       const isSelected = _selectedWishlistIds.has(Number(row.wishId));
       return '<tr class="wish-row' + (stocked ? ' is-stocked' : '') + '" data-wish-id="' + row.wishId + '">' +
         '<td class="wish-table-check-cell"><input type="checkbox" class="wish-select-item" value="' + row.wishId + '" aria-label="Select ' + escapeHtml(itemName) + '"' + (isSelected ? ' checked' : '') + ' onchange="event.stopPropagation();updateWishlistSelection()"></td>' +
-        '<td class="wish-table-name"' + openDetail + '><div class="wish-table-name-main">' + escapeHtml(itemName) + '</div><div class="wish-row-status"><span class="' + statusClass + '">' + escapeHtml(statusLabel) + '</span></div></td>' +
+        '<td class="wish-table-name"' + openDetail + '><div class="wish-table-name-main">' + escapeHtml(itemName) + '</div>' + statusMarkup + '</td>' +
         '<td' + openDetail + '>' + escapeHtml(supply) + '</td>' +
         '<td' + openDetail + '>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td>' +
         '<td class="wish-table-amount"' + openDetail + '>' + escapeHtml(amount) + '</td>' +
