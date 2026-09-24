@@ -5344,20 +5344,25 @@ function renderSavedWishlistListsPanel(savedLists, allWishes) {
       return '<tr draggable="true" ondragstart="beginWishlistItemDrag(event,' + wish.id + ')" ondragover="event.preventDefault()" ondrop="dropWishlistItem(event,\'' + escapeHtml(list.id) + '\',' + wish.id + ')"><td class="wish-table-check-cell"><input type="checkbox" class="wish-select-item" value="' + wish.id + '" aria-label="Select ' + escapeHtml(itemName) + '"' + (_selectedWishlistIds.has(Number(wish.id)) ? ' checked' : '') + ' onchange="event.stopPropagation();updateWishlistSelection()"></td><td class="wish-table-name"><button type="button" class="wish-saved-list-item-name" onclick="openWishlistDetail(' + wish.id + ')">' + escapeHtml(itemName) + '</button></td><td>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td><td class="wish-table-amount">' + escapeHtml(amount) + '</td></tr>';
     }).join("");
     const itemPreview = isActive
-      ? '<div class="wish-saved-list-items"><div class="wish-saved-list-items-head"><strong>Items in this list</strong></div>' + (itemRows ? '<div class="wish-table-wrap"><table class="wish-table wish-saved-list-table"><thead><tr><th scope="col">Select</th><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Est. amount</th></tr></thead><tbody>' + itemRows + '</tbody><tfoot><tr><th colspan="2">List totals</th><th>' + fmtN(metrics.quantity) + '</th><th>' + fmtN(metrics.estimated) + '</th></tr></tfoot></table></div>' : '<span>No items in this list yet.</span>') + '</div>'
+      ? '<div class="wish-saved-list-items">' + (itemRows ? '<div class="wish-table-wrap"><table class="wish-table wish-saved-list-table"><thead><tr><th scope="col">Select</th><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Est. amount</th></tr></thead><tbody>' + itemRows + '</tbody><tfoot><tr><th colspan="2">List totals</th><th>' + fmtN(metrics.quantity) + '</th><th>' + fmtN(metrics.estimated) + '</th></tr></tfoot></table></div>' : '<span>No items in this list yet.</span>') + '</div>'
       : "";
     const listActions = '<div class="wish-saved-list-actions"><button type="button" title="Edit list" aria-label="Edit list ' + escapeHtml(list.name) + '" onclick="editSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-pen"></i></button><button type="button" title="Delete list" aria-label="Delete list ' + escapeHtml(list.name) + '" onclick="deleteSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-trash"></i></button><button type="button" class="wish-saved-list-whatsapp" title="Send list via WhatsApp (coming soon)" aria-label="Send list via WhatsApp" disabled><i class="fa-brands fa-whatsapp"></i></button></div>';
-    const otherListOptions = savedLists
-      .filter((source) => source.id !== list.id && source.status !== "archived")
-      .map((source) => '<option value="' + escapeHtml(source.id) + '">' + escapeHtml(source.name) + '</option>')
+    const moveOptions = savedLists
+      .filter((target) => target.id !== list.id && target.status !== "archived")
+      .map((target) => '<option value="' + escapeHtml(target.id) + '">' + escapeHtml(target.name) + '</option>')
       .join("");
-    const addMenu = isActive
-      ? '<div class="wish-saved-list-add-menu" id="wish-add-menu-' + escapeHtml(list.id) + '" hidden><button type="button" onclick="beginWishlistAddFromSource(\'' + escapeHtml(list.id) + '\',\'general\')">General List</button>' + (otherListOptions ? '<select aria-label="Add from another list" onchange="if(this.value){beginWishlistAddFromSource(\'' + escapeHtml(list.id) + '\',this.value);this.value=\'\';}"><option value="">Other active list...</option>' + otherListOptions + '</select>' : '') + '</div>'
+    const bulkActions = isActive
+      ? '<div class="wish-saved-list-bulk-actions" hidden>' +
+        '<button type="button" class="wish-saved-list-bulk-btn" title="Mark selected stocked" aria-label="Mark selected stocked" onclick="markSelectedWishlistItemsStocked()"><i class="fa-solid fa-check"></i><span>Stocked</span></button>' +
+        (moveOptions ? '<select class="wish-saved-list-bulk-select" title="Move selected stocked items" aria-label="Move selected stocked items" onchange="if(this.value){moveSelectedStockedItemsToList(this.value);this.value=\'\';}"><option value="">Move to...</option>' + moveOptions + '</select>' : '') +
+        '<button type="button" class="wish-saved-list-bulk-btn" title="Edit selected" aria-label="Edit selected" onclick="editSelectedWishlistItem()"><i class="fa-solid fa-pen"></i><span>Edit</span></button>' +
+        '<button type="button" class="wish-saved-list-bulk-btn danger" title="Delete selected" aria-label="Delete selected" onclick="deleteSelectedWishlistItems()"><i class="fa-solid fa-trash"></i><span>Delete</span></button>' +
+        '</div>'
       : '';
-    const actionRow = '<div class="wish-saved-list-actions-row">' + (isActive ? '<div class="wish-saved-list-add-group"><button type="button" class="wish-saved-list-add-items" onclick="toggleWishlistAddMenu(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-plus"></i> Add item</button>' + addMenu + '</div>' : '') + listActions + '</div>';
+    const actionRow = isActive ? '<div class="wish-saved-list-actions-row"><div class="wish-saved-list-add-group"><button type="button" class="wish-saved-list-add-items" onclick="showWishlistSection(\'add\')"><i class="fa-solid fa-plus"></i> Add item</button></div>' + bulkActions + '</div>' : '';
     const listLiveIds = items.filter((wish) => wishStatus(wish) !== "stocked" && wishStatus(wish) !== "discarded").map((wish) => wish.id);
     const listSelected = listLiveIds.length > 0 && listLiveIds.every((id) => _selectedWishlistIds.has(Number(id)));
-    return '<article class="wish-saved-list-card' + (isActive ? ' active' : '') + '"><div class="wish-saved-list-card-head"><input type="checkbox" class="wish-saved-list-select"' + (listSelected ? ' checked' : '') + ' aria-label="Select items in ' + escapeHtml(list.name) + '" onchange="event.stopPropagation();toggleSavedWishlistListSelection(\'' + escapeHtml(list.id) + '\',this.checked)"><button type="button" class="wish-saved-list-open" onclick="openSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><span class="wish-saved-list-icon"><i class="fa-solid fa-list-check"></i></span><span class="wish-saved-list-copy"><strong>' + escapeHtml(list.name) + '</strong></span></button></div>' + actionRow + itemPreview + '</article>';
+    return '<article class="wish-saved-list-card' + (isActive ? ' active' : '') + '"><div class="wish-saved-list-card-head"><input type="checkbox" class="wish-saved-list-select"' + (listSelected ? ' checked' : '') + ' aria-label="Select items in ' + escapeHtml(list.name) + '" onchange="event.stopPropagation();toggleSavedWishlistListSelection(\'' + escapeHtml(list.id) + '\',this.checked)"><button type="button" class="wish-saved-list-open" onclick="openSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><span class="wish-saved-list-icon"><i class="fa-solid fa-list-check"></i></span><span class="wish-saved-list-copy"><strong>' + escapeHtml(list.name) + '</strong></span></button>' + listActions + '</div>' + actionRow + itemPreview + '</article>';
   }).join("");
   return '<div class="wish-saved-lists-panel"><div class="wish-saved-lists-head"><strong><i class="fa-solid fa-list-ul"></i> Wish lists</strong><button type="button" class="wish-filter-btn" onclick="createSavedWishlistList()"><i class="fa-solid fa-plus"></i> Add list</button></div><div class="wish-saved-list-grid">' + (cards || '<div class="wish-saved-empty"><i class="fa-solid fa-list"></i><span>No saved lists yet.</span></div>') + '</div></div>';
 }
@@ -5451,15 +5456,13 @@ function updateWishlistSelection() {
   const count = _selectedWishlistIds.size;
   const bar = document.getElementById("wishlist-bulk-actions");
   if (bar) bar.hidden = count === 0;
-  const discardButton = document.getElementById("wishlist-discard-btn");
-  if (discardButton) {
-    const selected = [..._selectedWishlistIds]
-      .map((id) => document.querySelector('.wish-select-item[value="' + id + '"]')?.closest("tr"))
-      .filter(Boolean);
-    discardButton.hidden = !selected.length || !selected.every((row) => row.classList.contains("is-stocked"));
-  }
   const addSelectedButton = document.getElementById("wishlist-add-selected-btn");
   if (addSelectedButton) addSelectedButton.hidden = count === 0 || !_wishlistAddToSavedListId;
+  const savedListBulkActions = document.querySelector(".wish-saved-list-bulk-actions");
+  if (savedListBulkActions) {
+    const savedListSelectionCount = document.querySelectorAll(".wish-saved-list-table .wish-select-item:checked").length;
+    savedListBulkActions.hidden = savedListSelectionCount === 0;
+  }
   const selectAll = document.getElementById("wish-select-all");
   if (selectAll) {
     selectAll.checked = visibleIds.size > 0 && visible.every((checkbox) => checkbox.checked);
@@ -5979,7 +5982,6 @@ function buildWishTableHtml(rows, wishById) {
     '<button type="button" class="wish-bulk-btn" onclick="moveSelectedWishlistItemsToGeneral()"><i class="fa-solid fa-arrow-left"></i> General List</button>' +
     '<select id="wishlist-stocked-destination" class="wish-bulk-destination" aria-label="Move stocked items to active list" onchange="if(this.value){moveSelectedStockedItemsToList(this.value);this.value=\'\';}"><option value="">Move stocked to...</option><option value="general">General List</option>' + stockedMoveOptions + '</select>' +
     '<button type="button" class="wish-bulk-btn" onclick="editSelectedWishlistItem()"><i class="fa-solid fa-pen"></i> Edit</button>' +
-    '<button type="button" id="wishlist-discard-btn" class="wish-bulk-btn" onclick="discardSelectedWishlistItems()" hidden><i class="fa-solid fa-trash"></i> Discard</button>' +
     '<button type="button" class="wish-bulk-btn" onclick="deleteSelectedWishlistItems()"><i class="fa-solid fa-trash"></i> Delete</button>' +
     '</div>';
   return bulkActions + '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th scope="col" style="width:8%;"><span class="wish-column-label">Sel.</span><input type="checkbox" id="wish-select-all" aria-label="Select all visible wishlist items" onchange="toggleAllWishlistSelection(this.checked)"></th><th scope="col">Item</th><th scope="col">Supplier</th><th scope="col">Qty</th><th scope="col">Est. amount</th></tr></thead><tbody>' +
