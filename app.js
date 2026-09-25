@@ -5381,7 +5381,7 @@ function renderSavedWishlistListsPanel(savedLists, allWishes) {
       const unit = String(wish.unit || "").trim();
       const itemName = wish.name || "Unnamed item";
       const stockedClass = wishStatus(wish) === "stocked" ? " is-stocked" : "";
-      return '<tr class="wish-saved-list-row' + stockedClass + '" draggable="true" ondragstart="beginWishlistItemDrag(event,' + wish.id + ')" ondragover="event.preventDefault()" ondrop="dropWishlistItem(event,\'' + escapeHtml(list.id) + '\',' + wish.id + ')"><td class="wish-table-check-cell"><input type="checkbox" class="wish-select-item" value="' + wish.id + '" aria-label="Select ' + escapeHtml(itemName) + '"' + (_selectedWishlistIds.has(Number(wish.id)) ? ' checked' : '') + ' onchange="event.stopPropagation();updateWishlistSelection()"></td><td class="wish-table-name"><button type="button" class="wish-saved-list-item-name" onclick="openWishlistDetail(' + wish.id + ')">' + escapeHtml(itemName) + '</button></td><td>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td><td class="wish-table-amount">' + escapeHtml(amount) + '</td></tr>';
+      return '<tr class="wish-saved-list-row' + stockedClass + '" draggable="true" onclick="openWishlistDetail(' + wish.id + ')" ondragstart="beginWishlistItemDrag(event,' + wish.id + ')" ondragover="event.preventDefault()" ondrop="dropWishlistItem(event,\'' + escapeHtml(list.id) + '\',' + wish.id + ')"><td class="wish-table-check-cell"><input type="checkbox" class="wish-select-item" value="' + wish.id + '" aria-label="Select ' + escapeHtml(itemName) + '"' + (_selectedWishlistIds.has(Number(wish.id)) ? ' checked' : '') + ' onchange="event.stopPropagation();updateWishlistSelection()"></td><td class="wish-table-name"><button type="button" class="wish-saved-list-item-name" onclick="event.stopPropagation();openWishlistDetail(' + wish.id + ')">' + escapeHtml(itemName) + '</button></td><td>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td><td class="wish-table-amount">' + escapeHtml(amount) + '</td></tr>';
     }).join("");
     const clearStockedButton = isActive && stockedItems.length
       ? '<button type="button" class="wish-saved-list-clear-stocked" onclick="clearStockedItemsFromSavedList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-broom"></i> Clear stocked</button>'
@@ -5978,36 +5978,38 @@ function buildWishVendorDetailHtml(quotes) {
 function renderWishDetailItemInfo(wish) {
   const el = document.getElementById("wd-item-details");
   if (!el) return;
-  const range =
-    parseWishShoeSizeRange(wish.name || "");
   const rows = [
-    { label: "Name", value: wish.name },
-    { label: "Category", value: wish.type },
-    { label: "Supply", value: wish.supplierId || wish.supplier },
-    { label: "Unit", value: wish.unit },
-    { label: "Qty", value: wish.qty > 0 ? wish.qty : "" },
-    {
-      label: "Estimated price",
-      value: wish.estimatedCost > 0 ? fmt(wish.estimatedCost) : "",
-    },
-    { label: "Sizes", value: range ? range.label : "" },
-    { label: "Status", value: labelWishlistStatus(wishStatus(wish)) },
+    { label: "Name", value: wish.name, icon: "fa-tag" },
+    { label: "Category", value: wish.type, icon: "fa-border-all" },
+    { label: "Supply", value: wish.supplierId || wish.supplier, icon: "fa-truck" },
+    { label: "Unit", value: wish.unit, icon: "fa-cube" },
+    { label: "Quantity", value: wish.qty > 0 ? wish.qty : "", icon: "fa-list" },
+    { label: "Estimated Price", value: wish.estimatedCost > 0 ? fmt(wish.estimatedCost) : "", icon: "fa-coins", className: "price" },
+    { label: "Status", value: labelWishlistStatus(wishStatus(wish)), icon: "fa-ban", className: "status" },
   ];
   const html = rows
     .filter((r) => r.value)
-    .map(
-      (r) =>
-        '<div class="wish-detail-dl-row">' +
-        "<dt>" +
-        escapeHtml(r.label) +
-        "</dt>" +
-        "<dd>" +
-        escapeHtml(String(r.value)) +
-        "</dd>" +
-        "</div>",
-    )
+    .map((r) => {
+      if (r.className === "price") {
+        return '<div class="wish-detail-dl-row price-row">' +
+          '<span class="wish-detail-price-icon">KSh</span>' +
+          '<div class="wish-detail-price-copy"><dt>' + escapeHtml(r.label) + '</dt>' +
+          '<dd>' + escapeHtml(String(r.value)) + '</dd></div>' +
+          '</div>';
+      }
+      return '<div class="wish-detail-dl-row">' +
+        '<span class="wish-detail-row-icon"><i class="fa-solid ' + r.icon + '"></i></span>' +
+        "<dt>" + escapeHtml(r.label) + "</dt>" +
+        '<dd class="' + (r.className || "") + '">' + escapeHtml(String(r.value)) + "</dd>" +
+        "</div>";
+    })
     .join("");
   el.innerHTML = html || '<p class="wish-vendor-empty">No details</p>';
+  const statusEl = document.getElementById("wd-status");
+  if (statusEl) {
+    statusEl.textContent = labelWishlistStatus(wishStatus(wish));
+    statusEl.className = "wish-detail-status " + wishStatus(wish);
+  }
 }
 
 function buildWishTableHtml(rows, wishById) {
@@ -6048,14 +6050,13 @@ function buildWishTableHtml(rows, wishById) {
       const statusMarkup = wishStatus(wish) === "stocked" || _activeWishlistView === "stocked"
         ? ""
         : '<div class="wish-row-status"><span class="' + statusClass + '">' + escapeHtml(statusLabel) + '</span></div>';
-      const openDetail = ' onclick="openWishlistDetail(' + row.wishId + ')"';
       const isSelected = _selectedWishlistIds.has(Number(row.wishId));
-      return '<tr class="wish-row' + (stocked ? ' is-stocked' : '') + '" data-wish-id="' + row.wishId + '">' +
+      return '<tr class="wish-row' + (stocked ? ' is-stocked' : '') + '" data-wish-id="' + row.wishId + '" onclick="openWishlistDetail(' + row.wishId + ')">' +
         '<td class="wish-table-check-cell"><input type="checkbox" class="wish-select-item" value="' + row.wishId + '" aria-label="Select ' + escapeHtml(itemName) + '"' + (isSelected ? ' checked' : '') + ' onchange="event.stopPropagation();updateWishlistSelection()"></td>' +
-        '<td class="wish-table-name"' + openDetail + '><div class="wish-table-name-main">' + escapeHtml(itemName) + '</div>' + statusMarkup + '</td>' +
-        '<td' + openDetail + '>' + escapeHtml(supply) + '</td>' +
-        '<td' + openDetail + '>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td>' +
-        '<td class="wish-table-amount"' + openDetail + '>' + escapeHtml(amount) + '</td>' +
+        '<td class="wish-table-name"><div class="wish-table-name-main">' + escapeHtml(itemName) + '</div>' + statusMarkup + '</td>' +
+        '<td>' + escapeHtml(supply) + '</td>' +
+        '<td>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td>' +
+        '<td class="wish-table-amount">' + escapeHtml(amount) + '</td>' +
         '</tr>';
     }).join("") +
     '</tbody><tfoot><tr><th colspan="3">Visible totals</th><th>' + fmtN(totalQty) + '</th><th>' + escapeHtml(fmt(totalAmount)) + '</th></tr></tfoot></table></div>';
