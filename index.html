@@ -1898,85 +1898,37 @@
      ============================================================== -->
 <div class="sheet-overlay" id="wishlist-detail-sheet">
   <div class="sheet wish-detail-sheet">
-    <div class="sheet-handle"></div>
-    <div class="wish-detail-top-actions">
-      <button type="button" class="wish-detail-btn edit" onclick="wishlistDetailEdit()" aria-label="Edit wishlist item" title="Edit wishlist item">
-        <i class="fa-solid fa-pen"></i>
-      </button>
+    <div class="wish-detail-header">
+      <div class="wish-detail-header-title"><i class="fa-regular fa-file-lines"></i><span>Item Details</span></div>
       <button type="button" class="wish-detail-close" onclick="closeWishlistDetail()" aria-label="Close" title="Close">
         <i class="fa-solid fa-xmark"></i>
       </button>
     </div>
 
-    <div id="wd-photo-wrap" class="wish-detail-photo-wrap">
-      <img id="wd-photo-img" class="wish-detail-photo" src="" alt="" style="display:none;">
-      <div id="wd-photo-empty" class="wish-detail-photo-empty"><i class="fa-solid fa-camera"></i></div>
-      <div id="wd-shoe-overlay" class="wd-shoe-overlay" hidden></div>
+    <div class="wish-detail-overview">
+      <div id="wd-photo-wrap" class="wish-detail-photo-wrap">
+        <img id="wd-photo-img" class="wish-detail-photo" src="" alt="" style="display:none;">
+        <div id="wd-photo-empty" class="wish-detail-photo-empty"><i class="fa-solid fa-camera"></i></div>
+        <div id="wd-shoe-overlay" class="wd-shoe-overlay" hidden></div>
+      </div>
+
+      <div class="wish-detail-identity">
+        <h2 id="wd-name" class="wish-detail-name"></h2>
+        <span id="wd-status" class="wish-detail-status"></span>
+      </div>
     </div>
 
     <div class="wish-detail-body">
-      <h2 id="wd-name" class="wish-detail-name"></h2>
-
       <section class="wish-detail-block" aria-labelledby="wd-hd-item">
         <h3 class="wish-detail-section-label" id="wd-hd-item">Item details</h3>
         <dl id="wd-item-details" class="wish-detail-dl"></dl>
-      </section>
-
-      <section class="wish-detail-block" aria-labelledby="wd-hd-vendors">
-        <h3 class="wish-detail-section-label" id="wd-hd-vendors">Vendors</h3>
-        <div id="wd-vendor-list"></div>
-      </section>
-
-      <section class="wish-detail-block wish-detail-add-vendor" aria-labelledby="wd-hd-add-vendor">
-        <h3 class="wish-detail-section-label" id="wd-hd-add-vendor">Add vendor</h3>
-        <div class="wish-detail-vendor-form">
-          <div class="wish-detail-field">
-            <label class="add-label" for="wd-vendor-name">Vendor name</label>
-            <input class="add-input" id="wd-vendor-name" type="text" maxlength="80" placeholder="Shop name" autocomplete="off">
-          </div>
-          <div class="wish-detail-field wish-detail-field-price">
-            <label class="add-label" for="wd-vendor-price">Amount</label>
-            <div class="wish-price-input-wrap">
-              <span class="wish-price-prefix" aria-hidden="true">K</span>
-              <input class="add-input add-mono add-center" id="wd-vendor-price" type="number" min="0" inputmode="decimal" placeholder="0" autocomplete="off">
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="wish-detail-block" aria-labelledby="wd-hd-note">
-        <h3 class="wish-detail-section-label" id="wd-hd-note">Note</h3>
-        <textarea class="wish-detail-note-input" id="wd-note-input" rows="3" maxlength="160" placeholder="Optional note"></textarea>
-      </section>
-
-      <section class="wish-detail-block" aria-labelledby="wd-hd-planning">
-        <h3 class="wish-detail-section-label" id="wd-hd-planning">Purchase planning</h3>
-        <div class="wish-detail-edit-grid">
-          <div class="wish-detail-field">
-            <label class="add-label" for="wd-category">Planning category</label>
-            <input class="add-input" id="wd-category" type="text" maxlength="80">
-          </div>
-          <div class="wish-detail-field">
-            <label class="add-label" for="wd-supplier">Preferred supplier / shop</label>
-            <input class="add-input" id="wd-supplier" type="text" maxlength="80">
-          </div>
-          <div class="wish-detail-field">
-            <label class="add-label" for="wd-purchase-list">Purchase list</label>
-            <select class="add-input" id="wd-purchase-list">
-              <option value="">No purchase list</option>
-            </select>
-          </div>
-        </div>
       </section>
     </div>
 
     <footer class="wish-detail-footer">
       <div class="wish-detail-footer-row">
-        <button type="button" class="wish-detail-btn save" onclick="saveWishlistDetail()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
-        <button type="button" class="wish-detail-btn stock" onclick="wishlistDetailStock()"><i class="fa-solid fa-boxes-stacked"></i> Stock
-        </button>
-        <button type="button" class="wish-detail-btn delete" onclick="wishlistDetailDelete()"><i class="fa-solid fa-trash"></i> Remove</button>
-        <button type="button" id="wd-revert-btn" class="wish-detail-btn revert" onclick="wishlistDetailRevert()"><i class="fa-solid fa-arrow-rotate-left"></i> Revert</button>
+        <button type="button" class="wish-detail-btn edit-action" onclick="wishlistDetailEdit()"><i class="fa-solid fa-pen"></i> Edit</button>
+        <button type="button" class="wish-detail-btn close-action" onclick="closeWishlistDetail()"><i class="fa-solid fa-xmark"></i> Close</button>
       </div>
     </footer>
   </div>
