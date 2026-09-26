@@ -1793,8 +1793,7 @@
         <input type="hidden" id="off-type" value="" aria-label="Category (optional)">
         <div id="off-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
       </div>
-      <div class="stock-form-grid">
-        <input class="add-input" id="off-size" type="text" placeholder="Size / variant optional">
+      <div class="stock-form-grid stock-form-grid-single">
         <div>
           <div class="field-label" style="text-transform:uppercase;">QTY to sell</div>
           <div class="qty-row" aria-label="Quantity sold">
@@ -1814,9 +1813,6 @@
       <div class="stock-form-grid">
         <input class="add-input add-mono" id="off-buy" type="number" min="0" inputmode="decimal" placeholder="Buy price">
         <input class="add-input add-mono" id="off-sell" type="number" min="0" inputmode="decimal" placeholder="Sale price">
-      </div>
-      <div class="stock-form-grid">
-        <input class="add-input add-mono" id="off-note" type="text" placeholder="Note optional">
       </div>
       <button onclick="confirmOffStockSale()" class="stock-add-wish-btn">
         <i class="fa-solid fa-cash-register"></i> Sell

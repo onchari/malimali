@@ -1917,6 +1917,9 @@ body {
   gap: 8px;
   margin-bottom: 8px;
 }
+.stock-form-grid-single {
+  grid-template-columns: minmax(0, 1fr);
+}
 .stock-add-wish-btn {
   width: 100%;
   display: flex;

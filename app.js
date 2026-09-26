@@ -1,7 +1,7 @@
 // ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
-const APP_VERSION = "2026.09.26.2";
+const APP_VERSION = "2026.09.26.3";
 
 // ===================================================================
 // APPLICATION RELEASE
@@ -10036,7 +10036,6 @@ async function confirmOffStockSale() {
     requireLeaf: true,
   });
   const type = selectedType || "General";
-  const size = Input.text("off-size");
   const qty = Input.int("off-qty");
   const buyPrice = Input.money("off-buy");
   const sellPrice = Input.money("off-sell");
@@ -10065,7 +10064,6 @@ async function confirmOffStockSale() {
     itemCode: code,
     itemName: name || code,
     itemType: type,
-    itemSize: size,
     qty,
     buyPrice: buy,
     sellPrice,
@@ -10092,9 +10090,31 @@ async function confirmOffStockSale() {
     createdAt: new Date().toISOString(),
     createdBy: currentUser ? currentUser.username : "system",
   };
-  await persistOffStockSaleAtomically(sale, monitorRow);
+  const sellButton = document.querySelector(
+    "#offstock-sale-sheet .stock-add-wish-btn",
+  );
+  const originalButtonMarkup = sellButton?.innerHTML;
+  if (sellButton) {
+    sellButton.disabled = true;
+    sellButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+  }
+  try {
+    await persistOffStockSaleAtomically(sale, monitorRow);
+  } catch (error) {
+    console.error("[confirmOffStockSale]", error);
+    toast(
+      "Could not record sale: " + (error.message || "Please try again"),
+      "err",
+    );
+    return;
+  } finally {
+    if (sellButton) {
+      sellButton.disabled = false;
+      sellButton.innerHTML = originalButtonMarkup;
+    }
+  }
 
-  ["off-name", "off-code", "off-size", "off-buy", "off-sell"].forEach((id) => {
+  ["off-name", "off-code", "off-buy", "off-sell"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
@@ -10104,8 +10124,12 @@ async function confirmOffStockSale() {
   if (offType) offType.value = "";
   renderOffstockTypeOptions();
   closeOffStockSale();
-  await renderStockMonitor();
-  await refreshSalesViews();
+  try {
+    await renderStockMonitor();
+    await refreshSalesViews();
+  } catch (error) {
+    console.error("[confirmOffStockSale] view refresh failed", error);
+  }
   try {
     renderDashboard();
   } catch (_) {
