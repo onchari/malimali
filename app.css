@@ -1640,6 +1640,36 @@ body {
   overflow-y: auto;
   animation: slideUp 0.25s ease;
 }
+#offstock-sale-sheet .sheet {
+  max-width: 400px;
+  padding: 16px 14px 18px;
+  border-radius: 20px;
+}
+.offstock-sheet-header {
+  position: relative;
+  justify-content: center !important;
+  min-height: 36px;
+}
+.offstock-sheet-header > div {
+  text-align: center;
+}
+.offstock-sheet-header .sheet-title,
+.offstock-sheet-header .sheet-code {
+  text-align: center;
+}
+.offstock-sheet-header > button {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+#offstock-sale-sheet .stock-monitor-form {
+  padding: 10px;
+  margin-bottom: 0;
+}
+#offstock-sale-sheet .stock-form-grid {
+  gap: 6px;
+  margin-bottom: 6px;
+}
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .sheet-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 18px; }
 .sheet-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
@@ -1919,6 +1949,32 @@ body {
 }
 .stock-form-grid-single {
   grid-template-columns: minmax(0, 1fr);
+}
+.stock-form-grid.offstock-category-qty,
+.stock-form-grid.offstock-sale-prices {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 8px;
+}
+.offstock-category-qty > *,
+.offstock-sale-prices > * {
+  min-width: 0;
+}
+.offstock-sale-prices > .add-input {
+  padding-right: 5px;
+  padding-left: 5px;
+  font-size: 12px;
+}
+.offstock-category-qty .cat-pick-native {
+  width: 100%;
+  margin-top: 0;
+  padding-right: 24px;
+}
+.offstock-category-qty #off-qty {
+  min-width: 0;
+  padding-right: 8px;
+  padding-left: 8px;
+  font-size: 13px;
 }
 .stock-add-wish-btn {
   width: 100%;

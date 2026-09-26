@@ -1774,10 +1774,10 @@
 <div class="sheet-overlay" id="offstock-sale-sheet">
   <div class="sheet" style="max-height:92vh;overflow:auto;">
     <div class="sheet-handle"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+    <div class="offstock-sheet-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
       <div>
         <div class="sheet-title">Sell Not In Stock</div>
-        <div class="sheet-code">Records sale, then flags item for stock count</div>
+        <div class="sheet-code">Use this form to sell directly without tracking stock</div>
       </div>
       <button onclick="closeOffStockSale()" class="stock-icon-btn" title="Close">
         <i class="fa-solid fa-xmark"></i>
@@ -1785,34 +1785,21 @@
     </div>
     <div class="stock-monitor-form">
       <div class="stock-form-grid">
-        <input class="add-input" id="off-name" type="text" placeholder="Item name">
-        <input class="add-input add-mono" id="off-code" type="text" placeholder="Code optional">
+        <input class="add-input" id="off-name" type="text" placeholder="Item name" required>
+        <input class="add-input add-mono" id="off-code" type="text" placeholder="Code (optional)">
       </div>
-      <div class="cat-cascade-field">
-        <div id="off-type-cascade" class="add-cascade"></div>
-        <input type="hidden" id="off-type" value="" aria-label="Category (optional)">
-        <div id="off-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
-      </div>
-      <div class="stock-form-grid stock-form-grid-single">
-        <div>
-          <div class="field-label" style="text-transform:uppercase;">QTY to sell</div>
-          <div class="qty-row" aria-label="Quantity sold">
-            <button type="button" class="qty-btn" onclick="adjOffStockQty(-1)"
-                    aria-label="Decrease quantity" title="Decrease quantity">
-              <i class="fa-solid fa-minus" aria-hidden="true"></i>
-            </button>
-            <input class="qty-input" id="off-qty" type="number" min="0" value="0"
-                   inputmode="none" readonly aria-label="Quantity sold">
-            <button type="button" class="qty-btn" onclick="adjOffStockQty(1)"
-                    aria-label="Increase quantity" title="Increase quantity">
-              <i class="fa-solid fa-plus" aria-hidden="true"></i>
-            </button>
-          </div>
+      <div class="stock-form-grid offstock-category-qty">
+        <div class="cat-cascade-field">
+          <div id="off-type-cascade" class="add-cascade"></div>
+          <input type="hidden" id="off-type" value="" aria-label="Category (optional)">
         </div>
+        <input class="add-input add-mono" id="off-qty" type="number" min="1" step="1"
+           inputmode="numeric" placeholder="Qty? (1 if blank)"
+           aria-label="Quantity to sell (defaults to one)" >
       </div>
-      <div class="stock-form-grid">
-        <input class="add-input add-mono" id="off-buy" type="number" min="0" inputmode="decimal" placeholder="Buy price">
-        <input class="add-input add-mono" id="off-sell" type="number" min="0" inputmode="decimal" placeholder="Sale price">
+      <div class="stock-form-grid offstock-sale-prices">
+        <input class="add-input add-mono" id="off-sell" type="number" min="0" step="any" inputmode="decimal" placeholder="Sale price" required>
+        <input class="add-input add-mono" id="off-buy" type="number" min="0" step="any" inputmode="decimal" placeholder="Buy price (optional)">
       </div>
       <button onclick="confirmOffStockSale()" class="stock-add-wish-btn">
         <i class="fa-solid fa-cash-register"></i> Sell

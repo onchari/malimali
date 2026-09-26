@@ -3129,9 +3129,10 @@ function _appendCascadePickButton(
   const phN = config.placeholderSub || "Choose sub-category...";
   const placeholder = depth === 0 ? ph0 : phN;
   const children = _activeChildTypes(parentId);
+  const useNativeSelect = ["f-type", "off-type"].includes(config.idPrefix);
   const step = document.createElement("div");
   step.className = "add-cascade-step";
-  if (depth > 0 && config.idPrefix !== "f-type") {
+  if (depth > 0 && !useNativeSelect) {
     const lbl = document.createElement("span");
     lbl.className = "add-cascade-step-lbl";
     lbl.textContent = depth === 1 ? "Sub-category" : "Sub-category " + depth;
@@ -3172,7 +3173,7 @@ function _appendCascadePickButton(
     if (config.idPrefix === "f-type") onTypeChange();
   };
 
-  if (config.idPrefix === "f-type") {
+  if (useNativeSelect) {
     const select = document.createElement("select");
     select.className = "add-select cat-pick-native";
     select.id = config.idPrefix + (depth === 0 ? "-parent" : "-sub-" + depth);
@@ -3344,11 +3345,11 @@ function mountOffTypeCascade() {
   mountCategoryCascadeField({
     wrap: document.getElementById("off-type-cascade"),
     valueEl: document.getElementById("off-type"),
-    breadcrumbEl: document.getElementById("off-type-breadcrumb"),
     idPrefix: "off-type",
     valueMode: "name",
     requireLeaf: true,
-    placeholder: "Category (optional)...",
+    placeholder: "Category?",
+    placeholderSub: "Sub-category?",
   });
 }
 
@@ -10008,8 +10009,6 @@ function selectPayment(method) {
 
 function openOffStockSale() {
   renderOffstockTypeOptions();
-  const qty = document.getElementById("off-qty");
-  if (qty && (!qty.value || parseInt(qty.value, 10) < 0)) qty.value = "0";
   const sheet = document.getElementById("offstock-sale-sheet");
   if (sheet) sheet.classList.add("open");
   setTimeout(() => document.getElementById("off-name")?.focus(), 80);
@@ -10036,29 +10035,25 @@ async function confirmOffStockSale() {
     requireLeaf: true,
   });
   const type = selectedType || "General";
-  const qty = Input.int("off-qty");
+  const qtyRaw = Input.raw("off-qty");
+  const qty = qtyRaw === "" ? 1 : Number(qtyRaw);
   const buyPrice = Input.money("off-buy");
   const sellPrice = Input.money("off-sell");
   const paymentMethod = "cash";
-  if (!name && !code)
-    return Validate.fail("Enter item name or code", "off-name");
+  if (!Validate.text(name, "off-name", "Item name")) return;
+  if (qtyRaw !== "" && !Number.isInteger(qty))
+    return Validate.fail("Enter a whole quantity", "off-qty");
   if (!Validate.restockQty(qty, "off-qty")) return;
-  if (
-    buyPrice === null ||
-    !Validate.moneyRequired(buyPrice, "off-buy", "Buy price")
-  )
-    return;
+  if (buyPrice !== null && !Validate.moneyRequired(buyPrice, "off-buy", "Buy price")) return;
   if (!Validate.moneyRequired(sellPrice, "off-sell", "Sale price")) return;
-  const buy = buyPrice;
-  if (buy <= 0)
-    return Validate.fail("Buy price must be greater than zero", "off-buy");
+  const buy = buyPrice ?? 0;
   if (sellPrice <= 0)
     return Validate.fail("Sale price must be greater than zero", "off-sell");
-  if (buy >= sellPrice)
-    return Validate.fail("Buy price must be less than sale price", "off-buy");
+  if (buyPrice !== null && buy >= sellPrice)
+    return Validate.fail("Sale price must be higher than buy price", "off-sell");
 
   const revenue = qty * sellPrice;
-  const profit = qty * (sellPrice - buy);
+  const profit = buyPrice === null ? 0 : qty * (sellPrice - buy);
   const sale = {
     itemId: null,
     itemCode: code,
@@ -10082,7 +10077,7 @@ async function confirmOffStockSale() {
     code,
     type,
     qty,
-    estimatedCost: buyPrice,
+    estimatedCost: buy,
     note: "Sold before stock count",
     status: "unaccounted",
     source: "sale-monitor",
@@ -10119,7 +10114,7 @@ async function confirmOffStockSale() {
     if (el) el.value = "";
   });
   const offQty = document.getElementById("off-qty");
-  if (offQty) offQty.value = "0";
+  if (offQty) offQty.value = "";
   const offType = document.getElementById("off-type");
   if (offType) offType.value = "";
   renderOffstockTypeOptions();
@@ -15835,6 +15830,10 @@ function userCanAccessNav(id, user) {
 }
 
 function resolveLandingPage(user, rawLastPage) {
+  if (userCanAccessNav("inventory", user)) {
+    _activeInventoryTab = "stock";
+    return "inventory";
+  }
   let last = rawLastPage || "dash";
   if (last === "day" || last === "finance") {
     _activeOperationsTab = last;
