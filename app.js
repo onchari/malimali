@@ -1,7 +1,7 @@
 // ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
-const APP_VERSION = "2026.09.21.1";
+const APP_VERSION = "2026.09.26.1";
 
 // ===================================================================
 // APPLICATION RELEASE
@@ -1773,7 +1773,8 @@ function applyAddFormFootwearUI(isShoe) {
   if (shoePanel) shoePanel.style.display = "none";
   if (stdPricing) stdPricing.style.removeProperty("display");
   // Hide the text size/variant field for footwear (sizes tracked externally)
-  if (sizeField) sizeField.style.display = isShoe ? "none" : "";
+  if (sizeField)
+    sizeField.style.display = isShoe && !_addFormIsRecord ? "none" : "";
 }
 
 function _sortTypes(a, b) {
@@ -4011,9 +4012,9 @@ async function deleteType(id) {
 
 // ===== PROFIT PREVIEW =====
 function updateProfitPreview() {
-  const buy = parseFloat(UI.el("f-buy")?.value) || 0;
-  const sell = parseFloat(UI.el("f-sell")?.value) || 0;
-  const sellMin = parseFloat(UI.el("f-sell-min")?.value) || 0;
+  const buy = parsePriceInput(UI.el("f-buy")?.value) || 0;
+  const sell = parsePriceInput(UI.el("f-sell")?.value) || 0;
+  const sellMin = parsePriceInput(UI.el("f-sell-min")?.value) || 0;
   const qty = parseInt(UI.el("f-qty")?.value) || 0;
   const preview = UI.el("profit-preview");
   if (!preview) return;
@@ -6282,6 +6283,13 @@ async function wishlistDetailDelete() {
 }
 window.wishlistDetailDelete = wishlistDetailDelete;
 
+function parsePriceInput(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return NaN;
+  const parsed = Number(raw.replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
 // ===== SAVE ITEM =====
 async function saveItem() {
   _overlay.show("Saving...");
@@ -6308,8 +6316,8 @@ async function saveItem() {
         toast("Warning: Enter quantity to add", "err");
         return;
       }
-      const buy = parseFloat(UI.el("f-buy")?.value);
-      const sell = parseFloat(UI.el("f-sell")?.value);
+      const buy = parsePriceInput(UI.el("f-buy")?.value);
+      const sell = parsePriceInput(UI.el("f-sell")?.value);
       const nextBuy = !isNaN(buy)
         ? buy
         : sizeRec.buyPrice || item?.buyPrice || item?.buy || 0;
@@ -6380,8 +6388,8 @@ async function saveItem() {
       }
       const qty = parseInt(UI.el("f-qty")?.value);
       const previousQty = Number(sizeRec.qty || 0);
-      const buy = parseFloat(UI.el("f-buy")?.value) || sizeRec.buyPrice || 0;
-      const sell = parseFloat(UI.el("f-sell")?.value) || sizeRec.sellPrice || 0;
+      const buy = parsePriceInput(UI.el("f-buy")?.value) || sizeRec.buyPrice || 0;
+      const sell = parsePriceInput(UI.el("f-sell")?.value) || sizeRec.sellPrice || 0;
       if (isNaN(qty) || qty < 0)
         return Validate.fail("Enter a valid quantity (0 or more)", "f-qty");
       if (!Validate.price(buy, sell, "f-buy", "f-sell")) return;
@@ -6531,8 +6539,8 @@ async function saveItem() {
     // Determine Record Only mode early — affects both shoe and standard paths
     const isRecord = !!_addFormIsRecord;
 
-    // SHOE MODE — disabled; footwear now saved as standard items
-    if (false && isFootwearType(type) && !editIdRaw && !isRecord) {
+    // Footwear stock is stored on the selected shoe sizes.
+    if (isFootwearType(type) && !editIdRaw && !isRecord) {
       const savedCount = await saveShoeItems(code, name, type);
       if (!savedCount) return;
       if (_wishStockingFromId) {
@@ -6562,9 +6570,9 @@ async function saveItem() {
     const buyRaw = UI.el("f-buy")?.value || "";
     const sellRaw = UI.el("f-sell")?.value || "";
     const sellMinRaw = UI.el("f-sell-min")?.value || "";
-    const buy = buyRaw === "" ? 0 : Number(buyRaw);
-    const sell = sellRaw === "" ? 0 : Number(sellRaw);
-    const sellPriceMin = sellMinRaw === "" ? 0 : Number(sellMinRaw);
+    const buy = buyRaw === "" ? 0 : parsePriceInput(buyRaw);
+    const sell = sellRaw === "" ? 0 : parsePriceInput(sellRaw);
+    const sellPriceMin = sellMinRaw === "" ? 0 : parsePriceInput(sellMinRaw);
     if (
       !isRecord &&
       qtyRaw !== "" &&
@@ -6804,7 +6812,7 @@ function clearForm() {
   _shoeState.reset();
   resetShoeUiPanels();
   _addFormWasFootwear = false;
-  _addFormIsRecord = true;
+  _addFormIsRecord = false;
   _preloadShoeCode = "";
   const pageAdd = document.getElementById("page-add");
   if (pageAdd) pageAdd.classList.remove("footwear-add-mode");
@@ -6820,8 +6828,8 @@ function clearForm() {
   _wishStockingFromId = null;
   onTypeChange();
 
-  // Apply Record Only AFTER onTypeChange so nothing overwrites it
-  setItemMode(true);
+  // Apply Track Stock after onTypeChange so the default stays in sync.
+  setItemMode(false);
 
   clearCodeMatchSelect();
   hideCodeDropdown();
@@ -6833,7 +6841,7 @@ let _editOriginItemId = null;
 let _editingItemId = null; // tracks current edit ID reliably (backup to hidden input)
 let _lastAddFormType = ""; // last f-type value - avoid wiping shoe sizes on tab switch
 let _addFormWasFootwear = false;
-let _addFormIsRecord = true; // true = Record Only mode (default)
+let _addFormIsRecord = false; // Track Stock is the default mode
 let _preloadShoeCode = "";
 let _selectedShoeSize = null;
 let _selectedShoeSizes = new Set();
@@ -17714,6 +17722,9 @@ window.toggleTypeGroup = toggleTypeGroup;
 function setItemMode(isRecord) {
   _addFormIsRecord = !!isRecord;
 
+  const pageAdd = document.getElementById("page-add");
+  if (pageAdd) pageAdd.classList.toggle("record-only-mode", !!isRecord);
+
   // Sync checkbox state (called programmatically during clearForm)
   const toggleInput = document.getElementById("mode-toggle-input");
   if (toggleInput) toggleInput.checked = !isRecord;
@@ -18443,7 +18454,7 @@ window.dayStartOver = dayStartOver;
 initDB();
 updateFirebaseEnvUI();
 setTimeout(initFirebase, 800);
-setTimeout(() => setItemMode(true), 0);
+setTimeout(() => setItemMode(false), 0);
 // Update sync dot 3s after startup — Firebase should be connected by then
 setTimeout(updateSyncDot, 3000);
 

@@ -765,7 +765,7 @@
 
   <div class="add-flow">
 
-  <!-- Item mode toggle: Record Only (default) ↔ Track Stock -->
+  <!-- Item mode toggle: Track Stock (default) ↔ Record Only -->
   <div id="item-mode-toggle" class="add-mode-bar">
     <div class="mode-opt" id="mode-opt-record">
       <i class="fa-solid fa-file-lines"></i> Record Only
@@ -941,8 +941,8 @@
         </div>
         <div class="add-field">
           <label class="add-field-lbl">Buy price</label>
-          <input class="add-input add-center" id="f-buy" type="number"
-                 placeholder="0" min="0" inputmode="decimal"
+          <input class="add-input add-center" id="f-buy" type="text"
+                 placeholder="0" inputmode="decimal"
                  aria-label="Buy price"
                  oninput="updateProfitPreview()">
           <span id="bp-cur" style="display:none;">KES</span>
@@ -953,16 +953,16 @@
       <div class="add-row-2" style="margin-top:8px;">
         <div class="add-field">
           <label class="add-field-lbl sell-lbl-max">Sell price <span class="sell-lbl-tag">max</span></label>
-          <input class="add-input add-center" id="f-sell" type="number"
-                 placeholder="0" min="0" inputmode="decimal"
+          <input class="add-input add-center" id="f-sell" type="text"
+                 placeholder="0" inputmode="decimal"
                  aria-label="Sell price (highest)"
                  oninput="updateProfitPreview()">
           <span id="sp-cur" style="display:none;">KES</span>
         </div>
         <div class="add-field" id="f-sell-min-row">
           <label class="add-field-lbl sell-lbl-min">Min sell <span class="sell-lbl-tag sell-lbl-tag-min">floor</span></label>
-          <input class="add-input add-center" id="f-sell-min" type="number"
-                 placeholder="0" min="0" inputmode="decimal"
+          <input class="add-input add-center" id="f-sell-min" type="text"
+                 placeholder="0" inputmode="decimal"
                  aria-label="Minimum sell price"
                  oninput="updateProfitPreview()">
         </div>
