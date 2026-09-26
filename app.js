@@ -278,6 +278,11 @@ function initDB() {
         }
         await initPhotoStore();
         _appDbReady = true;
+        try {
+          await backfillWishlistSyncOutbox();
+        } catch (syncBackfillError) {
+          console.warn("[SYNC] wishlist backfill failed:", syncBackfillError.message);
+        }
         setLoginReady(true);
         await bootstrapAppData();
         const sessionRestored = checkSession();
@@ -1326,6 +1331,21 @@ function dbPut(store, data) {
 }
 function dbDelete(store, id) {
   return _writeLocal(store, "delete", null, id);
+}
+
+async function backfillWishlistSyncOutbox() {
+  if (getFirebaseEnv() === "development") return 0;
+  if (!db.objectStoreNames.contains("wishlist") || !db.objectStoreNames.contains("sync_meta")) return 0;
+  if (await dbGet("sync_meta", "wishlist_sync_backfill_v1")) return 0;
+
+  const wishes = await dbAll("wishlist");
+  for (const wish of wishes) await _queueSync("wishlist", wish);
+  await dbPut("sync_meta", {
+    key: "wishlist_sync_backfill_v1",
+    completedAt: new Date().toISOString(),
+    count: wishes.length,
+  });
+  return wishes.length;
 }
 
 async function cascadeDeleteRecord(store, id, record = null) {
@@ -6003,12 +6023,9 @@ function renderWishDetailItemInfo(wish) {
   if (!el) return;
   const rows = [
     { label: "Name", value: wish.name, icon: "fa-tag" },
-    { label: "Category", value: wish.type, icon: "fa-border-all" },
     { label: "Supply", value: wish.supplierId || wish.supplier, icon: "fa-truck" },
-    { label: "Unit", value: wish.unit, icon: "fa-cube" },
     { label: "Quantity", value: wish.qty > 0 ? wish.qty : "", icon: "fa-list" },
     { label: "Estimated Price", value: wish.estimatedCost > 0 ? fmt(wish.estimatedCost) : "", icon: "fa-coins", className: "price" },
-    { label: "Status", value: labelWishlistStatus(wishStatus(wish)), icon: "fa-ban", className: "status" },
   ];
   const html = rows
     .filter((r) => r.value)
@@ -6028,11 +6045,6 @@ function renderWishDetailItemInfo(wish) {
     })
     .join("");
   el.innerHTML = html || '<p class="wish-vendor-empty">No details</p>';
-  const statusEl = document.getElementById("wd-status");
-  if (statusEl) {
-    statusEl.textContent = labelWishlistStatus(wishStatus(wish));
-    statusEl.className = "wish-detail-status " + wishStatus(wish);
-  }
 }
 
 function buildWishTableHtml(rows, wishById) {
