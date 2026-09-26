@@ -499,34 +499,41 @@
 
 <!-- ==============================================================
      PAGE: INVENTORY  (id="page-inventory")
-     Stock, Wishlist, Monitor, and Add are mounted here as inner tabs.
+      Add, Stock, and Stock Control are mounted here as inner tabs.
      ============================================================== -->
 <div class="page" id="page-inventory" style="padding:12px 12px 0;">
   <div class="ops-header inventory-header">
     <div>
       <div class="stock-title">Inventory</div>
-      <div class="stock-sub" id="inventory-sub">Stock, wishlist, monitor and add</div>
+      <div class="stock-sub" id="inventory-sub">Add, stock and stock control</div>
     </div>
   </div>
   <div class="ops-tabs inventory-tabs">
-    <button class="ops-tab active" id="inventory-tab-stock" onclick="showInventoryTab('stock')">
-      <i class="fa-solid fa-boxes-stacked"></i> Stock
-    </button>
-    <button class="ops-tab" id="inventory-tab-wishlist" onclick="showInventoryTab('wishlist')">
-      <i class="fa-solid fa-clipboard-list"></i> Wish
-    </button>
-    <button class="ops-tab" id="inventory-tab-monitor" onclick="showInventoryTab('monitor')">
-      <i class="fa-solid fa-display"></i> Monitor
-    </button>
     <button class="ops-tab" id="inventory-tab-add" onclick="showInventoryTab('add')">
       <i class="fa-solid fa-plus"></i> Add
     </button>
+    <button class="ops-tab active" id="inventory-tab-stock" onclick="showInventoryTab('stock')">
+      <i class="fa-solid fa-boxes-stacked"></i> Stock
+    </button>
+    <button class="ops-tab" id="inventory-tab-stock-control" onclick="showInventoryTab('stock-control')">
+      <i class="fa-solid fa-sliders"></i> Stock Control
+    </button>
   </div>
   <div id="inventory-stock-slot" class="ops-slot active"></div>
-  <div id="inventory-wishlist-slot" class="ops-slot"></div>
-  <div id="inventory-monitor-slot" class="ops-slot">
-    <div id="inventory-monitor-counts" class="stock-monitor-counts"></div>
-    <div id="inventory-monitor-list"></div>
+  <div id="inventory-stock-control-slot" class="ops-slot">
+    <div class="ops-tabs inventory-control-tabs">
+      <button class="ops-tab active" id="inventory-stock-control-tab-wishlist" onclick="showStockControlTab('wishlist')">
+        <i class="fa-solid fa-clipboard-list"></i> Wish
+      </button>
+      <button class="ops-tab" id="inventory-stock-control-tab-monitor" onclick="showStockControlTab('monitor')">
+        <i class="fa-solid fa-display"></i> Monitor
+      </button>
+    </div>
+    <div id="inventory-wishlist-slot" class="ops-slot active"></div>
+    <div id="inventory-monitor-slot" class="ops-slot">
+      <div id="inventory-monitor-counts" class="stock-monitor-counts"></div>
+      <div id="inventory-monitor-list"></div>
+    </div>
   </div>
   <div id="inventory-add-slot" class="ops-slot"></div>
 </div>

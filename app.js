@@ -2583,12 +2583,14 @@ let _operationsMounted = false;
 let _activeOperationsTab = "day";
 let _inventoryMounted = false;
 let _activeInventoryTab = "stock";
+let _activeStockControlTab = "wishlist";
 let _activeSalesTab = "sell";
 
 function saveLastView() {
   try {
     localStorage.setItem(KEY_LAST_VIEW, JSON.stringify({
       inventoryTab: _activeInventoryTab,
+      stockControlTab: _activeStockControlTab,
       wishlistSection: typeof _activeWishlistSection === "string" ? _activeWishlistSection : "list",
       operationsTab: _activeOperationsTab,
       salesTab: _activeSalesTab,
@@ -2599,7 +2601,12 @@ function saveLastView() {
 function restoreLastView() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY_LAST_VIEW) || "{}");
-    if (["stock", "wishlist", "monitor", "add"].includes(saved.inventoryTab)) _activeInventoryTab = saved.inventoryTab;
+    if (["stock", "stock-control", "add"].includes(saved.inventoryTab)) _activeInventoryTab = saved.inventoryTab;
+    if (saved.inventoryTab === "wishlist" || saved.inventoryTab === "monitor") {
+      _activeInventoryTab = "stock-control";
+      _activeStockControlTab = saved.inventoryTab;
+    }
+    if (["wishlist", "monitor"].includes(saved.stockControlTab)) _activeStockControlTab = saved.stockControlTab;
     if (saved.wishlistSection === "list") _activeWishlistSection = "list";
     if (["day", "finance"].includes(saved.operationsTab)) _activeOperationsTab = saved.operationsTab;
     if (["sell", "history"].includes(saved.salesTab)) _activeSalesTab = saved.salesTab;
@@ -2635,36 +2642,52 @@ function mountInventoryPage() {
 }
 
 function showInventoryTab(tab) {
-  const allowed = ["stock", "wishlist", "monitor", "add"];
-  _activeInventoryTab = allowed.includes(tab) ? tab : "stock";
+  if (tab === "wishlist" || tab === "monitor") {
+    _activeInventoryTab = "stock-control";
+    _activeStockControlTab = tab;
+  } else {
+    _activeInventoryTab = ["stock", "stock-control", "add"].includes(tab) ? tab : "stock";
+  }
   mountInventoryPage();
-  allowed.forEach((name) => {
+  ["add", "stock", "stock-control"].forEach((name) => {
     const btn = document.getElementById("inventory-tab-" + name);
     const slot = document.getElementById("inventory-" + name + "-slot");
     if (btn) btn.classList.toggle("active", name === _activeInventoryTab);
     if (slot) slot.classList.toggle("active", name === _activeInventoryTab);
   });
+  ["wishlist", "monitor"].forEach((name) => {
+    const btn = document.getElementById("inventory-stock-control-tab-" + name);
+    const slot = document.getElementById("inventory-" + name + "-slot");
+    if (btn) btn.classList.toggle("active", name === _activeStockControlTab);
+    if (slot) slot.classList.toggle("active", name === _activeStockControlTab);
+  });
   const sub = document.getElementById("inventory-sub");
   if (sub) {
     sub.textContent =
       {
-        stock: "Current stock list",
-        wishlist: "Prospective items to stock",
-        monitor: "Out of stock and not accounted items",
         add: "Add or restock inventory",
+        stock: "Current stock list",
+        "stock-control": _activeStockControlTab === "monitor"
+          ? "Out of stock and not accounted items"
+          : "Prospective items to stock",
       }[_activeInventoryTab] || "";
   }
   if (_activeInventoryTab === "stock") renderList();
-  if (_activeInventoryTab === "wishlist") {
+  if (_activeInventoryTab === "stock-control" && _activeStockControlTab === "wishlist") {
     if (typeof showWishlistSection === "function") showWishlistSection("list");
   }
-  if (_activeInventoryTab === "monitor") renderStockMonitor();
+  if (_activeInventoryTab === "stock-control" && _activeStockControlTab === "monitor") renderStockMonitor();
   if (_activeInventoryTab === "add") {
     renderTypeSelect();
     updateProfitPreview();
     onTypeChange();
   }
   saveLastView();
+}
+
+function showStockControlTab(tab) {
+  _activeStockControlTab = tab === "monitor" ? "monitor" : "wishlist";
+  showInventoryTab("stock-control");
 }
 
 function showSalesTab(tab) {
@@ -18488,6 +18511,7 @@ window.searchSell = searchSell;
 window.selectPayment = selectPayment;
 window.showPage = showPage;
 window.showInventoryTab = showInventoryTab;
+window.showStockControlTab = showStockControlTab;
 window.showSalesTab = showSalesTab;
 window.showOperationsTab = showOperationsTab;
 window.showUserProfile = showUserProfile;
