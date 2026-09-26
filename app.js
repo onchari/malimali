@@ -1,7 +1,7 @@
 // ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
-const APP_VERSION = "2026.09.26.1";
+const APP_VERSION = "2026.09.26.2";
 
 // ===================================================================
 // APPLICATION RELEASE
@@ -25,9 +25,9 @@ const CODE_MAX_QTY = 9999;
 const LOW_STOCK_LEVEL = 1;
 const OUT_STOCK_LEVEL = 0;
 const SHOE_GROUP_DEFAULTS = Object.freeze({
-  S: Object.freeze({ min: 20, max: 28 }),
-  M: Object.freeze({ min: 29, max: 36 }),
-  L: Object.freeze({ min: 37, max: 45 }),
+  S: Object.freeze({ min: 20, max: 28, label: "Children" }),
+  M: Object.freeze({ min: 29, max: 36, label: "Teens" }),
+  L: Object.freeze({ min: 37, max: 45, label: "Adults" }),
 });
 
 function initDB() {
@@ -2150,7 +2150,7 @@ class ShoeState {
     for (const [g, cfg] of Object.entries(groups)) {
       if (size >= cfg.min && size <= cfg.max) return g;
     }
-    return "S";
+    return null;
   }
 
   // Remove all sizes belonging to a group
@@ -3128,92 +3128,117 @@ function _appendCascadePickButton(
   const ph0 = config.placeholder || "Choose category...";
   const phN = config.placeholderSub || "Choose sub-category...";
   const placeholder = depth === 0 ? ph0 : phN;
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "cat-pick-btn" + (currentRec ? " has-value" : "");
-  btn.id = config.idPrefix + (depth === 0 ? "-parent" : "-sub-" + depth);
-  btn.setAttribute("data-depth", String(depth));
-  btn.innerHTML = currentRec
-    ? _catPickBtnHtml("", { name: currentRec.name, emoji: currentRec.emoji })
-    : _catPickBtnHtml(placeholder, null);
-
-  btn.addEventListener("click", () => {
-    const children = _activeChildTypes(parentId);
-    if (!children.length) {
-      toast(
-        depth === 0 ? "No categories available" : "No sub-categories here",
-        "err",
-      );
-      return;
-    }
-    let subtitle =
-      depth === 0 ? "Pick the main category" : "Pick the next level";
-    if (parentId) {
-      const parentRec = getTypeById(parentId);
-      if (parentRec)
-        subtitle = "Under: " + (parentRec.emoji || "📦") + " " + parentRec.name;
-    }
-    openCategoryPicker({
-      compact: config.idPrefix === "wish-type",
-      title: depth === 0 ? "Choose category" : "Choose sub-category",
-      subtitle,
-      items: children.map((t) => ({
-        id: String(t.id),
-        name: t.name,
-        emoji: t.emoji || "📦",
-        hint: _categoryHasActiveChildren(t.id)
-          ? "Has more sub-categories"
-          : "Use this category",
-        hasChildren: _categoryHasActiveChildren(t.id),
-      })),
-      currentId: currentId ? String(currentId) : "",
-      allowClear: true,
-      onSelect: (id) => {
-        const newPath = _getCascadePathFromWrap(wrap).slice(0, depth);
-        if (id) newPath.push(_normTypeId(id));
-        _setCascadePathOnWrap(wrap, newPath);
-        syncAddCascadeFootwearDataset(newPath);
-        const deepest = newPath.length
-          ? getTypeById(newPath[newPath.length - 1])
-          : null;
-        if (
-          deepest &&
-          (!config.requireLeaf || !_categoryHasActiveChildren(deepest.id))
-        ) {
-          _syncCascadeValueEl(config, deepest);
-        } else if (config.requireLeaf) {
-          if (config.valueEl) config.valueEl.value = "";
-        }
-        syncAddCascadeFootwearDataset(newPath);
-        if (config.idPrefix === "f-type")
-          applyAddFormFootwearUI(isAddFormFootwearContext());
-        let rerenderValue = "";
-        if (
-          config.requireLeaf &&
-          deepest &&
-          !_categoryHasActiveChildren(deepest.id)
-        ) {
-          rerenderValue =
-            config.valueMode === "id" ? String(deepest.id) : deepest.name;
-        } else if (config.valueEl && config.valueEl.value) {
-          rerenderValue = config.valueEl.value;
-        }
-        config.rerender(rerenderValue, { preservePath: true });
-        syncAddCascadeFootwearDataset(newPath);
-        if (config.idPrefix === "f-type") onTypeChange();
-      },
-    });
-  });
-
+  const children = _activeChildTypes(parentId);
   const step = document.createElement("div");
   step.className = "add-cascade-step";
-  if (depth > 0) {
+  if (depth > 0 && config.idPrefix !== "f-type") {
     const lbl = document.createElement("span");
     lbl.className = "add-cascade-step-lbl";
     lbl.textContent = depth === 1 ? "Sub-category" : "Sub-category " + depth;
     step.appendChild(lbl);
   }
-  step.appendChild(btn);
+
+  const onSelect = (id) => {
+    const newPath = _getCascadePathFromWrap(wrap).slice(0, depth);
+    if (id) newPath.push(_normTypeId(id));
+    _setCascadePathOnWrap(wrap, newPath);
+    syncAddCascadeFootwearDataset(newPath);
+    const deepest = newPath.length
+      ? getTypeById(newPath[newPath.length - 1])
+      : null;
+    if (
+      deepest &&
+      (!config.requireLeaf || !_categoryHasActiveChildren(deepest.id))
+    ) {
+      _syncCascadeValueEl(config, deepest);
+    } else if (config.requireLeaf) {
+      if (config.valueEl) config.valueEl.value = "";
+    }
+    if (config.idPrefix === "f-type")
+      applyAddFormFootwearUI(isAddFormFootwearContext());
+    let rerenderValue = "";
+    if (
+      config.requireLeaf &&
+      deepest &&
+      !_categoryHasActiveChildren(deepest.id)
+    ) {
+      rerenderValue =
+        config.valueMode === "id" ? String(deepest.id) : deepest.name;
+    } else if (config.valueEl && config.valueEl.value) {
+      rerenderValue = config.valueEl.value;
+    }
+    config.rerender(rerenderValue, { preservePath: true });
+    syncAddCascadeFootwearDataset(newPath);
+    if (config.idPrefix === "f-type") onTypeChange();
+  };
+
+  if (config.idPrefix === "f-type") {
+    const select = document.createElement("select");
+    select.className = "add-select cat-pick-native";
+    select.id = config.idPrefix + (depth === 0 ? "-parent" : "-sub-" + depth);
+    select.setAttribute("data-depth", String(depth));
+    select.setAttribute(
+      "aria-label",
+      depth === 0 ? "Category" : "Sub-category",
+    );
+    const placeholderOption = document.createElement("option");
+    placeholderOption.value = "";
+    placeholderOption.textContent = placeholder;
+    select.appendChild(placeholderOption);
+    children.forEach((child) => {
+      const option = document.createElement("option");
+      option.value = String(child.id);
+      option.textContent = (child.emoji || "📦") + " " + child.name;
+      select.appendChild(option);
+    });
+    select.value = currentId != null ? String(currentId) : "";
+    select.addEventListener("change", () => onSelect(select.value));
+    step.appendChild(select);
+  } else {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "cat-pick-btn" + (currentRec ? " has-value" : "");
+    btn.id = config.idPrefix + (depth === 0 ? "-parent" : "-sub-" + depth);
+    btn.setAttribute("data-depth", String(depth));
+    btn.innerHTML = currentRec
+      ? _catPickBtnHtml("", { name: currentRec.name, emoji: currentRec.emoji })
+      : _catPickBtnHtml(placeholder, null);
+    btn.addEventListener("click", () => {
+      if (!children.length) {
+        toast(
+          depth === 0 ? "No categories available" : "No sub-categories here",
+          "err",
+        );
+        return;
+      }
+      let subtitle =
+        depth === 0 ? "Pick the main category" : "Pick the next level";
+      if (parentId) {
+        const parentRec = getTypeById(parentId);
+        if (parentRec)
+          subtitle = "Under: " + (parentRec.emoji || "📦") + " " + parentRec.name;
+      }
+      openCategoryPicker({
+        compact: config.idPrefix === "wish-type",
+        title: depth === 0 ? "Choose category" : "Choose sub-category",
+        subtitle,
+        items: children.map((t) => ({
+          id: String(t.id),
+          name: t.name,
+          emoji: t.emoji || "📦",
+          hint: _categoryHasActiveChildren(t.id)
+            ? "Has more sub-categories"
+            : "Use this category",
+          hasChildren: _categoryHasActiveChildren(t.id),
+        })),
+        currentId: currentId ? String(currentId) : "",
+        allowClear: true,
+        onSelect,
+      });
+    });
+    step.appendChild(btn);
+  }
+
   wrap.appendChild(step);
 }
 
@@ -3350,6 +3375,8 @@ function renderAddTypeCascade(selectedTypeName, opts) {
     breadcrumbEl: document.getElementById("f-type-breadcrumb"),
     idPrefix: "f-type",
     locked: hidden.disabled,
+    placeholder: "Category?",
+    placeholderSub: "Sub-category?",
     // Do not close over opts.skipTypeChange - config.rerender() reuses this callback after
     // renderTypeSelect({ skipTypeChange: true }), which would block onTypeChange forever.
     onChange: () => onTypeChange(),
@@ -3523,9 +3550,10 @@ function _unmountRestockPricingSection() {
   const flow = document.querySelector("#page-add .add-flow");
   const stdPricing = document.getElementById("std-pricing-section");
   if (!flow || !stdPricing || flow.contains(stdPricing)) return;
-  const photoSection = flow.querySelector(".add-card-photo");
-  if (photoSection) flow.insertBefore(stdPricing, photoSection);
+  const entryCard = flow.querySelector(".add-entry-card");
+  if (entryCard) entryCard.appendChild(stdPricing);
   else flow.appendChild(stdPricing);
+  stdPricing.style.removeProperty("display");
 }
 
 function showRestockView(meta) {
@@ -3635,7 +3663,7 @@ function hideRestockView() {
   );
   if (pricingTitle) pricingTitle.innerHTML = _RESTOCK_PRICING_TITLE;
   const qtyEl = UI.el("f-qty");
-  if (qtyEl) qtyEl.placeholder = "Qty *";
+  if (qtyEl) qtyEl.placeholder = "How many items are in stock?";
   if (typeof onTypeChange === "function") onTypeChange();
 }
 
@@ -3827,68 +3855,137 @@ function renderShoeGroupSettings() {
   const wrap = document.getElementById("shoe-groups-settings");
   if (!wrap) return;
   const groups = getShoeGroups();
-  const labels = { S: "Children (S)", M: "Teens (M)", L: "Adults (L)" };
-  wrap.innerHTML = ["S", "M", "L"]
-    .map((g) => {
-      const cfg = groups[g] || SHOE_GROUP_DEFAULTS[g];
-      const lbl = (cfg && cfg.label) || labels[g];
-      return (
-        '<div class="sg-setting-row">' +
-        '<div class="sg-setting-fields">' +
-        '<input id="sg-label-' +
-        g +
-        '" type="text" class="type-input" placeholder="' +
-        g +
-        ' - display name" value="' +
-        escapeHtml(lbl) +
-        '" style="flex:1;min-width:0;" aria-label="' +
-        g +
-        ' display name">' +
-        '<input id="sg-min-' +
-        g +
-        '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Min size" value="' +
-        (cfg?.min ?? "") +
-        '" aria-label="' +
-        g +
-        ' minimum size">' +
-        '<span style="color:var(--muted);">–</span>' +
-        '<input id="sg-max-' +
-        g +
-        '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Max size" value="' +
-        (cfg?.max ?? "") +
-        '" aria-label="' +
-        g +
-        ' maximum size">' +
-        "</div>" +
-        "</div>"
-      );
-    })
+  wrap.innerHTML = Object.entries(groups)
+    .map(([id, config]) => _shoeGroupSettingRowHtml(id, config))
     .join("");
 }
 
+function _shoeGroupSettingRowHtml(id, config) {
+  const safeId = escapeHtml(id);
+  return (
+    '<div class="sg-setting-row" data-group="' + safeId + '">' +
+    '<div class="sg-setting-fields">' +
+    '<span class="sg-setting-code">' + safeId + "</span>" +
+    '<input id="sg-label-' + safeId + '" type="text" class="type-input sg-label-input" placeholder="Group name" value="' +
+    escapeHtml(config.label || "") +
+    '" aria-label="' + safeId + ' group name">' +
+    '<input id="sg-min-' + safeId + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Min" value="' +
+    config.min +
+    '" aria-label="' + safeId + ' minimum size">' +
+    '<span class="sg-setting-range-separator" aria-hidden="true">-</span>' +
+    '<input id="sg-max-' + safeId + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Max" value="' +
+    config.max +
+    '" aria-label="' + safeId + ' maximum size">' +
+    '<button type="button" class="sg-delete-btn" onclick="removeShoeGroupSetting(\'' + safeId + '\')" aria-label="Delete ' + safeId + ' group" title="Delete group"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>' +
+    "</div></div>"
+  );
+}
+
+async function addShoeGroupSetting() {
+  const wrap = document.getElementById("shoe-groups-settings");
+  if (!wrap) return;
+  const rows = [...wrap.querySelectorAll(".sg-setting-row")];
+  const savedSizes = await dbAll("shoe_sizes");
+  const usedIds = new Set([
+    ...rows.map((row) => row.dataset.group),
+    ...savedSizes.map((size) => size.sizeGroup).filter(Boolean),
+  ]);
+  let nextNumber = 1;
+  while (usedIds.has("G" + nextNumber)) nextNumber += 1;
+
+  const occupied = new Set();
+  rows.forEach((row) => {
+    const min = parseInt(document.getElementById("sg-min-" + row.dataset.group)?.value, 10);
+    const max = parseInt(document.getElementById("sg-max-" + row.dataset.group)?.value, 10);
+    if (Number.isFinite(min) && Number.isFinite(max) && min >= 1 && max <= 60 && min <= max) {
+      for (let size = min; size <= max; size++) occupied.add(size);
+    }
+  });
+  let firstFreeSize = null;
+  for (let size = 1; size <= 60; size++) {
+    if (!occupied.has(size)) {
+      firstFreeSize = size;
+      break;
+    }
+  }
+  if (firstFreeSize == null) {
+    toast("No unused sizes remain in the 1-60 range", "err");
+    return;
+  }
+
+  const id = "G" + nextNumber;
+  wrap.insertAdjacentHTML(
+    "beforeend",
+    _shoeGroupSettingRowHtml(id, {
+      label: "Group " + nextNumber,
+      min: firstFreeSize,
+      max: firstFreeSize,
+    }),
+  );
+  document.getElementById("sg-label-" + id)?.focus();
+}
+window.addShoeGroupSetting = addShoeGroupSetting;
+
+async function removeShoeGroupSetting(id) {
+  const wrap = document.getElementById("shoe-groups-settings");
+  const row = [...(wrap?.querySelectorAll(".sg-setting-row") || [])].find(
+    (entry) => entry.dataset.group === id,
+  );
+  if (!row) return;
+  const hasSavedSizes = (await dbAll("shoe_sizes")).some(
+    (size) => size.sizeGroup === id,
+  );
+  if (
+    hasSavedSizes &&
+    !confirm("Existing sizes use this group. Remove the group settings? Stock records will remain.")
+  )
+    return;
+  row.remove();
+}
+window.removeShoeGroupSetting = removeShoeGroupSetting;
+
 async function saveShoeGroupSettings() {
   const groups = {};
-  for (const g of ["S", "M", "L"]) {
+  const rows = [
+    ...(document.getElementById("shoe-groups-settings")?.querySelectorAll(".sg-setting-row") || []),
+  ];
+  if (!rows.length) {
+    toast("Add at least one size group", "err");
+    return;
+  }
+  for (const row of rows) {
+    const g = row.dataset.group;
     const min = parseInt(document.getElementById("sg-min-" + g)?.value, 10);
     const max = parseInt(document.getElementById("sg-max-" + g)?.value, 10);
-    const label = (
-      document.getElementById("sg-label-" + g)?.value || ""
-    ).trim();
+    const label = (document.getElementById("sg-label-" + g)?.value || "").trim();
     if (
       !Number.isFinite(min) ||
       !Number.isFinite(max) ||
       min > max ||
       min < 1 ||
-      max > 60
+      max > 60 ||
+      !label
     ) {
-      toast("Invalid size range for group " + g + " (use sizes 1–60)", "err");
+      toast("Enter a name and valid 1-60 range for group " + g, "err");
       return;
     }
     groups[g] = { min, max };
-    if (label) groups[g].label = label;
+    groups[g].label = label;
   }
-  localStorage.setItem(KEY_SHOE_GROUPS, JSON.stringify(groups));
+  const sortedGroups = Object.entries(groups).sort(
+    (a, b) => a[1].min - b[1].min,
+  );
+  for (let index = 1; index < sortedGroups.length; index++) {
+    const previous = sortedGroups[index - 1];
+    const current = sortedGroups[index];
+    if (current[1].min <= previous[1].max) {
+      toast("Size ranges for " + previous[0] + " and " + current[0] + " overlap", "err");
+      return;
+    }
+  }
+  localStorage.setItem(KEY_SHOE_GROUPS, JSON.stringify({ version: 2, groups }));
   renderShoeGroupButtons();
+  renderShoeGroupSettings();
   toast("Shoe size groups saved", "ok");
 }
 window.saveShoeGroupSettings = saveShoeGroupSettings;
@@ -6291,6 +6388,14 @@ function parsePriceInput(value) {
 }
 
 // ===== SAVE ITEM =====
+function resetInventoryListForNewItem() {
+  activeTypeFilter = "all";
+  const search = UI.el("search");
+  if (search) search.value = "";
+  const clearSearch = UI.el("search-clear");
+  if (clearSearch) clearSearch.style.display = "none";
+}
+
 async function saveItem() {
   _overlay.show("Saving...");
   try {
@@ -6512,12 +6617,12 @@ async function saveItem() {
     const type = UI.el("f-type")?.value || "";
     const code = sanitiseCode(UI.el("f-code")?.value || "");
     const name = (UI.el("f-name")?.value || "").trim().replace(/[ \t]+/g, " ");
+    if (!name) {
+      return Validate.fail("Enter item name", "f-name");
+    }
     if (!code) {
       toast("Warning: Enter item code", "err");
       return;
-    }
-    if (!name) {
-      return Validate.fail("Enter item name", "f-name");
     }
     if (!editIdRaw) {
       const codeMatches = await findCodeMatchesForSave(code);
@@ -6551,6 +6656,7 @@ async function saveItem() {
       }
       clearForm();
       clearAddFormPhoto();
+      resetInventoryListForNewItem();
       allItems = await dbAll("items");
       await enrichShoeItems(allItems);
       renderList();
@@ -6559,6 +6665,7 @@ async function saveItem() {
       scheduleSync();
       await renderWishlistPage();
       await renderStockMonitorSummary();
+      showPage("list");
       toast("" + savedCount + " shoe size(s) saved!", "ok");
       return;
     }
@@ -6567,12 +6674,20 @@ async function saveItem() {
     const size = UI.el("f-size")?.value.trim() || "";
     const qtyRaw = isRecord ? "0" : UI.el("f-qty")?.value || "";
     const qty = qtyRaw === "" ? 0 : Number(qtyRaw);
+    const unit = isRecord ? "" : UI.el("f-unit")?.value || "";
     const buyRaw = UI.el("f-buy")?.value || "";
     const sellRaw = UI.el("f-sell")?.value || "";
     const sellMinRaw = UI.el("f-sell-min")?.value || "";
     const buy = buyRaw === "" ? 0 : parsePriceInput(buyRaw);
     const sell = sellRaw === "" ? 0 : parsePriceInput(sellRaw);
     const sellPriceMin = sellMinRaw === "" ? 0 : parsePriceInput(sellMinRaw);
+    if (!isRecord && qtyRaw === "")
+      return Validate.fail("Enter quantity", "f-qty");
+    if (
+      !isRecord &&
+      !getActiveUnits().some((activeUnit) => activeUnit.abbr === unit)
+    )
+      return Validate.fail("Activate a unit in Settings", "f-unit");
     if (
       !isRecord &&
       qtyRaw !== "" &&
@@ -6651,6 +6766,7 @@ async function saveItem() {
       sellPriceMin: sellPriceMin || undefined,
       profit,
       qty,
+      unit: unit || undefined,
       isRecord,
       createdAt: new Date().toISOString(),
     };
@@ -6676,6 +6792,7 @@ async function saveItem() {
         sellPriceMin: sellPriceMin || undefined,
         profit,
         qty,
+        unit: unit || undefined,
         isRecord,
         createdAt: original
           ? original.createdAt || item.createdAt
@@ -6738,6 +6855,7 @@ async function saveItem() {
       const _backfilled = await _backfillSalesForItem(item);
       clearForm();
       clearAddFormPhoto();
+      resetInventoryListForNewItem();
       allItems = await dbAll("items");
       await enrichShoeItems(allItems);
       renderList();
@@ -6812,7 +6930,7 @@ function clearForm() {
   _shoeState.reset();
   resetShoeUiPanels();
   _addFormWasFootwear = false;
-  _addFormIsRecord = false;
+  _addFormIsRecord = true;
   _preloadShoeCode = "";
   const pageAdd = document.getElementById("page-add");
   if (pageAdd) pageAdd.classList.remove("footwear-add-mode");
@@ -6828,8 +6946,8 @@ function clearForm() {
   _wishStockingFromId = null;
   onTypeChange();
 
-  // Apply Track Stock after onTypeChange so the default stays in sync.
-  setItemMode(false);
+  // Apply Record Only after onTypeChange so the default stays in sync.
+  setItemMode(true);
 
   clearCodeMatchSelect();
   hideCodeDropdown();
@@ -6841,7 +6959,7 @@ let _editOriginItemId = null;
 let _editingItemId = null; // tracks current edit ID reliably (backup to hidden input)
 let _lastAddFormType = ""; // last f-type value - avoid wiping shoe sizes on tab switch
 let _addFormWasFootwear = false;
-let _addFormIsRecord = false; // Track Stock is the default mode
+let _addFormIsRecord = true; // Record Only is the default mode
 let _preloadShoeCode = "";
 let _selectedShoeSize = null;
 let _selectedShoeSizes = new Set();
@@ -7327,7 +7445,7 @@ async function renderList() {
                 <div class="item-body">
                   <div class="item-code">${escapeHtml(item.name || item.code)}</div>
                   <div class="item-tags">
-                    ${sz.sizeGroup ? `<span class="tag tag-gray">${sz.sizeGroup === "S" ? "Children" : sz.sizeGroup === "M" ? "Teens" : "Adults"}</span>` : ""}
+                    ${sz.sizeGroup ? `<span class="tag tag-gray">${escapeHtml(getShoeGroups()[sz.sizeGroup]?.label || sz.sizeGroup)}</span>` : ""}
                     <span class="tag ${stockColor}">${stockLabel}</span>
                     <span class="tag tag-gray">${soldQty} sold</span>
                   </div>
@@ -8283,11 +8401,7 @@ async function openShoeSizeCard(itemCode, size) {
   const stockCol = isOut ? "var(--red)" : isLow ? "#d97706" : "var(--green)";
   const stockLbl = isOut ? "Out of stock" : availableQty + " pcs in stock";
   const groupLbl =
-    sizeRec.sizeGroup === "S"
-      ? "Children"
-      : sizeRec.sizeGroup === "M"
-        ? "Teens"
-        : "Adults";
+    getShoeGroups()[sizeRec.sizeGroup]?.label || sizeRec.sizeGroup || "Size group";
 
   let sheet = document.getElementById("shoe-size-action-sheet");
   if (!sheet) {
@@ -8822,6 +8936,8 @@ async function editItem() {
       _editingItemId = null; // shoe edits use shoe_edit_ prefix, not _editingItemId
       UI.el("edit-id").value = "shoe_edit_" + item.id + "_" + size;
       setAddFormType(item.type || "", { skipTypeChange: true });
+      renderItemUnitOptions(item.unit || "");
+      setItemMode(!!item.isRecord);
       UI.el("f-code").value = item.code || "";
       UI.el("f-name").value = item.name || "";
       UI.el("f-size").value = size;
@@ -8861,6 +8977,8 @@ async function editItem() {
     showPage("add");
     UI.el("edit-id").value = item.id;
     setAddFormType(item.type || "", { skipTypeChange: true });
+    renderItemUnitOptions(item.unit || "");
+    setItemMode(!!item.isRecord);
     UI.el("f-code").value = item.code || "";
     UI.el("f-name").value = item.name || "";
     UI.el("f-size").value = item.variant || item.size || ""; // normalized field name
@@ -8869,7 +8987,6 @@ async function editItem() {
     UI.el("f-sell").value = item.sellPrice || item.sell || "";
     const _editSellMin = UI.el("f-sell-min");
     if (_editSellMin) _editSellMin.value = item.sellPriceMin || "";
-    if (item.isRecord) setItemMode(true);
     // Lock code and type - identifying fields
     ["f-code"].forEach((id) => {
       const el = document.getElementById(id);
@@ -9368,8 +9485,10 @@ function updateCurrencyUI() {
   if (sp) sp.textContent = currency;
   const buyEl = document.getElementById("f-buy");
   const sellEl = document.getElementById("f-sell");
-  if (buyEl) buyEl.placeholder = "Buy (" + currency + ") *";
-  if (sellEl) sellEl.placeholder = "Sell (" + currency + ") *";
+  const sellMinEl = document.getElementById("f-sell-min");
+  if (buyEl) buyEl.placeholder = "Buy price? *";
+  if (sellEl) sellEl.placeholder = "Sell max?";
+  if (sellMinEl) sellMinEl.placeholder = "Sell min?";
   const shBuy = document.getElementById("shoe-shared-buy");
   const shSell = document.getElementById("shoe-shared-sell");
   if (shBuy) shBuy.placeholder = "Buy (" + currency + ") *";
@@ -17719,6 +17838,63 @@ window.toggleTypeGroup = toggleTypeGroup;
 // GENERAL VARIANT UI FUNCTIONS
 // ══════════════════════════════════════════════════════════════════
 
+function renderItemUnitOptions(preferredUnit) {
+  const valueInput = document.getElementById("f-unit");
+  const picker = document.getElementById("f-unit-picker");
+  if (!valueInput || !picker) return;
+
+  const activeUnits = getActiveUnits();
+  const selectedUnit = preferredUnit || valueInput.value;
+  picker.replaceChildren();
+  if (!activeUnits.length) {
+    valueInput.value = "";
+    const empty = document.createElement("span");
+    empty.className = "item-unit-empty";
+    empty.textContent = "No active units";
+    picker.appendChild(empty);
+    return;
+  }
+
+  const currentUnit = activeUnits.some((unit) => unit.abbr === selectedUnit)
+    ? selectedUnit
+    : activeUnits[0].abbr;
+  valueInput.value = currentUnit;
+  activeUnits.forEach((unit) => {
+    const card = document.createElement("label");
+    const selected = unit.abbr === currentUnit;
+    card.className = "item-unit-card" + (selected ? " is-selected" : "");
+    card.title = unit.name;
+
+    const radio = document.createElement("input");
+    radio.className = "item-unit-radio";
+    radio.type = "radio";
+    radio.name = "f-unit-option";
+    radio.value = unit.abbr;
+    radio.checked = selected;
+    radio.setAttribute("aria-label", unit.name);
+    radio.addEventListener("change", () => selectItemUnit(unit.abbr));
+
+    const abbr = document.createElement("span");
+    abbr.textContent = unit.abbr;
+    card.append(radio, abbr);
+    picker.appendChild(card);
+  });
+}
+
+function selectItemUnit(abbr) {
+  const valueInput = document.getElementById("f-unit");
+  const picker = document.getElementById("f-unit-picker");
+  if (!valueInput || !picker) return;
+  if (!getActiveUnits().some((unit) => unit.abbr === abbr)) return;
+
+  valueInput.value = abbr;
+  picker.querySelectorAll(".item-unit-radio").forEach((radio) => {
+    const selected = radio.value === abbr;
+    radio.checked = selected;
+    radio.closest(".item-unit-card")?.classList.toggle("is-selected", selected);
+  });
+}
+
 function setItemMode(isRecord) {
   _addFormIsRecord = !!isRecord;
 
@@ -17737,17 +17913,23 @@ function setItemMode(isRecord) {
   if (optTrack) optTrack.classList.toggle("mode-opt-active", !isRecord);
   if (modeBar) modeBar.classList.toggle("record-mode", !!isRecord);
 
-  // Show/hide qty field and record note
-  const qtyField = document.getElementById("f-qty")?.closest(".add-field");
+  // Show/hide qty and keep the mode guidance beside the switch.
+  const qtyField = document.getElementById("f-stock-row");
+  renderItemUnitOptions();
   const recordNote = document.getElementById("record-mode-note");
+  const recordMessage = document.getElementById("record-mode-message");
+  if (recordMessage) {
+    recordMessage.textContent = isRecord
+      ? "Qty not tracked - item always shows as available for sale."
+      : "Qty is tracked - ALWAYS enter the correct item quantities.";
+  }
+  if (recordNote) recordNote.classList.toggle("track-mode-note", !isRecord);
   if (isRecord) {
     if (qtyField) qtyField.style.display = "none";
-    if (recordNote) recordNote.style.display = "flex";
     const qtyEl = document.getElementById("f-qty");
     if (qtyEl) qtyEl.value = "0";
   } else {
     if (qtyField) qtyField.style.removeProperty("display");
-    if (recordNote) recordNote.style.display = "none";
   }
 
   // Re-evaluate shoe panel visibility — toggling mode on a footwear category
@@ -17770,14 +17952,40 @@ window.setSizeGroupFilter = setSizeGroupFilter;
 function _renderSizeGroupFilter() {
   const wrap = document.getElementById("shoe-size-filter");
   if (!wrap) return;
+  const groups = getShoeGroups();
+  if (
+    window._activeSizeGroupFilter !== "all" &&
+    !groups[window._activeSizeGroupFilter]
+  ) {
+    window._activeSizeGroupFilter = "all";
+  }
   const footwearSelected =
     activeTypeFilter !== "all" && isFootwearType(activeTypeFilter);
   wrap.style.display = footwearSelected ? "flex" : "none";
+  wrap.replaceChildren();
+  const filters = [
+    ["all", "All"],
+    ...Object.entries(groups).map(([group, config]) => [
+      group,
+      group + " - " + config.label,
+    ]),
+  ];
+  filters.forEach(([group, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.id = "sgf-" + group;
+    button.className =
+      "fin-filter-btn" +
+      (window._activeSizeGroupFilter === group ? " active" : "");
+    button.textContent = label;
+    button.addEventListener("click", () => setSizeGroupFilter(group));
+    wrap.appendChild(button);
+  });
   if (!footwearSelected) {
     window._activeSizeGroupFilter = "all";
-    document
-      .querySelectorAll('[id^="sgf-"]')
-      .forEach((b) => b.classList.remove("active"));
+    wrap.querySelectorAll(".fin-filter-btn").forEach((button) => {
+      button.classList.toggle("active", button.id === "sgf-all");
+    });
   }
 }
 
@@ -18454,7 +18662,7 @@ window.dayStartOver = dayStartOver;
 initDB();
 updateFirebaseEnvUI();
 setTimeout(initFirebase, 800);
-setTimeout(() => setItemMode(false), 0);
+setTimeout(() => setItemMode(true), 0);
 // Update sync dot 3s after startup — Firebase should be connected by then
 setTimeout(updateSyncDot, 3000);
 
@@ -19486,22 +19694,42 @@ async function saleAddToInventoryFromDetail() {
 window.saleAddToInventoryFromDetail = saleAddToInventoryFromDetail;
 
 function renderAllShoeGroupCards() {
+  const wrap = document.getElementById("shoe-size-groups");
+  if (!wrap) return;
   const groups = getShoeGroups();
-  ["S", "M", "L"].forEach((g) => {
+  const entries = Object.entries(groups).sort((a, b) => a[1].min - b[1].min);
+  const signature = JSON.stringify(entries);
+  if (wrap.dataset.groupsSignature !== signature) {
+    wrap.innerHTML = entries
+      .map(
+        ([group, config]) =>
+          '<div class="sg-card" id="sg-card-' +
+          escapeHtml(group) +
+          '" data-group="' +
+          escapeHtml(group) +
+          '"><div class="sg-card-head"><span class="sg-ltr">' +
+          escapeHtml(group) +
+          '</span><span class="sg-range" id="sg-range-' +
+          escapeHtml(group) +
+          '">' +
+          config.min +
+          "–" +
+          config.max +
+          '</span><span class="sg-name" aria-hidden="true">' +
+          escapeHtml(config.label) +
+          '</span></div><div class="sg-card-sizes" id="sg-card-sizes-' +
+          escapeHtml(group) +
+          '"></div></div>',
+      )
+      .join("");
+    wrap.dataset.groupsSignature = signature;
+  }
+
+  entries.forEach(([g, config]) => {
     const container = document.getElementById("sg-card-sizes-" + g);
     const card = document.getElementById("sg-card-" + g);
-    const rng = document.getElementById("sg-range-" + g);
     if (!container) return;
-    if (!groups[g]) {
-      container.innerHTML = "";
-      if (card) card.classList.remove("sg-card-active");
-      return;
-    }
-    const { min, max } = groups[g];
-    if (rng) {
-      const lbl = groups[g].label ? groups[g].label + " - " : "";
-      rng.textContent = lbl + min + "–" + max;
-    }
+    const { min, max } = config;
     container.innerHTML = "";
     for (let s = min; s <= max; s++) {
       const btn = document.createElement("button");
@@ -19521,9 +19749,7 @@ function renderAllShoeGroupCards() {
       }
       container.appendChild(btn);
     }
-    const anySelected = _getGroupSizes(g).some((sz) =>
-      _shoeState.sizes.has(sz),
-    );
+    const anySelected = _getGroupSizes(g).some((sz) => _shoeState.sizes.has(sz));
     if (card) card.classList.toggle("sg-card-active", anySelected);
     if (anySelected) _shoeState.shownGroups.add(g);
     else _shoeState.shownGroups.delete(g);
@@ -19700,9 +19926,21 @@ async function saveShoeItems(baseCode, baseName, type) {
     return false;
   }
 
+  const ungroupedSize = _shoeState.sortedSizes.find(
+    (size) => !_shoeState.groupFor(size),
+  );
+  if (ungroupedSize != null) {
+    toast("Size " + ungroupedSize + " is outside the configured groups", "err");
+    return false;
+  }
+
   if (!_shoeState.group) {
     const firstSize = [..._shoeState.sizes][0];
-    _shoeState.group = _shoeState.groupFor(firstSize) || "S";
+    _shoeState.group = _shoeState.groupFor(firstSize);
+    if (!_shoeState.group) {
+      toast("Selected size is outside the configured groups", "err");
+      return false;
+    }
   }
 
   let sharedQty = 0,
@@ -19998,13 +20236,19 @@ window.closeShoeSizeActions = closeShoeSizeActions;
 
 function getShoeGroups() {
   const defaults = JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS));
-  const saved = localStorage.getItem(KEY_SHOE_GROUPS);
-  if (!saved) return defaults;
   try {
+    const saved = localStorage.getItem(KEY_SHOE_GROUPS);
+    if (!saved) return defaults;
     const parsed = JSON.parse(saved);
-    const out = Object.assign({}, defaults);
-    for (const g of ["S", "M", "L"]) {
-      const cfg = parsed[g];
+    const isVersioned =
+      parsed?.version === 2 &&
+      parsed.groups &&
+      typeof parsed.groups === "object" &&
+      !Array.isArray(parsed.groups);
+    const source = isVersioned ? parsed.groups : parsed;
+    const out = isVersioned ? {} : Object.assign({}, defaults);
+    for (const [g, cfg] of Object.entries(source || {})) {
+      if (!/^[A-Za-z0-9_-]{1,12}$/.test(g)) continue;
       const min = parseInt(cfg?.min, 10);
       const max = parseInt(cfg?.max, 10);
       if (
@@ -20014,7 +20258,11 @@ function getShoeGroups() {
         max <= 60 &&
         min <= max
       ) {
-        out[g] = { min, max, label: cfg.label || defaults[g]?.label || "" };
+        out[g] = {
+          min,
+          max,
+          label: String(cfg.label || defaults[g]?.label || g),
+        };
       }
     }
     return out;
@@ -20069,7 +20317,7 @@ function renderShoeSummary() {
   } else {
     el.innerHTML = sorted
       .map((s) => {
-        const g = (_shoeState.groupFor(s) || "s").toLowerCase();
+        const g = (_shoeState.groupFor(s) || "other").toLowerCase();
         return (
           '<span class="shoe-selected-chip shoe-chip-' +
           g +

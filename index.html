@@ -577,11 +577,7 @@
   <div class="chips" id="type-chips"></div>
 
   <!-- Shoe size-group filter - only when Footwear category is selected -->
-  <div id="shoe-size-filter" style="display:none;padding:0 0 8px;gap:6px;flex-wrap:wrap;">
-    <button onclick="setSizeGroupFilter('S')" id="sgf-S" class="fin-filter-btn">S - Children</button>
-    <button onclick="setSizeGroupFilter('M')" id="sgf-M" class="fin-filter-btn">M - Teens</button>
-    <button onclick="setSizeGroupFilter('L')" id="sgf-L" class="fin-filter-btn">L - Adults</button>
-  </div>
+  <div id="shoe-size-filter" style="display:none;padding:0 0 8px;gap:6px;flex-wrap:wrap;"></div>
 
   <!-- Item cards injected here -->
   <div id="item-list"></div>
@@ -765,93 +761,71 @@
 
   <div class="add-flow">
 
-  <!-- Item mode toggle: Track Stock (default) ↔ Record Only -->
-  <div id="item-mode-toggle" class="add-mode-bar">
-    <div class="mode-opt" id="mode-opt-record">
-      <i class="fa-solid fa-file-lines"></i> Record Only
-    </div>
-    <label class="ios-toggle" for="mode-toggle-input" title="Record Only / Track Stock">
-      <input type="checkbox" id="mode-toggle-input" onchange="setItemMode(!this.checked)">
-      <span class="ios-toggle-track"><span class="ios-toggle-on-label">ON</span></span>
-      <span class="ios-toggle-thumb"></span>
-    </label>
-    <div class="mode-opt" id="mode-opt-track">
-      <i class="fa-solid fa-boxes-stacked"></i> Track Stock
-    </div>
-  </div>
-
-  <!-- Step 1: Category -->
-  <section class="add-card" aria-labelledby="add-step-cat">
-    <h2 class="add-card-title" id="add-step-cat"><span class="add-step-badge">1</span> Category</h2>
-    <input type="hidden" id="f-type" value="">
-    <div id="f-type-cascade" class="add-cascade"></div>
-    <div id="f-type-breadcrumb" class="add-type-breadcrumb" hidden></div>
-  </section>
-
-  <!-- Step 2: Item details -->
-  <section class="add-card" aria-labelledby="add-step-item">
-    <h2 class="add-card-title" id="add-step-item"><span class="add-step-badge">2</span> Item</h2>
-
-    <div class="add-field">
-      <input class="add-input add-mono" id="f-code" type="text"
-             placeholder="Code *"
-             aria-label="Item code"
-             autocomplete="off" spellcheck="false"
-             style="text-transform:uppercase;"
-             oninput="onCodeInput()">
+  <section class="add-card add-entry-card" aria-label="Item details">
+    <div class="add-entry-toolbar">
+      <div class="add-photo-box add-photo-control" id="add-photo-preview">
+        <img id="add-photo-img" src="" alt="Item photo" class="add-photo-img" style="display:none;">
+        <button type="button" id="add-photo-placeholder" class="add-photo-ph" onclick="triggerAddPhotoUpload()" aria-label="Add item photo" title="Add item photo">
+          <i class="fa-solid fa-camera add-photo-ph-icon" aria-hidden="true"></i>
+        </button>
+        <button type="button" id="add-photo-remove" onclick="removeAddPhoto(event)" class="add-photo-remove" style="display:none;" aria-label="Remove item photo" title="Remove item photo">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="add-entry-mode">
+        <div class="add-mode-row">
+          <div id="item-mode-toggle" class="add-mode-bar record-mode">
+            <div class="mode-opt mode-opt-active" id="mode-opt-record">
+              <i class="fa-solid fa-file-lines"></i> Record Only
+            </div>
+            <label class="ios-toggle" for="mode-toggle-input" title="Record Only / Track Stock">
+              <input type="checkbox" id="mode-toggle-input" onchange="setItemMode(!this.checked)">
+              <span class="ios-toggle-track"><span class="ios-toggle-on-label">ON</span></span>
+              <span class="ios-toggle-thumb"></span>
+            </label>
+            <div class="mode-opt" id="mode-opt-track">
+              <i class="fa-solid fa-boxes-stacked"></i> Track Stock
+            </div>
+          </div>
+          <div id="record-mode-note" class="record-mode-note" role="status" aria-live="polite">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            <span id="record-mode-message">Qty not tracked - item always shows as available for sale.</span>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="add-field" id="code-match-field">
-      <select class="add-select add-mono" id="code-match-select" disabled aria-label="Existing code match">
-        <option value="">Match code...</option>
-      </select>
-    </div>
+    <div class="add-entry-fields">
+      <div class="add-name-code-row">
+        <div class="add-field">
+          <input class="add-input" id="f-name" type="text"
+                 placeholder="Item name? *"
+                 aria-label="Item name" autocomplete="off" spellcheck="false" required>
+        </div>
 
-    <div class="add-field">
-      <input class="add-input" id="f-name" type="text"
-             placeholder="Name *"
-             aria-label="Display name"
-             autocomplete="off" spellcheck="false">
-    </div>
+        <div class="add-field">
+          <input class="add-input add-mono" id="f-code" type="text"
+               placeholder="Code? *"
+                 aria-label="Item code" autocomplete="off" spellcheck="false"
+                 style="text-transform:uppercase;" oninput="onCodeInput()" required>
+          <div class="add-field" id="code-match-field">
+            <select class="add-select add-mono" id="code-match-select" disabled aria-label="Existing code match">
+              <option value="">Match code...</option>
+            </select>
+          </div>
+        </div>
+      </div>
 
-    <div class="add-field" id="f-size-field">
-      <input class="add-input" id="f-size" type="text"
-             placeholder="Size"
-             aria-label="Size or variant"
-             autocomplete="off" spellcheck="false">
+      <input type="hidden" id="f-size" value="">
+      <input type="hidden" id="f-type" value="">
+      <div id="f-type-cascade" class="add-cascade"></div>
     </div>
-  </section>
 
   <!-- Step 2b: Item mode toggle -->
   <!-- Shoe sizes (footwear categories) -->
-  <div id="shoe-size-panel" class="add-card add-card-shoe">
+  <div id="shoe-size-panel" class="add-card-shoe">
     <h2 class="add-card-title"><span class="add-step-badge">3</span> Sizes</h2>
-    <div class="sg-row sg-row-full">
-        <div class="sg-card" id="sg-card-S" data-group="S">
-          <div class="sg-card-head">
-            <span class="sg-ltr">S</span>
-            <span class="sg-range" id="sg-range-S">20–28</span>
-            <span class="sg-name" aria-hidden="true">Children</span>
-          </div>
-          <div class="sg-card-sizes" id="sg-card-sizes-S"></div>
-        </div>
-        <div class="sg-card" id="sg-card-M" data-group="M">
-          <div class="sg-card-head">
-            <span class="sg-ltr">M</span>
-            <span class="sg-range" id="sg-range-M">29–36</span>
-            <span class="sg-name" aria-hidden="true">Teens</span>
-          </div>
-          <div class="sg-card-sizes" id="sg-card-sizes-M"></div>
-        </div>
-        <div class="sg-card" id="sg-card-L" data-group="L">
-          <div class="sg-card-head">
-            <span class="sg-ltr">L</span>
-            <span class="sg-range" id="sg-range-L">37–45</span>
-            <span class="sg-name" aria-hidden="true">Adults</span>
-          </div>
-          <div class="sg-card-sizes" id="sg-card-sizes-L"></div>
-        </div>
-    </div>
+    <div class="sg-row sg-row-full" id="shoe-size-groups"></div>
 
     <div id="shoe-sizes-grid" hidden aria-hidden="true">
       <div id="sz-grid"></div>
@@ -922,49 +896,36 @@
 
   <!-- ── Variant type selector (non-footwear) ─────────────────── -->
   <!-- Step 3: Stock & pricing (standard items) -->
-  <section id="std-pricing-section" class="add-card">
-    <h2 class="add-card-title"><span class="add-step-badge">3</span> Stock</h2>
-    <div id="record-mode-note" class="record-mode-note" style="display:none;">
-      <i class="fa-solid fa-circle-info"></i>
-      Qty not tracked — item always shows as available for sale.
-    </div>
-    <div class="add-section add-section-inset">
-
-      <!-- Row 1: Qty + Buy price -->
-      <div class="add-row-2">
-        <div class="add-field">
-          <label class="add-field-lbl">Qty</label>
-          <input class="add-input add-center add-mono" id="f-qty" type="number"
-                 placeholder="0" min="0" inputmode="numeric"
-                 aria-label="Quantity"
-                 oninput="updateProfitPreview()">
+  <div id="std-pricing-section" class="add-entry-pricing">
+      <div class="add-entry-stock-row" id="f-stock-row">
+        <div class="add-field" id="f-qty-field">
+          <input class="add-input add-mono" id="f-qty" type="number"
+                 placeholder="QTY (required)" min="0" inputmode="numeric"
+                 aria-label="Quantity in stock" oninput="updateProfitPreview()" required>
         </div>
         <div class="add-field">
-          <label class="add-field-lbl">Buy price</label>
-          <input class="add-input add-center" id="f-buy" type="text"
-                 placeholder="0" inputmode="decimal"
-                 aria-label="Buy price"
-                 oninput="updateProfitPreview()">
-          <span id="bp-cur" style="display:none;">KES</span>
+          <input id="f-unit" type="hidden" value="">
+          <div class="item-unit-picker" id="f-unit-picker" role="radiogroup" aria-label="Select an item unit"></div>
         </div>
       </div>
 
-      <!-- Row 2: Sell max + Sell min (both optional) -->
-      <div class="add-row-2" style="margin-top:8px;">
+      <div class="add-price-grid">
         <div class="add-field">
-          <label class="add-field-lbl sell-lbl-max">Sell price <span class="sell-lbl-tag">max</span></label>
-          <input class="add-input add-center" id="f-sell" type="text"
-                 placeholder="0" inputmode="decimal"
-                 aria-label="Sell price (highest)"
-                 oninput="updateProfitPreview()">
+          <input class="add-input" id="f-buy" type="text"
+                 placeholder="What is the buy price?" inputmode="decimal"
+                 aria-label="Buy price" oninput="updateProfitPreview()">
+          <span id="bp-cur" style="display:none;">KES</span>
+        </div>
+        <div class="add-field">
+          <input class="add-input" id="f-sell" type="text"
+                 placeholder="What is the max sell price?" inputmode="decimal"
+                 aria-label="Maximum sell price" oninput="updateProfitPreview()">
           <span id="sp-cur" style="display:none;">KES</span>
         </div>
         <div class="add-field" id="f-sell-min-row">
-          <label class="add-field-lbl sell-lbl-min">Min sell <span class="sell-lbl-tag sell-lbl-tag-min">floor</span></label>
-          <input class="add-input add-center" id="f-sell-min" type="text"
-                 placeholder="0" inputmode="decimal"
-                 aria-label="Minimum sell price"
-                 oninput="updateProfitPreview()">
+          <input class="add-input" id="f-sell-min" type="text"
+                 placeholder="Minimum sell price?" inputmode="decimal"
+                 aria-label="Minimum sell price" oninput="updateProfitPreview()">
         </div>
       </div>
 
@@ -987,19 +948,6 @@
         <span id="pp-qty-lbl" style="display:none;"></span>
       </div>
 
-    </div>
-  </section>
-
-  <!-- Step 4: Photo -->
-  <section class="add-card add-card-photo">
-    <h2 class="add-card-title"><span class="add-step-badge">4</span> Photo</h2>
-    <div class="add-photo-box" id="add-photo-preview">
-      <img id="add-photo-img" src="" alt="" class="add-photo-img" style="display:none;">
-      <div id="add-photo-placeholder" class="add-photo-ph" onclick="triggerAddPhotoUpload()">
-        <span class="add-photo-ph-icon"><i class="fa-solid fa-camera"></i></span>
-        <span class="add-photo-ph-text">Photo</span>
-      </div>
-      <button type="button" id="add-photo-remove" onclick="removeAddPhoto(event)" class="add-photo-remove" style="display:none;">Remove</button>
     </div>
   </section>
 
@@ -1545,10 +1493,13 @@
   <div class="sec-label" style="margin-top:14px;">Size groups (for size-grid categories)</div>
   <div class="card" style="margin-bottom:4px;">
     <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;">
-      S / M / L button ranges on the Add Item shoe panel. Change labels and size numbers here.
+      Create and manage size groups, names, and non-overlapping ranges used on the Add Item shoe panel.
     </div>
     <div id="shoe-groups-settings"></div>
-    <button onclick="saveShoeGroupSettings()"
+    <button type="button" class="sg-add-btn" onclick="addShoeGroupSetting()">
+      <i class="fa-solid fa-plus" aria-hidden="true"></i> Add group
+    </button>
+    <button type="button" onclick="saveShoeGroupSettings()"
             style="width:100%;margin-top:10px;padding:12px;background:var(--accent);color:white;border:none;
                    border-radius:var(--r);font-size:13px;font-weight:800;cursor:pointer;font-family:var(--sans);">
       Save size groups

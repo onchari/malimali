@@ -4,7 +4,7 @@
 //   Firebase SDK  to  Cache-first (static SDK, rarely changes)
 //   Firestore API  to  Network-only (never cache live data)
 
-const APP_VERSION = '2026.09.26.1';
+const APP_VERSION = '2026.09.26.2';
 const CACHE_NAME = `mandela-${APP_VERSION}`;
 const FIREBASE_CACHE = 'firebase-sdk-v1';
 
