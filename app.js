@@ -273,7 +273,10 @@ function initDB() {
           try {
             await runStockLedgerMigrationCutover();
           } catch (ledgerError) {
-            console.warn("[stock-ledger] startup migration failed:", ledgerError.message);
+            console.warn(
+              "[stock-ledger] startup migration failed:",
+              ledgerError.message,
+            );
           }
         }
         await initPhotoStore();
@@ -281,7 +284,10 @@ function initDB() {
         try {
           await backfillWishlistSyncOutbox();
         } catch (syncBackfillError) {
-          console.warn("[SYNC] wishlist backfill failed:", syncBackfillError.message);
+          console.warn(
+            "[SYNC] wishlist backfill failed:",
+            syncBackfillError.message,
+          );
         }
         setLoginReady(true);
         await bootstrapAppData();
@@ -395,7 +401,8 @@ const STOCK_LEDGER_MIGRATION_HLC = Object.freeze({
 function _nextHlc() {
   const state = _readHlcState();
   const wall = Math.max(Date.now(), Number(state.wall || 0));
-  const counter = wall === Number(state.wall || 0) ? Number(state.counter || 0) + 1 : 0;
+  const counter =
+    wall === Number(state.wall || 0) ? Number(state.counter || 0) + 1 : 0;
   const next = { wall, counter, clientId: state.clientId || _syncClient() };
   _writeHlcState(next);
   return next;
@@ -459,7 +466,10 @@ async function recomputeDerivedQtyForItem(itemId, sizeId = null) {
     }
     item.qtyCache = sizes
       .filter((record) => String(record.itemId) === String(itemId))
-      .reduce((total, record) => total + Number(record.qtyCache ?? record.qty ?? 0), 0);
+      .reduce(
+        (total, record) => total + Number(record.qtyCache ?? record.qty ?? 0),
+        0,
+      );
   } else {
     item.qtyCache = Number(derived || 0);
   }
@@ -476,7 +486,8 @@ async function appendStockMove({
   actor = _syncClient(),
   source = "app",
 } = {}) {
-  if (!itemId || !db || !db.objectStoreNames.contains("stock_moves")) return null;
+  if (!itemId || !db || !db.objectStoreNames.contains("stock_moves"))
+    return null;
   if (!Number.isFinite(Number(delta))) return null;
   const moveId = _stockMoveId({ reason, refId, itemId, sizeId });
   const move = {
@@ -495,15 +506,28 @@ async function appendStockMove({
   };
   await dbPut("stock_moves", move);
   await recomputeDerivedQtyForItem(itemId, sizeId);
-  await recordStockAudit("stock_move_written", { itemId, sizeId, delta, reason, refId });
+  await recordStockAudit("stock_move_written", {
+    itemId,
+    sizeId,
+    delta,
+    reason,
+    refId,
+  });
   await _queueSync("stock_moves", move, "upsert");
   return move;
 }
 
-function persistSaleAtomically({ item, shoeSize = null, sale, delta, actor } = {}) {
+function persistSaleAtomically({
+  item,
+  shoeSize = null,
+  sale,
+  delta,
+  actor,
+} = {}) {
   return new Promise((resolve, reject) => {
     if (!_dbReady(reject)) return;
-    const hasShoeSize = !!shoeSize && db.objectStoreNames.contains("shoe_sizes");
+    const hasShoeSize =
+      !!shoeSize && db.objectStoreNames.contains("shoe_sizes");
     const hasLedger =
       db.objectStoreNames.contains("stock_moves") && Number(delta) !== 0;
     const syncable =
@@ -531,7 +555,8 @@ function persistSaleAtomically({ item, shoeSize = null, sale, delta, actor } = {
       let finalized = false;
 
       const finalize = () => {
-        if (finalized || saleId == null || (syncable && state === undefined)) return;
+        if (finalized || saleId == null || (syncable && state === undefined))
+          return;
         finalized = true;
         sale.id = saleId;
 
@@ -564,14 +589,19 @@ function persistSaleAtomically({ item, shoeSize = null, sale, delta, actor } = {
               : existing.sizeId == null || existing.sizeId === ""),
         );
         const derivedQty = matchingMoves.length
-          ? matchingMoves.reduce((total, existing) => total + Number(existing.delta || 0), 0) + Number(delta)
+          ? matchingMoves.reduce(
+              (total, existing) => total + Number(existing.delta || 0),
+              0,
+            ) + Number(delta)
           : Number(hasShoeSize ? shoeSize.qty : item.qty);
         if (hasShoeSize) shoeSize.qtyCache = Number(derivedQty || 0);
         item.qtyCache = hasShoeSize
           ? moves
               .filter((existing) => String(existing.itemId) === String(item.id))
-              .reduce((total, existing) => total + Number(existing.delta || 0), 0) +
-            Number(delta)
+              .reduce(
+                (total, existing) => total + Number(existing.delta || 0),
+                0,
+              ) + Number(delta)
           : Number(item.qty || 0);
 
         itemStore.put(item);
@@ -579,7 +609,11 @@ function persistSaleAtomically({ item, shoeSize = null, sale, delta, actor } = {
         if (hasLedger) ledgerStore.put(move);
 
         if (syncable) {
-          const meta = state || { key: "state", clock: 0, clientId: _syncClient() };
+          const meta = state || {
+            key: "state",
+            clock: 0,
+            clientId: _syncClient(),
+          };
           let clock = Math.max(Number(meta.clock) || 0, _syncClock);
           const now = new Date().toISOString();
           const queue = (store, record) => {
@@ -624,14 +658,19 @@ function persistSaleAtomically({ item, shoeSize = null, sale, delta, actor } = {
       }
       if (stateRequest) {
         stateRequest.onsuccess = (event) => {
-          state = event.target.result || { key: "state", clock: 0, clientId: _syncClient() };
+          state = event.target.result || {
+            key: "state",
+            clock: 0,
+            clientId: _syncClient(),
+          };
           finalize();
         };
       } else {
         state = null;
       }
       tx.onerror = (event) => reject(event.target.error || tx.error);
-      tx.onabort = () => reject(tx.error || new Error("Sale transaction aborted"));
+      tx.onabort = () =>
+        reject(tx.error || new Error("Sale transaction aborted"));
       tx.oncomplete = () => {
         _notifySyncLocalChange("sales");
         resolve(sale.id);
@@ -661,7 +700,8 @@ function persistOffStockSaleAtomically(sale, monitorRow) {
       let saleId;
       let finalized = false;
       const finalize = () => {
-        if (finalized || saleId == null || (syncable && state === undefined)) return;
+        if (finalized || saleId == null || (syncable && state === undefined))
+          return;
         finalized = true;
         sale.id = saleId;
         sale.fbId = stableSaleFbId(sale);
@@ -670,7 +710,11 @@ function persistOffStockSaleAtomically(sale, monitorRow) {
         monitorRequest.onsuccess = (event) => {
           monitorRow.id = event.target.result;
           if (!syncable) return;
-          const meta = state || { key: "state", clock: 0, clientId: _syncClient() };
+          const meta = state || {
+            key: "state",
+            clock: 0,
+            clientId: _syncClient(),
+          };
           let clock = Math.max(Number(meta.clock) || 0, _syncClock);
           const now = new Date().toISOString();
           const queue = (collection, record) => {
@@ -704,14 +748,19 @@ function persistOffStockSaleAtomically(sale, monitorRow) {
       };
       if (stateRequest) {
         stateRequest.onsuccess = (event) => {
-          state = event.target.result || { key: "state", clock: 0, clientId: _syncClient() };
+          state = event.target.result || {
+            key: "state",
+            clock: 0,
+            clientId: _syncClient(),
+          };
           finalize();
         };
       } else {
         state = null;
       }
       tx.onerror = (event) => reject(event.target.error || tx.error);
-      tx.onabort = () => reject(tx.error || new Error("Off-stock sale transaction aborted"));
+      tx.onabort = () =>
+        reject(tx.error || new Error("Off-stock sale transaction aborted"));
       tx.oncomplete = () => {
         _notifySyncLocalChange("sales");
         resolve({ sale, monitorRow });
@@ -722,7 +771,13 @@ function persistOffStockSaleAtomically(sale, monitorRow) {
   });
 }
 
-function persistStockMutationAtomically({ item, delta, reason, refId, actor } = {}) {
+function persistStockMutationAtomically({
+  item,
+  delta,
+  reason,
+  refId,
+  actor,
+} = {}) {
   return new Promise((resolve, reject) => {
     if (!_dbReady(reject)) return;
     const hasLedger = db.objectStoreNames.contains("stock_moves");
@@ -755,7 +810,11 @@ function persistStockMutationAtomically({ item, delta, reason, refId, actor } = 
       if (syncable) {
         const stateRequest = tx.objectStore("sync_meta").get("state");
         stateRequest.onsuccess = () => {
-          const meta = stateRequest.result || { key: "state", clock: 0, clientId: _syncClient() };
+          const meta = stateRequest.result || {
+            key: "state",
+            clock: 0,
+            clientId: _syncClient(),
+          };
           let clock = Math.max(Number(meta.clock) || 0, _syncClock);
           const now = new Date().toISOString();
           const queue = (collection, record) => {
@@ -767,16 +826,25 @@ function persistStockMutationAtomically({ item, delta, reason, refId, actor } = 
             record._syncUpdatedAt = now;
             record._syncDeleted = false;
             tx.objectStore(collection).put(record);
-            tx.objectStore("sync_queue").add(_queueRecord(collection, record, "upsert", clock, now));
+            tx.objectStore("sync_queue").add(
+              _queueRecord(collection, record, "upsert", clock, now),
+            );
           };
           queue("items", item);
           if (hasLedger) queue("stock_moves", move);
-          tx.objectStore("sync_meta").put({ ...meta, key: "state", clock, clientId: _syncClient(), updatedAt: now });
+          tx.objectStore("sync_meta").put({
+            ...meta,
+            key: "state",
+            clock,
+            clientId: _syncClient(),
+            updatedAt: now,
+          });
           _syncClock = clock;
         };
       }
       tx.onerror = (event) => reject(event.target.error || tx.error);
-      tx.onabort = () => reject(tx.error || new Error("Stock mutation aborted"));
+      tx.onabort = () =>
+        reject(tx.error || new Error("Stock mutation aborted"));
       tx.oncomplete = () => {
         _notifySyncLocalChange("items");
         resolve(move);
@@ -787,11 +855,18 @@ function persistStockMutationAtomically({ item, delta, reason, refId, actor } = 
   });
 }
 
-function persistSaleEditAtomically({ item, shoeSize = null, sale, delta, actor } = {}) {
+function persistSaleEditAtomically({
+  item,
+  shoeSize = null,
+  sale,
+  delta,
+  actor,
+} = {}) {
   return new Promise((resolve, reject) => {
     if (!_dbReady(reject)) return;
     const hasSize = !!shoeSize && db.objectStoreNames.contains("shoe_sizes");
-    const hasLedger = db.objectStoreNames.contains("stock_moves") && Number(delta) !== 0;
+    const hasLedger =
+      db.objectStoreNames.contains("stock_moves") && Number(delta) !== 0;
     const syncable =
       _appDbReady &&
       db.objectStoreNames.contains("sync_queue") &&
@@ -804,7 +879,12 @@ function persistSaleEditAtomically({ item, shoeSize = null, sale, delta, actor }
       const tx = db.transaction(stores, "readwrite");
       const move = hasLedger
         ? {
-            id: _stockMoveId({ reason: "sale_edit", refId: `sale:${sale.id}:edit`, itemId: item.id, sizeId: hasSize ? shoeSize.id : null }),
+            id: _stockMoveId({
+              reason: "sale_edit",
+              refId: `sale:${sale.id}:edit`,
+              itemId: item.id,
+              sizeId: hasSize ? shoeSize.id : null,
+            }),
             itemId: String(item.id),
             sizeId: hasSize ? String(shoeSize.id) : null,
             delta: Number(delta),
@@ -815,7 +895,12 @@ function persistSaleEditAtomically({ item, shoeSize = null, sale, delta, actor }
             createdAt: new Date().toISOString(),
             _hlc: _nextHlc(),
             _serverUpdatedAt: new Date().toISOString(),
-            fbId: _stockMoveId({ reason: "sale_edit", refId: `sale:${sale.id}:edit`, itemId: item.id, sizeId: hasSize ? shoeSize.id : null }),
+            fbId: _stockMoveId({
+              reason: "sale_edit",
+              refId: `sale:${sale.id}:edit`,
+              itemId: item.id,
+              sizeId: hasSize ? shoeSize.id : null,
+            }),
           }
         : null;
       tx.objectStore("items").put(item);
@@ -825,7 +910,11 @@ function persistSaleEditAtomically({ item, shoeSize = null, sale, delta, actor }
       if (syncable) {
         const stateRequest = tx.objectStore("sync_meta").get("state");
         stateRequest.onsuccess = () => {
-          const meta = stateRequest.result || { key: "state", clock: 0, clientId: _syncClient() };
+          const meta = stateRequest.result || {
+            key: "state",
+            clock: 0,
+            clientId: _syncClient(),
+          };
           let clock = Math.max(Number(meta.clock) || 0, _syncClock);
           const now = new Date().toISOString();
           const queue = (collection, record) => {
@@ -837,18 +926,27 @@ function persistSaleEditAtomically({ item, shoeSize = null, sale, delta, actor }
             record._syncUpdatedAt = now;
             record._syncDeleted = false;
             tx.objectStore(collection).put(record);
-            tx.objectStore("sync_queue").add(_queueRecord(collection, record, "upsert", clock, now));
+            tx.objectStore("sync_queue").add(
+              _queueRecord(collection, record, "upsert", clock, now),
+            );
           };
           queue("items", item);
           if (hasSize) queue("shoe_sizes", shoeSize);
           queue("sales", sale);
           if (move) queue("stock_moves", move);
-          tx.objectStore("sync_meta").put({ ...meta, key: "state", clock, clientId: _syncClient(), updatedAt: now });
+          tx.objectStore("sync_meta").put({
+            ...meta,
+            key: "state",
+            clock,
+            clientId: _syncClient(),
+            updatedAt: now,
+          });
           _syncClock = clock;
         };
       }
       tx.onerror = (event) => reject(event.target.error || tx.error);
-      tx.onabort = () => reject(tx.error || new Error("Sale edit transaction aborted"));
+      tx.onabort = () =>
+        reject(tx.error || new Error("Sale edit transaction aborted"));
       tx.oncomplete = () => {
         _notifySyncLocalChange("sales");
         resolve();
@@ -867,7 +965,9 @@ async function deriveQty(itemId, sizeId = null) {
     if (sizeId != null && sizeId !== "") {
       const rec = await dbAll("shoe_sizes");
       const sizeRec = rec.find(
-        (s) => String(s.itemId) === String(itemId) && String(s.size ?? s.id) === String(sizeId),
+        (s) =>
+          String(s.itemId) === String(itemId) &&
+          String(s.size ?? s.id) === String(sizeId),
       );
       return Number(sizeRec?.qty || item.qty || 0);
     }
@@ -877,7 +977,9 @@ async function deriveQty(itemId, sizeId = null) {
   const qty = moves
     .filter((m) => String(m.itemId) === String(itemId))
     .filter((m) =>
-      sizeId == null || sizeId === "" ? m.sizeId == null : String(m.sizeId) === String(sizeId),
+      sizeId == null || sizeId === ""
+        ? m.sizeId == null
+        : String(m.sizeId) === String(sizeId),
     )
     .reduce((sum, move) => sum + Number(move.delta || 0), 0);
   return Number(qty || 0);
@@ -904,7 +1006,9 @@ async function readableStockQty(item, sizeId = null) {
           String(move.itemId) === String(itemId) &&
           String(move.sizeId) === String(sizeId),
       );
-      return hasLedgerMoves ? await deriveQty(itemId, sizeId) : Number(item.qty ?? 0);
+      return hasLedgerMoves
+        ? await deriveQty(itemId, sizeId)
+        : Number(item.qty ?? 0);
     }
     return Number(item.qty || 0);
   }
@@ -925,7 +1029,9 @@ async function readableStockQty(item, sizeId = null) {
         String(move.itemId) === String(item.id) &&
         (move.sizeId == null || move.sizeId === ""),
     );
-    return hasLedgerMoves ? await deriveQty(item.id, null) : Number(item.qty ?? 0);
+    return hasLedgerMoves
+      ? await deriveQty(item.id, null)
+      : Number(item.qty ?? 0);
   }
   return Number(item.qty || 0);
 }
@@ -960,7 +1066,8 @@ async function markStockLedgerMigrationCutover() {
 
 async function backfillStockMovesFromCurrentQty({ dryRun = false } = {}) {
   if (!db) return { skipped: true, dryRun, reason: "db unavailable" };
-  if (!db.objectStoreNames.contains("items")) return { skipped: true, dryRun, reason: "items store missing" };
+  if (!db.objectStoreNames.contains("items"))
+    return { skipped: true, dryRun, reason: "items store missing" };
   if (!db.objectStoreNames.contains("stock_moves")) {
     return { skipped: true, dryRun, reason: "stock_moves store missing" };
   }
@@ -1025,7 +1132,10 @@ async function backfillStockMovesFromCurrentQty({ dryRun = false } = {}) {
   return { dryRun: false, items: records.length, records };
 }
 
-async function runStockLedgerMigrationCutover({ dryRun = false, force = false } = {}) {
+async function runStockLedgerMigrationCutover({
+  dryRun = false,
+  force = false,
+} = {}) {
   if (!db) {
     throw new Error("Database is not ready yet");
   }
@@ -1108,7 +1218,8 @@ window.deriveQty = deriveQty;
 window.recordStockAudit = recordStockAudit;
 
 async function runStockLedgerIntegrityCheck() {
-  if (!db || !db.objectStoreNames.contains("items")) return { checked: 0, mismatches: [] };
+  if (!db || !db.objectStoreNames.contains("items"))
+    return { checked: 0, mismatches: [] };
   const items = await dbAll("items");
   const mismatches = [];
   for (const item of items) {
@@ -1127,7 +1238,11 @@ async function runStockLedgerIntegrityCheck() {
         legacy,
         derived,
       });
-      console.warn("[stock-ledger] mismatch", { itemId: item.id, legacy, derived });
+      console.warn("[stock-ledger] mismatch", {
+        itemId: item.id,
+        legacy,
+        derived,
+      });
     }
     await recomputeDerivedQtyForItem(item.id, null);
   }
@@ -1147,7 +1262,8 @@ function _syncIdentity(store, record) {
     return stableBusinessDayFbId(record);
   if (store === "wishlist" && typeof stableWishFbId === "function")
     return stableWishFbId(record);
-  if (store === "purchase_budgets") return "budget_" + (record.id || _syncUuid());
+  if (store === "purchase_budgets")
+    return "budget_" + (record.id || _syncUuid());
   if (store === "customers" && record.customerId != null)
     return "cust_" + record.customerId;
   if (store === "sales") return "sale_" + _syncUuid();
@@ -1335,7 +1451,11 @@ function dbDelete(store, id) {
 
 async function backfillWishlistSyncOutbox() {
   if (getFirebaseEnv() === "development") return 0;
-  if (!db.objectStoreNames.contains("wishlist") || !db.objectStoreNames.contains("sync_meta")) return 0;
+  if (
+    !db.objectStoreNames.contains("wishlist") ||
+    !db.objectStoreNames.contains("sync_meta")
+  )
+    return 0;
   if (await dbGet("sync_meta", "wishlist_sync_backfill_v1")) return 0;
 
   const wishes = await dbAll("wishlist");
@@ -2609,28 +2729,38 @@ let _activeSalesTab = "sell";
 
 function saveLastView() {
   try {
-    localStorage.setItem(KEY_LAST_VIEW, JSON.stringify({
-      inventoryTab: _activeInventoryTab,
-      stockControlTab: _activeStockControlTab,
-      wishlistSection: typeof _activeWishlistSection === "string" ? _activeWishlistSection : "list",
-      operationsTab: _activeOperationsTab,
-      salesTab: _activeSalesTab,
-    }));
+    localStorage.setItem(
+      KEY_LAST_VIEW,
+      JSON.stringify({
+        inventoryTab: _activeInventoryTab,
+        stockControlTab: _activeStockControlTab,
+        wishlistSection:
+          typeof _activeWishlistSection === "string"
+            ? _activeWishlistSection
+            : "list",
+        operationsTab: _activeOperationsTab,
+        salesTab: _activeSalesTab,
+      }),
+    );
   } catch (_) {}
 }
 
 function restoreLastView() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY_LAST_VIEW) || "{}");
-    if (["stock", "stock-control", "add"].includes(saved.inventoryTab)) _activeInventoryTab = saved.inventoryTab;
+    if (["stock", "stock-control", "add"].includes(saved.inventoryTab))
+      _activeInventoryTab = saved.inventoryTab;
     if (saved.inventoryTab === "wishlist" || saved.inventoryTab === "monitor") {
       _activeInventoryTab = "stock-control";
       _activeStockControlTab = saved.inventoryTab;
     }
-    if (["wishlist", "monitor"].includes(saved.stockControlTab)) _activeStockControlTab = saved.stockControlTab;
+    if (["wishlist", "monitor"].includes(saved.stockControlTab))
+      _activeStockControlTab = saved.stockControlTab;
     if (saved.wishlistSection === "list") _activeWishlistSection = "list";
-    if (["day", "finance"].includes(saved.operationsTab)) _activeOperationsTab = saved.operationsTab;
-    if (["sell", "history"].includes(saved.salesTab)) _activeSalesTab = saved.salesTab;
+    if (["day", "finance"].includes(saved.operationsTab))
+      _activeOperationsTab = saved.operationsTab;
+    if (["sell", "history"].includes(saved.salesTab))
+      _activeSalesTab = saved.salesTab;
   } catch (_) {}
 }
 
@@ -2667,7 +2797,9 @@ function showInventoryTab(tab) {
     _activeInventoryTab = "stock-control";
     _activeStockControlTab = tab;
   } else {
-    _activeInventoryTab = ["stock", "stock-control", "add"].includes(tab) ? tab : "stock";
+    _activeInventoryTab = ["stock", "stock-control", "add"].includes(tab)
+      ? tab
+      : "stock";
   }
   mountInventoryPage();
   ["add", "stock", "stock-control"].forEach((name) => {
@@ -2688,16 +2820,24 @@ function showInventoryTab(tab) {
       {
         add: "Add or restock inventory",
         stock: "Current stock list",
-        "stock-control": _activeStockControlTab === "monitor"
-          ? "Out of stock and not accounted items"
-          : "Prospective items to stock",
+        "stock-control":
+          _activeStockControlTab === "monitor"
+            ? "Out of stock and not accounted items"
+            : "Prospective items to stock",
       }[_activeInventoryTab] || "";
   }
   if (_activeInventoryTab === "stock") renderList();
-  if (_activeInventoryTab === "stock-control" && _activeStockControlTab === "wishlist") {
+  if (
+    _activeInventoryTab === "stock-control" &&
+    _activeStockControlTab === "wishlist"
+  ) {
     if (typeof showWishlistSection === "function") showWishlistSection("list");
   }
-  if (_activeInventoryTab === "stock-control" && _activeStockControlTab === "monitor") renderStockMonitor();
+  if (
+    _activeInventoryTab === "stock-control" &&
+    _activeStockControlTab === "monitor"
+  )
+    renderStockMonitor();
   if (_activeInventoryTab === "add") {
     renderTypeSelect();
     updateProfitPreview();
@@ -3217,7 +3357,8 @@ function _appendCascadePickButton(
       if (parentId) {
         const parentRec = getTypeById(parentId);
         if (parentRec)
-          subtitle = "Under: " + (parentRec.emoji || "📦") + " " + parentRec.name;
+          subtitle =
+            "Under: " + (parentRec.emoji || "📦") + " " + parentRec.name;
       }
       openCategoryPicker({
         compact: config.idPrefix === "wish-type",
@@ -3401,7 +3542,8 @@ function openCategoryPicker(opts) {
   const items = (opts && opts.items) || [];
   const sheet = document.createElement("div");
   sheet.id = "category-picker-sheet";
-  sheet.className = "cat-picker-overlay" + (opts.compact ? " cat-picker-compact" : "");
+  sheet.className =
+    "cat-picker-overlay" + (opts.compact ? " cat-picker-compact" : "");
   sheet.setAttribute("role", "dialog");
   sheet.setAttribute("aria-modal", "true");
 
@@ -3864,20 +4006,40 @@ function renderShoeGroupSettings() {
 function _shoeGroupSettingRowHtml(id, config) {
   const safeId = escapeHtml(id);
   return (
-    '<div class="sg-setting-row" data-group="' + safeId + '">' +
+    '<div class="sg-setting-row" data-group="' +
+    safeId +
+    '">' +
     '<div class="sg-setting-fields">' +
-    '<span class="sg-setting-code">' + safeId + "</span>" +
-    '<input id="sg-label-' + safeId + '" type="text" class="type-input sg-label-input" placeholder="Group name" value="' +
+    '<span class="sg-setting-code">' +
+    safeId +
+    "</span>" +
+    '<input id="sg-label-' +
+    safeId +
+    '" type="text" class="type-input sg-label-input" placeholder="Group name" value="' +
     escapeHtml(config.label || "") +
-    '" aria-label="' + safeId + ' group name">' +
-    '<input id="sg-min-' + safeId + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Min" value="' +
+    '" aria-label="' +
+    safeId +
+    ' group name">' +
+    '<input id="sg-min-' +
+    safeId +
+    '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Min" value="' +
     config.min +
-    '" aria-label="' + safeId + ' minimum size">' +
+    '" aria-label="' +
+    safeId +
+    ' minimum size">' +
     '<span class="sg-setting-range-separator" aria-hidden="true">-</span>' +
-    '<input id="sg-max-' + safeId + '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Max" value="' +
+    '<input id="sg-max-' +
+    safeId +
+    '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Max" value="' +
     config.max +
-    '" aria-label="' + safeId + ' maximum size">' +
-    '<button type="button" class="sg-delete-btn" onclick="removeShoeGroupSetting(\'' + safeId + '\')" aria-label="Delete ' + safeId + ' group" title="Delete group"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>' +
+    '" aria-label="' +
+    safeId +
+    ' maximum size">' +
+    '<button type="button" class="sg-delete-btn" onclick="removeShoeGroupSetting(\'' +
+    safeId +
+    '\')" aria-label="Delete ' +
+    safeId +
+    ' group" title="Delete group"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>' +
     "</div></div>"
   );
 }
@@ -3896,9 +4058,21 @@ async function addShoeGroupSetting() {
 
   const occupied = new Set();
   rows.forEach((row) => {
-    const min = parseInt(document.getElementById("sg-min-" + row.dataset.group)?.value, 10);
-    const max = parseInt(document.getElementById("sg-max-" + row.dataset.group)?.value, 10);
-    if (Number.isFinite(min) && Number.isFinite(max) && min >= 1 && max <= 60 && min <= max) {
+    const min = parseInt(
+      document.getElementById("sg-min-" + row.dataset.group)?.value,
+      10,
+    );
+    const max = parseInt(
+      document.getElementById("sg-max-" + row.dataset.group)?.value,
+      10,
+    );
+    if (
+      Number.isFinite(min) &&
+      Number.isFinite(max) &&
+      min >= 1 &&
+      max <= 60 &&
+      min <= max
+    ) {
       for (let size = min; size <= max; size++) occupied.add(size);
     }
   });
@@ -3938,7 +4112,9 @@ async function removeShoeGroupSetting(id) {
   );
   if (
     hasSavedSizes &&
-    !confirm("Existing sizes use this group. Remove the group settings? Stock records will remain.")
+    !confirm(
+      "Existing sizes use this group. Remove the group settings? Stock records will remain.",
+    )
   )
     return;
   row.remove();
@@ -3948,7 +4124,9 @@ window.removeShoeGroupSetting = removeShoeGroupSetting;
 async function saveShoeGroupSettings() {
   const groups = {};
   const rows = [
-    ...(document.getElementById("shoe-groups-settings")?.querySelectorAll(".sg-setting-row") || []),
+    ...(document
+      .getElementById("shoe-groups-settings")
+      ?.querySelectorAll(".sg-setting-row") || []),
   ];
   if (!rows.length) {
     toast("Add at least one size group", "err");
@@ -3958,7 +4136,9 @@ async function saveShoeGroupSettings() {
     const g = row.dataset.group;
     const min = parseInt(document.getElementById("sg-min-" + g)?.value, 10);
     const max = parseInt(document.getElementById("sg-max-" + g)?.value, 10);
-    const label = (document.getElementById("sg-label-" + g)?.value || "").trim();
+    const label = (
+      document.getElementById("sg-label-" + g)?.value || ""
+    ).trim();
     if (
       !Number.isFinite(min) ||
       !Number.isFinite(max) ||
@@ -3980,7 +4160,10 @@ async function saveShoeGroupSettings() {
     const previous = sortedGroups[index - 1];
     const current = sortedGroups[index];
     if (current[1].min <= previous[1].max) {
-      toast("Size ranges for " + previous[0] + " and " + current[0] + " overlap", "err");
+      toast(
+        "Size ranges for " + previous[0] + " and " + current[0] + " overlap",
+        "err",
+      );
       return;
     }
   }
@@ -5021,7 +5204,9 @@ const _selectedWishlistIds = new Set();
 
 function getSavedWishlistLists() {
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY_WISHLIST_SAVED_LISTS) || "[]");
+    const saved = JSON.parse(
+      localStorage.getItem(KEY_WISHLIST_SAVED_LISTS) || "[]",
+    );
     return Array.isArray(saved)
       ? saved
           .filter(
@@ -5037,11 +5222,19 @@ function getSavedWishlistLists() {
             category: String(list.category || "").trim(),
             supply: String(list.supply || "").trim(),
             budget: Number(list.budget || 0) || 0,
-            status: ["planned", "ordering", "partial", "complete"].includes(list.status)
+            status: ["planned", "ordering", "partial", "complete"].includes(
+              list.status,
+            )
               ? list.status
               : "planned",
             dueDate: String(list.dueDate || "").trim(),
-            itemIds: [...new Set(list.itemIds.map((id) => Number(id)).filter((id) => Number.isInteger(id)))],
+            itemIds: [
+              ...new Set(
+                list.itemIds
+                  .map((id) => Number(id))
+                  .filter((id) => Number.isInteger(id)),
+              ),
+            ],
           }))
       : [];
   } catch (_) {
@@ -5054,9 +5247,11 @@ function persistSavedWishlistLists(lists) {
 }
 
 function getWishlistListMembership(itemId, lists) {
-  return lists.find((list) =>
-    (list.itemIds || []).some((id) => String(id) === String(itemId)),
-  ) || null;
+  return (
+    lists.find((list) =>
+      (list.itemIds || []).some((id) => String(id) === String(itemId)),
+    ) || null
+  );
 }
 
 function removeWishlistItemsFromLists(lists, itemIds) {
@@ -5067,8 +5262,14 @@ function removeWishlistItemsFromLists(lists, itemIds) {
 }
 
 async function runAtomicWishlistOperation(itemIds, updateRecord, updateLists) {
-  const ids = [...new Set(itemIds.map((id) => Number(id)).filter((id) => Number.isInteger(id)))];
-  const previousRecords = (await Promise.all(ids.map((id) => dbGet("wishlist", id)))).filter(Boolean);
+  const ids = [
+    ...new Set(
+      itemIds.map((id) => Number(id)).filter((id) => Number.isInteger(id)),
+    ),
+  ];
+  const previousRecords = (
+    await Promise.all(ids.map((id) => dbGet("wishlist", id)))
+  ).filter(Boolean);
   const previousLists = localStorage.getItem(KEY_WISHLIST_SAVED_LISTS);
   try {
     for (const record of previousRecords) {
@@ -5078,9 +5279,12 @@ async function runAtomicWishlistOperation(itemIds, updateRecord, updateLists) {
     updateLists();
   } catch (error) {
     for (const record of previousRecords) {
-      try { await dbPut("wishlist", record); } catch (_) {}
+      try {
+        await dbPut("wishlist", record);
+      } catch (_) {}
     }
-    if (previousLists === null) localStorage.removeItem(KEY_WISHLIST_SAVED_LISTS);
+    if (previousLists === null)
+      localStorage.removeItem(KEY_WISHLIST_SAVED_LISTS);
     else localStorage.setItem(KEY_WISHLIST_SAVED_LISTS, previousLists);
     throw error;
   }
@@ -5091,9 +5295,17 @@ function moveWishlistItemsToSavedList(itemIds, targetListId) {
   const target = lists.find((list) => list.id === targetListId);
   if (!target) return { ok: false, reason: "Saved list not found" };
   const targetIds = new Set((target.itemIds || []).map((id) => String(id)));
-  const ids = [...new Set(itemIds.map((id) => Number(id)).filter((id) => Number.isInteger(id)))];
+  const ids = [
+    ...new Set(
+      itemIds.map((id) => Number(id)).filter((id) => Number.isInteger(id)),
+    ),
+  ];
   const duplicates = ids.filter((id) => targetIds.has(String(id)));
-  if (duplicates.length) return { ok: false, reason: "One or more items already exist in the destination list" };
+  if (duplicates.length)
+    return {
+      ok: false,
+      reason: "One or more items already exist in the destination list",
+    };
   removeWishlistItemsFromLists(lists, ids);
   target.itemIds = [...new Set([...(target.itemIds || []), ...ids])];
   persistSavedWishlistLists(lists);
@@ -5126,7 +5338,8 @@ function createSavedWishlistList() {
     return toast('"' + name + '" already exists', "info");
   }
   lists.push({
-    id: "wish-list-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+    id:
+      "wish-list-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
     name,
     category: "",
     supply: "",
@@ -5149,12 +5362,18 @@ function editSavedWishlistList(listId) {
   if (rawName === null) return;
   const name = String(rawName).trim();
   if (!name) return toast("Enter a name for the list", "err");
-  if (lists.some((entry) => entry.id !== listId && entry.name.toLowerCase() === name.toLowerCase())) {
+  if (
+    lists.some(
+      (entry) =>
+        entry.id !== listId && entry.name.toLowerCase() === name.toLowerCase(),
+    )
+  ) {
     return toast('"' + name + '" already exists', "info");
   }
   const previousName = list.name;
   list.name = name;
-  if (_activeWishlistSavedList === previousName) _activeWishlistSavedList = name;
+  if (_activeWishlistSavedList === previousName)
+    _activeWishlistSavedList = name;
   persistSavedWishlistLists(lists);
   renderWishlistPage();
   toast("Saved list renamed", "ok");
@@ -5167,10 +5386,19 @@ function duplicateSavedWishlistList(listId) {
   const source = lists.find((list) => list.id === listId);
   if (!source) return toast("Saved list not found", "err");
   const copyName = source.name + " copy";
-  if (lists.some((list) => list.name.toLowerCase() === copyName.toLowerCase())) {
+  if (
+    lists.some((list) => list.name.toLowerCase() === copyName.toLowerCase())
+  ) {
     return toast('"' + copyName + '" already exists', "info");
   }
-  lists.push({ ...source, id: "wish-list-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8), name: copyName, status: "planned", itemIds: [...source.itemIds] });
+  lists.push({
+    ...source,
+    id:
+      "wish-list-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+    name: copyName,
+    status: "planned",
+    itemIds: [...source.itemIds],
+  });
   persistSavedWishlistLists(lists);
   renderWishlistPage();
   toast('Stock list "' + copyName + '" duplicated', "ok");
@@ -5181,10 +5409,14 @@ async function deleteSavedWishlistList(listId) {
   const lists = getSavedWishlistLists();
   const list = lists.find((entry) => entry.id === listId);
   if (!list) return toast("Saved list not found", "err");
-  const wishes = db.objectStoreNames.contains("wishlist") ? await dbAll("wishlist") : [];
+  const wishes = db.objectStoreNames.contains("wishlist")
+    ? await dbAll("wishlist")
+    : [];
   const liveIds = (list.itemIds || []).filter((id) => {
     const wish = wishes.find((entry) => String(entry.id) === String(id));
-    return wish && wishStatus(wish) !== "stocked" && wishStatus(wish) !== "discarded";
+    return (
+      wish && wishStatus(wish) !== "stocked" && wishStatus(wish) !== "discarded"
+    );
   });
   const stockedIds = (list.itemIds || []).filter((id) => {
     const wish = wishes.find((entry) => String(entry.id) === String(id));
@@ -5192,10 +5424,17 @@ async function deleteSavedWishlistList(listId) {
   });
   const transferMessage = [
     "Items in this list will be moved across:",
-    liveIds.length + " live item" + (liveIds.length === 1 ? "" : "s") + " to Main list",
-    stockedIds.length + " item" + (stockedIds.length === 1 ? "" : "s") + " marked as stocked to Stocked list",
+    liveIds.length +
+      " live item" +
+      (liveIds.length === 1 ? "" : "s") +
+      " to Main list",
+    stockedIds.length +
+      " item" +
+      (stockedIds.length === 1 ? "" : "s") +
+      " marked as stocked to Stocked list",
   ].join("\n");
-  if (!confirm(transferMessage + '\n\nDelete wishlist "' + list.name + '"?')) return;
+  if (!confirm(transferMessage + '\n\nDelete wishlist "' + list.name + '"?'))
+    return;
   removeWishlistItemsFromLists(lists, [...liveIds, ...stockedIds]);
   persistSavedWishlistLists(lists.filter((entry) => entry.id !== listId));
   if (_activeWishlistSavedList === list.name) {
@@ -5205,17 +5444,33 @@ async function deleteSavedWishlistList(listId) {
   _selectedWishlistIds.clear();
   renderWishlistPage();
   const movedSummary = [
-    liveIds.length ? liveIds.length + " live item" + (liveIds.length === 1 ? "" : "s") + " moved to General List" : "",
-    stockedIds.length ? stockedIds.length + " stocked item" + (stockedIds.length === 1 ? "" : "s") + " kept in Stocked" : "",
-  ].filter(Boolean).join("; ");
-  toast(movedSummary ? "Saved list deleted. " + movedSummary : "Saved list deleted", "ok");
+    liveIds.length
+      ? liveIds.length +
+        " live item" +
+        (liveIds.length === 1 ? "" : "s") +
+        " moved to General List"
+      : "",
+    stockedIds.length
+      ? stockedIds.length +
+        " stocked item" +
+        (stockedIds.length === 1 ? "" : "s") +
+        " kept in Stocked"
+      : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
+  toast(
+    movedSummary ? "Saved list deleted. " + movedSummary : "Saved list deleted",
+    "ok",
+  );
 }
 window.deleteSavedWishlistList = deleteSavedWishlistList;
 
 function setWishlistView(view, savedListName) {
   const nextView = ["main", "stocked", "saved"].includes(view) ? view : "main";
   _activeWishlistView = nextView;
-  if (nextView === "saved" && savedListName) _activeWishlistSavedList = String(savedListName);
+  if (nextView === "saved" && savedListName)
+    _activeWishlistSavedList = String(savedListName);
   _selectedWishlistIds.clear();
   renderWishlistPage();
 }
@@ -5243,9 +5498,16 @@ async function toggleSavedWishlistListSelection(listId, checked) {
   const list = getSavedWishlistLists().find((entry) => entry.id === listId);
   if (!list) return;
   _selectedSavedWishlistListId = checked ? listId : "";
-  const wishes = db.objectStoreNames.contains("wishlist") ? await dbAll("wishlist") : [];
+  const wishes = db.objectStoreNames.contains("wishlist")
+    ? await dbAll("wishlist")
+    : [];
   const liveIds = wishes
-    .filter((wish) => (list.itemIds || []).some((id) => String(id) === String(wish.id)) && wishStatus(wish) !== "stocked" && wishStatus(wish) !== "discarded")
+    .filter(
+      (wish) =>
+        (list.itemIds || []).some((id) => String(id) === String(wish.id)) &&
+        wishStatus(wish) !== "stocked" &&
+        wishStatus(wish) !== "discarded",
+    )
     .map((wish) => wish.id);
   liveIds.forEach((id) => {
     if (checked) _selectedWishlistIds.add(id);
@@ -5256,7 +5518,9 @@ async function toggleSavedWishlistListSelection(listId, checked) {
 window.toggleSavedWishlistListSelection = toggleSavedWishlistListSelection;
 
 function toggleSavedWishlistMoveButton(select) {
-  const button = select?.closest(".wish-saved-list-transfer")?.querySelector("button");
+  const button = select
+    ?.closest(".wish-saved-list-transfer")
+    ?.querySelector("button");
   if (button) button.disabled = !select.value;
 }
 window.toggleSavedWishlistMoveButton = toggleSavedWishlistMoveButton;
@@ -5264,13 +5528,20 @@ window.toggleSavedWishlistMoveButton = toggleSavedWishlistMoveButton;
 function moveAllItemsFromSavedWishlistList(sourceListId, targetListId) {
   const lists = getSavedWishlistLists();
   const source = lists.find((list) => list.id === sourceListId);
-  const target = lists.find((list) => list.id === targetListId && list.id !== sourceListId);
+  const target = lists.find(
+    (list) => list.id === targetListId && list.id !== sourceListId,
+  );
   if (!source) return toast("Source list not found", "err");
   if (!target) return toast("Choose another active list", "info");
-  const sourceIds = [...new Set(
-    (source.itemIds || []).map((id) => Number(id)).filter((id) => Number.isInteger(id)),
-  )];
-  if (!sourceIds.length) return toast("There are no items in this list", "info");
+  const sourceIds = [
+    ...new Set(
+      (source.itemIds || [])
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id)),
+    ),
+  ];
+  if (!sourceIds.length)
+    return toast("There are no items in this list", "info");
   const existingTargetIds = [...(target.itemIds || [])];
   removeWishlistItemsFromLists(lists, sourceIds);
   target.itemIds = [...new Set([...existingTargetIds, ...sourceIds])];
@@ -5280,8 +5551,12 @@ function moveAllItemsFromSavedWishlistList(sourceListId, targetListId) {
   _activeWishlistSavedList = target.name;
   renderWishlistPage();
   toast(
-    sourceIds.length + " item" + (sourceIds.length === 1 ? "" : "s") +
-      ' moved to "' + target.name + '". Empty source list deleted.',
+    sourceIds.length +
+      " item" +
+      (sourceIds.length === 1 ? "" : "s") +
+      ' moved to "' +
+      target.name +
+      '". Empty source list deleted.',
     "ok",
   );
 }
@@ -5293,25 +5568,50 @@ async function addActiveWishlistItemsToSavedList(listId) {
   if (!list) return toast("Saved list not found", "err");
   const wishes = await dbAll("wishlist");
   const activeIds = wishes
-    .filter((wish) => !isWishlistSaleMonitorEntry(wish) && wishStatus(wish) !== "stocked" && wishStatus(wish) !== "cancelled" && wishStatus(wish) !== "discarded")
+    .filter(
+      (wish) =>
+        !isWishlistSaleMonitorEntry(wish) &&
+        wishStatus(wish) !== "stocked" &&
+        wishStatus(wish) !== "cancelled" &&
+        wishStatus(wish) !== "discarded",
+    )
     .map((wish) => wish.id);
   const existing = new Set(list.itemIds || []);
   const added = activeIds.filter((id) => !existing.has(id));
   for (const other of lists) {
-    other.itemIds = (other.itemIds || []).filter((id) => !activeIds.includes(id));
+    other.itemIds = (other.itemIds || []).filter(
+      (id) => !activeIds.includes(id),
+    );
   }
   list.itemIds = [...new Set([...(list.itemIds || []), ...activeIds])];
   persistSavedWishlistLists(lists);
   renderWishlistPage();
-  toast(added.length + " active item" + (added.length === 1 ? "" : "s") + " added to \"" + list.name + "\"", "ok");
+  toast(
+    added.length +
+      " active item" +
+      (added.length === 1 ? "" : "s") +
+      ' added to "' +
+      list.name +
+      '"',
+    "ok",
+  );
 }
 window.addActiveWishlistItemsToSavedList = addActiveWishlistItemsToSavedList;
 function getWishlistListMetrics(list, wishesById, includeStocked = false) {
   const items = (list.itemIds || [])
     .map((id) => wishesById.get(id))
-    .filter((wish) => wish && (includeStocked || wishStatus(wish) !== "stocked") && wishStatus(wish) !== "discarded");
+    .filter(
+      (wish) =>
+        wish &&
+        (includeStocked || wishStatus(wish) !== "stocked") &&
+        wishStatus(wish) !== "discarded",
+    );
   const quantity = items.reduce((sum, wish) => sum + Number(wish.qty || 0), 0);
-  const estimated = items.reduce((sum, wish) => sum + Number(wish.qty || 0) * Number(wish.estimatedCost || 0), 0);
+  const estimated = items.reduce(
+    (sum, wish) =>
+      sum + Number(wish.qty || 0) * Number(wish.estimatedCost || 0),
+    0,
+  );
   return {
     items,
     quantity,
@@ -5325,7 +5625,9 @@ function removeWishlistItemFromSavedList(listId, itemId) {
   const lists = getSavedWishlistLists();
   const list = lists.find((entry) => entry.id === listId);
   if (!list) return;
-  list.itemIds = (list.itemIds || []).filter((id) => String(id) !== String(itemId));
+  list.itemIds = (list.itemIds || []).filter(
+    (id) => String(id) !== String(itemId),
+  );
   persistSavedWishlistLists(lists);
   renderWishlistPage();
   toast("Item removed from list", "ok");
@@ -5337,8 +5639,10 @@ function clearStockedItemsFromSavedList(listId) {
   const list = lists.find((entry) => entry.id === listId);
   if (!list) return toast("Saved list not found", "err");
   dbAll("wishlist").then((wishes) => {
-    const stocked = wishes.filter((wish) =>
-      list.itemIds.some((id) => String(id) === String(wish.id)) && wishStatus(wish) === "stocked",
+    const stocked = wishes.filter(
+      (wish) =>
+        list.itemIds.some((id) => String(id) === String(wish.id)) &&
+        wishStatus(wish) === "stocked",
     );
     if (!stocked.length) return toast("No stocked items to clear", "info");
     const ids = new Set(stocked.map((wish) => String(wish.id)));
@@ -5346,7 +5650,14 @@ function clearStockedItemsFromSavedList(listId) {
     persistSavedWishlistLists(lists);
     stocked.forEach((wish) => _selectedWishlistIds.delete(Number(wish.id)));
     renderWishlistPage();
-    toast(stocked.length + " stocked item" + (stocked.length === 1 ? "" : "s") + " cleared from " + list.name, "ok");
+    toast(
+      stocked.length +
+        " stocked item" +
+        (stocked.length === 1 ? "" : "s") +
+        " cleared from " +
+        list.name,
+      "ok",
+    );
   });
 }
 window.clearStockedItemsFromSavedList = clearStockedItemsFromSavedList;
@@ -5361,7 +5672,8 @@ function moveWishlistItemToList(itemId, targetListId, sourceListId) {
 window.moveWishlistItemToList = moveWishlistItemToList;
 
 function beginWishlistItemDrag(event, itemId) {
-  if (event.dataTransfer) event.dataTransfer.setData("text/plain", String(itemId));
+  if (event.dataTransfer)
+    event.dataTransfer.setData("text/plain", String(itemId));
 }
 
 function dropWishlistItem(event, listId, beforeItemId) {
@@ -5374,7 +5686,9 @@ function dropWishlistItem(event, listId, beforeItemId) {
   const current = (list.itemIds || []).find((id) => String(id) === itemId);
   if (current === undefined) return;
   list.itemIds = list.itemIds.filter((id) => String(id) !== itemId);
-  const index = list.itemIds.findIndex((id) => String(id) === String(beforeItemId));
+  const index = list.itemIds.findIndex(
+    (id) => String(id) === String(beforeItemId),
+  );
   list.itemIds.splice(index < 0 ? list.itemIds.length : index, 0, current);
   persistSavedWishlistLists(lists);
   renderWishlistPage();
@@ -5395,7 +5709,9 @@ function chooseWishlistShareOptions() {
     return result;
   };
   modal.hidden = false;
-  document.querySelector('input[name="wish-share-scope"][value="all"]')?.focus();
+  document
+    .querySelector('input[name="wish-share-scope"][value="all"]')
+    ?.focus();
   return new Promise((resolve) => {
     close.onclick = () => resolve(finish(null));
     cancel.onclick = () => resolve(finish(null));
@@ -5403,7 +5719,9 @@ function chooseWishlistShareOptions() {
       if (event.target === modal) resolve(finish(null));
     };
     submit.onclick = () => {
-      const scope = document.querySelector('input[name="wish-share-scope"]:checked')?.value || "all";
+      const scope =
+        document.querySelector('input[name="wish-share-scope"]:checked')
+          ?.value || "all";
       resolve(finish({ scope, includePrices: !!prices?.checked }));
     };
     modal.onkeydown = (event) => {
@@ -5416,25 +5734,31 @@ window.chooseWishlistShareOptions = chooseWishlistShareOptions;
 async function shareSavedWishlistListViaWhatsApp(listId) {
   const list = getSavedWishlistLists().find((entry) => entry.id === listId);
   if (!list) return toast("Saved list not found", "err");
-  const wishesById = new Map((await dbAll("wishlist")).map((wish) => [wish.id, wish]));
+  const wishesById = new Map(
+    (await dbAll("wishlist")).map((wish) => [wish.id, wish]),
+  );
   const shareOptions = await chooseWishlistShareOptions();
   if (!shareOptions) return;
   const allItems = (list.itemIds || [])
     .map((id) => wishesById.get(id))
     .filter(Boolean);
-  const items = allItems.filter((wish) =>
-    shareOptions.scope === "all" ||
-    (shareOptions.scope === "stocked" && wishStatus(wish) === "stocked") ||
-    (shareOptions.scope === "not-stocked" && wishStatus(wish) !== "stocked"),
+  const items = allItems.filter(
+    (wish) =>
+      shareOptions.scope === "all" ||
+      (shareOptions.scope === "stocked" && wishStatus(wish) === "stocked") ||
+      (shareOptions.scope === "not-stocked" && wishStatus(wish) !== "stocked"),
   );
   if (!items.length) return toast("There are no items to share", "info");
   const includePrices = shareOptions.includePrices;
   const totalEstimated = items.reduce(
-    (sum, wish) => sum + Number(wish.qty || 0) * Number(wish.estimatedCost || 0),
+    (sum, wish) =>
+      sum + Number(wish.qty || 0) * Number(wish.estimatedCost || 0),
     0,
   );
   const stockedItems = items.filter((wish) => wishStatus(wish) === "stocked");
-  const notStockedItems = items.filter((wish) => wishStatus(wish) !== "stocked");
+  const notStockedItems = items.filter(
+    (wish) => wishStatus(wish) !== "stocked",
+  );
   const dateParts = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
       weekday: "long",
@@ -5444,24 +5768,40 @@ async function shareSavedWishlistListViaWhatsApp(listId) {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
-    }).formatToParts(new Date()).map((part) => [part.type, part.value]),
+    })
+      .formatToParts(new Date())
+      .map((part) => [part.type, part.value]),
   );
   const sharedAt = dateParts.dayPeriod
-    ? dateParts.weekday + " " + dateParts.day + ", " + dateParts.month + " " + dateParts.year +
-      " – " + dateParts.hour + ":" + dateParts.minute + dateParts.dayPeriod.toLowerCase()
+    ? dateParts.weekday +
+      " " +
+      dateParts.day +
+      ", " +
+      dateParts.month +
+      " " +
+      dateParts.year +
+      " – " +
+      dateParts.hour +
+      ":" +
+      dateParts.minute +
+      dateParts.dayPeriod.toLowerCase()
     : "";
   const itemLine = (wish, index) => {
     const qty = Number(wish.qty || 0);
     const unit = String(wish.unit || "").trim();
-    const amount = qty > 0 && Number(wish.estimatedCost || 0) > 0
-      ? fmt(qty * Number(wish.estimatedCost || 0))
-      : "";
+    const amount =
+      qty > 0 && Number(wish.estimatedCost || 0) > 0
+        ? fmt(qty * Number(wish.estimatedCost || 0))
+        : "";
     const details = [String(wish.name || "Unnamed item")];
     if (qty > 0) details.push(qty + (unit ? " " + unit : ""));
     if (includePrices && amount) details.push(amount);
-    return (index + 1) + ". *" + details.join(" — ") + "*";
+    return index + 1 + ". *" + details.join(" — ") + "*";
   };
-  const lines = ["*🏠 " + String(list.name || "Wishlist").toLocaleUpperCase() + "*", ""];
+  const lines = [
+    "*🏠 " + String(list.name || "Wishlist").toLocaleUpperCase() + "*",
+    "",
+  ];
   if (sharedAt) lines.push("*" + sharedAt + "*", "");
   if (stockedItems.length) {
     lines.push("*Items Already Stocked:*", "");
@@ -5475,8 +5815,12 @@ async function shareSavedWishlistListViaWhatsApp(listId) {
   }
   lines.push("📦 *Total Items:* " + items.length);
   if (includePrices) lines.push("💰 *Estimated Total:* " + fmt(totalEstimated));
-  lines.push("✅ *Stocked:* " + stockedItems.length, "⏳ *Not Yet Stocked:* " + notStockedItems.length);
-  const shareUrl = "https://wa.me/?text=" + encodeURIComponent(lines.join("\n"));
+  lines.push(
+    "✅ *Stocked:* " + stockedItems.length,
+    "⏳ *Not Yet Stocked:* " + notStockedItems.length,
+  );
+  const shareUrl =
+    "https://wa.me/?text=" + encodeURIComponent(lines.join("\n"));
   const shareWindow = window.open(shareUrl, "_blank", "noopener,noreferrer");
   if (!shareWindow) toast("Allow popups to share this list", "info");
 }
@@ -5487,18 +5831,48 @@ function exportSavedWishlistList(listId) {
   if (!list) return;
   dbAll("wishlist").then((wishes) => {
     const byId = new Map(wishes.map((wish) => [wish.id, wish]));
-    const rows = [["List", "Item", "Category", "Supply", "Quantity", "Estimated price", "Estimated amount"]];
+    const rows = [
+      [
+        "List",
+        "Item",
+        "Category",
+        "Supply",
+        "Quantity",
+        "Estimated price",
+        "Estimated amount",
+      ],
+    ];
     (list.itemIds || []).forEach((id) => {
       const wish = byId.get(id);
       if (!wish) return;
       const qty = Number(wish.qty || 0);
       const price = Number(wish.estimatedCost || 0);
-      rows.push([list.name, wish.name || "", wish.type || "", wish.supplierId || wish.supplier || "", qty, price, qty * price]);
+      rows.push([
+        list.name,
+        wish.name || "",
+        wish.type || "",
+        wish.supplierId || wish.supplier || "",
+        qty,
+        price,
+        qty * price,
+      ]);
     });
-    const csv = rows.map((row) => row.map((value) => '"' + String(value).replace(/"/g, '""') + '"').join(",")).join("\r\n");
+    const csv = rows
+      .map((row) =>
+        row
+          .map((value) => '"' + String(value).replace(/"/g, '""') + '"')
+          .join(","),
+      )
+      .join("\r\n");
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    link.download = list.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() + ".csv";
+    link.href = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    );
+    link.download =
+      list.name
+        .replace(/[^a-z0-9]+/gi, "-")
+        .replace(/^-|-$/g, "")
+        .toLowerCase() + ".csv";
     link.click();
     URL.revokeObjectURL(link.href);
   });
@@ -5507,54 +5881,172 @@ window.exportSavedWishlistList = exportSavedWishlistList;
 
 function renderSavedWishlistListsPanel(savedLists, allWishes) {
   const wishesById = new Map(allWishes.map((wish) => [wish.id, wish]));
-  const cards = savedLists.map((list) => {
-    const isActive = _activeWishlistSavedList === list.name;
-    const metrics = getWishlistListMetrics(list, wishesById, isActive);
-    const items = [...metrics.items].sort((a, b) => {
-      const aStocked = wishStatus(a) === "stocked" ? 1 : 0;
-      const bStocked = wishStatus(b) === "stocked" ? 1 : 0;
-      return aStocked - bStocked;
-    });
-    const stockedItems = items.filter((wish) => wishStatus(wish) === "stocked");
-    const itemRows = items.map((wish) => {
-      const qty = Number(wish.qty || 0);
-      const estimatedPrice = Number(wish.estimatedCost || 0);
-      const amount = qty > 0 && estimatedPrice > 0 ? fmtN(qty * estimatedPrice) : "";
-      const unit = String(wish.unit || "").trim();
-      const itemName = wish.name || "Unnamed item";
-      const stockedClass = wishStatus(wish) === "stocked" ? " is-stocked" : "";
-      return '<tr class="wish-saved-list-row' + stockedClass + '" draggable="true" onclick="openWishlistDetail(' + wish.id + ')" ondragstart="beginWishlistItemDrag(event,' + wish.id + ')" ondragover="event.preventDefault()" ondrop="dropWishlistItem(event,\'' + escapeHtml(list.id) + '\',' + wish.id + ')"><td class="wish-table-check-cell"><input type="checkbox" class="wish-select-item" value="' + wish.id + '" aria-label="Select ' + escapeHtml(itemName) + '"' + (_selectedWishlistIds.has(Number(wish.id)) ? ' checked' : '') + ' onchange="event.stopPropagation();updateWishlistSelection()"></td><td class="wish-table-name"><button type="button" class="wish-saved-list-item-name" onclick="event.stopPropagation();openWishlistDetail(' + wish.id + ')">' + escapeHtml(itemName) + '</button></td><td>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td><td class="wish-table-amount">' + escapeHtml(amount) + '</td></tr>';
-    }).join("");
-    const clearStockedButton = isActive && stockedItems.length
-      ? '<button type="button" class="wish-saved-list-clear-stocked" onclick="clearStockedItemsFromSavedList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-broom"></i> Clear stocked</button>'
-      : '';
-    const itemPreview = isActive
-      ? '<div class="wish-saved-list-items">' + (itemRows ? '<div class="wish-table-wrap"><table class="wish-table wish-saved-list-table"><thead><tr><th scope="col">Select</th><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Est. amount</th></tr></thead><tbody>' + itemRows + '</tbody><tfoot><tr><th colspan="2">List totals</th><th>' + fmtN(metrics.quantity) + '</th><th>' + fmtN(metrics.estimated) + '</th></tr></tfoot></table></div>' : '<span>No items in this list yet.</span>') + clearStockedButton + '</div>'
-      : "";
-    const listActions = '<div class="wish-saved-list-actions"><button type="button" title="Edit list" aria-label="Edit list ' + escapeHtml(list.name) + '" onclick="editSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-pen"></i></button><button type="button" title="Delete list" aria-label="Delete list ' + escapeHtml(list.name) + '" onclick="deleteSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><i class="fa-solid fa-trash"></i></button><button type="button" class="wish-saved-list-whatsapp" title="Share list via WhatsApp" aria-label="Share list ' + escapeHtml(list.name) + ' via WhatsApp" onclick="shareSavedWishlistListViaWhatsApp(\'' + escapeHtml(list.id) + '\')"><i class="fa-brands fa-whatsapp"></i></button></div>';
-    const moveOptions = savedLists
-      .filter((target) => target.id !== list.id)
-      .map((target) => '<option value="' + escapeHtml(target.id) + '">' + escapeHtml(target.name) + '</option>')
-      .join("");
-    const bulkActions = isActive
-      ? '<div class="wish-saved-list-bulk-actions" hidden>' +
-        '<button type="button" class="wish-saved-list-bulk-btn wish-saved-list-stock-btn" title="Mark selected stocked" aria-label="Mark selected stocked" onclick="markSelectedWishlistItemsStocked()"><i class="fa-solid fa-check"></i><span>Stocked</span></button>' +
-        (moveOptions ? '<select class="wish-saved-list-bulk-select wish-saved-list-move-select" title="Move selected items" aria-label="Move selected items" onchange="if(this.value){moveSelectedSavedWishlistItemsToList(this.value);this.value=\'\';}"><option value="">Move to...</option>' + moveOptions + '</select>' : '') +
-        '<button type="button" class="wish-saved-list-bulk-btn" title="Edit selected" aria-label="Edit selected" onclick="editSelectedWishlistItem()"><i class="fa-solid fa-pen"></i><span>Edit</span></button>' +
-        '<button type="button" class="wish-saved-list-bulk-btn danger" title="Delete selected" aria-label="Delete selected" onclick="deleteSelectedWishlistItems()"><i class="fa-solid fa-trash"></i><span>Delete</span></button>' +
-        '</div>'
-      : '';
-    const actionRow = isActive ? '<div class="wish-saved-list-actions-row"><div class="wish-saved-list-add-group"><button type="button" class="wish-saved-list-add-items" onclick="showWishlistSection(\'add\')"><i class="fa-solid fa-plus"></i> Add item</button></div>' + bulkActions + '</div>' : '';
-    const moveTargets = savedLists
-      .filter((target) => target.id !== list.id)
-      .map((target) => '<option value="' + escapeHtml(target.id) + '">' + escapeHtml(target.name) + '</option>')
-      .join("");
-    const listTransfer = _selectedSavedWishlistListId === list.id && moveTargets
-      ? '<div class="wish-saved-list-transfer"><label for="wish-move-target-' + escapeHtml(list.id) + '">Move to</label><select id="wish-move-target-' + escapeHtml(list.id) + '" class="wish-saved-list-transfer-select" onchange="toggleSavedWishlistMoveButton(this)"><option value="">Choose list...</option>' + moveTargets + '</select><button type="button" class="wish-saved-list-transfer-btn" disabled onclick="moveAllItemsFromSavedWishlistList(\'' + escapeHtml(list.id) + '\', this.closest(\'.wish-saved-list-transfer\').querySelector(\'select\').value)">Move all</button></div>'
-      : '';
-    return '<article class="wish-saved-list-card' + (isActive ? ' active' : '') + '"><div class="wish-saved-list-card-head"><input type="checkbox" class="wish-saved-list-select"' + (_selectedSavedWishlistListId === list.id ? ' checked' : '') + ' aria-label="Select list ' + escapeHtml(list.name) + '" onchange="event.stopPropagation();toggleSavedWishlistListSelection(\'' + escapeHtml(list.id) + '\',this.checked)">' + listActions + '<button type="button" class="wish-saved-list-open" onclick="openSavedWishlistList(\'' + escapeHtml(list.id) + '\')"><span class="wish-saved-list-icon"><i class="fa-solid fa-list-check"></i></span><span class="wish-saved-list-copy"><strong>' + escapeHtml(list.name) + '</strong></span></button>' + listTransfer + '</div>' + actionRow + itemPreview + '</article>';
-  }).join("");
-  return '<div class="wish-saved-lists-panel"><div class="wish-saved-lists-head"><strong><i class="fa-solid fa-list-ul"></i> Wish lists</strong><button type="button" class="wish-filter-btn" onclick="createSavedWishlistList()"><i class="fa-solid fa-plus"></i> Add list</button></div><div class="wish-saved-list-grid">' + (cards || '<div class="wish-saved-empty"><i class="fa-solid fa-list"></i><span>No saved lists yet.</span></div>') + '</div></div>';
+  const cards = savedLists
+    .map((list) => {
+      const isActive = _activeWishlistSavedList === list.name;
+      const metrics = getWishlistListMetrics(list, wishesById, isActive);
+      const items = [...metrics.items].sort((a, b) => {
+        const aStocked = wishStatus(a) === "stocked" ? 1 : 0;
+        const bStocked = wishStatus(b) === "stocked" ? 1 : 0;
+        return aStocked - bStocked;
+      });
+      const stockedItems = items.filter(
+        (wish) => wishStatus(wish) === "stocked",
+      );
+      const itemRows = items
+        .map((wish) => {
+          const qty = Number(wish.qty || 0);
+          const estimatedPrice = Number(wish.estimatedCost || 0);
+          const amount =
+            qty > 0 && estimatedPrice > 0 ? fmtN(qty * estimatedPrice) : "";
+          const unit = String(wish.unit || "").trim();
+          const itemName = wish.name || "Unnamed item";
+          const stockedClass =
+            wishStatus(wish) === "stocked" ? " is-stocked" : "";
+          return (
+            '<tr class="wish-saved-list-row' +
+            stockedClass +
+            '" draggable="true" onclick="openWishlistDetail(' +
+            wish.id +
+            ')" ondragstart="beginWishlistItemDrag(event,' +
+            wish.id +
+            ')" ondragover="event.preventDefault()" ondrop="dropWishlistItem(event,\'' +
+            escapeHtml(list.id) +
+            "'," +
+            wish.id +
+            ')"><td class="wish-table-check-cell"><input type="checkbox" class="wish-select-item" value="' +
+            wish.id +
+            '" aria-label="Select ' +
+            escapeHtml(itemName) +
+            '"' +
+            (_selectedWishlistIds.has(Number(wish.id)) ? " checked" : "") +
+            ' onchange="event.stopPropagation();updateWishlistSelection()"></td><td class="wish-table-name"><button type="button" class="wish-saved-list-item-name" onclick="event.stopPropagation();openWishlistDetail(' +
+            wish.id +
+            ')">' +
+            escapeHtml(itemName) +
+            "</button></td><td>" +
+            (qty > 0 ? qty + (unit ? " " + escapeHtml(unit) : "") : "") +
+            '</td><td class="wish-table-amount">' +
+            escapeHtml(amount) +
+            "</td></tr>"
+          );
+        })
+        .join("");
+      const clearStockedButton =
+        isActive && stockedItems.length
+          ? '<button type="button" class="wish-saved-list-clear-stocked" onclick="clearStockedItemsFromSavedList(\'' +
+            escapeHtml(list.id) +
+            '\')"><i class="fa-solid fa-broom"></i> Clear stocked</button>'
+          : "";
+      const itemPreview = isActive
+        ? '<div class="wish-saved-list-items">' +
+          (itemRows
+            ? '<div class="wish-table-wrap"><table class="wish-table wish-saved-list-table"><thead><tr><th scope="col">Select</th><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Est. amount</th></tr></thead><tbody>' +
+              itemRows +
+              '</tbody><tfoot><tr><th colspan="2">List totals</th><th>' +
+              fmtN(metrics.quantity) +
+              "</th><th>" +
+              fmtN(metrics.estimated) +
+              "</th></tr></tfoot></table></div>"
+            : "<span>No items in this list yet.</span>") +
+          clearStockedButton +
+          "</div>"
+        : "";
+      const listActions =
+        '<div class="wish-saved-list-actions"><button type="button" title="Edit list" aria-label="Edit list ' +
+        escapeHtml(list.name) +
+        '" onclick="editSavedWishlistList(\'' +
+        escapeHtml(list.id) +
+        '\')"><i class="fa-solid fa-pen"></i></button><button type="button" title="Delete list" aria-label="Delete list ' +
+        escapeHtml(list.name) +
+        '" onclick="deleteSavedWishlistList(\'' +
+        escapeHtml(list.id) +
+        '\')"><i class="fa-solid fa-trash"></i></button><button type="button" class="wish-saved-list-whatsapp" title="Share list via WhatsApp" aria-label="Share list ' +
+        escapeHtml(list.name) +
+        ' via WhatsApp" onclick="shareSavedWishlistListViaWhatsApp(\'' +
+        escapeHtml(list.id) +
+        '\')"><i class="fa-brands fa-whatsapp"></i></button></div>';
+      const moveOptions = savedLists
+        .filter((target) => target.id !== list.id)
+        .map(
+          (target) =>
+            '<option value="' +
+            escapeHtml(target.id) +
+            '">' +
+            escapeHtml(target.name) +
+            "</option>",
+        )
+        .join("");
+      const bulkActions = isActive
+        ? '<div class="wish-saved-list-bulk-actions" hidden>' +
+          '<button type="button" class="wish-saved-list-bulk-btn wish-saved-list-stock-btn" title="Mark selected stocked" aria-label="Mark selected stocked" onclick="markSelectedWishlistItemsStocked()"><i class="fa-solid fa-check"></i><span>Stocked</span></button>' +
+          (moveOptions
+            ? '<select class="wish-saved-list-bulk-select wish-saved-list-move-select" title="Move selected items" aria-label="Move selected items" onchange="if(this.value){moveSelectedSavedWishlistItemsToList(this.value);this.value=\'\';}"><option value="">Move to...</option>' +
+              moveOptions +
+              "</select>"
+            : "") +
+          '<button type="button" class="wish-saved-list-bulk-btn" title="Edit selected" aria-label="Edit selected" onclick="editSelectedWishlistItem()"><i class="fa-solid fa-pen"></i><span>Edit</span></button>' +
+          '<button type="button" class="wish-saved-list-bulk-btn danger" title="Delete selected" aria-label="Delete selected" onclick="deleteSelectedWishlistItems()"><i class="fa-solid fa-trash"></i><span>Delete</span></button>' +
+          "</div>"
+        : "";
+      const actionRow = isActive
+        ? '<div class="wish-saved-list-actions-row"><div class="wish-saved-list-add-group"><button type="button" class="wish-saved-list-add-items" onclick="showWishlistSection(\'add\')"><i class="fa-solid fa-plus"></i> Add item</button></div>' +
+          bulkActions +
+          "</div>"
+        : "";
+      const moveTargets = savedLists
+        .filter((target) => target.id !== list.id)
+        .map(
+          (target) =>
+            '<option value="' +
+            escapeHtml(target.id) +
+            '">' +
+            escapeHtml(target.name) +
+            "</option>",
+        )
+        .join("");
+      const listTransfer =
+        _selectedSavedWishlistListId === list.id && moveTargets
+          ? '<div class="wish-saved-list-transfer"><label for="wish-move-target-' +
+            escapeHtml(list.id) +
+            '">Move to</label><select id="wish-move-target-' +
+            escapeHtml(list.id) +
+            '" class="wish-saved-list-transfer-select" onchange="toggleSavedWishlistMoveButton(this)"><option value="">Choose list...</option>' +
+            moveTargets +
+            '</select><button type="button" class="wish-saved-list-transfer-btn" disabled onclick="moveAllItemsFromSavedWishlistList(\'' +
+            escapeHtml(list.id) +
+            "', this.closest('.wish-saved-list-transfer').querySelector('select').value)\">Move all</button></div>"
+          : "";
+      return (
+        '<article class="wish-saved-list-card' +
+        (isActive ? " active" : "") +
+        '"><div class="wish-saved-list-card-head"><input type="checkbox" class="wish-saved-list-select"' +
+        (_selectedSavedWishlistListId === list.id ? " checked" : "") +
+        ' aria-label="Select list ' +
+        escapeHtml(list.name) +
+        '" onchange="event.stopPropagation();toggleSavedWishlistListSelection(\'' +
+        escapeHtml(list.id) +
+        "',this.checked)\">" +
+        listActions +
+        '<button type="button" class="wish-saved-list-open" onclick="openSavedWishlistList(\'' +
+        escapeHtml(list.id) +
+        '\')"><span class="wish-saved-list-icon"><i class="fa-solid fa-list-check"></i></span><span class="wish-saved-list-copy"><strong>' +
+        escapeHtml(list.name) +
+        "</strong></span></button>" +
+        listTransfer +
+        "</div>" +
+        actionRow +
+        itemPreview +
+        "</article>"
+      );
+    })
+    .join("");
+  return (
+    '<div class="wish-saved-lists-panel"><div class="wish-saved-lists-head"><strong><i class="fa-solid fa-list-ul"></i> Wish lists</strong><button type="button" class="wish-filter-btn" onclick="createSavedWishlistList()"><i class="fa-solid fa-plus"></i> Add list</button></div><div class="wish-saved-list-grid">' +
+    (cards ||
+      '<div class="wish-saved-empty"><i class="fa-solid fa-list"></i><span>No saved lists yet.</span></div>') +
+    "</div></div>"
+  );
 }
 
 function addVisibleWishlistItemsToSavedList(selectedListName) {
@@ -5563,7 +6055,9 @@ function addVisibleWishlistItemsToSavedList(selectedListName) {
     toast("Choose a saved list first", "info");
     return;
   }
-  const visibleIds = [...document.querySelectorAll("#wishlist-list .wish-row[data-wish-id]")]
+  const visibleIds = [
+    ...document.querySelectorAll("#wishlist-list .wish-row[data-wish-id]"),
+  ]
     .map((row) => Number(row.dataset.wishId))
     .filter((id) => Number.isFinite(id));
   if (!visibleIds.length) {
@@ -5579,7 +6073,15 @@ function addVisibleWishlistItemsToSavedList(selectedListName) {
   const result = moveWishlistItemsToSavedList(visibleIds, list.id);
   if (!result.ok) return toast(result.reason, "info");
   renderWishlistPage();
-  toast(visibleIds.length + " visible item" + (visibleIds.length === 1 ? "" : "s") + " moved to \"" + listName + "\"", "ok");
+  toast(
+    visibleIds.length +
+      " visible item" +
+      (visibleIds.length === 1 ? "" : "s") +
+      ' moved to "' +
+      listName +
+      '"',
+    "ok",
+  );
 }
 window.addVisibleWishlistItemsToSavedList = addVisibleWishlistItemsToSavedList;
 
@@ -5603,19 +6105,25 @@ function beginWishlistAddFromSource(targetListId, sourceListId) {
     toast("Select General List items, then use Add to current list", "info");
     return;
   }
-  const source = lists.find((list) => list.id === sourceListId && list.id !== target.id);
+  const source = lists.find(
+    (list) => list.id === sourceListId && list.id !== target.id,
+  );
   if (!source) return toast("Source list not found", "err");
   _activeWishlistView = "saved";
   _activeWishlistSavedList = source.name;
   _activeWishlistSection = "list";
   _selectedWishlistIds.clear();
   renderWishlistPage();
-  toast("Select items from " + source.name + ", then use Add to current list", "info");
+  toast(
+    "Select items from " + source.name + ", then use Add to current list",
+    "info",
+  );
 }
 window.beginWishlistAddFromSource = beginWishlistAddFromSource;
 
 function addSelectedItemsToPendingWishlistList() {
-  if (!_wishlistAddToSavedListId) return toast("Choose a destination list first", "info");
+  if (!_wishlistAddToSavedListId)
+    return toast("Choose a destination list first", "info");
   const ids = getSelectedWishlistIds();
   if (!ids.length) return toast("Select wishlist items first", "info");
   const result = moveWishlistItemsToSavedList(ids, _wishlistAddToSavedListId);
@@ -5625,9 +6133,17 @@ function addSelectedItemsToPendingWishlistList() {
   _activeWishlistView = "saved";
   _activeWishlistSavedList = result.target.name;
   renderWishlistPage();
-  toast(ids.length + " item" + (ids.length === 1 ? "" : "s") + " moved to " + result.target.name, "ok");
+  toast(
+    ids.length +
+      " item" +
+      (ids.length === 1 ? "" : "s") +
+      " moved to " +
+      result.target.name,
+    "ok",
+  );
 }
-window.addSelectedItemsToPendingWishlistList = addSelectedItemsToPendingWishlistList;
+window.addSelectedItemsToPendingWishlistList =
+  addSelectedItemsToPendingWishlistList;
 
 function getSelectedWishlistIds() {
   const checkedIds = [...document.querySelectorAll(".wish-select-item:checked")]
@@ -5641,7 +6157,9 @@ function getSelectedWishlistIds() {
 function updateWishlistSelection() {
   const visible = [...document.querySelectorAll(".wish-select-item")];
   const visibleIds = new Set(
-    visible.map((checkbox) => Number(checkbox.value)).filter((id) => Number.isFinite(id)),
+    visible
+      .map((checkbox) => Number(checkbox.value))
+      .filter((id) => Number.isFinite(id)),
   );
   visible.forEach((checkbox) => {
     const id = Number(checkbox.value);
@@ -5651,32 +6169,55 @@ function updateWishlistSelection() {
   const count = _selectedWishlistIds.size;
   const bar = document.getElementById("wishlist-bulk-actions");
   if (bar) bar.hidden = count === 0;
-  const addSelectedButton = document.getElementById("wishlist-add-selected-btn");
-  if (addSelectedButton) addSelectedButton.hidden = count === 0 || !_wishlistAddToSavedListId;
+  const addSelectedButton = document.getElementById(
+    "wishlist-add-selected-btn",
+  );
+  if (addSelectedButton)
+    addSelectedButton.hidden = count === 0 || !_wishlistAddToSavedListId;
   const selectedRows = visible
     .filter((checkbox) => checkbox.checked)
     .map((checkbox) => checkbox.closest("tr"));
-  const hasUnstockedSelection = selectedRows.some((row) => !row?.classList.contains("is-stocked"));
-  const hasStockedSelection = selectedRows.some((row) => row?.classList.contains("is-stocked"));
+  const hasUnstockedSelection = selectedRows.some(
+    (row) => !row?.classList.contains("is-stocked"),
+  );
+  const hasStockedSelection = selectedRows.some((row) =>
+    row?.classList.contains("is-stocked"),
+  );
   const stockedAction = document.querySelector(".wish-bulk-stocked");
-  const stockedDestination = document.getElementById("wishlist-stocked-destination");
+  const stockedDestination = document.getElementById(
+    "wishlist-stocked-destination",
+  );
   if (stockedAction) stockedAction.hidden = !hasUnstockedSelection;
   if (stockedDestination) stockedDestination.hidden = !hasStockedSelection;
-  const savedListBulkActions = document.querySelector(".wish-saved-list-bulk-actions");
+  const savedListBulkActions = document.querySelector(
+    ".wish-saved-list-bulk-actions",
+  );
   if (savedListBulkActions) {
-    const savedListSelection = [...document.querySelectorAll(".wish-saved-list-table .wish-select-item:checked")];
+    const savedListSelection = [
+      ...document.querySelectorAll(
+        ".wish-saved-list-table .wish-select-item:checked",
+      ),
+    ];
     const savedListSelectionCount = savedListSelection.length;
-    const hasUnstocked = savedListSelection.some((checkbox) => !checkbox.closest("tr")?.classList.contains("is-stocked"));
+    const hasUnstocked = savedListSelection.some(
+      (checkbox) => !checkbox.closest("tr")?.classList.contains("is-stocked"),
+    );
     savedListBulkActions.hidden = savedListSelectionCount === 0;
-    const stockButton = savedListBulkActions.querySelector(".wish-saved-list-stock-btn");
-    const moveSelect = savedListBulkActions.querySelector(".wish-saved-list-move-select");
+    const stockButton = savedListBulkActions.querySelector(
+      ".wish-saved-list-stock-btn",
+    );
+    const moveSelect = savedListBulkActions.querySelector(
+      ".wish-saved-list-move-select",
+    );
     if (stockButton) stockButton.hidden = !hasUnstocked;
     if (moveSelect) moveSelect.hidden = savedListSelectionCount === 0;
   }
   const selectAll = document.getElementById("wish-select-all");
   if (selectAll) {
-    selectAll.checked = visibleIds.size > 0 && visible.every((checkbox) => checkbox.checked);
-    selectAll.indeterminate = visible.some((checkbox) => checkbox.checked) && !selectAll.checked;
+    selectAll.checked =
+      visibleIds.size > 0 && visible.every((checkbox) => checkbox.checked);
+    selectAll.indeterminate =
+      visible.some((checkbox) => checkbox.checked) && !selectAll.checked;
   }
 }
 
@@ -5692,10 +6233,14 @@ async function markSelectedWishlistItemsStocked() {
   if (!ids.length) return toast("Select wishlist items first", "info");
   const now = new Date().toISOString();
   try {
-    await runAtomicWishlistOperation(ids, (wish) => {
-      wish.status = "stocked";
-      wish.stockedAt = now;
-    }, () => {});
+    await runAtomicWishlistOperation(
+      ids,
+      (wish) => {
+        wish.status = "stocked";
+        wish.stockedAt = now;
+      },
+      () => {},
+    );
   } catch (_) {
     return toast("Could not mark the selected items stocked", "err");
   }
@@ -5703,43 +6248,65 @@ async function markSelectedWishlistItemsStocked() {
   scheduleSync();
   await renderWishlistPage();
   await renderStockMonitorSummary();
-  toast(ids.length + " item" + (ids.length === 1 ? "" : "s") + " marked stocked", "ok");
+  toast(
+    ids.length + " item" + (ids.length === 1 ? "" : "s") + " marked stocked",
+    "ok",
+  );
 }
 window.markSelectedWishlistItemsStocked = markSelectedWishlistItemsStocked;
 
 async function moveSelectedWishlistItemsToGeneral() {
   const ids = getSelectedWishlistIds();
   if (!ids.length) return toast("Select wishlist items first", "info");
-  const wishes = (await Promise.all(ids.map((id) => dbGet("wishlist", id)))).filter(Boolean);
+  const wishes = (
+    await Promise.all(ids.map((id) => dbGet("wishlist", id)))
+  ).filter(Boolean);
   const movable = wishes.filter((wish) => wishStatus(wish) !== "discarded");
-  if (!movable.length) return toast("Discarded items cannot move to the General List", "info");
+  if (!movable.length)
+    return toast("Discarded items cannot move to the General List", "info");
   const now = new Date().toISOString();
   try {
-    await runAtomicWishlistOperation(movable.map((wish) => wish.id), (wish) => {
-      if (wishStatus(wish) === "stocked") {
-      wish.status = "planned";
-      wish.stockedAt = null;
-      wish.stockedItemId = null;
-      wish.dayPurchaseDate = null;
-      wish.updatedAt = now;
-      }
-    }, () => moveWishlistItemsToGeneralList(movable.map((wish) => wish.id)));
+    await runAtomicWishlistOperation(
+      movable.map((wish) => wish.id),
+      (wish) => {
+        if (wishStatus(wish) === "stocked") {
+          wish.status = "planned";
+          wish.stockedAt = null;
+          wish.stockedItemId = null;
+          wish.dayPurchaseDate = null;
+          wish.updatedAt = now;
+        }
+      },
+      () => moveWishlistItemsToGeneralList(movable.map((wish) => wish.id)),
+    );
   } catch (_) {
     return toast("Could not move the selected items to General List", "err");
   }
   _selectedWishlistIds.clear();
   scheduleSync();
   await renderWishlistPage();
-  toast(movable.length + " item" + (movable.length === 1 ? "" : "s") + " moved to General List", "ok");
+  toast(
+    movable.length +
+      " item" +
+      (movable.length === 1 ? "" : "s") +
+      " moved to General List",
+    "ok",
+  );
 }
 window.moveSelectedWishlistItemsToGeneral = moveSelectedWishlistItemsToGeneral;
 
 function moveSelectedSavedWishlistItemsToList(targetListId) {
-  const ids = [...document.querySelectorAll(".wish-saved-list-table .wish-select-item:checked")]
+  const ids = [
+    ...document.querySelectorAll(
+      ".wish-saved-list-table .wish-select-item:checked",
+    ),
+  ]
     .map((checkbox) => Number(checkbox.value))
     .filter((id) => Number.isInteger(id));
   if (!ids.length) return toast("Select wishlist items first", "info");
-  const target = getSavedWishlistLists().find((list) => list.id === targetListId);
+  const target = getSavedWishlistLists().find(
+    (list) => list.id === targetListId,
+  );
   if (!target) return toast("Choose another saved list", "info");
   const result = moveWishlistItemsToSavedList(ids, target.id);
   if (!result.ok) return toast(result.reason, "info");
@@ -5749,79 +6316,141 @@ function moveSelectedSavedWishlistItemsToList(targetListId) {
   _activeWishlistSavedList = target.name;
   renderWishlistPage();
   toast(
-    ids.length + " item" + (ids.length === 1 ? "" : "s") +
-      ' moved to "' + target.name + '"',
+    ids.length +
+      " item" +
+      (ids.length === 1 ? "" : "s") +
+      ' moved to "' +
+      target.name +
+      '"',
     "ok",
   );
 }
-window.moveSelectedSavedWishlistItemsToList = moveSelectedSavedWishlistItemsToList;
+window.moveSelectedSavedWishlistItemsToList =
+  moveSelectedSavedWishlistItemsToList;
 
 async function moveSelectedStockedItemsToList(targetListId) {
   const ids = getSelectedWishlistIds();
-  const wishes = (await Promise.all(ids.map((id) => dbGet("wishlist", id)))).filter((wish) => wish && wishStatus(wish) === "stocked");
+  const wishes = (
+    await Promise.all(ids.map((id) => dbGet("wishlist", id)))
+  ).filter((wish) => wish && wishStatus(wish) === "stocked");
   if (!wishes.length) return toast("Select stocked items first", "info");
-  const target = targetListId === "general" ? null : getSavedWishlistLists().find((list) => list.id === targetListId);
-  if (targetListId !== "general" && !target) return toast("Choose an active destination list", "info");
+  const target =
+    targetListId === "general"
+      ? null
+      : getSavedWishlistLists().find((list) => list.id === targetListId);
+  if (targetListId !== "general" && !target)
+    return toast("Choose an active destination list", "info");
   if (target) {
-    const duplicate = wishes.some((wish) => (target.itemIds || []).some((id) => String(id) === String(wish.id)));
-    if (duplicate) return toast("One or more items already exist in the destination list", "info");
+    const duplicate = wishes.some((wish) =>
+      (target.itemIds || []).some((id) => String(id) === String(wish.id)),
+    );
+    if (duplicate)
+      return toast(
+        "One or more items already exist in the destination list",
+        "info",
+      );
   }
   const now = new Date().toISOString();
   try {
-    await runAtomicWishlistOperation(wishes.map((wish) => wish.id), (wish) => {
-    wish.status = "planned";
-    wish.stockedAt = null;
-    wish.stockedItemId = null;
-    wish.dayPurchaseDate = null;
-    wish.updatedAt = now;
-    }, () => {
-      if (target) moveWishlistItemsToSavedList(wishes.map((wish) => wish.id), target.id);
-      else moveWishlistItemsToGeneralList(wishes.map((wish) => wish.id));
-    });
+    await runAtomicWishlistOperation(
+      wishes.map((wish) => wish.id),
+      (wish) => {
+        wish.status = "planned";
+        wish.stockedAt = null;
+        wish.stockedItemId = null;
+        wish.dayPurchaseDate = null;
+        wish.updatedAt = now;
+      },
+      () => {
+        if (target)
+          moveWishlistItemsToSavedList(
+            wishes.map((wish) => wish.id),
+            target.id,
+          );
+        else moveWishlistItemsToGeneralList(wishes.map((wish) => wish.id));
+      },
+    );
   } catch (_) {
     return toast("Could not move the stocked items", "err");
   }
   _selectedWishlistIds.clear();
   scheduleSync();
   await renderWishlistPage();
-  toast(wishes.length + " item" + (wishes.length === 1 ? "" : "s") + " moved to " + (target ? target.name : "General List"), "ok");
+  toast(
+    wishes.length +
+      " item" +
+      (wishes.length === 1 ? "" : "s") +
+      " moved to " +
+      (target ? target.name : "General List"),
+    "ok",
+  );
 }
 window.moveSelectedStockedItemsToList = moveSelectedStockedItemsToList;
 
 async function discardSelectedWishlistItems() {
   const ids = getSelectedWishlistIds();
   if (!ids.length) return toast("Select stocked items first", "info");
-  const wishes = (await Promise.all(ids.map((id) => dbGet("wishlist", id)))).filter(Boolean);
+  const wishes = (
+    await Promise.all(ids.map((id) => dbGet("wishlist", id)))
+  ).filter(Boolean);
   const stocked = wishes.filter((wish) => wishStatus(wish) === "stocked");
   if (!stocked.length) return toast("Select stocked items to discard", "info");
-  if (!confirm("Discard " + stocked.length + " stocked item" + (stocked.length === 1 ? "" : "s") + "?")) return;
+  if (
+    !confirm(
+      "Discard " +
+        stocked.length +
+        " stocked item" +
+        (stocked.length === 1 ? "" : "s") +
+        "?",
+    )
+  )
+    return;
   const now = new Date().toISOString();
   try {
-    await runAtomicWishlistOperation(stocked.map((wish) => wish.id), (wish) => {
-      wish.status = "discarded";
-      wish.discardedAt = now;
-      wish.updatedAt = now;
-    }, () => moveWishlistItemsToGeneralList(stocked.map((wish) => wish.id)));
+    await runAtomicWishlistOperation(
+      stocked.map((wish) => wish.id),
+      (wish) => {
+        wish.status = "discarded";
+        wish.discardedAt = now;
+        wish.updatedAt = now;
+      },
+      () => moveWishlistItemsToGeneralList(stocked.map((wish) => wish.id)),
+    );
   } catch (_) {
     return toast("Could not discard the selected items", "err");
   }
   _selectedWishlistIds.clear();
   scheduleSync();
   await renderWishlistPage();
-  toast(stocked.length + " item" + (stocked.length === 1 ? "" : "s") + " discarded", "ok");
+  toast(
+    stocked.length + " item" + (stocked.length === 1 ? "" : "s") + " discarded",
+    "ok",
+  );
 }
 window.discardSelectedWishlistItems = discardSelectedWishlistItems;
 
 async function deleteSelectedWishlistItems() {
   const ids = getSelectedWishlistIds();
   if (!ids.length) return toast("Select wishlist items first", "info");
-  if (!confirm("Delete " + ids.length + " selected wishlist item" + (ids.length === 1 ? "" : "s") + "?")) return;
+  if (
+    !confirm(
+      "Delete " +
+        ids.length +
+        " selected wishlist item" +
+        (ids.length === 1 ? "" : "s") +
+        "?",
+    )
+  )
+    return;
   for (const id of ids) await deleteWishlistItem(id, true);
   _selectedWishlistIds.clear();
   await renderWishlistPage();
   await renderStockMonitor();
   await renderStockMonitorSummary();
-  toast(ids.length + " item" + (ids.length === 1 ? "" : "s") + " deleted", "ok");
+  toast(
+    ids.length + " item" + (ids.length === 1 ? "" : "s") + " deleted",
+    "ok",
+  );
 }
 window.deleteSelectedWishlistItems = deleteSelectedWishlistItems;
 
@@ -5834,16 +6463,23 @@ async function editSelectedWishlistItem() {
 window.editSelectedWishlistItem = editSelectedWishlistItem;
 
 async function openWishlistBulkEdit(ids) {
-  const records = (await Promise.all(ids.map((id) => dbGet("wishlist", id)))).filter(Boolean);
-  if (!records.length) return toast("Selected wishlist items were not found", "err");
+  const records = (
+    await Promise.all(ids.map((id) => dbGet("wishlist", id)))
+  ).filter(Boolean);
+  if (!records.length)
+    return toast("Selected wishlist items were not found", "err");
   const fields = {
     name: records.map((wish) => String(wish.name || "")),
     unit: records.map((wish) => String(wish.unit || "Pcs")),
     qty: records.map((wish) => String(Number(wish.qty || 0))),
-    estimatedCost: records.map((wish) => String(Number(wish.estimatedCost || 0))),
+    estimatedCost: records.map((wish) =>
+      String(Number(wish.estimatedCost || 0)),
+    ),
     status: records.map((wish) => normalizeWishlistStatus(wish.status)),
     category: records.map((wish) => String(wish.type || wish.category || "")),
-    supplierId: records.map((wish) => String(wish.supplierId || wish.supplier || "")),
+    supplierId: records.map((wish) =>
+      String(wish.supplierId || wish.supplier || ""),
+    ),
     note: records.map((wish) => String(wish.note || "")),
   };
   const values = {
@@ -5881,17 +6517,22 @@ window.closeWishlistBulkEdit = closeWishlistBulkEdit;
 
 async function saveWishlistBulkEdit() {
   const ids = getSelectedWishlistIds();
-  const selectedFields = [...document.querySelectorAll("[data-bulk-edit-field]:checked")]
-    .map((checkbox) => checkbox.dataset.bulkEditField);
+  const selectedFields = [
+    ...document.querySelectorAll("[data-bulk-edit-field]:checked"),
+  ].map((checkbox) => checkbox.dataset.bulkEditField);
   if (!ids.length) return closeWishlistBulkEdit();
-  if (!selectedFields.length) return toast("Choose at least one field to update", "info");
+  if (!selectedFields.length)
+    return toast("Choose at least one field to update", "info");
   const statusRaw = document.getElementById("wish-bulk-status")?.value || "";
-  if (selectedFields.includes("status") && !statusRaw) return toast("Choose a status before applying it", "info");
+  if (selectedFields.includes("status") && !statusRaw)
+    return toast("Choose a status before applying it", "info");
   const values = {
     name: Input.text("wish-bulk-name"),
     unit: Input.text("wish-bulk-unit") || "Pcs",
     qty: Number(document.getElementById("wish-bulk-qty")?.value || 0),
-    estimatedCost: Number(document.getElementById("wish-bulk-cost")?.value || 0),
+    estimatedCost: Number(
+      document.getElementById("wish-bulk-cost")?.value || 0,
+    ),
     status: normalizeWishlistStatus(statusRaw),
     category: Input.text("wish-bulk-category"),
     supplierId: Input.text("wish-bulk-supplier"),
@@ -5928,7 +6569,10 @@ async function saveWishlistBulkEdit() {
   scheduleSync();
   await renderWishlistPage();
   await renderStockMonitorSummary();
-  toast(updated + " wishlist item" + (updated === 1 ? "" : "s") + " updated", "ok");
+  toast(
+    updated + " wishlist item" + (updated === 1 ? "" : "s") + " updated",
+    "ok",
+  );
 }
 window.saveWishlistBulkEdit = saveWishlistBulkEdit;
 
@@ -5943,17 +6587,34 @@ function addSelectedWishlistItemsToSavedList(selectedListName) {
   if (!result.ok) return toast(result.reason, "info");
   _selectedWishlistIds.clear();
   renderWishlistPage();
-  toast(selectedIds.length + " item" + (selectedIds.length === 1 ? "" : "s") + " moved to \"" + listName + "\"", "ok");
+  toast(
+    selectedIds.length +
+      " item" +
+      (selectedIds.length === 1 ? "" : "s") +
+      ' moved to "' +
+      listName +
+      '"',
+    "ok",
+  );
 }
-window.addSelectedWishlistItemsToSavedList = addSelectedWishlistItemsToSavedList;
+window.addSelectedWishlistItemsToSavedList =
+  addSelectedWishlistItemsToSavedList;
 
 let _selectedPurchaseBudgetId = "";
 let _purchaseProcessing = null;
 
 function normalizeWishlistStatus(value) {
-  const status = String(value || "").trim().toLowerCase();
-  if (status === "planned" || status === "prospective" || status === "new") return "planned";
-  if (status === "in_progress" || status === "in-progress" || status === "inprogress") return "in_progress";
+  const status = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (status === "planned" || status === "prospective" || status === "new")
+    return "planned";
+  if (
+    status === "in_progress" ||
+    status === "in-progress" ||
+    status === "inprogress"
+  )
+    return "in_progress";
   if (status === "stocked" || status === "completed") return "stocked";
   if (status === "discarded") return "discarded";
   if (status === "cancelled" || status === "canceled") return "cancelled";
@@ -5962,12 +6623,18 @@ function normalizeWishlistStatus(value) {
 
 function labelWishlistStatus(value) {
   switch (normalizeWishlistStatus(value)) {
-    case "planned": return "Planned";
-    case "in_progress": return "In progress";
-    case "stocked": return "Stocked";
-    case "discarded": return "Discarded";
-    case "cancelled": return "Cancelled";
-    default: return "Planned";
+    case "planned":
+      return "Planned";
+    case "in_progress":
+      return "In progress";
+    case "stocked":
+      return "Stocked";
+    case "discarded":
+      return "Discarded";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return "Planned";
   }
 }
 
@@ -5982,10 +6649,21 @@ function isWishlistSaleMonitorEntry(wish) {
 function wishDateLabel(value) {
   if (!value) return "";
   const date = new Date(value + (value.length === 10 ? "T00:00:00" : ""));
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
 }
 
-async function markWishlistStockedById(wishId, itemId, stockedQty, actualBuyPrice) {
+async function markWishlistStockedById(
+  wishId,
+  itemId,
+  stockedQty,
+  actualBuyPrice,
+) {
   if (!wishId || !db.objectStoreNames.contains("wishlist")) return;
   const wish = await dbGet("wishlist", wishId);
   if (!wish) return;
@@ -5999,10 +6677,14 @@ async function markWishlistStockedById(wishId, itemId, stockedQty, actualBuyPric
   wish.qty = Math.max(0, requestedQty - totalPurchased);
   wish.status = totalPurchased >= requestedQty ? "stocked" : "planned";
   wish.purchaseStatus = totalPurchased >= requestedQty ? "stocked" : "partial";
-  wish.stockedAt = totalPurchased >= requestedQty ? now : wish.stockedAt || null;
+  wish.stockedAt =
+    totalPurchased >= requestedQty ? now : wish.stockedAt || null;
   if (totalPurchased >= requestedQty) wish.dayPurchaseDate = null;
   wish.stockedItemId = itemId || null;
-  if (wish.purchaseBudgetId && db.objectStoreNames.contains("purchase_budgets")) {
+  if (
+    wish.purchaseBudgetId &&
+    db.objectStoreNames.contains("purchase_budgets")
+  ) {
     const budget = await dbGet("purchase_budgets", wish.purchaseBudgetId);
     if (budget) {
       if (!Array.isArray(budget.purchaseHistory)) budget.purchaseHistory = [];
@@ -6122,78 +6804,162 @@ function renderWishDetailItemInfo(wish) {
   if (!el) return;
   const rows = [
     { label: "Name", value: wish.name, icon: "fa-tag" },
-    { label: "Supply", value: wish.supplierId || wish.supplier, icon: "fa-truck" },
+    {
+      label: "Supply",
+      value: wish.supplierId || wish.supplier,
+      icon: "fa-truck",
+    },
     { label: "Quantity", value: wish.qty > 0 ? wish.qty : "", icon: "fa-list" },
-    { label: "Estimated Price", value: wish.estimatedCost > 0 ? fmt(wish.estimatedCost) : "", icon: "fa-coins", className: "price" },
+    {
+      label: "Estimated Price",
+      value: wish.estimatedCost > 0 ? fmt(wish.estimatedCost) : "",
+      icon: "fa-coins",
+      className: "price",
+    },
   ];
   const html = rows
     .filter((r) => r.value)
     .map((r) => {
       if (r.className === "price") {
-        return '<div class="wish-detail-dl-row price-row">' +
+        return (
+          '<div class="wish-detail-dl-row price-row">' +
           '<span class="wish-detail-price-icon">KSh</span>' +
-          '<div class="wish-detail-price-copy"><dt>' + escapeHtml(r.label) + '</dt>' +
-          '<dd>' + escapeHtml(String(r.value)) + '</dd></div>' +
-          '</div>';
+          '<div class="wish-detail-price-copy"><dt>' +
+          escapeHtml(r.label) +
+          "</dt>" +
+          "<dd>" +
+          escapeHtml(String(r.value)) +
+          "</dd></div>" +
+          "</div>"
+        );
       }
-      return '<div class="wish-detail-dl-row">' +
-        '<span class="wish-detail-row-icon"><i class="fa-solid ' + r.icon + '"></i></span>' +
-        "<dt>" + escapeHtml(r.label) + "</dt>" +
-        '<dd class="' + (r.className || "") + '">' + escapeHtml(String(r.value)) + "</dd>" +
-        "</div>";
+      return (
+        '<div class="wish-detail-dl-row">' +
+        '<span class="wish-detail-row-icon"><i class="fa-solid ' +
+        r.icon +
+        '"></i></span>' +
+        "<dt>" +
+        escapeHtml(r.label) +
+        "</dt>" +
+        '<dd class="' +
+        (r.className || "") +
+        '">' +
+        escapeHtml(String(r.value)) +
+        "</dd>" +
+        "</div>"
+      );
     })
     .join("");
   el.innerHTML = html || '<p class="wish-vendor-empty">No details</p>';
 }
 
 function buildWishTableHtml(rows, wishById) {
-  const activeRows = rows.filter((row) => wishStatus(wishById.get(row.wishId) || {}) !== "stocked");
-  const totalQty = activeRows.reduce((sum, row) => sum + Number((wishById.get(row.wishId) || {}).qty || row.qty || 0), 0);
+  const activeRows = rows.filter(
+    (row) => wishStatus(wishById.get(row.wishId) || {}) !== "stocked",
+  );
+  const totalQty = activeRows.reduce(
+    (sum, row) =>
+      sum + Number((wishById.get(row.wishId) || {}).qty || row.qty || 0),
+    0,
+  );
   const totalAmount = activeRows.reduce((sum, row) => {
     const wish = wishById.get(row.wishId) || {};
-    return sum + Number(wish.qty || row.qty || 0) * Number(wish.estimatedCost || 0);
+    return (
+      sum + Number(wish.qty || row.qty || 0) * Number(wish.estimatedCost || 0)
+    );
   }, 0);
-  const stockedMoveOptions = getSavedWishlistLists().map((list) => '<option value="' + escapeHtml(list.id) + '">' + escapeHtml(list.name) + '</option>').join("");
-  const bulkActions = '<div id="wishlist-bulk-actions" class="wishlist-bulk-actions" hidden>' +
+  const stockedMoveOptions = getSavedWishlistLists()
+    .map(
+      (list) =>
+        '<option value="' +
+        escapeHtml(list.id) +
+        '">' +
+        escapeHtml(list.name) +
+        "</option>",
+    )
+    .join("");
+  const bulkActions =
+    '<div id="wishlist-bulk-actions" class="wishlist-bulk-actions" hidden>' +
     '<button type="button" id="wishlist-add-selected-btn" class="wish-bulk-btn" onclick="addSelectedItemsToPendingWishlistList()" hidden><i class="fa-solid fa-arrow-right"></i> Add to current list</button>' +
     '<button type="button" class="wish-bulk-btn wish-bulk-stocked" onclick="markSelectedWishlistItemsStocked()"><i class="fa-solid fa-check"></i> Mark Stocked</button>' +
     '<button type="button" class="wish-bulk-btn" onclick="moveSelectedWishlistItemsToGeneral()"><i class="fa-solid fa-arrow-left"></i> General List</button>' +
-    '<select id="wishlist-stocked-destination" class="wish-bulk-destination" aria-label="Move stocked items to active list" onchange="if(this.value){moveSelectedStockedItemsToList(this.value);this.value=\'\';}"><option value="">Move stocked to...</option><option value="general">General List</option>' + stockedMoveOptions + '</select>' +
+    '<select id="wishlist-stocked-destination" class="wish-bulk-destination" aria-label="Move stocked items to active list" onchange="if(this.value){moveSelectedStockedItemsToList(this.value);this.value=\'\';}"><option value="">Move stocked to...</option><option value="general">General List</option>' +
+    stockedMoveOptions +
+    "</select>" +
     '<button type="button" class="wish-bulk-btn" onclick="editSelectedWishlistItem()"><i class="fa-solid fa-pen"></i> Edit</button>' +
     '<button type="button" class="wish-bulk-btn" onclick="deleteSelectedWishlistItems()"><i class="fa-solid fa-trash"></i> Delete</button>' +
-    '</div>';
-  return bulkActions + '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th scope="col" style="width:8%;"><span class="wish-column-label">Sel.</span><input type="checkbox" id="wish-select-all" aria-label="Select all visible wishlist items" onchange="toggleAllWishlistSelection(this.checked)"></th><th scope="col">Item</th><th scope="col">Supplier</th><th scope="col">Qty</th><th scope="col">Est. amount</th></tr></thead><tbody>' +
-    rows.map((row) => {
-      const wish = wishById.get(row.wishId) || {};
-      const stocked = wishStatus(wish) === "stocked";
-      const itemName = String(row.name || row.code || "").trim();
-      const supply = String(wish.supplierId || wish.supplier || "").trim();
-      const qty = Number(wish.qty || row.qty || 0);
-      const estimatedPrice = Number(wish.estimatedCost || 0);
-      const amount = qty > 0 && estimatedPrice > 0 ? fmt(qty * estimatedPrice) : "";
-      const unit = String(wish.unit || "").trim();
-      const statusLabel = labelWishlistStatus(wishStatus(wish));
-      const statusClass =
-        wishStatus(wish) === "in_progress"
-          ? "wish-status-indicator in-progress"
-          : wishStatus(wish) === "stocked"
-            ? "wish-status-indicator stocked"
-            : wishStatus(wish) === "cancelled"
-              ? "wish-status-indicator cancelled"
-              : "wish-status-indicator planned";
-      const statusMarkup = wishStatus(wish) === "stocked" || _activeWishlistView === "stocked"
-        ? ""
-        : '<div class="wish-row-status"><span class="' + statusClass + '">' + escapeHtml(statusLabel) + '</span></div>';
-      const isSelected = _selectedWishlistIds.has(Number(row.wishId));
-      return '<tr class="wish-row' + (stocked ? ' is-stocked' : '') + '" data-wish-id="' + row.wishId + '" onclick="openWishlistDetail(' + row.wishId + ')">' +
-        '<td class="wish-table-check-cell"><input type="checkbox" class="wish-select-item" value="' + row.wishId + '" aria-label="Select ' + escapeHtml(itemName) + '"' + (isSelected ? ' checked' : '') + ' onchange="event.stopPropagation();updateWishlistSelection()"></td>' +
-        '<td class="wish-table-name"><div class="wish-table-name-main">' + escapeHtml(itemName) + '</div>' + statusMarkup + '</td>' +
-        '<td>' + escapeHtml(supply) + '</td>' +
-        '<td>' + (qty > 0 ? qty + (unit ? ' ' + escapeHtml(unit) : '') : '') + '</td>' +
-        '<td class="wish-table-amount">' + escapeHtml(amount) + '</td>' +
-        '</tr>';
-    }).join("") +
-    '</tbody><tfoot><tr><th colspan="3">Visible totals</th><th>' + fmtN(totalQty) + '</th><th>' + escapeHtml(fmt(totalAmount)) + '</th></tr></tfoot></table></div>';
+    "</div>";
+  return (
+    bulkActions +
+    '<div class="wish-table-wrap"><table class="wish-table"><thead><tr><th scope="col" style="width:8%;"><span class="wish-column-label">Sel.</span><input type="checkbox" id="wish-select-all" aria-label="Select all visible wishlist items" onchange="toggleAllWishlistSelection(this.checked)"></th><th scope="col">Item</th><th scope="col">Supplier</th><th scope="col">Qty</th><th scope="col">Est. amount</th></tr></thead><tbody>' +
+    rows
+      .map((row) => {
+        const wish = wishById.get(row.wishId) || {};
+        const stocked = wishStatus(wish) === "stocked";
+        const itemName = String(row.name || row.code || "").trim();
+        const supply = String(wish.supplierId || wish.supplier || "").trim();
+        const qty = Number(wish.qty || row.qty || 0);
+        const estimatedPrice = Number(wish.estimatedCost || 0);
+        const amount =
+          qty > 0 && estimatedPrice > 0 ? fmt(qty * estimatedPrice) : "";
+        const unit = String(wish.unit || "").trim();
+        const statusLabel = labelWishlistStatus(wishStatus(wish));
+        const statusClass =
+          wishStatus(wish) === "in_progress"
+            ? "wish-status-indicator in-progress"
+            : wishStatus(wish) === "stocked"
+              ? "wish-status-indicator stocked"
+              : wishStatus(wish) === "cancelled"
+                ? "wish-status-indicator cancelled"
+                : "wish-status-indicator planned";
+        const statusMarkup =
+          wishStatus(wish) === "stocked" || _activeWishlistView === "stocked"
+            ? ""
+            : '<div class="wish-row-status"><span class="' +
+              statusClass +
+              '">' +
+              escapeHtml(statusLabel) +
+              "</span></div>";
+        const isSelected = _selectedWishlistIds.has(Number(row.wishId));
+        return (
+          '<tr class="wish-row' +
+          (stocked ? " is-stocked" : "") +
+          '" data-wish-id="' +
+          row.wishId +
+          '" onclick="openWishlistDetail(' +
+          row.wishId +
+          ')">' +
+          '<td class="wish-table-check-cell"><input type="checkbox" class="wish-select-item" value="' +
+          row.wishId +
+          '" aria-label="Select ' +
+          escapeHtml(itemName) +
+          '"' +
+          (isSelected ? " checked" : "") +
+          ' onchange="event.stopPropagation();updateWishlistSelection()"></td>' +
+          '<td class="wish-table-name"><div class="wish-table-name-main">' +
+          escapeHtml(itemName) +
+          "</div>" +
+          statusMarkup +
+          "</td>" +
+          "<td>" +
+          escapeHtml(supply) +
+          "</td>" +
+          "<td>" +
+          (qty > 0 ? qty + (unit ? " " + escapeHtml(unit) : "") : "") +
+          "</td>" +
+          '<td class="wish-table-amount">' +
+          escapeHtml(amount) +
+          "</td>" +
+          "</tr>"
+        );
+      })
+      .join("") +
+    '</tbody><tfoot><tr><th colspan="3">Visible totals</th><th>' +
+    fmtN(totalQty) +
+    "</th><th>" +
+    escapeHtml(fmt(totalAmount)) +
+    "</th></tr></tfoot></table></div>"
+  );
 }
 
 function clearWishDetailVendorForm() {
@@ -6242,7 +7008,10 @@ async function openWishlistDetail(wishId) {
   renderWishDetailItemInfo(wish);
   renderWishShoeOverlay(wish);
   if (noteInput) noteInput.value = wish.note || "";
-  await renderPurchaseListOptions("wd-purchase-list", wish.purchaseBudgetId || "");
+  await renderPurchaseListOptions(
+    "wd-purchase-list",
+    wish.purchaseBudgetId || "",
+  );
   [
     ["wd-category", wish.category || ""],
     ["wd-supplier", wish.supplierId || wish.supplier || ""],
@@ -6270,7 +7039,8 @@ async function saveWishlistDetail() {
   wish.note = noteInput ? String(noteInput.value || "").trim() : "";
   wish.category = Input.text("wd-category");
   wish.supplierId = Input.text("wd-supplier");
-  wish.purchaseBudgetId = document.getElementById("wd-purchase-list")?.value || "";
+  wish.purchaseBudgetId =
+    document.getElementById("wd-purchase-list")?.value || "";
 
   const vendorName = Input.text("wd-vendor-name").trim();
   const vendorPriceRaw = Input.money("wd-vendor-price");
@@ -6361,11 +7131,15 @@ async function wishlistDetailDelete() {
     if (!confirm('Discard "' + label + '"?')) return;
     const now = new Date().toISOString();
     try {
-      await runAtomicWishlistOperation([id], (record) => {
-        record.status = "discarded";
-        record.discardedAt = now;
-        record.updatedAt = now;
-      }, () => moveWishlistItemsToGeneralList([id]));
+      await runAtomicWishlistOperation(
+        [id],
+        (record) => {
+          record.status = "discarded";
+          record.discardedAt = now;
+          record.updatedAt = now;
+        },
+        () => moveWishlistItemsToGeneralList([id]),
+      );
     } catch (_) {
       return toast("Could not discard the item", "err");
     }
@@ -6494,8 +7268,10 @@ async function saveItem() {
       }
       const qty = parseInt(UI.el("f-qty")?.value);
       const previousQty = Number(sizeRec.qty || 0);
-      const buy = parsePriceInput(UI.el("f-buy")?.value) || sizeRec.buyPrice || 0;
-      const sell = parsePriceInput(UI.el("f-sell")?.value) || sizeRec.sellPrice || 0;
+      const buy =
+        parsePriceInput(UI.el("f-buy")?.value) || sizeRec.buyPrice || 0;
+      const sell =
+        parsePriceInput(UI.el("f-sell")?.value) || sizeRec.sellPrice || 0;
       if (isNaN(qty) || qty < 0)
         return Validate.fail("Enter a valid quantity (0 or more)", "f-qty");
       if (!Validate.price(buy, sell, "f-buy", "f-sell")) return;
@@ -6586,9 +7362,10 @@ async function saveItem() {
         actor: currentUser ? currentUser.username : "system",
       });
       fbSyncItem(existing);
-      const actualBuy = _purchaseProcessing?.wishId === _wishStockingFromId
-        ? _purchaseProcessing.unitBuy
-        : (existing.buyPrice || existing.buy || 0);
+      const actualBuy =
+        _purchaseProcessing?.wishId === _wishStockingFromId
+          ? _purchaseProcessing.unitBuy
+          : existing.buyPrice || existing.buy || 0;
       await recordStockInvestment(
         existing,
         addQty * actualBuy,
@@ -6596,7 +7373,12 @@ async function saveItem() {
         "Restock",
       );
       if (_wishStockingFromId) {
-        await markWishlistStockedById(_wishStockingFromId, existing.id, addQty, actualBuy);
+        await markWishlistStockedById(
+          _wishStockingFromId,
+          existing.id,
+          addQty,
+          actualBuy,
+        );
         _wishStockingFromId = null;
         _purchaseProcessing = null;
       }
@@ -6840,11 +7622,17 @@ async function saveItem() {
         actor: currentUser ? currentUser.username : "system",
       });
       if (_addFormPhotoData) await setItemPhoto(newId, _addFormPhotoData);
-      const actualBuy = _purchaseProcessing?.wishId === _wishStockingFromId
-        ? _purchaseProcessing.unitBuy
-        : buy;
+      const actualBuy =
+        _purchaseProcessing?.wishId === _wishStockingFromId
+          ? _purchaseProcessing.unitBuy
+          : buy;
       if (_wishStockingFromId) {
-        await markWishlistStockedById(_wishStockingFromId, newId, qty, actualBuy);
+        await markWishlistStockedById(
+          _wishStockingFromId,
+          newId,
+          qty,
+          actualBuy,
+        );
         _wishStockingFromId = null;
         _purchaseProcessing = null;
       } else {
@@ -7313,7 +8101,10 @@ async function renderList() {
   const allSizes = await dbAll("shoe_sizes");
   const ledgerSizeQty = new Map(
     await Promise.all(
-      allSizes.map(async (size) => [size.id, await readableStockQty(size, size.id)]),
+      allSizes.map(async (size) => [
+        size.id,
+        await readableStockQty(size, size.id),
+      ]),
     ),
   );
   const ledgerItemQty = new Map(
@@ -7371,7 +8162,10 @@ async function renderList() {
       }
 
       // ── Aggregates for the group header ──────────────────────
-      const groupTotalPcs = sizes.reduce((s, sz) => s + (ledgerSizeQty.get(sz.id) || 0), 0);
+      const groupTotalPcs = sizes.reduce(
+        (s, sz) => s + (ledgerSizeQty.get(sz.id) || 0),
+        0,
+      );
       const groupSoldPcs = sizes.reduce(
         (s, sz) => s + (salesBySize[item.code + "_" + sz.size] || 0),
         0,
@@ -7486,7 +8280,10 @@ async function renderList() {
         continue;
       }
 
-      const groupTotalPcs = variants.reduce((s, v) => s + (ledgerSizeQty.get(v.id) || 0), 0);
+      const groupTotalPcs = variants.reduce(
+        (s, v) => s + (ledgerSizeQty.get(v.id) || 0),
+        0,
+      );
       const groupSoldPcs = variants.reduce(
         (s, v) => s + (salesBySize[item.code + "_" + v.sizeGroup] || 0),
         0,
@@ -7565,12 +8362,19 @@ async function renderList() {
       const isExpanded =
         (UI.el("search")?.value || "").length > 0 ||
         _expandedTypeGroups.has(ptId);
-      const groupTotalQty = groupItems.reduce((s, i) => s + (ledgerItemQty.get(i.id) || 0), 0);
+      const groupTotalQty = groupItems.reduce(
+        (s, i) => s + (ledgerItemQty.get(i.id) || 0),
+        0,
+      );
       const groupRevenue = allSales
         .filter((s) => groupItems.some((i) => i.id === s.itemId))
         .reduce((s, x) => s + (x.revenue || 0), 0);
-      const allOut = groupItems.every((i) => (ledgerItemQty.get(i.id) || 0) <= 0);
-      const hasOut = groupItems.some((i) => (ledgerItemQty.get(i.id) || 0) <= 0);
+      const allOut = groupItems.every(
+        (i) => (ledgerItemQty.get(i.id) || 0) <= 0,
+      );
+      const hasOut = groupItems.some(
+        (i) => (ledgerItemQty.get(i.id) || 0) <= 0,
+      );
 
       cards.push(`
         <div class="type-group-header" onclick="toggleTypeGroup(${ptId})" style="cursor:pointer;">
@@ -7699,20 +8503,22 @@ async function getStockMonitorRows() {
 
   for (const item of items) {
     if (item.isShoe) {
-      for (const sz of sizes.filter((record) => record.itemCode === item.code)) {
+      for (const sz of sizes.filter(
+        (record) => record.itemCode === item.code,
+      )) {
         const availableQty = await readableStockQty(sz, sz.id);
         if (availableQty > 0) continue;
         rows.push({
-            kind: "out",
-            itemId: item.id,
-            size: sz.size,
-            name: item.name || item.code,
-            code: item.code,
-            type: item.type || "",
-            qty: 0,
-            buyPrice: sz.buyPrice || item.buyPrice || item.buy || 0,
-            label: "Out of stock - size " + sz.size,
-          });
+          kind: "out",
+          itemId: item.id,
+          size: sz.size,
+          name: item.name || item.code,
+          code: item.code,
+          type: item.type || "",
+          qty: 0,
+          buyPrice: sz.buyPrice || item.buyPrice || item.buy || 0,
+          label: "Out of stock - size " + sz.size,
+        });
       }
     } else if (!item.isRecord && (await readableStockQty(item)) <= 0) {
       rows.push({
@@ -7884,7 +8690,12 @@ function showWishlistSection(section) {
   const listPanel = document.getElementById("wishlist-list");
   const addPanel = document.getElementById("wishlist-add-panel");
   const controls = document.getElementById("wishlist-controls");
-  const normalizedSection = section === "day" || section === "stocked" ? "list" : (section === "add" ? "add" : "list");
+  const normalizedSection =
+    section === "day" || section === "stocked"
+      ? "list"
+      : section === "add"
+        ? "add"
+        : "list";
   const isAdd = normalizedSection === "add";
   if (isAdd) {
     const currentList = getSavedWishlistListForAdd();
@@ -7924,18 +8735,29 @@ function setWishCurrentStep(stepName, shouldFocus) {
   });
   document.querySelectorAll(".wish-question-step-tab").forEach((tab) => {
     tab.classList.toggle("is-current", tab.dataset.stepTarget === stepName);
-    tab.setAttribute("aria-selected", tab.dataset.stepTarget === stepName ? "true" : "false");
+    tab.setAttribute(
+      "aria-selected",
+      tab.dataset.stepTarget === stepName ? "true" : "false",
+    );
   });
   if (shouldFocus) {
-    const current = document.querySelector('.wish-question-step[data-wish-step="' + stepName + '"]');
-    current?.querySelector("input, select, button")?.focus({ preventScroll: true });
+    const current = document.querySelector(
+      '.wish-question-step[data-wish-step="' + stepName + '"]',
+    );
+    current
+      ?.querySelector("input, select, button")
+      ?.focus({ preventScroll: true });
   }
 }
 
 function updateWishFormProgress() {
   const steps = [
     Boolean(Input.text("wish-name")),
-    Boolean(Input.text("wish-type") || Input.text("wish-category") || Input.raw("wish-cost")),
+    Boolean(
+      Input.text("wish-type") ||
+      Input.text("wish-category") ||
+      Input.raw("wish-cost"),
+    ),
     Boolean(Input.text("wish-supplier")),
     Boolean(Input.text("wish-note") || _wishFormPhotoData),
   ];
@@ -7944,7 +8766,9 @@ function updateWishFormProgress() {
   if (label) label.textContent = answered + " of 4 answered";
   const stepEls = Array.from(document.querySelectorAll(".wish-question-step"));
   document.querySelectorAll(".wish-question-step-tab").forEach((tab) => {
-    const index = ["item", "target", "plan", "context"].indexOf(tab.dataset.stepTarget);
+    const index = ["item", "target", "plan", "context"].indexOf(
+      tab.dataset.stepTarget,
+    );
     tab.classList.toggle("is-answered", !!steps[index]);
   });
   stepEls.forEach((step, index) => {
@@ -7954,7 +8778,9 @@ function updateWishFormProgress() {
 window.updateWishFormProgress = updateWishFormProgress;
 
 function focusWishStep(stepName) {
-  const step = document.querySelector('.wish-question-step[data-wish-step="' + stepName + '"]');
+  const step = document.querySelector(
+    '.wish-question-step[data-wish-step="' + stepName + '"]',
+  );
   if (!step) return;
   setWishCurrentStep(stepName, false);
   step.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -7970,7 +8796,8 @@ function toggleWishAddMore(forceOpen) {
   btn.setAttribute("aria-expanded", open ? "true" : "false");
   btn.classList.toggle("is-open", open);
   const label = btn.querySelector(".wish-add-more-toggle-text");
-  if (label) label.textContent = open ? "Hide other fields" : "Show other fields";
+  if (label)
+    label.textContent = open ? "Hide other fields" : "Show other fields";
 }
 window.toggleWishAddMore = toggleWishAddMore;
 
@@ -7980,18 +8807,37 @@ async function renderWishlistPage() {
   const list = document.getElementById("wishlist-list");
   if (!list) return;
   list.style.display = _activeWishlistView === "saved" ? "none" : "";
-  const allWishes = db.objectStoreNames.contains("wishlist") ? await dbAll("wishlist") : [];
+  const allWishes = db.objectStoreNames.contains("wishlist")
+    ? await dbAll("wishlist")
+    : [];
   const showList = _activeWishlistSection === "list";
   const showAdd = _activeWishlistSection === "add";
   const controls = document.getElementById("wishlist-controls");
   const savedLists = getSavedWishlistLists();
   if (controls) {
     if (showList) {
-      controls.innerHTML = '<div class="wish-view-tabs" role="tablist" aria-label="Wishlist views">' +
-        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "saved" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "saved") + '" onclick="chooseWishlistSavedList()"><i class="fa-solid fa-list-ul"></i> Wish lists</button>' +
-        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "main" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "main") + '" onclick="setWishlistView(\'main\')"><i class="fa-solid fa-layer-group"></i> Main list</button>' +
-        '<button type="button" class="wish-view-tab' + (_activeWishlistView === "stocked" ? " active" : "") + '" role="tab" aria-selected="' + (_activeWishlistView === "stocked") + '" onclick="setWishlistView(\'stocked\')">Stocked</button>' +
-        '</div>' + (_activeWishlistView === "saved" ? renderSavedWishlistListsPanel(savedLists, allWishes) : '') + '<div id="wish-list-summary" class="wish-list-summary" aria-live="polite"></div>';
+      controls.innerHTML =
+        '<div class="wish-view-tabs" role="tablist" aria-label="Wishlist views">' +
+        '<button type="button" class="wish-view-tab' +
+        (_activeWishlistView === "saved" ? " active" : "") +
+        '" role="tab" aria-selected="' +
+        (_activeWishlistView === "saved") +
+        '" onclick="chooseWishlistSavedList()"><i class="fa-solid fa-list-ul"></i> Wish lists</button>' +
+        '<button type="button" class="wish-view-tab' +
+        (_activeWishlistView === "main" ? " active" : "") +
+        '" role="tab" aria-selected="' +
+        (_activeWishlistView === "main") +
+        '" onclick="setWishlistView(\'main\')"><i class="fa-solid fa-layer-group"></i> Main list</button>' +
+        '<button type="button" class="wish-view-tab' +
+        (_activeWishlistView === "stocked" ? " active" : "") +
+        '" role="tab" aria-selected="' +
+        (_activeWishlistView === "stocked") +
+        '" onclick="setWishlistView(\'stocked\')">Stocked</button>' +
+        "</div>" +
+        (_activeWishlistView === "saved"
+          ? renderSavedWishlistListsPanel(savedLists, allWishes)
+          : "") +
+        '<div id="wish-list-summary" class="wish-list-summary" aria-live="polite"></div>';
     } else {
       controls.innerHTML = "";
     }
@@ -7999,12 +8845,24 @@ async function renderWishlistPage() {
   let filteredWishes = allWishes
     .filter((wish) => !isWishlistSaleMonitorEntry(wish))
     .filter((wish) => {
-      if (_activeWishlistView === "stocked") return wishStatus(wish) === "stocked";
+      if (_activeWishlistView === "stocked")
+        return wishStatus(wish) === "stocked";
       if (_activeWishlistView === "saved") {
-        const savedList = savedLists.find((list) => list.name === _activeWishlistSavedList);
-        return Boolean(savedList && savedList.itemIds.includes(wish.id) && wishStatus(wish) !== "stocked" && wishStatus(wish) !== "discarded");
+        const savedList = savedLists.find(
+          (list) => list.name === _activeWishlistSavedList,
+        );
+        return Boolean(
+          savedList &&
+          savedList.itemIds.includes(wish.id) &&
+          wishStatus(wish) !== "stocked" &&
+          wishStatus(wish) !== "discarded",
+        );
       }
-      return wishStatus(wish) !== "stocked" && wishStatus(wish) !== "discarded" && !getWishlistListMembership(wish.id, savedLists);
+      return (
+        wishStatus(wish) !== "stocked" &&
+        wishStatus(wish) !== "discarded" &&
+        !getWishlistListMembership(wish.id, savedLists)
+      );
     })
     .sort((a, b) => {
       const aStocked = wishStatus(a) === "stocked" ? 1 : 0;
@@ -8012,13 +8870,26 @@ async function renderWishlistPage() {
       if (aStocked !== bStocked) return aStocked - bStocked;
       return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
     });
-  const wishlistRecords = allWishes.filter((wish) => !isWishlistSaleMonitorEntry(wish) && wishStatus(wish) !== "discarded");
-  const activeCount = wishlistRecords.filter((wish) => wishStatus(wish) !== "stocked").length;
-  const stockedCount = wishlistRecords.filter((wish) => wishStatus(wish) === "stocked").length;
-  const visibleActiveWishes = filteredWishes.filter((wish) => wishStatus(wish) !== "stocked");
-  const visibleQty = visibleActiveWishes.reduce((sum, wish) => sum + Number(wish.qty || 0), 0);
+  const wishlistRecords = allWishes.filter(
+    (wish) =>
+      !isWishlistSaleMonitorEntry(wish) && wishStatus(wish) !== "discarded",
+  );
+  const activeCount = wishlistRecords.filter(
+    (wish) => wishStatus(wish) !== "stocked",
+  ).length;
+  const stockedCount = wishlistRecords.filter(
+    (wish) => wishStatus(wish) === "stocked",
+  ).length;
+  const visibleActiveWishes = filteredWishes.filter(
+    (wish) => wishStatus(wish) !== "stocked",
+  );
+  const visibleQty = visibleActiveWishes.reduce(
+    (sum, wish) => sum + Number(wish.qty || 0),
+    0,
+  );
   const visibleValue = visibleActiveWishes.reduce(
-    (sum, wish) => sum + Number(wish.qty || 0) * Number(wish.estimatedCost || 0),
+    (sum, wish) =>
+      sum + Number(wish.qty || 0) * Number(wish.estimatedCost || 0),
     0,
   );
   const summary = document.getElementById("wish-list-summary");
@@ -8026,11 +8897,21 @@ async function renderWishlistPage() {
     summary.style.display = _activeWishlistView === "saved" ? "none" : "";
     if (_activeWishlistView !== "saved") {
       summary.innerHTML =
-        '<span><strong>' + filteredWishes.length + '</strong> shown</span>' +
-        '<span><strong>' + activeCount + '</strong> to buy</span>' +
-        '<span><strong>' + stockedCount + '</strong> stocked</span>' +
-        '<span><strong>' + fmtN(visibleQty) + '</strong> units</span>' +
-        '<span><strong>' + fmt(visibleValue) + '</strong> estimated</span>';
+        "<span><strong>" +
+        filteredWishes.length +
+        "</strong> shown</span>" +
+        "<span><strong>" +
+        activeCount +
+        "</strong> to buy</span>" +
+        "<span><strong>" +
+        stockedCount +
+        "</strong> stocked</span>" +
+        "<span><strong>" +
+        fmtN(visibleQty) +
+        "</strong> units</span>" +
+        "<span><strong>" +
+        fmt(visibleValue) +
+        "</strong> estimated</span>";
     }
   }
   const rows = filteredWishes.map((wish) => ({
@@ -8047,7 +8928,12 @@ async function renderWishlistPage() {
       : "Nothing yet";
 
   if (!rows.length) {
-    list.innerHTML = '<div class="wish-empty"><div class="wish-empty-icon">+</div><p class="wish-empty-title">No item to display.</p>' + (!showAdd ? '<button type="button" class="wish-empty-btn" onclick="window.showWishlistSection(\'add\')">Add item</button>' : "") + '</div>';
+    list.innerHTML =
+      '<div class="wish-empty"><div class="wish-empty-icon">+</div><p class="wish-empty-title">No item to display.</p>' +
+      (!showAdd
+        ? '<button type="button" class="wish-empty-btn" onclick="window.showWishlistSection(\'add\')">Add item</button>'
+        : "") +
+      "</div>";
     return;
   }
 
@@ -8077,7 +8963,11 @@ async function toggleWishlistStockedState(wishId) {
       toast("Moved back to wishlist", "ok");
       return;
     }
-    if (confirm('Delete "' + label + '" from the wishlist? This cannot be undone.')) {
+    if (
+      confirm(
+        'Delete "' + label + '" from the wishlist? This cannot be undone.',
+      )
+    ) {
       await deleteWishlistItem(wishId);
       toast("Wishlist item deleted", "ok");
       return;
@@ -8090,12 +8980,16 @@ async function toggleWishlistStockedState(wishId) {
   wish.stockedItemId = null;
   wish.dayPurchaseDate = null;
   try {
-    await runAtomicWishlistOperation([wishId], (record) => {
-      record.status = wish.status;
-      record.stockedAt = wish.stockedAt;
-      record.stockedItemId = null;
-      record.dayPurchaseDate = null;
-    }, () => {});
+    await runAtomicWishlistOperation(
+      [wishId],
+      (record) => {
+        record.status = wish.status;
+        record.stockedAt = wish.stockedAt;
+        record.stockedItemId = null;
+        record.dayPurchaseDate = null;
+      },
+      () => {},
+    );
   } catch (_) {
     return toast("Could not mark the item stocked", "err");
   }
@@ -8116,7 +9010,9 @@ async function saveWishlistItem() {
   const unit = unitField ? Input.text("wish-unit") || "Pcs" : "Pcs";
   const type = typeField ? Input.text("wish-type") : "";
   const note = noteField ? Input.text("wish-note") : "";
-  const status = statusField ? normalizeWishlistStatus(Input.text("wish-status")) : "planned";
+  const status = statusField
+    ? normalizeWishlistStatus(Input.text("wish-status"))
+    : "planned";
   const qtyRaw = Input.int("wish-qty");
   const estimatedCost = Input.money("wish-cost");
   const supplierId = Input.text("wish-supplier");
@@ -8148,17 +9044,15 @@ async function saveWishlistItem() {
     delete existing.priority;
     delete existing.plannedPurchaseDate;
     await dbPut("wishlist", existing);
-    if (wishStatus(existing) === "stocked" || wishStatus(existing) === "discarded") {
+    if (
+      wishStatus(existing) === "stocked" ||
+      wishStatus(existing) === "discarded"
+    ) {
       moveWishlistItemsToGeneralList([existing.id]);
     }
     _editingWishlistId = null;
     clearWishPhotoForm();
-    [
-      "wish-name",
-      "wish-qty",
-      "wish-cost",
-      "wish-supplier",
-    ].forEach((id) => {
+    ["wish-name", "wish-qty", "wish-cost", "wish-supplier"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.value = "";
     });
@@ -8187,12 +9081,7 @@ async function saveWishlistItem() {
   const addList = _wishlistAddToSavedListId;
   _wishlistAddToSavedListId = "";
   if (addList) assignWishlistItemToSavedList(entry.id, addList);
-  [
-    "wish-name",
-    "wish-qty",
-    "wish-cost",
-    "wish-supplier",
-  ].forEach((id) => {
+  ["wish-name", "wish-qty", "wish-cost", "wish-supplier"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
@@ -8239,9 +9128,15 @@ async function openEditWishlistItem(wishId) {
   const supplierEl = document.getElementById("wish-supplier");
   if (supplierEl) supplierEl.value = wish.supplierId || wish.supplier || "";
   const saveBtn = document.querySelector(".wish-save-btn");
-  if (saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Update wishlist item';
-  const addTitle = document.querySelector("#wishlist-add-panel .wish-section-title");
-  if (addTitle) addTitle.innerHTML = '<span class="wish-section-icon"><i class="fa-solid fa-pen"></i></span>Edit wishlist item';
+  if (saveBtn)
+    saveBtn.innerHTML =
+      '<i class="fa-solid fa-floppy-disk"></i> Update wishlist item';
+  const addTitle = document.querySelector(
+    "#wishlist-add-panel .wish-section-title",
+  );
+  if (addTitle)
+    addTitle.innerHTML =
+      '<span class="wish-section-icon"><i class="fa-solid fa-pen"></i></span>Edit wishlist item';
   setTimeout(() => document.getElementById("wish-name")?.focus(), 100);
 }
 window.openEditWishlistItem = openEditWishlistItem;
@@ -8249,9 +9144,15 @@ window.openEditWishlistItem = openEditWishlistItem;
 function cancelWishlistEdit() {
   _editingWishlistId = null;
   const saveBtn = document.querySelector(".wish-save-btn");
-  if (saveBtn) saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save to wishlist';
-  const addTitle = document.querySelector("#wishlist-add-panel .wish-section-title");
-  if (addTitle) addTitle.innerHTML = '<span class="wish-section-icon"><i class="fa-solid fa-cube"></i></span>What do you want to stock? <span class="add-required">*</span>';
+  if (saveBtn)
+    saveBtn.innerHTML =
+      '<i class="fa-solid fa-floppy-disk"></i> Save to wishlist';
+  const addTitle = document.querySelector(
+    "#wishlist-add-panel .wish-section-title",
+  );
+  if (addTitle)
+    addTitle.innerHTML =
+      '<span class="wish-section-icon"><i class="fa-solid fa-cube"></i></span>What do you want to stock? <span class="add-required">*</span>';
   [
     "wish-name",
     "wish-unit",
@@ -8303,8 +9204,9 @@ async function markWishlistStockedForItem(item) {
     const wishName = (wish.name || "").trim().toLowerCase();
     return itemName && wishName && itemName === wishName;
   });
-  const match = (codeMatches.length ? codeMatches : nameMatches)
-    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+  const match = (codeMatches.length ? codeMatches : nameMatches).sort(
+    (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+  )[0];
   if (!match) return;
   match.status = "stocked";
   match.stockedAt = new Date().toISOString();
@@ -8332,9 +9234,15 @@ async function startWishlistRestock(wishId) {
   const wish = await dbGet("wishlist", wishId);
   if (!wish) return;
   const existingItems = await dbAll("items");
-  const existing = existingItems.find((item) =>
-    (wish.code && item.code && item.code.toLowerCase() === wish.code.toLowerCase()) ||
-    (!wish.code && wish.name && item.name && item.name.toLowerCase() === wish.name.toLowerCase()),
+  const existing = existingItems.find(
+    (item) =>
+      (wish.code &&
+        item.code &&
+        item.code.toLowerCase() === wish.code.toLowerCase()) ||
+      (!wish.code &&
+        wish.name &&
+        item.name &&
+        item.name.toLowerCase() === wish.name.toLowerCase()),
   );
   _wishStockingFromId = wishId;
   closeWishlistDetail();
@@ -8366,8 +9274,16 @@ async function startWishlistRestock(wishId) {
     if (wish.type) setAddFormType(wish.type);
     if (UI.el("f-code")) UI.el("f-code").value = wish.code || "";
     if (UI.el("f-name")) UI.el("f-name").value = wish.name || "";
-    if (UI.el("f-qty")) UI.el("f-qty").value = _purchaseProcessing?.wishId === wishId ? _purchaseProcessing.qty : wish.qty || 1;
-    if (UI.el("f-buy")) UI.el("f-buy").value = _purchaseProcessing?.wishId === wishId ? _purchaseProcessing.unitBuy : wish.estimatedCost || "";
+    if (UI.el("f-qty"))
+      UI.el("f-qty").value =
+        _purchaseProcessing?.wishId === wishId
+          ? _purchaseProcessing.qty
+          : wish.qty || 1;
+    if (UI.el("f-buy"))
+      UI.el("f-buy").value =
+        _purchaseProcessing?.wishId === wishId
+          ? _purchaseProcessing.unitBuy
+          : wish.estimatedCost || "";
     if (photo) applyAddFormPhotoPreview(photo);
     else clearAddFormPhoto();
     setItemMode(false);
@@ -8402,7 +9318,9 @@ async function openShoeSizeCard(itemCode, size) {
   const stockCol = isOut ? "var(--red)" : isLow ? "#d97706" : "var(--green)";
   const stockLbl = isOut ? "Out of stock" : availableQty + " pcs in stock";
   const groupLbl =
-    getShoeGroups()[sizeRec.sizeGroup]?.label || sizeRec.sizeGroup || "Size group";
+    getShoeGroups()[sizeRec.sizeGroup]?.label ||
+    sizeRec.sizeGroup ||
+    "Size group";
 
   let sheet = document.getElementById("shoe-size-action-sheet");
   if (!sheet) {
@@ -9861,29 +10779,31 @@ async function searchSell() {
       const t = getTypeObj(item.type);
 
       if (item.isShoe) {
-        for (const sz of sizes.filter((record) => record.itemCode === item.code)) {
-            const availableQty = await readableStockQty(sz, sz.id);
-            if (availableQty <= 0) continue;
-            // Also score against size number
-            const szScore = q
-              ? Math.max(score, String(sz.size).includes(q) ? 20 : 0)
-              : 1;
-            if (q && szScore === 0) return;
-            const price = sz.sellPrice || item.sellPrice || item.sell || 0;
-            const buy = sz.buyPrice || item.buyPrice || item.buy || 0;
-            rows.push({
-              item,
-              t,
-              score: szScore,
-              label: item.name || item.code,
-              meta: item.code + " · Size " + sz.size,
-              qty: availableQty,
-              price,
-              profit: price - buy,
-              isRec: false,
-              action: `openSellShoeModal(${item.id},${sz.size})`,
-              extraTag: `<span class="tag tag-gray">Sz ${escapeHtml(String(sz.size))}</span>`,
-            });
+        for (const sz of sizes.filter(
+          (record) => record.itemCode === item.code,
+        )) {
+          const availableQty = await readableStockQty(sz, sz.id);
+          if (availableQty <= 0) continue;
+          // Also score against size number
+          const szScore = q
+            ? Math.max(score, String(sz.size).includes(q) ? 20 : 0)
+            : 1;
+          if (q && szScore === 0) return;
+          const price = sz.sellPrice || item.sellPrice || item.sell || 0;
+          const buy = sz.buyPrice || item.buyPrice || item.buy || 0;
+          rows.push({
+            item,
+            t,
+            score: szScore,
+            label: item.name || item.code,
+            meta: item.code + " · Size " + sz.size,
+            qty: availableQty,
+            price,
+            profit: price - buy,
+            isRec: false,
+            action: `openSellShoeModal(${item.id},${sz.size})`,
+            extraTag: `<span class="tag tag-gray">Sz ${escapeHtml(String(sz.size))}</span>`,
+          });
         }
         continue;
       }
@@ -10044,13 +10964,20 @@ async function confirmOffStockSale() {
   if (qtyRaw !== "" && !Number.isInteger(qty))
     return Validate.fail("Enter a whole quantity", "off-qty");
   if (!Validate.restockQty(qty, "off-qty")) return;
-  if (buyPrice !== null && !Validate.moneyRequired(buyPrice, "off-buy", "Buy price")) return;
+  if (
+    buyPrice !== null &&
+    !Validate.moneyRequired(buyPrice, "off-buy", "Buy price")
+  )
+    return;
   if (!Validate.moneyRequired(sellPrice, "off-sell", "Sale price")) return;
   const buy = buyPrice ?? 0;
   if (sellPrice <= 0)
     return Validate.fail("Sale price must be greater than zero", "off-sell");
   if (buyPrice !== null && buy >= sellPrice)
-    return Validate.fail("Sale price must be higher than buy price", "off-sell");
+    return Validate.fail(
+      "Sale price must be higher than buy price",
+      "off-sell",
+    );
 
   const revenue = qty * sellPrice;
   const profit = buyPrice === null ? 0 : qty * (sellPrice - buy);
@@ -10091,7 +11018,8 @@ async function confirmOffStockSale() {
   const originalButtonMarkup = sellButton?.innerHTML;
   if (sellButton) {
     sellButton.disabled = true;
-    sellButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+    sellButton.innerHTML =
+      '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
   }
   try {
     await persistOffStockSaleAtomically(sale, monitorRow);
@@ -10215,7 +11143,9 @@ async function openSellModal(itemId) {
     document.getElementById("sm-cur").textContent = currency;
     document.getElementById("sm-qty").value = 0;
     document.getElementById("sm-qty").min = 0;
-    document.getElementById("sm-qty").max = item.isRecord ? 999999 : availableQty;
+    document.getElementById("sm-qty").max = item.isRecord
+      ? 999999
+      : availableQty;
     document.getElementById("sm-actual").value = "";
     _toggleSmBuyField(_itemBuy);
     updateSellModal();
@@ -10392,9 +11322,10 @@ async function confirmSaleUnlocked() {
       !isNaN(actualRaw) && actualRaw > 0 ? actualRaw : sellPrice;
 
     // ── Validate stock ─────────────────────────────────────────────
-    const maxQty = _isShoeSale && _sellShoeSize
-      ? await readableStockQty(_sellShoeSize, _sellShoeSize.id)
-      : await readableStockQty(item);
+    const maxQty =
+      _isShoeSale && _sellShoeSize
+        ? await readableStockQty(_sellShoeSize, _sellShoeSize.id)
+        : await readableStockQty(item);
     const itemLabel = item.name || item.code;
     if (!Number.isFinite(qty) || qty <= 0) {
       Validate.fail("Enter quantity to sell", "sm-qty");
@@ -11205,31 +12136,60 @@ async function seedDevDatabase() {
 
   for (let i = 0; i < 60; i++) {
     const baseName = wishNames[i % wishNames.length];
-    const name = i < wishNames.length
-      ? baseName
-      : baseName + " #" + (Math.floor(i / wishNames.length) + 1);
+    const name =
+      i < wishNames.length
+        ? baseName
+        : baseName + " #" + (Math.floor(i / wishNames.length) + 1);
     const priority = wishPriorities[i % wishPriorities.length];
     const status = wishStatuses[i % wishStatuses.length];
     const category = wishCategories[i % wishCategories.length];
     const supplierId = wishSuppliers[i % wishSuppliers.length];
     const unit = wishUnits[i % wishUnits.length];
     const qty = 2 + ((i * 3) % 24);
-    const requestedQty = qty + ((i % 4) * 2);
-    const purchasedQty = status === "stocked" ? requestedQty : status === "in_progress" ? Math.max(0, Math.floor(requestedQty / 2)) : 0;
+    const requestedQty = qty + (i % 4) * 2;
+    const purchasedQty =
+      status === "stocked"
+        ? requestedQty
+        : status === "in_progress"
+          ? Math.max(0, Math.floor(requestedQty / 2))
+          : 0;
     const estimatedCost = 150 + ((i * 211) % 2600);
     const note = wishNotes[i % wishNotes.length];
     const source = wishSources[i % wishSources.length];
-    const purchaseStatus = status === "stocked" ? "stocked" : status === "cancelled" ? "cancelled" : purchasedQty > 0 ? "partial" : "unstocked";
+    const purchaseStatus =
+      status === "stocked"
+        ? "stocked"
+        : status === "cancelled"
+          ? "cancelled"
+          : purchasedQty > 0
+            ? "partial"
+            : "unstocked";
     const dateOffset = ((i % 9) + 1) * 2;
-    const purchaseDate = status === "stocked" || status === "in_progress"
-      ? new Date(now)
-      : new Date(now);
+    const purchaseDate =
+      status === "stocked" || status === "in_progress"
+        ? new Date(now)
+        : new Date(now);
     purchaseDate.setDate(purchaseDate.getDate() - dateOffset);
-    const dayPurchaseDate = status === "stocked" || status === "in_progress" ? _seedLocalDateStr(purchaseDate) : null;
+    const dayPurchaseDate =
+      status === "stocked" || status === "in_progress"
+        ? _seedLocalDateStr(purchaseDate)
+        : null;
     const stockedAt = status === "stocked" ? new Date(now).toISOString() : null;
     const vendorQuotes = [
-      { supplier: supplierId, price: estimatedCost, qty: requestedQty, currency: "KES", updatedAt: now.toISOString() },
-      { supplier: wishSuppliers[(i + 1) % wishSuppliers.length], price: Math.max(120, estimatedCost - 180), qty: Math.max(1, requestedQty - 1), currency: "KES", updatedAt: now.toISOString() },
+      {
+        supplier: supplierId,
+        price: estimatedCost,
+        qty: requestedQty,
+        currency: "KES",
+        updatedAt: now.toISOString(),
+      },
+      {
+        supplier: wishSuppliers[(i + 1) % wishSuppliers.length],
+        price: Math.max(120, estimatedCost - 180),
+        qty: Math.max(1, requestedQty - 1),
+        currency: "KES",
+        updatedAt: now.toISOString(),
+      },
     ];
 
     wishSeed.push({
@@ -11268,8 +12228,12 @@ async function seedDevDatabase() {
 
   for (let i = 0; i < wishSeed.length; i++) {
     const w = wishSeed[i];
-    const normalizedName = String(w.name || "").trim().toLowerCase();
-    const match = normalizedName ? existingWishlistByName.get(normalizedName) : null;
+    const normalizedName = String(w.name || "")
+      .trim()
+      .toLowerCase();
+    const match = normalizedName
+      ? existingWishlistByName.get(normalizedName)
+      : null;
     const seedEntry = {
       ...w,
       name: w.name,
@@ -11313,25 +12277,107 @@ async function seedDevDatabase() {
 
   const seededWishlistItems = await dbAll("wishlist");
   const seededWishListMaps = {
-    Electronics: seededWishlistItems.filter((item) => String(item.category || "").toLowerCase() === "electronics"),
-    Clothes: seededWishlistItems.filter((item) => String(item.category || "").toLowerCase() === "clothes"),
-    General: seededWishlistItems.filter((item) => String(item.category || "").toLowerCase() === "general"),
-    Plastics: seededWishlistItems.filter((item) => String(item.category || "").toLowerCase() === "plastics"),
-    Food: seededWishlistItems.filter((item) => String(item.category || "").toLowerCase() === "food"),
-    Household: seededWishlistItems.filter((item) => String(item.category || "").toLowerCase() === "household"),
+    Electronics: seededWishlistItems.filter(
+      (item) => String(item.category || "").toLowerCase() === "electronics",
+    ),
+    Clothes: seededWishlistItems.filter(
+      (item) => String(item.category || "").toLowerCase() === "clothes",
+    ),
+    General: seededWishlistItems.filter(
+      (item) => String(item.category || "").toLowerCase() === "general",
+    ),
+    Plastics: seededWishlistItems.filter(
+      (item) => String(item.category || "").toLowerCase() === "plastics",
+    ),
+    Food: seededWishlistItems.filter(
+      (item) => String(item.category || "").toLowerCase() === "food",
+    ),
+    Household: seededWishlistItems.filter(
+      (item) => String(item.category || "").toLowerCase() === "household",
+    ),
   };
 
   const savedLists = [
-    { name: "Electronics Run", category: "Electronics", supply: "Nairobi Wholesale", budget: 60000, status: "planned", dueDate: _seedLocalDateStr(new Date(now.getTime() + 5 * 86400000)), itemIds: (seededWishListMaps.Electronics || []).slice(0, 10).map((item) => item.id) },
-    { name: "Apparel & Accessories", category: "Clothes", supply: "City Traders", budget: 42500, status: "ordering", dueDate: _seedLocalDateStr(new Date(now.getTime() + 7 * 86400000)), itemIds: (seededWishListMaps.Clothes || []).slice(0, 10).map((item) => item.id) },
-    { name: "Household Essentials", category: "Household", supply: "Market Centre", budget: 35000, status: "partial", dueDate: _seedLocalDateStr(new Date(now.getTime() + 9 * 86400000)), itemIds: (seededWishListMaps.Household || []).slice(0, 10).map((item) => item.id) },
-    { name: "General Supplies", category: "General", supply: "Eastside Supplies", budget: 28000, status: "planned", dueDate: _seedLocalDateStr(new Date(now.getTime() + 10 * 86400000)), itemIds: (seededWishListMaps.General || []).slice(0, 10).map((item) => item.id) },
-    { name: "Plastics & Storage", category: "Plastics", supply: "Corner Depot", budget: 32000, status: "planned", dueDate: _seedLocalDateStr(new Date(now.getTime() + 12 * 86400000)), itemIds: (seededWishListMaps.Plastics || []).slice(0, 10).map((item) => item.id) },
-    { name: "Food & Pantry", category: "Food", supply: "Nairobi Wholesale", budget: 26000, status: "planned", dueDate: _seedLocalDateStr(new Date(now.getTime() + 14 * 86400000)), itemIds: (seededWishListMaps.Food || []).slice(0, 10).map((item) => item.id) },
+    {
+      name: "Electronics Run",
+      category: "Electronics",
+      supply: "Nairobi Wholesale",
+      budget: 60000,
+      status: "planned",
+      dueDate: _seedLocalDateStr(new Date(now.getTime() + 5 * 86400000)),
+      itemIds: (seededWishListMaps.Electronics || [])
+        .slice(0, 10)
+        .map((item) => item.id),
+    },
+    {
+      name: "Apparel & Accessories",
+      category: "Clothes",
+      supply: "City Traders",
+      budget: 42500,
+      status: "ordering",
+      dueDate: _seedLocalDateStr(new Date(now.getTime() + 7 * 86400000)),
+      itemIds: (seededWishListMaps.Clothes || [])
+        .slice(0, 10)
+        .map((item) => item.id),
+    },
+    {
+      name: "Household Essentials",
+      category: "Household",
+      supply: "Market Centre",
+      budget: 35000,
+      status: "partial",
+      dueDate: _seedLocalDateStr(new Date(now.getTime() + 9 * 86400000)),
+      itemIds: (seededWishListMaps.Household || [])
+        .slice(0, 10)
+        .map((item) => item.id),
+    },
+    {
+      name: "General Supplies",
+      category: "General",
+      supply: "Eastside Supplies",
+      budget: 28000,
+      status: "planned",
+      dueDate: _seedLocalDateStr(new Date(now.getTime() + 10 * 86400000)),
+      itemIds: (seededWishListMaps.General || [])
+        .slice(0, 10)
+        .map((item) => item.id),
+    },
+    {
+      name: "Plastics & Storage",
+      category: "Plastics",
+      supply: "Corner Depot",
+      budget: 32000,
+      status: "planned",
+      dueDate: _seedLocalDateStr(new Date(now.getTime() + 12 * 86400000)),
+      itemIds: (seededWishListMaps.Plastics || [])
+        .slice(0, 10)
+        .map((item) => item.id),
+    },
+    {
+      name: "Food & Pantry",
+      category: "Food",
+      supply: "Nairobi Wholesale",
+      budget: 26000,
+      status: "planned",
+      dueDate: _seedLocalDateStr(new Date(now.getTime() + 14 * 86400000)),
+      itemIds: (seededWishListMaps.Food || [])
+        .slice(0, 10)
+        .map((item) => item.id),
+    },
   ].map((list) => ({
     ...list,
-    id: "wish-list-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + "-" + list.category.toLowerCase().replace(/[^a-z]+/g, "-"),
-    itemIds: [...new Set((list.itemIds || []).filter((id) => id !== undefined && id !== null))],
+    id:
+      "wish-list-" +
+      Date.now() +
+      "-" +
+      Math.random().toString(36).slice(2, 8) +
+      "-" +
+      list.category.toLowerCase().replace(/[^a-z]+/g, "-"),
+    itemIds: [
+      ...new Set(
+        (list.itemIds || []).filter((id) => id !== undefined && id !== null),
+      ),
+    ],
   }));
 
   localStorage.setItem(KEY_WISHLIST_SAVED_LISTS, JSON.stringify(savedLists));
@@ -12927,7 +13973,11 @@ async function withSaleLock(itemId, work) {
         const request = store.get(key);
         request.onsuccess = () => {
           const current = request.result;
-          if (current && current.expiresAt > Date.now() && current.owner !== owner) {
+          if (
+            current &&
+            current.expiresAt > Date.now() &&
+            current.owner !== owner
+          ) {
             tx.abort();
             resolve(false);
             return;
@@ -13331,8 +14381,20 @@ function _remoteTimestamp(record) {
 }
 
 function _compareSyncVersion(a, b) {
-  const aHlc = a && (a._hlc || { wall: Number(a._syncVersion) || 0, counter: 0, clientId: a._syncClient || "" });
-  const bHlc = b && (b._hlc || { wall: Number(b._syncVersion) || 0, counter: 0, clientId: b._syncClient || "" });
+  const aHlc =
+    a &&
+    (a._hlc || {
+      wall: Number(a._syncVersion) || 0,
+      counter: 0,
+      clientId: a._syncClient || "",
+    });
+  const bHlc =
+    b &&
+    (b._hlc || {
+      wall: Number(b._syncVersion) || 0,
+      counter: 0,
+      clientId: b._syncClient || "",
+    });
   const hlcDelta = _hlcCompare(aHlc, bHlc);
   if (hlcDelta !== 0) return hlcDelta;
   const at = _remoteTimestamp(a),
@@ -13569,12 +14631,22 @@ async function processSyncQueue(silent = false, onProgress = null) {
       const newestByRecord = new Map();
       for (const entry of queue) {
         const key =
-          entry.collection + ":" + entry.recordKey + ":" + (entry.operation || "upsert");
+          entry.collection +
+          ":" +
+          entry.recordKey +
+          ":" +
+          (entry.operation || "upsert");
         const previous = newestByRecord.get(key);
-        const prevVersion = previous?.payload?._hlc ||
-          { wall: Number(previous?.payload?._syncVersion || 0), counter: 0, clientId: previous?.payload?._syncClient || "" };
-        const nextVersion = entry.payload?._hlc ||
-          { wall: Number(entry.payload?._syncVersion || 0), counter: 0, clientId: entry.payload?._syncClient || "" };
+        const prevVersion = previous?.payload?._hlc || {
+          wall: Number(previous?.payload?._syncVersion || 0),
+          counter: 0,
+          clientId: previous?.payload?._syncClient || "",
+        };
+        const nextVersion = entry.payload?._hlc || {
+          wall: Number(entry.payload?._syncVersion || 0),
+          counter: 0,
+          clientId: entry.payload?._syncClient || "",
+        };
         if (!previous || _hlcCompare(nextVersion, prevVersion) >= 0) {
           newestByRecord.set(key, entry);
         }
@@ -14393,7 +15465,8 @@ async function _deleteLocalRevenueForSale(saleId) {
 }
 
 function canMutateSale(sale) {
-  if (!currentUser || !["super", "user"].includes(currentUser.role)) return false;
+  if (!currentUser || !["super", "user"].includes(currentUser.role))
+    return false;
   if (!activeDay || activeDay.status !== "OPEN") return false;
   const saleDate = sale?.businessDate || sale?.business_date;
   const activeDate = activeDay.businessDate || activeDay.business_date;
@@ -14455,7 +15528,10 @@ async function voidSale(saleId) {
       await dbPut("sales", sale);
     }
     if (!(await fbDeleteSale(sale))) {
-      toast("Sale was not voided because sync deletion could not be queued", "err");
+      toast(
+        "Sale was not voided because sync deletion could not be queued",
+        "err",
+      );
       return;
     }
 
@@ -16183,7 +17259,11 @@ async function checkPublishedAppVersion({ refreshWorker = true } = {}) {
       versionLine.textContent =
         "Version " + APP_VERSION + " -> " + version + " is ready to install";
     }
-    if (refreshWorker && swRegistration && typeof swRegistration.update === "function") {
+    if (
+      refreshWorker &&
+      swRegistration &&
+      typeof swRegistration.update === "function"
+    ) {
       await swRegistration.update();
     }
     return true;
@@ -16485,22 +17565,39 @@ function _setFinanceRecordOptions() {
 async function getActivePurchaseBudget() {
   if (!db || !db.objectStoreNames.contains("purchase_budgets")) return null;
   const budgets = await dbAll("purchase_budgets");
-  const selected = typeof _selectedPurchaseBudgetId !== "undefined" ? _selectedPurchaseBudgetId : "";
-  return budgets
-    .filter((budget) => (budget.status || "active") === "active")
-    .filter((budget) => !selected || String(budget.id) === String(selected))
-    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0] || null;
+  const selected =
+    typeof _selectedPurchaseBudgetId !== "undefined"
+      ? _selectedPurchaseBudgetId
+      : "";
+  return (
+    budgets
+      .filter((budget) => (budget.status || "active") === "active")
+      .filter((budget) => !selected || String(budget.id) === String(selected))
+      .sort(
+        (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+      )[0] || null
+  );
 }
 
 async function renderPurchaseListOptions(selectId, selectedId) {
   const select = document.getElementById(selectId);
-  if (!select || !db || !db.objectStoreNames.contains("purchase_budgets")) return;
+  if (!select || !db || !db.objectStoreNames.contains("purchase_budgets"))
+    return;
   const budgets = (await dbAll("purchase_budgets"))
     .filter((budget) => (budget.status || "active") === "active")
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  select.innerHTML = '<option value="">No purchase list</option>' + budgets
-    .map((budget) => '<option value="' + escapeHtml(String(budget.id)) + '">' + escapeHtml(budget.name || "Purchase list") + '</option>')
-    .join("");
+  select.innerHTML =
+    '<option value="">No purchase list</option>' +
+    budgets
+      .map(
+        (budget) =>
+          '<option value="' +
+          escapeHtml(String(budget.id)) +
+          '">' +
+          escapeHtml(budget.name || "Purchase list") +
+          "</option>",
+      )
+      .join("");
   select.value = selectedId == null ? "" : String(selectedId);
 }
 
@@ -16517,34 +17614,84 @@ async function renderPurchaseListItems(budget) {
   if (!list) return;
   if (!budget) {
     if (actions) actions.style.display = "none";
-    list.innerHTML = '<div class="purchase-list-empty">Create a purchase list, then add Wishlist items to it.</div>';
+    list.innerHTML =
+      '<div class="purchase-list-empty">Create a purchase list, then add Wishlist items to it.</div>';
     return;
   }
   if (actions) actions.style.display = "grid";
-  const budgets = (await dbAll("purchase_budgets")).filter((entry) =>
-    (entry.status || "active") === "active" && String(entry.id) !== String(budget.id),
+  const budgets = (await dbAll("purchase_budgets")).filter(
+    (entry) =>
+      (entry.status || "active") === "active" &&
+      String(entry.id) !== String(budget.id),
   );
   if (moveTarget) {
-    moveTarget.innerHTML = '<option value="">Move all to...</option>' + budgets
-      .map((entry) => '<option value="' + escapeHtml(String(entry.id)) + '">' + escapeHtml(entry.name || "Purchase list") + '</option>')
-      .join("");
+    moveTarget.innerHTML =
+      '<option value="">Move all to...</option>' +
+      budgets
+        .map(
+          (entry) =>
+            '<option value="' +
+            escapeHtml(String(entry.id)) +
+            '">' +
+            escapeHtml(entry.name || "Purchase list") +
+            "</option>",
+        )
+        .join("");
   }
-  const wishes = (await dbAll("wishlist")).filter((wish) => String(wish.purchaseBudgetId || "") === String(budget.id));
+  const wishes = (await dbAll("wishlist")).filter(
+    (wish) => String(wish.purchaseBudgetId || "") === String(budget.id),
+  );
   if (!wishes.length) {
-    list.innerHTML = '<div class="purchase-list-empty">No items in this purchase list yet. Add items from Wishlist.</div>';
+    list.innerHTML =
+      '<div class="purchase-list-empty">No items in this purchase list yet. Add items from Wishlist.</div>';
     return;
   }
-  list.innerHTML = '<div class="purchase-list-items-head">Items in this list <span>' + wishes.length + '</span></div>' + wishes.map((wish) => {
-    const stocked = wishStatus(wish) === "stocked";
-    return '<div class="purchase-list-item' + (stocked ? ' is-stocked' : '') + '">' +
-      '<div class="purchase-list-item-main"><strong>' + escapeHtml(wish.name || wish.code || "Item") + '</strong><span>' +
-      (wish.qty || 1) + ' pcs' + (wish.estimatedCost ? ' - ' + fmt((wish.estimatedCost || 0) * (wish.qty || 1)) : '') +
-      (stocked ? ' - Stocked' : '') + '</span></div>' +
-      '<div class="purchase-list-item-actions">' +
-      (stocked ? '<span class="purchase-list-stocked">Stocked</span>' : '<input class="purchase-list-actual-qty" id="purchase-qty-' + wish.id + '" type="number" min="1" max="' + (wish.qty || 1) + '" placeholder="Qty" aria-label="Actual quantity for ' + escapeHtml(wish.name || "item") + '"><input class="purchase-list-actual-price" id="purchase-price-' + wish.id + '" type="number" min="0" placeholder="Actual price" aria-label="Actual buying price for ' + escapeHtml(wish.name || "item") + '"><button type="button" onclick="beginPurchaseListPurchase(' + wish.id + ')">Purchase</button><button type="button" onclick="markPurchaseListItemStocked(' + wish.id + ')">Close as stocked</button>') +
-      '<button type="button" onclick="returnPurchaseListItem(' + wish.id + ')">Return to Wishlist</button>' +
-      '</div></div>';
-  }).join("");
+  list.innerHTML =
+    '<div class="purchase-list-items-head">Items in this list <span>' +
+    wishes.length +
+    "</span></div>" +
+    wishes
+      .map((wish) => {
+        const stocked = wishStatus(wish) === "stocked";
+        return (
+          '<div class="purchase-list-item' +
+          (stocked ? " is-stocked" : "") +
+          '">' +
+          '<div class="purchase-list-item-main"><strong>' +
+          escapeHtml(wish.name || wish.code || "Item") +
+          "</strong><span>" +
+          (wish.qty || 1) +
+          " pcs" +
+          (wish.estimatedCost
+            ? " - " + fmt((wish.estimatedCost || 0) * (wish.qty || 1))
+            : "") +
+          (stocked ? " - Stocked" : "") +
+          "</span></div>" +
+          '<div class="purchase-list-item-actions">' +
+          (stocked
+            ? '<span class="purchase-list-stocked">Stocked</span>'
+            : '<input class="purchase-list-actual-qty" id="purchase-qty-' +
+              wish.id +
+              '" type="number" min="1" max="' +
+              (wish.qty || 1) +
+              '" placeholder="Qty" aria-label="Actual quantity for ' +
+              escapeHtml(wish.name || "item") +
+              '"><input class="purchase-list-actual-price" id="purchase-price-' +
+              wish.id +
+              '" type="number" min="0" placeholder="Actual price" aria-label="Actual buying price for ' +
+              escapeHtml(wish.name || "item") +
+              '"><button type="button" onclick="beginPurchaseListPurchase(' +
+              wish.id +
+              ')">Purchase</button><button type="button" onclick="markPurchaseListItemStocked(' +
+              wish.id +
+              ')">Close as stocked</button>') +
+          '<button type="button" onclick="returnPurchaseListItem(' +
+          wish.id +
+          ')">Return to Wishlist</button>' +
+          "</div></div>"
+        );
+      })
+      .join("");
 }
 
 async function togglePurchaseWishlistChooser() {
@@ -16559,25 +17706,54 @@ async function renderPurchaseWishlistChooser() {
   const list = document.getElementById("purchase-wishlist-chooser-list");
   const budget = await getActivePurchaseBudget();
   if (!list || !budget) return;
-  const wishes = (await dbAll("wishlist")).filter((wish) =>
-    wishStatus(wish) !== "stocked" && String(wish.purchaseBudgetId || "") !== String(budget.id),
+  const wishes = (await dbAll("wishlist")).filter(
+    (wish) =>
+      wishStatus(wish) !== "stocked" &&
+      String(wish.purchaseBudgetId || "") !== String(budget.id),
   );
   list.innerHTML = wishes.length
-    ? wishes.map((wish) => '<label class="purchase-wishlist-option"><input type="checkbox" value="' + wish.id + '"><span><strong>' + escapeHtml(wish.name || wish.code || "Item") + '</strong><small>' + (wish.qty || 1) + ' pcs' + (wish.estimatedCost ? ' - ' + fmt((wish.estimatedCost || 0) * (wish.qty || 1)) : '') + '</small></span></label>').join("")
+    ? wishes
+        .map(
+          (wish) =>
+            '<label class="purchase-wishlist-option"><input type="checkbox" value="' +
+            wish.id +
+            '"><span><strong>' +
+            escapeHtml(wish.name || wish.code || "Item") +
+            "</strong><small>" +
+            (wish.qty || 1) +
+            " pcs" +
+            (wish.estimatedCost
+              ? " - " + fmt((wish.estimatedCost || 0) * (wish.qty || 1))
+              : "") +
+            "</small></span></label>",
+        )
+        .join("")
     : '<div class="purchase-list-empty">No unassigned Wishlist items available.</div>';
 }
 
 async function assignSelectedWishlistItems() {
   const budget = await getActivePurchaseBudget();
   if (!budget) return toast("Select a purchase list first", "info");
-  const selected = Array.from(document.querySelectorAll("#purchase-wishlist-chooser-list input:checked"));
-  if (!selected.length) return toast("Select at least one Wishlist item", "info");
-  for (const checkbox of selected) await updatePurchaseListItem(Number(checkbox.value), { purchaseBudgetId: budget.id });
+  const selected = Array.from(
+    document.querySelectorAll("#purchase-wishlist-chooser-list input:checked"),
+  );
+  if (!selected.length)
+    return toast("Select at least one Wishlist item", "info");
+  for (const checkbox of selected)
+    await updatePurchaseListItem(Number(checkbox.value), {
+      purchaseBudgetId: budget.id,
+    });
   const chooser = document.getElementById("purchase-wishlist-chooser");
   if (chooser) chooser.hidden = true;
   await renderPurchaseBudget();
   await renderWishlistPage();
-  toast(selected.length + " item" + (selected.length === 1 ? "" : "s") + " added to purchase list", "ok");
+  toast(
+    selected.length +
+      " item" +
+      (selected.length === 1 ? "" : "s") +
+      " added to purchase list",
+    "ok",
+  );
 }
 window.assignSelectedWishlistItems = assignSelectedWishlistItems;
 
@@ -16593,14 +17769,26 @@ async function updatePurchaseListItem(wishId, changes) {
 async function beginPurchaseListPurchase(wishId) {
   const wish = await dbGet("wishlist", wishId);
   if (!wish) return;
-  const qty = parseInt(document.getElementById("purchase-qty-" + wishId)?.value || "0", 10);
-  const unitBuy = parseFloat(document.getElementById("purchase-price-" + wishId)?.value || wish.estimatedCost || "0");
+  const qty = parseInt(
+    document.getElementById("purchase-qty-" + wishId)?.value || "0",
+    10,
+  );
+  const unitBuy = parseFloat(
+    document.getElementById("purchase-price-" + wishId)?.value ||
+      wish.estimatedCost ||
+      "0",
+  );
   const remaining = Number(wish.qty) || 0;
   if (!Number.isInteger(qty) || qty <= 0 || qty > remaining)
     return toast("Enter a quantity up to the remaining amount", "err");
   if (!Number.isFinite(unitBuy) || unitBuy < 0)
     return toast("Enter the actual buying price", "err");
-  _purchaseProcessing = { wishId, qty, unitBuy, budgetId: wish.purchaseBudgetId || "" };
+  _purchaseProcessing = {
+    wishId,
+    qty,
+    unitBuy,
+    budgetId: wish.purchaseBudgetId || "",
+  };
   await startWishlistRestock(wishId);
 }
 window.beginPurchaseListPurchase = beginPurchaseListPurchase;
@@ -16608,7 +17796,12 @@ window.beginPurchaseListPurchase = beginPurchaseListPurchase;
 async function markPurchaseListItemStocked(wishId) {
   const wish = await dbGet("wishlist", wishId);
   if (!wish) return;
-  await markWishlistStockedById(wishId, wish.stockedItemId || null, wish.qty || 0, wish.estimatedCost || 0);
+  await markWishlistStockedById(
+    wishId,
+    wish.stockedItemId || null,
+    wish.qty || 0,
+    wish.estimatedCost || 0,
+  );
   await renderPurchaseBudget();
   await renderWishlistPage();
   toast("Item marked stocked", "ok");
@@ -16616,7 +17809,11 @@ async function markPurchaseListItemStocked(wishId) {
 window.markPurchaseListItemStocked = markPurchaseListItemStocked;
 
 async function returnPurchaseListItem(wishId) {
-  await updatePurchaseListItem(wishId, { purchaseBudgetId: "", purchaseStatus: "unstocked", status: "prospective" });
+  await updatePurchaseListItem(wishId, {
+    purchaseBudgetId: "",
+    purchaseStatus: "unstocked",
+    status: "prospective",
+  });
   await renderPurchaseBudget();
   await renderWishlistPage();
   toast("Item returned to Wishlist", "ok");
@@ -16625,10 +17822,17 @@ window.returnPurchaseListItem = returnPurchaseListItem;
 
 async function moveAllPurchaseListItems() {
   const budget = await getActivePurchaseBudget();
-  const targetId = document.getElementById("purchase-list-move-target")?.value || "";
-  if (!budget || !targetId) return toast("Choose another purchase list", "info");
-  const wishes = (await dbAll("wishlist")).filter((wish) => String(wish.purchaseBudgetId || "") === String(budget.id) && wishStatus(wish) !== "stocked");
-  for (const wish of wishes) await updatePurchaseListItem(wish.id, { purchaseBudgetId: targetId });
+  const targetId =
+    document.getElementById("purchase-list-move-target")?.value || "";
+  if (!budget || !targetId)
+    return toast("Choose another purchase list", "info");
+  const wishes = (await dbAll("wishlist")).filter(
+    (wish) =>
+      String(wish.purchaseBudgetId || "") === String(budget.id) &&
+      wishStatus(wish) !== "stocked",
+  );
+  for (const wish of wishes)
+    await updatePurchaseListItem(wish.id, { purchaseBudgetId: targetId });
   await renderPurchaseBudget();
   await renderWishlistPage();
   toast("Items moved to the other list", "ok");
@@ -16638,8 +17842,17 @@ window.moveAllPurchaseListItems = moveAllPurchaseListItems;
 async function emptyPurchaseList() {
   const budget = await getActivePurchaseBudget();
   if (!budget) return;
-  const wishes = (await dbAll("wishlist")).filter((wish) => String(wish.purchaseBudgetId || "") === String(budget.id) && wishStatus(wish) !== "stocked");
-  for (const wish of wishes) await updatePurchaseListItem(wish.id, { purchaseBudgetId: "", purchaseStatus: "unstocked", status: "prospective" });
+  const wishes = (await dbAll("wishlist")).filter(
+    (wish) =>
+      String(wish.purchaseBudgetId || "") === String(budget.id) &&
+      wishStatus(wish) !== "stocked",
+  );
+  for (const wish of wishes)
+    await updatePurchaseListItem(wish.id, {
+      purchaseBudgetId: "",
+      purchaseStatus: "unstocked",
+      status: "prospective",
+    });
   await renderPurchaseBudget();
   await renderWishlistPage();
   toast("Unstocked items returned to Wishlist", "ok");
@@ -16649,8 +17862,17 @@ window.emptyPurchaseList = emptyPurchaseList;
 async function recyclePurchaseList() {
   const budget = await getActivePurchaseBudget();
   if (!budget) return;
-  const wishes = (await dbAll("wishlist")).filter((wish) => String(wish.purchaseBudgetId || "") === String(budget.id) && wishStatus(wish) !== "stocked");
-  for (const wish of wishes) await updatePurchaseListItem(wish.id, { purchaseBudgetId: "", purchaseStatus: "unstocked", status: "prospective" });
+  const wishes = (await dbAll("wishlist")).filter(
+    (wish) =>
+      String(wish.purchaseBudgetId || "") === String(budget.id) &&
+      wishStatus(wish) !== "stocked",
+  );
+  for (const wish of wishes)
+    await updatePurchaseListItem(wish.id, {
+      purchaseBudgetId: "",
+      purchaseStatus: "unstocked",
+      status: "prospective",
+    });
   budget.status = "recycled";
   budget.recycledAt = new Date().toISOString();
   await dbPut("purchase_budgets", budget);
@@ -16664,10 +17886,13 @@ window.recyclePurchaseList = recyclePurchaseList;
 async function completePurchaseList() {
   const budget = await getActivePurchaseBudget();
   if (!budget) return;
-  const outstanding = (await dbAll("wishlist")).some((wish) =>
-    String(wish.purchaseBudgetId || "") === String(budget.id) && wishStatus(wish) !== "stocked",
+  const outstanding = (await dbAll("wishlist")).some(
+    (wish) =>
+      String(wish.purchaseBudgetId || "") === String(budget.id) &&
+      wishStatus(wish) !== "stocked",
   );
-  if (outstanding) return toast("Process or return all unstocked items first", "info");
+  if (outstanding)
+    return toast("Process or return all unstocked items first", "info");
   budget.status = "completed";
   budget.completedAt = new Date().toISOString();
   await dbPut("purchase_budgets", budget);
@@ -16684,13 +17909,53 @@ async function renderPurchaseListHistory() {
   if (!el || !db || !db.objectStoreNames.contains("purchase_budgets")) return;
   const history = (await dbAll("purchase_budgets"))
     .filter((budget) => ["completed", "recycled"].includes(budget.status))
-    .sort((a, b) => new Date(b.completedAt || b.recycledAt || b.createdAt || 0) - new Date(a.completedAt || a.recycledAt || a.createdAt || 0));
+    .sort(
+      (a, b) =>
+        new Date(b.completedAt || b.recycledAt || b.createdAt || 0) -
+        new Date(a.completedAt || a.recycledAt || a.createdAt || 0),
+    );
   el.innerHTML = history.length
-    ? '<div class="purchase-list-history-title">Purchase history</div>' + history.map((budget) => {
-      const total = (budget.purchaseHistory || []).reduce((sum, row) => sum + (Number(row.total) || 0), 0);
-      const items = (budget.purchaseHistory || []).map((row) => escapeHtml(row.name || "Item") + " x" + row.qty + " @ " + fmt(row.actualBuyPrice || 0)).join(", ");
-      return '<div class="purchase-list-history-row"><strong>' + escapeHtml(budget.name || "Purchase list") + '</strong><span>' + (budget.status === "completed" ? "Completed" : "Recycled") + ' - ' + escapeHtml(String((budget.completedAt || budget.recycledAt || budget.createdAt || "").slice(0, 10))) + '</span><span>' + (items || "No purchases recorded") + '</span><b>' + fmt(total) + '</b></div>';
-    }).join("")
+    ? '<div class="purchase-list-history-title">Purchase history</div>' +
+      history
+        .map((budget) => {
+          const total = (budget.purchaseHistory || []).reduce(
+            (sum, row) => sum + (Number(row.total) || 0),
+            0,
+          );
+          const items = (budget.purchaseHistory || [])
+            .map(
+              (row) =>
+                escapeHtml(row.name || "Item") +
+                " x" +
+                row.qty +
+                " @ " +
+                fmt(row.actualBuyPrice || 0),
+            )
+            .join(", ");
+          return (
+            '<div class="purchase-list-history-row"><strong>' +
+            escapeHtml(budget.name || "Purchase list") +
+            "</strong><span>" +
+            (budget.status === "completed" ? "Completed" : "Recycled") +
+            " - " +
+            escapeHtml(
+              String(
+                (
+                  budget.completedAt ||
+                  budget.recycledAt ||
+                  budget.createdAt ||
+                  ""
+                ).slice(0, 10),
+              ),
+            ) +
+            "</span><span>" +
+            (items || "No purchases recorded") +
+            "</span><b>" +
+            fmt(total) +
+            "</b></div>"
+          );
+        })
+        .join("")
     : "";
 }
 
@@ -16704,15 +17969,33 @@ function budgetDateInRange(date, budget) {
 
 async function computePurchaseBudget() {
   const budget = await getActivePurchaseBudget();
-  if (!budget) return { budget: null, planned: 0, purchased: 0, remaining: 0, unfunded: 0, plannedCount: 0 };
-  const wishes = db.objectStoreNames.contains("wishlist") ? await dbAll("wishlist") : [];
+  if (!budget)
+    return {
+      budget: null,
+      planned: 0,
+      purchased: 0,
+      remaining: 0,
+      unfunded: 0,
+      plannedCount: 0,
+    };
+  const wishes = db.objectStoreNames.contains("wishlist")
+    ? await dbAll("wishlist")
+    : [];
   const plannedWishes = wishes.filter((wish) => {
     if ((wish.status || "prospective") === "stocked") return false;
     if (String(wish.purchaseBudgetId || "") !== String(budget.id)) return false;
-    if (wish.plannedPurchaseDate && !budgetDateInRange(wish.plannedPurchaseDate, budget)) return false;
+    if (
+      wish.plannedPurchaseDate &&
+      !budgetDateInRange(wish.plannedPurchaseDate, budget)
+    )
+      return false;
     return Number(wish.estimatedCost) > 0;
   });
-  const planned = plannedWishes.reduce((sum, wish) => sum + (Number(wish.estimatedCost) || 0) * (Number(wish.qty) || 1), 0);
+  const planned = plannedWishes.reduce(
+    (sum, wish) =>
+      sum + (Number(wish.estimatedCost) || 0) * (Number(wish.qty) || 1),
+    0,
+  );
   const purchased = (budget.purchaseHistory || [])
     .filter((entry) => budgetDateInRange(entry.date || entry.createdAt, budget))
     .reduce((sum, entry) => sum + (Number(entry.total) || 0), 0);
@@ -16728,7 +18011,8 @@ async function computePurchaseBudget() {
 }
 
 function purchaseBudgetMetricsHtml(summary) {
-  if (!summary.budget) return '<div class="purchase-budget-empty">Create a budget to track planned and actual stock spending.</div>';
+  if (!summary.budget)
+    return '<div class="purchase-budget-empty">Create a budget to track planned and actual stock spending.</div>';
   const cells = [
     ["Budget", summary.budget.amount],
     ["Planned", summary.planned],
@@ -16736,34 +18020,72 @@ function purchaseBudgetMetricsHtml(summary) {
     ["Remaining", summary.remaining],
     ["Unfunded", summary.unfunded],
   ];
-  return cells.map(([label, value]) => '<div class="purchase-budget-metric"><span>' + label + '</span><strong>' + fmt(value) + '</strong></div>').join("");
+  return cells
+    .map(
+      ([label, value]) =>
+        '<div class="purchase-budget-metric"><span>' +
+        label +
+        "</span><strong>" +
+        fmt(value) +
+        "</strong></div>",
+    )
+    .join("");
 }
 
 async function renderPurchaseBudget() {
   const summary = await computePurchaseBudget();
-  await renderPurchaseListOptions("purchase-budget-select", summary.budget ? summary.budget.id : "");
+  await renderPurchaseListOptions(
+    "purchase-budget-select",
+    summary.budget ? summary.budget.id : "",
+  );
   const budgetSelect = document.getElementById("purchase-budget-select");
-  if (budgetSelect?.options[0]) budgetSelect.options[0].textContent = "Select purchase list";
+  if (budgetSelect?.options[0])
+    budgetSelect.options[0].textContent = "Select purchase list";
   const status = document.getElementById("purchase-budget-status");
   const sub = document.getElementById("purchase-budget-sub");
   const metrics = document.getElementById("purchase-budget-metrics");
   const warning = document.getElementById("purchase-budget-warning");
   if (status) status.textContent = summary.budget ? "Active" : "No budget";
-  if (sub) sub.textContent = summary.budget ? (summary.budget.name || "Current budget") : "Plan stock spending before you buy.";
+  if (sub)
+    sub.textContent = summary.budget
+      ? summary.budget.name || "Current budget"
+      : "Plan stock spending before you buy.";
   if (metrics) metrics.innerHTML = purchaseBudgetMetricsHtml(summary);
   await renderPurchaseListItems(summary.budget);
   await renderPurchaseListHistory();
   if (warning) {
     const warnings = [];
-    if (summary.unfunded > 0) warnings.push("Planned purchases exceed this budget by " + fmt(summary.unfunded) + ".");
-    if (summary.remaining < 0) warnings.push("Actual spending is over budget by " + fmt(Math.abs(summary.remaining)) + ".");
+    if (summary.unfunded > 0)
+      warnings.push(
+        "Planned purchases exceed this budget by " +
+          fmt(summary.unfunded) +
+          ".",
+      );
+    if (summary.remaining < 0)
+      warnings.push(
+        "Actual spending is over budget by " +
+          fmt(Math.abs(summary.remaining)) +
+          ".",
+      );
     warning.hidden = !warnings.length;
     warning.textContent = warnings.join(" ");
   }
   const dash = document.getElementById("dash-budget-metrics");
   if (dash) {
     dash.innerHTML = summary.budget
-      ? '<span>' + escapeHtml(summary.budget.name || "Active budget") + '</span><strong>Budget ' + fmt(summary.budget.amount) + '</strong><strong>Planned ' + fmt(summary.planned) + '</strong><strong>Purchased ' + fmt(summary.purchased) + '</strong><strong class="' + (summary.remaining < 0 ? "is-over" : "") + '">Remaining ' + fmt(summary.remaining) + '</strong>'
+      ? "<span>" +
+        escapeHtml(summary.budget.name || "Active budget") +
+        "</span><strong>Budget " +
+        fmt(summary.budget.amount) +
+        "</strong><strong>Planned " +
+        fmt(summary.planned) +
+        "</strong><strong>Purchased " +
+        fmt(summary.purchased) +
+        '</strong><strong class="' +
+        (summary.remaining < 0 ? "is-over" : "") +
+        '">Remaining ' +
+        fmt(summary.remaining) +
+        "</strong>"
       : "No active purchase budget";
   }
   return summary;
@@ -16776,7 +18098,11 @@ async function savePurchaseBudget() {
   const endDate = Input.raw("budget-end-date");
   if (!name) return Validate.fail("Enter a budget name", "budget-name");
   if (!Validate.moneyRequired(amount, "budget-amount", "Budget amount")) return;
-  if (startDate && endDate && endDate < startDate) return Validate.fail("End date must be after start date", "budget-end-date");
+  if (startDate && endDate && endDate < startDate)
+    return Validate.fail(
+      "End date must be after start date",
+      "budget-end-date",
+    );
   const entry = {
     name,
     amount,
@@ -16788,7 +18114,12 @@ async function savePurchaseBudget() {
   };
   entry.id = await dbAdd("purchase_budgets", entry);
   _selectedPurchaseBudgetId = entry.id;
-  ["budget-name", "budget-amount", "budget-start-date", "budget-end-date"].forEach((id) => {
+  [
+    "budget-name",
+    "budget-amount",
+    "budget-start-date",
+    "budget-end-date",
+  ].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
@@ -17084,8 +18415,12 @@ const KEY_WISHLIST_SUPPLIERS = "mgs_wishlist_suppliers";
 
 function getWishlistSuppliers() {
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY_WISHLIST_SUPPLIERS) || "[]");
-    return Array.isArray(saved) ? saved.filter(Boolean).sort((a, b) => a.localeCompare(b)) : [];
+    const saved = JSON.parse(
+      localStorage.getItem(KEY_WISHLIST_SUPPLIERS) || "[]",
+    );
+    return Array.isArray(saved)
+      ? saved.filter(Boolean).sort((a, b) => a.localeCompare(b))
+      : [];
   } catch (_) {
     return [];
   }
@@ -17096,9 +18431,18 @@ function renderWishlistSupplierOptions() {
   if (!select) return;
   const current = select.value;
   const suppliers = getWishlistSuppliers();
-  select.innerHTML = '<option value="">From Where?</option>' + suppliers
-    .map((supplier) => '<option value="' + escapeHtml(supplier) + '">' + escapeHtml(supplier) + '</option>')
-    .join("");
+  select.innerHTML =
+    '<option value="">From Where?</option>' +
+    suppliers
+      .map(
+        (supplier) =>
+          '<option value="' +
+          escapeHtml(supplier) +
+          '">' +
+          escapeHtml(supplier) +
+          "</option>",
+      )
+      .join("");
   select.value = suppliers.includes(current) ? current : "";
 }
 
@@ -17108,10 +18452,27 @@ function renderWishlistUnitOptions() {
   if (!picker || !valueInput) return;
   const current = valueInput.value;
   const units = getActiveUnits();
-  const selected = units.some((unit) => unit.abbr === current) ? current : (units[0]?.abbr || "");
+  const selected = units.some((unit) => unit.abbr === current)
+    ? current
+    : units[0]?.abbr || "";
   valueInput.value = selected;
   picker.innerHTML = units.length
-    ? units.map((unit) => '<button type="button" class="unit-chip wish-unit-chip' + (unit.abbr === selected ? ' unit-chip-on' : '') + '" role="radio" aria-checked="' + (unit.abbr === selected ? 'true' : 'false') + '" onclick="selectWishlistUnit(&quot;' + escapeHtml(unit.abbr) + '&quot;)"><span class="unit-chip-abbr">' + escapeHtml(unit.abbr) + '</span><span class="unit-chip-name">' + escapeHtml(unit.name) + '</span></button>').join("")
+    ? units
+        .map(
+          (unit) =>
+            '<button type="button" class="unit-chip wish-unit-chip' +
+            (unit.abbr === selected ? " unit-chip-on" : "") +
+            '" role="radio" aria-checked="' +
+            (unit.abbr === selected ? "true" : "false") +
+            '" onclick="selectWishlistUnit(&quot;' +
+            escapeHtml(unit.abbr) +
+            '&quot;)"><span class="unit-chip-abbr">' +
+            escapeHtml(unit.abbr) +
+            '</span><span class="unit-chip-name">' +
+            escapeHtml(unit.name) +
+            "</span></button>",
+        )
+        .join("")
     : '<span class="wish-unit-empty">No active units</span>';
 }
 
@@ -17119,7 +18480,9 @@ function selectWishlistUnit(abbr) {
   const valueInput = document.getElementById("wish-unit");
   if (!valueInput) return;
   const activeUnits = getActiveUnits();
-  valueInput.value = activeUnits.some((unit) => unit.abbr === abbr) ? abbr : (activeUnits[0]?.abbr || "");
+  valueInput.value = activeUnits.some((unit) => unit.abbr === abbr)
+    ? abbr
+    : activeUnits[0]?.abbr || "";
   renderWishlistUnitOptions();
 }
 window.selectWishlistUnit = selectWishlistUnit;
@@ -17129,7 +18492,16 @@ function renderWishlistSuppliers() {
   if (!list) return;
   const suppliers = getWishlistSuppliers();
   list.innerHTML = suppliers.length
-    ? suppliers.map((supplier) => '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);"><span>' + escapeHtml(supplier) + '</span><button type="button" class="settings-btn settings-btn--ghost" onclick="removeWishlistSupplier(' + JSON.stringify(supplier).replace(/</g, "\\u003c") + ')"><i class="fa-solid fa-trash"></i></button></div>').join("")
+    ? suppliers
+        .map(
+          (supplier) =>
+            '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);"><span>' +
+            escapeHtml(supplier) +
+            '</span><button type="button" class="settings-btn settings-btn--ghost" onclick="removeWishlistSupplier(' +
+            JSON.stringify(supplier).replace(/</g, "\\u003c") +
+            ')"><i class="fa-solid fa-trash"></i></button></div>',
+        )
+        .join("")
     : '<div style="font-size:12px;color:var(--muted);">No suppliers added yet.</div>';
   renderWishlistSupplierOptions();
 }
@@ -17139,7 +18511,10 @@ function addWishlistSupplier() {
   const name = String(input?.value || "").trim();
   if (!name) return toast("Enter a supplier name", "err");
   const suppliers = getWishlistSuppliers();
-  if (!suppliers.some((supplier) => supplier.toLowerCase() === name.toLowerCase())) suppliers.push(name);
+  if (
+    !suppliers.some((supplier) => supplier.toLowerCase() === name.toLowerCase())
+  )
+    suppliers.push(name);
   localStorage.setItem(KEY_WISHLIST_SUPPLIERS, JSON.stringify(suppliers));
   if (input) input.value = "";
   renderWishlistSuppliers();
@@ -17148,7 +18523,9 @@ function addWishlistSupplier() {
 window.addWishlistSupplier = addWishlistSupplier;
 
 function removeWishlistSupplier(name) {
-  const suppliers = getWishlistSuppliers().filter((supplier) => supplier !== name);
+  const suppliers = getWishlistSuppliers().filter(
+    (supplier) => supplier !== name,
+  );
   localStorage.setItem(KEY_WISHLIST_SUPPLIERS, JSON.stringify(suppliers));
   renderWishlistSuppliers();
 }
@@ -17210,7 +18587,8 @@ function toggleUnit(abbr) {
   if (u) u.active = !u.active;
   _saveUnits(units);
   renderUnitsSettings();
-  if (typeof renderWishlistUnitOptions === "function") renderWishlistUnitOptions();
+  if (typeof renderWishlistUnitOptions === "function")
+    renderWishlistUnitOptions();
 }
 window.toggleUnit = toggleUnit;
 
@@ -17218,7 +18596,8 @@ function resetUnitsToDefault() {
   if (!confirm("Reset units to the default list?")) return;
   _saveUnits([...DEFAULT_UNITS]);
   renderUnitsSettings();
-  if (typeof renderWishlistUnitOptions === "function") renderWishlistUnitOptions();
+  if (typeof renderWishlistUnitOptions === "function")
+    renderWishlistUnitOptions();
   toast("Units reset to defaults", "ok");
 }
 window.resetUnitsToDefault = resetUnitsToDefault;
@@ -17244,7 +18623,8 @@ function addCustomUnit() {
   document.getElementById("unit-add-abbr").value = "";
   document.getElementById("unit-add-name").value = "";
   renderUnitsSettings();
-  if (typeof renderWishlistUnitOptions === "function") renderWishlistUnitOptions();
+  if (typeof renderWishlistUnitOptions === "function")
+    renderWishlistUnitOptions();
   toast("Unit added", "ok");
 }
 window.addCustomUnit = addCustomUnit;
@@ -17254,7 +18634,8 @@ function removeCustomUnit(abbr) {
   const units = getUnits().filter((u) => u.abbr !== abbr);
   _saveUnits(units);
   renderUnitsSettings();
-  if (typeof renderWishlistUnitOptions === "function") renderWishlistUnitOptions();
+  if (typeof renderWishlistUnitOptions === "function")
+    renderWishlistUnitOptions();
 }
 window.removeCustomUnit = removeCustomUnit;
 
@@ -18850,7 +20231,8 @@ async function renderHistoryPage() {
   const customRangeEl = document.getElementById("hist-custom-range");
   const customFromEl = document.getElementById("hist-custom-from");
   const customToEl = document.getElementById("hist-custom-to");
-  if (customRangeEl) customRangeEl.style.display = filterVal === "custom" ? "flex" : "none";
+  if (customRangeEl)
+    customRangeEl.style.display = filterVal === "custom" ? "flex" : "none";
 
   if (filterVal === "today") {
     cutoffStr = today; // only today (00:00 → now)
@@ -18907,7 +20289,8 @@ async function renderHistoryPage() {
       rangeLabel = customFrom + " – " + customTo;
     } else {
       cutoffStr = "9999-12-31";
-      rangeLabel = customFrom && customTo ? "Invalid date range" : "Choose a date range";
+      rangeLabel =
+        customFrom && customTo ? "Invalid date range" : "Choose a date range";
     }
   } else if (filterVal === "all") {
     cutoffStr = null;
@@ -19119,7 +20502,6 @@ async function renderHistoryPage() {
     _expandedHistDay = null;
     setTimeout(() => expandHistDay(today.replace(/-/g, "")), 0);
   }
-
 }
 
 // Money formatted for a table cell (no currency prefix - shown once in the header instead)
@@ -19421,7 +20803,8 @@ async function openSaleDetail(saleId) {
     toast("Sale not found", "err");
     return;
   }
-  const linkedItem = sale.itemId == null ? null : await dbGet("items", sale.itemId);
+  const linkedItem =
+    sale.itemId == null ? null : await dbGet("items", sale.itemId);
 
   document.getElementById("sds-id").value = saleId;
 
@@ -19593,14 +20976,13 @@ async function saveSaleEdit() {
       toast("The sale has no valid buy price", "err");
       return;
     }
-    const size = item?.isShoe && sale.itemSize
-      ? (await getShoeSizes(item.code)).find(
-          (record) => String(record.size) === String(sale.itemSize),
-        )
-      : null;
-    const minimumPrice = Number(
-      size?.sellPriceMin || item?.sellPriceMin || 0,
-    );
+    const size =
+      item?.isShoe && sale.itemSize
+        ? (await getShoeSizes(item.code)).find(
+            (record) => String(record.size) === String(sale.itemSize),
+          )
+        : null;
+    const minimumPrice = Number(size?.sellPriceMin || item?.sellPriceMin || 0);
     if (minimumPrice > 0 && price < minimumPrice) {
       toast("Price cannot be below the minimum sale price", "err");
       return;
@@ -19631,7 +21013,10 @@ async function saveSaleEdit() {
         size.qtyCache = Number(size.qty);
         size.updatedAt = new Date().toISOString();
         const allSizes = await getShoeSizes(item.code);
-        item.qty = allSizes.reduce((total, record) => total + Number(record.qty || 0), 0);
+        item.qty = allSizes.reduce(
+          (total, record) => total + Number(record.qty || 0),
+          0,
+        );
       } else {
         item.qty = Math.max(0, Number(item.qty || 0) + stockDelta);
       }
@@ -19772,7 +21157,9 @@ function renderAllShoeGroupCards() {
       }
       container.appendChild(btn);
     }
-    const anySelected = _getGroupSizes(g).some((sz) => _shoeState.sizes.has(sz));
+    const anySelected = _getGroupSizes(g).some((sz) =>
+      _shoeState.sizes.has(sz),
+    );
     if (card) card.classList.toggle("sg-card-active", anySelected);
     if (anySelected) _shoeState.shownGroups.add(g);
     else _shoeState.shownGroups.delete(g);
@@ -20214,7 +21601,9 @@ async function openSellShoeModal(itemId, size) {
   }
   const sizes = await getShoeSizes(item.code);
   const sizeRec = sizes.find((s) => s.size === size);
-  const availableQty = sizeRec ? await readableStockQty(sizeRec, sizeRec.id) : 0;
+  const availableQty = sizeRec
+    ? await readableStockQty(sizeRec, sizeRec.id)
+    : 0;
   if (!sizeRec || availableQty <= 0) {
     toast("Size " + size + " is out of stock", "err");
     return;
@@ -21018,7 +22407,6 @@ async function renderCustomerList(query) {
         </div>
         <div id="cust-recycle-body" style="display:none;">${binCards}</div>
       </div>`;
-
   }
 }
 window.renderCustomerList = renderCustomerList;
