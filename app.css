@@ -4565,9 +4565,17 @@ body {
   padding: 8px 10px 20px;
   box-sizing: border-box;
 }
+#inventory-monitor-slot {
+  padding: 8px 10px 20px;
+}
 .inventory-tabs {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+}
+.inventory-control-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 10px 0;
 }
 .inventory-tabs .ops-tab {
   gap: 5px;
