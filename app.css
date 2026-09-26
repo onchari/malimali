@@ -3536,9 +3536,10 @@ body {
 /* Wishlist add form */
 .wish-add-panel {
   width: 100%;
-  max-width: 100%;
+  max-width: 560px;
   min-width: 0;
   box-sizing: border-box;
+  margin: 0 auto;
   padding: 0 0 22px;
   display: flex;
   flex-direction: column;
@@ -3646,7 +3647,7 @@ body {
   box-sizing: border-box;
   background: #fff;
   border: 1px solid #e1eee9;
-  border-radius: 13px;
+  border-radius: 16px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -3659,14 +3660,15 @@ body {
   gap: 10px;
 }
 .wish-add-primary {
-  padding: 16px;
+  padding: 20px;
 }
 .wish-add-primary .wish-add-vendor-grid { gap: 12px; }
 .wish-add-primary .wish-add-name-row,
 .wish-add-supply-row { grid-template-columns: minmax(0, 1fr); }
 .wish-add-amount-row {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 0 16px 16px;
+  gap: 14px;
+  padding: 0 20px 20px;
   box-sizing: border-box;
 }
 .wish-add-primary .wish-add-field { min-width: 0; }
@@ -3711,9 +3713,9 @@ body {
 .wish-add-card .add-label {
   letter-spacing: 0;
   text-transform: none;
-  color: #124f43;
-  font-size: 14px;
-  font-weight: 800;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 .wish-add-card .add-label i {
   width: 20px;
@@ -3809,12 +3811,12 @@ body {
 }
 .wish-add-card .add-input {
   width: 100%;
-  min-height: 48px;
+  min-height: 44px;
   box-sizing: border-box;
   border-color: #c9e4dc;
   border-radius: 10px;
   background: #fbfefd;
-  font-size: 16px;
+  font-size: 14px;
 }
 .wish-add-vendor-grid {
   display: grid;
