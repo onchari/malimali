@@ -1,7 +1,7 @@
 // ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
-const APP_VERSION = "2026.09.28.1";
+const APP_VERSION = "2026.09.28.2";
 
 // ===================================================================
 // APPLICATION RELEASE
@@ -11187,16 +11187,17 @@ async function updateSellModal() {
           _isShoeSale && _sellShoeSize ? _sellShoeSize.id : null,
         );
     const qtyEl = document.getElementById("sm-qty");
-    let qty = parseInt(qtyEl?.value || "0");
-    if (!Number.isFinite(qty) || qty < 0) qty = 0;
+    const rawQty = qtyEl?.value ?? "";
+    let qty = Number(rawQty);
+    if (rawQty === "" || !Number.isFinite(qty) || qty < 0) qty = 0;
     if (qty > maxStock) {
       qty = maxStock;
+      if (qtyEl) qtyEl.value = String(qty);
       toast("Only " + maxStock + " in stock", "err");
     }
     if (qtyEl) {
       qtyEl.min = 0;
       qtyEl.max = maxStock;
-      if (String(qtyEl.value) !== String(qty)) qtyEl.value = qty;
     }
     const actualRaw = parseFloat(document.getElementById("sm-actual").value);
     const priceUsed =
@@ -11300,7 +11301,7 @@ async function confirmSaleUnlocked() {
     const qtyEl = document.getElementById("sm-qty");
     const actualEl = document.getElementById("sm-actual");
     const buyEl = document.getElementById("sm-buy");
-    const qty = parseInt(qtyEl?.value || "0");
+    const qty = Number(qtyEl?.value || "0");
     const actualRaw = parseFloat(actualEl?.value || "");
     const buyEntered = parseFloat(buyEl?.value || "");
 
@@ -11327,8 +11328,8 @@ async function confirmSaleUnlocked() {
         ? await readableStockQty(_sellShoeSize, _sellShoeSize.id)
         : await readableStockQty(item);
     const itemLabel = item.name || item.code;
-    if (!Number.isFinite(qty) || qty <= 0) {
-      Validate.fail("Enter quantity to sell", "sm-qty");
+    if (!Number.isInteger(qty) || qty <= 0) {
+      Validate.fail("Enter a positive whole quantity to sell", "sm-qty");
       _overlay.hide();
       return;
     }
