@@ -1,7 +1,7 @@
 // ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
-const APP_VERSION = "2026.09.26.3";
+const APP_VERSION = "2026.09.28.1";
 
 // ===================================================================
 // APPLICATION RELEASE
@@ -15600,6 +15600,12 @@ async function voidSale(saleId) {
     } catch (_) {
       /* intentionally ignored */
     }
+    closeSaleDetailSheet();
+    try {
+      await renderHistoryPage();
+    } catch (_) {
+      /* intentionally ignored */
+    }
     scheduleSync();
     toast("Sale voided - stock restored", "ok");
   } catch (e) {
@@ -20976,10 +20982,11 @@ async function saveSaleEdit() {
       toast("The sale has no valid buy price", "err");
       return;
     }
+    const saleSize = sale.itemSize || sale.size;
     const size =
-      item?.isShoe && sale.itemSize
+      item?.isShoe && saleSize
         ? (await getShoeSizes(item.code)).find(
-            (record) => String(record.size) === String(sale.itemSize),
+            (record) => String(record.size) === String(saleSize),
           )
         : null;
     const minimumPrice = Number(size?.sellPriceMin || item?.sellPriceMin || 0);
@@ -20996,6 +21003,10 @@ async function saveSaleEdit() {
     const stockDelta = oldQty - qty;
     if (stockDelta !== 0 && !item) {
       toast("The original inventory item could not be found", "err");
+      return;
+    }
+    if (stockDelta !== 0 && item?.isShoe && !size) {
+      toast("The original shoe size could not be found", "err");
       return;
     }
     if (stockDelta < 0 && !item.isRecord) {
