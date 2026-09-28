@@ -1,7 +1,7 @@
 // ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
-const APP_VERSION = "2026.09.28.2";
+const APP_VERSION = "2026.09.28.3";
 
 // ===================================================================
 // APPLICATION RELEASE
@@ -15513,7 +15513,8 @@ async function voidSale(saleId) {
       toast("Sale not found", "err");
       return;
     }
-    const item = await dbGet("items", sale.itemId);
+    const item =
+      sale.itemId == null ? null : await dbGet("items", sale.itemId);
     if (item?.isShoe && (sale.itemSize || sale.size)) {
       const sizes = await getShoeSizes(item.code);
       const size = sizes.find(
@@ -20978,11 +20979,6 @@ async function saveSaleEdit() {
     }
 
     const item = sale.itemId == null ? null : await dbGet("items", sale.itemId);
-    const buy = Number(sale.buyPrice);
-    if (!Number.isFinite(buy) || buy <= 0) {
-      toast("The sale has no valid buy price", "err");
-      return;
-    }
     const saleSize = sale.itemSize || sale.size;
     const size =
       item?.isShoe && saleSize
@@ -20990,6 +20986,13 @@ async function saveSaleEdit() {
             (record) => String(record.size) === String(saleSize),
           )
         : null;
+    const buy = [sale.buyPrice, size?.buyPrice, item?.buyPrice, item?.buy, sale.buy]
+      .map(Number)
+      .find((value) => Number.isFinite(value) && value > 0);
+    if (buy == null) {
+      toast("The sale and linked item have no valid buy price", "err");
+      return;
+    }
     const minimumPrice = Number(size?.sellPriceMin || item?.sellPriceMin || 0);
     if (minimumPrice > 0 && price < minimumPrice) {
       toast("Price cannot be below the minimum sale price", "err");
@@ -21037,6 +21040,7 @@ async function saveSaleEdit() {
     }
 
     sale.qty = qty;
+    sale.buyPrice = buy;
     sale.actualPrice = price;
     sale.sellPrice = price;
     sale.paymentMethod = pm;
