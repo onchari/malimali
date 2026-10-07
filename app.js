@@ -1,7 +1,7 @@
 // ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
-const APP_VERSION = "2026.10.07.2";
+const APP_VERSION = "2026.10.07.3";
 
 // ===================================================================
 // APPLICATION RELEASE
@@ -20366,39 +20366,8 @@ async function renderHistoryPage() {
   const recList = UI.el("hist-records-list");
   if (!recList) return;
 
-  const periodTotals = Object.values(byDate).reduce(
-    (totals, day) => {
-      totals.qty += day.sales.reduce((qty, sale) => qty + (sale.qty || 1), 0);
-      totals.revenue += day.revenue;
-      totals.cost += day.cost;
-      totals.profit += day.profit;
-      return totals;
-    },
-    { qty: 0, revenue: 0, cost: 0, profit: 0 },
-  );
-  const totalsMarkup = `
-    <div class="hist-period-totals" aria-label="Cumulative totals for ${escapeHtml(rangeLabel)}">
-      <div class="hist-period-total">
-        <div class="hist-period-total-val">${fmtN(periodTotals.qty)}</div>
-        <div class="hist-period-total-lbl">Items sold</div>
-      </div>
-      <div class="hist-period-total">
-        <div class="hist-period-total-val">${_fmtNum(periodTotals.revenue)}</div>
-        <div class="hist-period-total-lbl">Sales</div>
-      </div>
-      <div class="hist-period-total">
-        <div class="hist-period-total-val">${_fmtNum(periodTotals.cost)}</div>
-        <div class="hist-period-total-lbl">Cost</div>
-      </div>
-      <div class="hist-period-total">
-        <div class="hist-period-total-val ${periodTotals.profit >= 0 ? "hist-total-positive" : "hist-total-negative"}">${_fmtNum(periodTotals.profit)}</div>
-        <div class="hist-period-total-lbl">Earnings</div>
-      </div>
-    </div>`;
-
   if (!datesSorted.length) {
     recList.innerHTML =
-      totalsMarkup +
       '<div style="color:var(--muted);font-size:13px;padding:24px 0;text-align:center;">No records in this period.</div>';
     return;
   }
@@ -20510,8 +20479,6 @@ async function renderHistoryPage() {
 
   const expandedDateBeforeRender = window._histExpandedDate;
   recList.innerHTML = `
-    ${totalsMarkup}
-
     <!-- Day list rows -->
     <div class="pr-days-list">${dayCards}</div>
 
@@ -20580,6 +20547,17 @@ window.sortHistTable = sortHistTable;
 
 // ── Tabular sale record renderer ────────────────────────────────────
 function _histTable(sales) {
+  const totals = sales.reduce(
+    (sum, sale) => {
+      const qty = sale.qty || 1;
+      sum.qty += qty;
+      sum.buy += (Number(sale.buyPrice) || 0) * qty;
+      sum.sale += (Number(sale.actualPrice || sale.sellPrice) || 0) * qty;
+      sum.profit += Number(sale.profit) || 0;
+      return sum;
+    },
+    { qty: 0, buy: 0, sale: 0, profit: 0 },
+  );
   const sorted = [...sales].sort((a, b) => {
     const qtyA = a.qty || 1,
       qtyB = b.qty || 1;
@@ -20643,15 +20621,18 @@ function _histTable(sales) {
 
   return (
     `<div class="hist-table-wrap"><table class="hist-table hist-table-lined">` +
-    `<thead><tr>` +
+    `<thead>` +
+    `<tr class="hist-totals-top"><td></td><td><strong class="hist-total-label">Totals</strong><span class="hist-total-meta">${fmtN(totals.qty)} items sold</span></td><td></td><td>${_fmtNum(totals.buy)}</td><td>${_fmtNum(totals.sale)}</td><td class="${totals.profit >= 0 ? "hp-pos" : "hp-neg"}">${_fmtNum(totals.profit)}</td><td></td></tr>` +
+    `<tr>` +
     `<th class="hist-num">#</th>` +
     `<th>${_histSortButton("Item", "item")}</th>` +
     `<th>${_histSortButton("@", "unitCost", "Unit cost per item")}</th>` +
-    `<th>${_histSortButton("BUY", "cost")}</th>` +
+    `<th>${_histSortButton("Buy", "cost")}</th>` +
     `<th>${_histSortButton("Sale", "revenue")}</th>` +
     `<th>${_histSortButton("Profit", "earning")}</th>` +
     `<th></th>` +
-    `</tr></thead>` +
+    `</tr>` +
+    `</thead>` +
     `<tbody>${detailRows}</tbody>` +
     `</table></div>`
   );

@@ -10414,7 +10414,7 @@ body.photo-lightbox-open {
   font-size: 8px;
   font-weight: 800;
   color: var(--muted);
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0;
   background: var(--surface2);
   padding: 5px 4px;
@@ -10506,15 +10506,35 @@ body.photo-lightbox-open {
 
 /* Totals row — pinned at top, distinct background */
 .hist-totals-top td {
-  background: var(--surface2);
-  border-bottom: 2px solid var(--border);
+  background: var(--accent-light);
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent);
   font-weight: 900;
-  font-size: 12px;
+  font-size: 15px;
+  padding-top: 11px;
+  padding-bottom: 11px;
 }
 .hist-totals-top td:nth-child(2) {
   font-family: var(--sans);
-  font-size: 9px;
-  letter-spacing: 0.5px;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+.hist-totals-top .hist-total-meta {
+  font-size: 11px;
+}
+.hist-total-label,
+.hist-total-meta {
+  display: block;
+}
+.hist-total-label {
+  text-transform: uppercase;
+}
+.hist-total-meta {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: none;
 }
 
 /* Clickable sale rows */
