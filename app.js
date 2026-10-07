@@ -1,7 +1,7 @@
 // ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
-const APP_VERSION = "2026.10.07.1";
+const APP_VERSION = "2026.10.07.2";
 
 // ===================================================================
 // APPLICATION RELEASE
@@ -20204,6 +20204,9 @@ function onTypeChange() {
 }
 window.onTypeChange = onTypeChange;
 
+let _histLastFilterKey = null;
+let _histManuallyCollapsedDate = null;
+
 async function renderHistoryPage() {
   const today = todayDateStr();
   // Ensure allItems is fresh for inventory status badges
@@ -20248,6 +20251,16 @@ async function renderHistoryPage() {
   const customRangeEl = document.getElementById("hist-custom-range");
   const customFromEl = document.getElementById("hist-custom-from");
   const customToEl = document.getElementById("hist-custom-to");
+  const filterKey = [
+    filterVal,
+    today,
+    customFromEl?.value || "",
+    customToEl?.value || "",
+  ].join("|");
+  if (_histLastFilterKey !== filterKey) {
+    _histLastFilterKey = filterKey;
+    _histManuallyCollapsedDate = null;
+  }
   if (customRangeEl)
     customRangeEl.style.display = filterVal === "custom" ? "flex" : "none";
 
@@ -20495,6 +20508,7 @@ async function renderHistoryPage() {
     <tbody>${dayRows}</tbody>
   </table>`;
 
+  const expandedDateBeforeRender = window._histExpandedDate;
   recList.innerHTML = `
     ${totalsMarkup}
 
@@ -20518,10 +20532,17 @@ async function renderHistoryPage() {
 
     </div>`;
 
-  // Today opens directly to its sale records; the four period cards remain the only summary cards.
-  if (filterVal === "today" && byDate[today]) {
+  const dateToExpand =
+    (datesSorted.length === 1 &&
+    _histManuallyCollapsedDate !== datesSorted[0]
+      ? datesSorted[0]
+      : null) ||
+    (expandedDateBeforeRender && byDate[expandedDateBeforeRender]
+      ? expandedDateBeforeRender
+      : null);
+  if (dateToExpand) {
     _expandedHistDay = null;
-    setTimeout(() => expandHistDay(today.replace(/-/g, "")), 0);
+    expandHistDay(dateToExpand.replace(/-/g, ""));
   }
 }
 
@@ -20684,6 +20705,7 @@ function expandHistDay(safeId) {
   const day = (window._histByDate || {})[date];
   if (!day) return;
   window._histExpandedDate = date;
+  _histManuallyCollapsedDate = null;
 
   const rows = [...day.sales].sort(
     (a, b) => new Date(b.date) - new Date(a.date),
@@ -20803,6 +20825,8 @@ window.histSetPay = histSetPay;
 
 function collapseHistDay() {
   _expandedHistDay = null;
+  _histManuallyCollapsedDate = window._histExpandedDate;
+  window._histExpandedDate = null;
   const grid = document.querySelector(".pr-days-list");
   const area = document.getElementById("hist-expanded-area");
   if (grid) grid.style.display = "grid";

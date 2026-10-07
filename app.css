@@ -1759,6 +1759,7 @@ body {
 }
 .nav-btn {
   flex: 1;
+  min-width: 0;
   padding: 11px 6px;
   text-align: center;
   font-size: 10px;
@@ -10355,11 +10356,11 @@ body.photo-lightbox-open {
 
 .hist-table-wrap {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 .hist-table {
   width: 100%;
-  min-width: 525px;
+  min-width: 0;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 11px;
@@ -10376,7 +10377,7 @@ body.photo-lightbox-open {
 
 .hist-table th,
 .hist-table td {
-  padding: 4px 4px; /* compact rows */
+  padding: 4px 2px;
   text-align: left;
   border-bottom: 1px solid var(--border);
   white-space: nowrap; /* never wrap — prevents vertical text */
@@ -10402,7 +10403,7 @@ body.photo-lightbox-open {
 .hist-table th:nth-child(6),
 .hist-table td:nth-child(6) {
   text-align: right;
-  padding-right: 8px;
+  padding-right: 2px;
 }
 .hist-table th:nth-child(7),
 .hist-table td:nth-child(7) {
@@ -10414,7 +10415,7 @@ body.photo-lightbox-open {
   font-weight: 800;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0;
   background: var(--surface2);
   padding: 5px 4px;
 }
@@ -10428,46 +10429,39 @@ body.photo-lightbox-open {
 .hist-table td:nth-child(2) {
   font-family: var(--sans);
   font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 0; /* forces ellipsis within table-layout:fixed */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
 }
 
 /* Column widths — sized to content, not pixels that cause wrapping */
 .hist-table th:nth-child(1),
 .hist-table td:nth-child(1) {
-  width: 4%;
-  min-width: 26px;
+  width: 6%;
 } /* # */
 .hist-table th:nth-child(2),
 .hist-table td:nth-child(2) {
-  width: 35%;
+  width: 25%;
 } /* Item */
 .hist-table th:nth-child(3),
 .hist-table td:nth-child(3) {
   width: 10%;
-  min-width: 52px;
 } /* Unit cost */
 .hist-table th:nth-child(4),
 .hist-table td:nth-child(4) {
-  width: 14%;
-  min-width: 68px;
+  width: 16%;
 } /* Buy.P */
 .hist-table th:nth-child(5),
 .hist-table td:nth-child(5) {
-  width: 14%;
-  min-width: 68px;
+  width: 16%;
 } /* Sale */
 .hist-table th:nth-child(6),
 .hist-table td:nth-child(6) {
-  width: 17%;
-  min-width: 76px;
+  width: 19%;
 } /* Profit */
 .hist-table th:nth-child(7),
 .hist-table td:nth-child(7) {
-  width: 6%;
-  min-width: 31px;
+  width: 8%;
 } /* inv icon */
 
 .hist-num {
@@ -12616,6 +12610,15 @@ textarea:focus-visible,
   color: var(--accent);
   background: var(--accent-light);
   border-bottom-color: var(--accent);
+}
+
+@media (max-width: 360px) {
+  .nav-btn {
+    padding-right: 2px;
+    padding-left: 2px;
+    font-size: 8px;
+    letter-spacing: 0;
+  }
 }
 
 .card,
