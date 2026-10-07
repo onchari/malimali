@@ -1,7 +1,7 @@
 // ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
-const APP_VERSION = "2026.09.28.3";
+const APP_VERSION = "2026.10.07.1";
 
 // ===================================================================
 // APPLICATION RELEASE
@@ -16228,7 +16228,9 @@ let swRegistration = null;
 let deferredInstallPrompt = null;
 
 // Register service worker
-if ("serviceWorker" in navigator) {
+const _skipServiceWorkerOnLocal =
+  location.hostname === "localhost" || location.hostname === "127.0.0.1";
+if ("serviceWorker" in navigator && !_skipServiceWorkerOnLocal) {
   navigator.serviceWorker
     .register("./sw.js")
     .then((reg) => {
@@ -16303,6 +16305,13 @@ if ("serviceWorker" in navigator) {
     if (successEl) successEl.style.display = "block";
     setTimeout(() => window.location.reload(), 1200);
   });
+} else if ("serviceWorker" in navigator) {
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((registrations) =>
+      registrations.forEach((registration) => registration.unregister()),
+    )
+    .catch(() => {});
 }
 
 // Register background sync when going offline
@@ -20312,7 +20321,11 @@ async function renderHistoryPage() {
 
   const byDate = {};
   allSales.forEach((s) => {
-    const d = s.businessDate || (s.date ? s.date.slice(0, 10) : null) || today;
+    const d =
+      s.businessDate ||
+      s.business_date ||
+      (s.date ? s.date.slice(0, 10) : null) ||
+      today;
     if (d === today && !includeToday) return; // skip today unless filter includes it
     if (d > today) return; // never show future records
     if (cutoffStr && d < cutoffStr) return;
@@ -20358,7 +20371,7 @@ async function renderHistoryPage() {
       </div>
       <div class="hist-period-total">
         <div class="hist-period-total-val">${_fmtNum(periodTotals.revenue)}</div>
-        <div class="hist-period-total-lbl">Revenue</div>
+        <div class="hist-period-total-lbl">Sales</div>
       </div>
       <div class="hist-period-total">
         <div class="hist-period-total-val">${_fmtNum(periodTotals.cost)}</div>
@@ -20527,8 +20540,8 @@ function _histSortArrow(key) {
   return `<span class="hist-sort-arrow hist-sort-arrow-active">${_histSort.dir === 1 ? "↑" : "↓"}</span>`;
 }
 
-function _histSortButton(label, key) {
-  return `<button type="button" class="hist-sort-btn" onclick="sortHistTable('${key}')">${label}${_histSortArrow(key)}</button>`;
+function _histSortButton(label, key, title = label) {
+  return `<button type="button" class="hist-sort-btn" title="${title}" aria-label="${title}" onclick="sortHistTable('${key}')">${label}${_histSortArrow(key)}</button>`;
 }
 
 function sortHistTable(key) {
@@ -20559,6 +20572,7 @@ function _histTable(sales) {
           (a.itemName || a.itemCode || "Item").toLowerCase(),
           (b.itemName || b.itemCode || "Item").toLowerCase(),
         ],
+        unitCost: [Number(a.buyPrice) || 0, Number(b.buyPrice) || 0],
         cost: [(a.buyPrice || 0) * qtyA, (b.buyPrice || 0) * qtyB],
         revenue: [
           (a.actualPrice || a.sellPrice || 0) * qtyA,
@@ -20573,7 +20587,8 @@ function _histTable(sales) {
   const detailRows = sorted
     .map((s, i) => {
       const qty = s.qty || 1;
-      const buy = (s.buyPrice || 0) * qty;
+      const unitCost = Number(s.buyPrice) || 0;
+      const buy = unitCost * qty;
       const sell = (s.actualPrice || s.sellPrice || 0) * qty;
       const profit = s.profit || 0;
       const rawName =
@@ -20595,6 +20610,7 @@ function _histTable(sales) {
         `<tr class="hist-clickable-row" ${click}>` +
         `<td class="hist-num">${i + 1}</td>` +
         `<td>${escapeHtml(rawName)}</td>` +
+        `<td>${_fmtNum(unitCost)}</td>` +
         `<td>${_fmtNum(buy)}</td>` +
         `<td>${_fmtNum(sell)}</td>` +
         `<td class="${profCls}">${_fmtNum(profit)}</td>` +
@@ -20609,9 +20625,10 @@ function _histTable(sales) {
     `<thead><tr>` +
     `<th class="hist-num">#</th>` +
     `<th>${_histSortButton("Item", "item")}</th>` +
-    `<th>${_histSortButton("Cost", "cost")}</th>` +
-    `<th>${_histSortButton("Revenue", "revenue")}</th>` +
-    `<th>${_histSortButton("Earning", "earning")}</th>` +
+    `<th>${_histSortButton("@", "unitCost", "Unit cost per item")}</th>` +
+    `<th>${_histSortButton("BUY", "cost")}</th>` +
+    `<th>${_histSortButton("Sale", "revenue")}</th>` +
+    `<th>${_histSortButton("Profit", "earning")}</th>` +
     `<th></th>` +
     `</tr></thead>` +
     `<tbody>${detailRows}</tbody>` +
