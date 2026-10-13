@@ -11,9 +11,17 @@ Offline-first inventory & point-of-sale PWA for Mandela General Stores (a small 
 ### File layout
 | File | Purpose |
 |------|---------|
-| `index.html` | SPA shell — all markup/modals/panels |
-| `app.js` | All application logic (~10 000+ lines) |
-| `app.css` | All styles |
+| `index.html` | Shared SPA shell, navigation, and component mount points |
+| `app.js` | Shared application logic and services |
+| `app.css` | Shared application styles |
+| `Inventory/inventory.html` | Inventory pages and inventory-specific sheets, loaded by the shell |
+| `Inventory/navigation.js` | Inventory page and tab navigation |
+| `Inventory/inventory-items.js` | Item forms, stock list, item details, and footwear sizes |
+| `Inventory/inventory-planning.js` | Wishlist, purchase planning, and photo-based stock import |
+| `Inventory/inventory.css` | Inventory tab and page-layout styles |
+| `Sales/sales.html` | Sales pages and sales-specific sheets, loaded by the shell |
+| `Sales/sales.js` | Sale entry, sales history, exports, and sale record editing |
+| `Sales/sales.css` | Sales tab, history, and sale-sheet styles |
 | `sw.js` | Service worker — offline caching, background sync |
 | `manifest.json` | PWA manifest (name: "Mandela General Stores") |
 
@@ -136,6 +144,7 @@ For footwear: delegates to `saveShoeItems(baseCode, baseName, type)` (line ~1004
 - **Deploy:** `git push origin main` → GitHub Pages auto-deploys to `onchari.github.io/malimali/`.
 - **After every deploy:** bump `CACHE_NAME` in `sw.js` (e.g. `mandela-v<date>-<tag>`).
 - **No build step** — edit files directly; changes are live immediately in the browser.
+- The shell loads `Inventory/inventory.html`, mounts its templates, then loads three inventory classic scripts before `app.js`; modules reuse shared helpers and state.
 - **Schema changes:** increment `DB_VER` (currently `11`) and add a migration branch in `initDB()`'s `onupgradeneeded` handler.
 - **Environments:** localhost auto-uses `development` env (separate DB + `dev_` Firestore prefix). Production is auto-detected from hostname.
 - **`window.xxx` exports** are at the bottom of `app.js` (~line 9165+) — required for `onclick=` handlers in `index.html`.

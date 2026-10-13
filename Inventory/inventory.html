@@ -1,0 +1,1533 @@
+<!-- Inventory-owned markup, mounted by the shared page shell. -->
+<template id="inventory-pages-template">
+<!-- ==============================================================
+     PAGE: INVENTORY
+     ============================================================== -->
+    <div class="page" id="page-inventory" style="padding: 12px 12px 0">
+      <div class="ops-tabs inventory-section-tabs" role="tablist" aria-label="Inventory sections">
+        <button
+          class="ops-tab active"
+          id="inventory-tab-stock"
+          role="tab"
+          aria-selected="true"
+          onclick="showInventoryTab('stock')"
+        >
+          <i class="fa-solid fa-boxes-stacked"></i> Stock List
+        </button>
+        <button
+          class="ops-tab"
+          id="inventory-tab-stock-control"
+          role="tab"
+          aria-selected="false"
+          onclick="showInventoryTab('stock-control')"
+        >
+          <i class="fa-solid fa-display"></i> Stock Control
+        </button>
+        <button
+          class="ops-tab"
+          id="inventory-tab-wishlist"
+          role="tab"
+          aria-selected="false"
+          onclick="showInventoryTab('wishlist')"
+        >
+          <i class="fa-solid fa-clipboard-list"></i> Stock Wishlist
+        </button>
+      </div>
+      <div id="inventory-stock-slot" class="ops-slot active"></div>
+      <div id="inventory-stock-control-slot" class="ops-slot">
+        <div id="inventory-monitor-slot">
+          <div id="inventory-monitor-counts" class="stock-monitor-counts"></div>
+          <div id="inventory-monitor-list"></div>
+        </div>
+      </div>
+      <div id="inventory-wishlist-slot" class="ops-slot"></div>
+      <div id="inventory-add-slot" class="ops-slot"></div>
+    </div>
+
+    <!-- ==============================================================
+     PAGE: STOCK LIST  (id="page-list")
+     Shows all items as compact clickable cards.
+     renderList() in Inventory/inventory-items.js builds the stock table in #item-list.
+     Cards sorted newest-first (by createdAt).
+     Clicking a card calls openSheet(item.id).
+     ============================================================== -->
+     <div class="page" id="page-list" style="padding: 12px 12px 0">
+       <div class="stock-toolbar inventory-stock-toolbar">
+         <div class="inventory-stock-actions">
+          <button
+            type="button"
+            class="import-photo-btn inventory-photo-import-btn"
+            onclick="openPhotoImport()"
+          >
+            <i class="fa-solid fa-camera"></i> Add Stock from Photo
+          </button>
+          <button
+            type="button"
+            class="inventory-add-item-btn"
+            onclick="showInventoryTab('add')"
+          >
+            <i class="fa-solid fa-plus"></i> Add Item
+          </button>
+        </div>
+      </div>
+
+      <!-- Category chips - populated by renderTypeChips() -->
+      <div class="chips" id="type-chips"></div>
+
+      <div class="inventory-search-row">
+        <div class="search-wrap">
+          <span class="s-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+          <input
+            class="search-input"
+            id="search"
+            placeholder="Search by name, code, type, size…"
+            autocomplete="off"
+            spellcheck="false"
+            oninput="onInventorySearch(this.value)"
+          />
+          <button
+            id="search-clear"
+            class="search-clear-btn"
+            onclick="clearInventorySearch()"
+            style="display: none"
+            aria-label="Clear"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Shoe size-group filter - only when Footwear category is selected -->
+      <div
+        id="shoe-size-filter"
+        style="display: none; padding: 0 0 8px; gap: 6px; flex-wrap: wrap"
+      ></div>
+
+      <!-- Item cards injected here -->
+      <div id="item-list"></div>
+    </div>
+    <!-- /page-list -->
+
+    <!-- Stock monitor sheet: out of stock items -->
+    <div class="sheet-overlay" id="stock-monitor-sheet">
+      <div class="sheet" style="max-height: 92vh; overflow: auto">
+        <div class="sheet-handle"></div>
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+          "
+        >
+          <div>
+            <div class="sheet-title">Out of Stock</div>
+            <div class="sheet-code">Items that need restocking</div>
+          </div>
+          <button
+            onclick="closeStockMonitor()"
+            class="stock-icon-btn"
+            title="Close"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <div id="stock-monitor-counts" class="stock-monitor-counts"></div>
+        <div id="stock-monitor-list"></div>
+      </div>
+    </div>
+
+    <!-- ==============================================================
+     PAGE: WISHLIST  (id="page-wishlist")
+     Prospective items the business may stock later.
+     ============================================================== -->
+    <div class="page" id="page-wishlist" style="padding: 12px 12px 0">
+      <div
+        id="wishlist-controls"
+        class="wish-list-controls"
+        aria-label="Wishlist"
+      ></div>
+
+      <div id="wishlist-list" class="wish-list-panel"></div>
+
+      <div id="wishlist-add-panel" class="wish-add-panel" style="display: none">
+        <div class="wish-add-card">
+          <section
+            class="wish-add-block wish-add-primary"
+            aria-label="Main wishlist details"
+          >
+            <div class="wish-add-vendor-grid wish-add-name-row">
+              <div class="wish-add-field">
+                <input
+                  class="add-input"
+                  id="wish-name"
+                  type="text"
+                  placeholder="What do you want to stock? *"
+                  required
+                  autofocus
+                />
+              </div>
+            </div>
+            <div class="wish-add-vendor-grid wish-add-supply-row">
+              <div class="wish-add-field">
+                <label class="add-label" for="wish-supplier">Supply</label>
+                <select
+                  class="add-input"
+                  id="wish-supplier"
+                  aria-label="Supply"
+                >
+                  <option value="">Where is it from?</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <div class="wish-add-vendor-grid wish-add-amount-row">
+            <div class="wish-add-field">
+              <label class="add-label" for="wish-qty">Quantity</label>
+              <input
+                class="add-input add-mono add-center"
+                id="wish-qty"
+                type="number"
+                min="1"
+                inputmode="numeric"
+                placeholder="How many? (optional)"
+              />
+            </div>
+            <div class="wish-add-field">
+              <label class="add-label" for="wish-cost">Estimated price</label>
+              <input
+                class="add-input add-mono"
+                id="wish-cost"
+                type="number"
+                min="0"
+                inputmode="decimal"
+                placeholder="Estimated price? (optional)"
+              />
+            </div>
+          </div>
+          <footer class="wish-add-footer">
+            <div class="wish-add-footer-actions">
+              <button
+                type="button"
+                class="wish-back-btn"
+                onclick="cancelWishlistEdit()"
+              >
+                <i class="fa-solid fa-arrow-left"></i> Back to list
+              </button>
+              <button
+                type="button"
+                class="wish-save-btn"
+                onclick="saveWishlistItem()"
+              >
+                <i class="fa-solid fa-floppy-disk"></i> Save to wishlist
+              </button>
+            </div>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <div class="wish-share-modal" id="wish-share-modal" hidden>
+      <div
+        class="wish-share-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wish-share-title"
+      >
+        <button
+          type="button"
+          class="wish-share-close"
+          id="wish-share-close"
+          aria-label="Close share options"
+          title="Close"
+        >
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+        <h2 id="wish-share-title">Share wishlist</h2>
+        <p class="wish-share-subtitle">
+          Choose which items to send to WhatsApp.
+        </p>
+        <fieldset class="wish-share-scope">
+          <legend>Items</legend>
+          <label
+            ><input type="radio" name="wish-share-scope" value="all" checked />
+            All items</label
+          >
+          <label
+            ><input type="radio" name="wish-share-scope" value="stocked" />
+            Stocked items only</label
+          >
+          <label
+            ><input type="radio" name="wish-share-scope" value="not-stocked" />
+            Not Yet Stocked only</label
+          >
+        </fieldset>
+        <label class="wish-share-price-option"
+          ><input type="checkbox" id="wish-share-include-prices" checked />
+          Include prices and estimated total</label
+        >
+        <div class="wish-share-actions">
+          <button
+            type="button"
+            class="wish-share-cancel"
+            id="wish-share-cancel"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="wish-share-submit"
+            id="wish-share-submit"
+          >
+            <i class="fa-brands fa-whatsapp"></i> Share to WhatsApp
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-overlay" id="wishlist-bulk-edit-sheet">
+      <div class="sheet wishlist-bulk-edit-sheet">
+        <div class="sheet-handle"></div>
+        <div class="wishlist-bulk-edit-head">
+          <div>
+            <div class="sheet-title">Edit selected items</div>
+            <div class="sheet-code">Update shared planning fields only</div>
+          </div>
+          <button
+            type="button"
+            class="stock-icon-btn"
+            onclick="closeWishlistBulkEdit()"
+            aria-label="Close bulk edit"
+            title="Close"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div class="wishlist-bulk-edit-fields">
+          <label class="wishlist-bulk-edit-field"
+            ><input type="checkbox" data-bulk-edit-field="name" /><span
+              >Name</span
+            ><input
+              id="wish-bulk-name"
+              class="add-input"
+              type="text"
+              maxlength="120"
+              placeholder="Mixed values"
+          /></label>
+          <label class="wishlist-bulk-edit-field"
+            ><input type="checkbox" data-bulk-edit-field="unit" /><span
+              >Unit</span
+            ><input
+              id="wish-bulk-unit"
+              class="add-input"
+              type="text"
+              maxlength="20"
+              placeholder="Mixed values"
+          /></label>
+          <label class="wishlist-bulk-edit-field"
+            ><input type="checkbox" data-bulk-edit-field="qty" /><span
+              >Quantity</span
+            ><input
+              id="wish-bulk-qty"
+              class="add-input"
+              type="number"
+              min="0"
+              placeholder="Mixed values"
+          /></label>
+          <label class="wishlist-bulk-edit-field"
+            ><input type="checkbox" data-bulk-edit-field="estimatedCost" /><span
+              >Estimated price</span
+            ><input
+              id="wish-bulk-cost"
+              class="add-input"
+              type="number"
+              min="0"
+              placeholder="Mixed values"
+          /></label>
+          <label class="wishlist-bulk-edit-field"
+            ><input type="checkbox" data-bulk-edit-field="status" /><span
+              >Status</span
+            ><select id="wish-bulk-status" class="add-input">
+              <option value="">Mixed values</option>
+              <option value="planned">Planned</option>
+              <option value="in_progress">In progress</option>
+              <option value="stocked">Stocked</option>
+              <option value="cancelled">Cancelled</option>
+            </select></label
+          >
+          <label class="wishlist-bulk-edit-field"
+            ><input type="checkbox" data-bulk-edit-field="category" /><span
+              >Category</span
+            ><input
+              id="wish-bulk-category"
+              class="add-input"
+              type="text"
+              maxlength="80"
+              placeholder="Mixed values"
+          /></label>
+          <label class="wishlist-bulk-edit-field"
+            ><input type="checkbox" data-bulk-edit-field="supplierId" /><span
+              >Supplier</span
+            ><input
+              id="wish-bulk-supplier"
+              class="add-input"
+              type="text"
+              maxlength="80"
+              placeholder="Mixed values"
+          /></label>
+          <label class="wishlist-bulk-edit-field"
+            ><input type="checkbox" data-bulk-edit-field="note" /><span
+              >Note</span
+            ><textarea
+              id="wish-bulk-note"
+              class="add-input"
+              rows="3"
+              maxlength="160"
+              placeholder="Mixed values"
+            ></textarea>
+          </label>
+        </div>
+        <div class="wishlist-bulk-edit-actions">
+          <button
+            type="button"
+            class="wish-detail-btn"
+            onclick="closeWishlistBulkEdit()"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="wish-detail-btn save"
+            onclick="saveWishlistBulkEdit()"
+          >
+            <i class="fa-solid fa-floppy-disk"></i> Apply changes
+          </button>
+        </div>
+      </div>
+    </div>
+</template>
+
+<template id="inventory-add-template">
+<!-- ==============================================================
+     PAGE: ADD / EDIT ITEM  (id="page-add")
+     Dual-mode: "New Item" or "Edit Item" (controlled by #edit-id).
+     saveItem() handles validation + IndexedDB write.
+     editItem() pre-fills all fields and loads existing photo.
+     ============================================================== -->
+    <div class="page page-add" id="page-add">
+      <input type="hidden" id="edit-id" />
+
+      <header class="add-hero">
+        <div class="add-hero-text">
+          <h1 class="add-hero-title" id="form-mode-label" hidden></h1>
+          <p class="add-hero-sub" id="add-form-sub" hidden></p>
+        </div>
+        <button
+          type="button"
+          id="cancel-edit-btn"
+          class="add-cancel-btn"
+          onclick="cancelEdit()"
+          style="display: none"
+        >
+          Cancel
+        </button>
+      </header>
+
+      <div id="restock-view" class="restock-view" hidden>
+        <div class="restock-summary-card">
+          <table
+            class="restock-summary-table"
+            aria-label="Item being restocked"
+          >
+            <tbody>
+              <tr>
+                <th scope="row">Code</th>
+                <td id="rs-code">-</td>
+              </tr>
+              <tr>
+                <th scope="row">Name</th>
+                <td id="rs-name">-</td>
+              </tr>
+              <tr>
+                <th scope="row">Category</th>
+                <td id="rs-category">-</td>
+              </tr>
+              <tr id="rs-size-row">
+                <th scope="row">Size</th>
+                <td id="rs-size">-</td>
+              </tr>
+              <tr>
+                <th scope="row">In stock</th>
+                <td id="rs-stock">-</td>
+              </tr>
+              <tr>
+                <th scope="row">Buy</th>
+                <td id="rs-buy">-</td>
+              </tr>
+              <tr>
+                <th scope="row">Sell</th>
+                <td id="rs-sell">-</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="add-flow">
+        <section class="add-card add-entry-card" aria-label="Item details">
+          <div class="add-entry-toolbar">
+            <div class="add-photo-box add-photo-control" id="add-photo-preview">
+              <img
+                id="add-photo-img"
+                src=""
+                alt="Item photo"
+                class="add-photo-img"
+                style="display: none"
+              />
+              <button
+                type="button"
+                id="add-photo-placeholder"
+                class="add-photo-ph"
+                onclick="triggerAddPhotoUpload()"
+                aria-label="Add item photo"
+                title="Add item photo"
+              >
+                <i
+                  class="fa-solid fa-camera add-photo-ph-icon"
+                  aria-hidden="true"
+                ></i>
+              </button>
+              <button
+                type="button"
+                id="add-photo-remove"
+                onclick="removeAddPhoto(event)"
+                class="add-photo-remove"
+                style="display: none"
+                aria-label="Remove item photo"
+                title="Remove item photo"
+              >
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+              </button>
+            </div>
+            <div class="add-entry-mode">
+              <div class="add-mode-row">
+                <div id="item-mode-toggle" class="add-mode-bar record-mode">
+                  <div class="mode-opt mode-opt-active" id="mode-opt-record">
+                    <i class="fa-solid fa-file-lines"></i> Record Only
+                  </div>
+                  <label
+                    class="ios-toggle"
+                    for="mode-toggle-input"
+                    title="Record Only / Track Stock"
+                  >
+                    <input
+                      type="checkbox"
+                      id="mode-toggle-input"
+                      onchange="setItemMode(!this.checked)"
+                    />
+                    <span class="ios-toggle-track"
+                      ><span class="ios-toggle-on-label">ON</span></span
+                    >
+                    <span class="ios-toggle-thumb"></span>
+                  </label>
+                  <div class="mode-opt" id="mode-opt-track">
+                    <i class="fa-solid fa-boxes-stacked"></i> Track Stock
+                  </div>
+                </div>
+                <div
+                  id="record-mode-note"
+                  class="record-mode-note"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                  <span id="record-mode-message"
+                    >Qty not tracked - item always shows as available for
+                    sale.</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="add-entry-fields">
+            <div class="add-name-code-row">
+              <div class="add-field">
+                <input
+                  class="add-input"
+                  id="f-name"
+                  type="text"
+                  placeholder="Item name? *"
+                  aria-label="Item name"
+                  autocomplete="off"
+                  spellcheck="false"
+                  required
+                />
+              </div>
+
+              <div class="add-field">
+                <input
+                  class="add-input add-mono"
+                  id="f-code"
+                  type="text"
+                  placeholder="Code? *"
+                  aria-label="Item code"
+                  autocomplete="off"
+                  spellcheck="false"
+                  style="text-transform: uppercase"
+                  oninput="onCodeInput()"
+                  required
+                />
+                <div class="add-field" id="code-match-field">
+                  <select
+                    class="add-select add-mono"
+                    id="code-match-select"
+                    disabled
+                    aria-label="Existing code match"
+                  >
+                    <option value="">Match code...</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <input type="hidden" id="f-size" value="" />
+            <input type="hidden" id="f-type" value="" />
+            <div id="f-type-cascade" class="add-cascade"></div>
+          </div>
+
+          <!-- Step 2b: Item mode toggle -->
+          <!-- Shoe sizes (footwear categories) -->
+          <div id="shoe-size-panel" class="add-card-shoe">
+            <h2 class="add-card-title">
+              <span class="add-step-badge">3</span> Sizes
+            </h2>
+            <div class="sg-row sg-row-full" id="shoe-size-groups"></div>
+
+            <div id="shoe-sizes-grid" hidden aria-hidden="true">
+              <div id="sz-grid"></div>
+            </div>
+
+            <div id="shoe-rows-wrap">
+              <div
+                class="add-section add-section-inset shoe-pricing-panel"
+                style="padding-bottom: 10px"
+              >
+                <div id="shoe-stock-summary" class="shoe-stock-summary">
+                  <div class="shoe-stock-summary-top">
+                    <div
+                      id="shoe-selected-summary"
+                      class="shoe-selected-chips"
+                    ></div>
+                  </div>
+                  <div class="shoe-stock-metrics">
+                    <div class="shoe-metric">
+                      <span class="shoe-metric-lbl">Qty</span>
+                      <strong id="shoe-metric-qty" class="shoe-metric-val"
+                        >0</strong
+                      >
+                    </div>
+                    <div class="shoe-metric">
+                      <span class="shoe-metric-lbl">BP</span>
+                      <strong id="shoe-metric-bp" class="shoe-metric-val"
+                        >-</strong
+                      >
+                    </div>
+                    <div class="shoe-metric">
+                      <span class="shoe-metric-lbl">SP</span>
+                      <strong id="shoe-metric-sp" class="shoe-metric-val"
+                        >-</strong
+                      >
+                    </div>
+                  </div>
+                </div>
+
+                <div class="shoe-mode-tabs">
+                  <button
+                    type="button"
+                    id="mode-tab-shared"
+                    class="shoe-mode-tab active"
+                    onclick="setShoeMode('shared')"
+                  >
+                    All sizes
+                  </button>
+                  <button
+                    type="button"
+                    id="mode-tab-persize"
+                    class="shoe-mode-tab"
+                    onclick="setShoeMode('persize')"
+                  >
+                    Per size
+                  </button>
+                </div>
+
+                <form
+                  id="shoe-stock-form"
+                  class="shoe-stock-form"
+                  onsubmit="return false;"
+                >
+                  <div id="shoe-shared-wrap">
+                    <div class="shoe-form-grid">
+                      <div class="shoe-form-field">
+                        <label for="shoe-shared-qty">Qty</label>
+                        <input
+                          class="add-input add-center"
+                          id="shoe-shared-qty"
+                          type="number"
+                          min="0"
+                          inputmode="numeric"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div class="shoe-form-field">
+                        <label for="shoe-shared-buy">BP</label>
+                        <input
+                          class="add-input add-center"
+                          id="shoe-shared-buy"
+                          type="number"
+                          min="0"
+                          inputmode="decimal"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div class="shoe-form-field">
+                        <label for="shoe-shared-sell">SP</label>
+                        <input
+                          class="add-input add-center"
+                          id="shoe-shared-sell"
+                          type="number"
+                          min="0"
+                          inputmode="decimal"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </form>
+
+                <!-- ── Per-size mode ────────────────────────────────── -->
+                <div id="shoe-per-size-wrap" style="display: none">
+                  <div class="shoe-row-hdr" id="shoe-row-hdr">
+                    <span>Sz</span><span>Qty</span><span>BP</span
+                    ><span>SP</span>
+                  </div>
+                  <div id="shoe-rows"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Variant type selector (non-footwear) ─────────────────── -->
+          <!-- Step 3: Stock & pricing (standard items) -->
+          <div id="std-pricing-section" class="add-entry-pricing">
+            <div class="add-entry-stock-row" id="f-stock-row">
+              <div class="add-field" id="f-qty-field">
+                <input
+                  class="add-input add-mono"
+                  id="f-qty"
+                  type="number"
+                  placeholder="QTY (required)"
+                  min="0"
+                  inputmode="numeric"
+                  aria-label="Quantity in stock"
+                  oninput="updateProfitPreview()"
+                  required
+                />
+              </div>
+              <div class="add-field">
+                <input id="f-unit" type="hidden" value="" />
+                <div
+                  class="item-unit-picker"
+                  id="f-unit-picker"
+                  role="radiogroup"
+                  aria-label="Select an item unit"
+                ></div>
+              </div>
+            </div>
+
+            <div class="add-price-grid">
+              <div class="add-field">
+                <input
+                  class="add-input"
+                  id="f-buy"
+                  type="text"
+                  placeholder="What is the buy price?"
+                  inputmode="decimal"
+                  aria-label="Buy price"
+                  oninput="updateProfitPreview()"
+                />
+                <span id="bp-cur" style="display: none">KES</span>
+              </div>
+              <div class="add-field">
+                <input
+                  class="add-input"
+                  id="f-sell"
+                  type="text"
+                  placeholder="What is the max sell price?"
+                  inputmode="decimal"
+                  aria-label="Maximum sell price"
+                  oninput="updateProfitPreview()"
+                />
+                <span id="sp-cur" style="display: none">KES</span>
+              </div>
+              <div class="add-field" id="f-sell-min-row">
+                <input
+                  class="add-input"
+                  id="f-sell-min"
+                  type="text"
+                  placeholder="Minimum sell price?"
+                  inputmode="decimal"
+                  aria-label="Minimum sell price"
+                  oninput="updateProfitPreview()"
+                />
+              </div>
+            </div>
+
+            <!-- Profit preview pill -->
+            <div
+              class="add-profit-pill"
+              id="profit-preview"
+              style="display: none"
+            >
+              <div class="app-pill-row">
+                <span class="app-pill-label">Profit</span>
+                <span class="app-pill-val" id="pp-profit"></span>
+              </div>
+              <div class="app-pill-row">
+                <span class="app-pill-label">Margin</span>
+                <span class="app-pill-val" id="pp-margin"></span>
+              </div>
+              <div class="app-pill-row" id="pp-total-row" style="display: none">
+                <span class="app-pill-label">Total</span>
+                <span class="app-pill-val" id="pp-total"></span>
+              </div>
+              <span id="pp-buy" style="display: none"></span>
+              <span id="pp-sell" style="display: none"></span>
+              <span id="pp-qty-lbl" style="display: none"></span>
+            </div>
+          </div>
+        </section>
+      </div>
+      <!-- /add-flow -->
+
+      <footer class="add-footer" id="add-footer">
+        <button
+          type="button"
+          class="add-save-btn"
+          id="save-btn"
+          onclick="saveItem()"
+        >
+          <i class="fa-solid fa-check"></i> Save
+        </button>
+        <button
+          type="button"
+          class="add-footer-cancel"
+          id="restock-cancel-btn"
+          onclick="cancelEdit()"
+          hidden
+        >
+          Cancel
+        </button>
+      </footer>
+    </div>
+    <!-- /page-add -->
+</template>
+
+<template id="inventory-detail-sheets-template">
+<!-- ==============================================================
+     SHEET: WISHLIST ITEM DETAIL
+     ============================================================== -->
+    <div class="sheet-overlay" id="wishlist-detail-sheet">
+      <div class="sheet wish-detail-sheet">
+        <div class="wish-detail-header">
+          <div class="wish-detail-header-title">
+            <i class="fa-regular fa-file-lines"></i><span>Item Details</span>
+          </div>
+          <button
+            type="button"
+            class="wish-detail-close"
+            onclick="closeWishlistDetail()"
+            aria-label="Close"
+            title="Close"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <div class="wish-detail-overview">
+          <div id="wd-photo-wrap" class="wish-detail-photo-wrap">
+            <img
+              id="wd-photo-img"
+              class="wish-detail-photo"
+              src=""
+              alt=""
+              style="display: none"
+            />
+            <div id="wd-photo-empty" class="wish-detail-photo-empty">
+              <i class="fa-solid fa-camera"></i>
+            </div>
+            <div id="wd-shoe-overlay" class="wd-shoe-overlay" hidden></div>
+          </div>
+
+          <div class="wish-detail-identity">
+            <h2 id="wd-name" class="wish-detail-name"></h2>
+          </div>
+        </div>
+
+        <div class="wish-detail-body">
+          <section class="wish-detail-block" aria-labelledby="wd-hd-item">
+            <h3 class="wish-detail-section-label" id="wd-hd-item">
+              Item details
+            </h3>
+            <dl id="wd-item-details" class="wish-detail-dl"></dl>
+          </section>
+        </div>
+
+        <footer class="wish-detail-footer">
+          <div class="wish-detail-footer-row">
+            <button
+              type="button"
+              class="wish-detail-btn edit-action"
+              onclick="wishlistDetailEdit()"
+            >
+              <i class="fa-solid fa-pen"></i> Edit
+            </button>
+            <button
+              type="button"
+              class="wish-detail-btn close-action"
+              onclick="closeWishlistDetail()"
+            >
+              <i class="fa-solid fa-xmark"></i> Close
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ==============================================================
+     SHEET: ITEM DETAIL  (id="detail-sheet")
+     Opens when a stock card is tapped.
+     openSheet(id) in Inventory/inventory-items.js populates all *id* elements.
+     Top: 400px photo area (pannable with touch, pinch-to-zoom).
+     Bottom: prices, stock counts, restock, edit, delete, CLOSE.
+     ============================================================== -->
+    <div class="sheet-overlay" id="detail-sheet">
+      <div
+        class="sheet"
+        style="
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          max-height: 92vh;
+          overflow: hidden;
+        "
+      >
+        <!-- Handle -->
+        <div
+          class="sheet-handle"
+          style="
+            position: absolute;
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 3;
+            flex-shrink: 0;
+          "
+        ></div>
+
+        <!-- ── Action strip: Edit (left) - X close (right) ─────── -->
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 10px 0;
+            flex-shrink: 0;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
+          "
+        >
+          <button
+            class="btn-edit"
+            onclick="editItem()"
+            style="
+              background: rgba(0, 0, 0, 0.38);
+              color: white;
+              border: none;
+              border-radius: 6px;
+              font-size: 11px;
+              font-weight: 700;
+              padding: 5px 10px;
+              cursor: pointer;
+              font-family: var(--sans);
+            "
+          >
+            Edit
+          </button>
+          <button
+            onclick="closeSheet()"
+            style="
+              background: rgba(0, 0, 0, 0.38);
+              color: white;
+              border: none;
+              border-radius: 50%;
+              width: 32px;
+              height: 32px;
+              font-size: 18px;
+              font-weight: 700;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              line-height: 1;
+            "
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- ── Scrollable info panel ─────────────────────────────── -->
+        <div
+          style="
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 0 20px;
+            -webkit-overflow-scrolling: touch;
+          "
+        >
+          <!-- Photo block - full width at top -->
+          <div
+            id="sh-photo-area-inner"
+            style="
+              width: 100%;
+              height: 200px;
+              position: relative;
+              background: var(--surface2);
+              overflow: hidden;
+              flex-shrink: 0;
+            "
+          >
+            <div
+              id="sh-photo-pan"
+              class="photo-viewport"
+              style="
+                display: none;
+                width: 100%;
+                height: 100%;
+                overflow: hidden;
+                touch-action: none;
+                position: absolute;
+                inset: 0;
+                z-index: 1;
+              "
+            >
+              <img
+                id="sh-photo-img"
+                src=""
+                alt=""
+                class="photo-pan-img"
+                style="user-select: none; -webkit-user-drag: none"
+              />
+            </div>
+            <p
+              class="photo-pan-hint"
+              id="sh-photo-pan-hint"
+              style="display: none"
+            >
+              Pan - 2× full
+            </p>
+            <div
+              id="sh-photo-fallback"
+              style="
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 64px;
+              "
+            >
+              <span id="sh-icon"></span>
+            </div>
+            <div
+              id="sh-out-badge"
+              style="
+                display: none;
+                position: absolute;
+                inset: 0;
+                pointer-events: none;
+                overflow: hidden;
+              "
+            >
+              <div
+                style="
+                  position: absolute;
+                  top: 50%;
+                  left: 50%;
+                  transform: translate(-50%, -50%) rotate(-35deg);
+                  white-space: nowrap;
+                  font-size: 18px;
+                  font-weight: 900;
+                  color: white;
+                  background: rgba(192, 57, 43, 0.82);
+                  padding: 6px 24px;
+                  border-radius: 6px;
+                  letter-spacing: 1px;
+                "
+              >
+                OUT OF STOCK - RESTOCK
+              </div>
+            </div>
+            <div
+              id="sh-type-badge"
+              style="
+                position: absolute;
+                bottom: 8px;
+                left: 10px;
+                background: rgba(0, 0, 0, 0.45);
+                color: white;
+                font-size: 10px;
+                font-weight: 700;
+                padding: 3px 9px;
+                border-radius: 20px;
+                z-index: 2;
+                max-width: 55%;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+              "
+            ></div>
+            <button
+              id="sh-photo-btn"
+              onclick="triggerSheetPhotoUpload(event)"
+              style="
+                position: absolute;
+                bottom: 8px;
+                right: 10px;
+                background: rgba(0, 0, 0, 0.4);
+                color: white;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-radius: 6px;
+                font-size: 10px;
+                font-weight: 700;
+                padding: 4px 8px;
+                cursor: pointer;
+                z-index: 2;
+              "
+            >
+              <i class="fa-solid fa-camera"></i>
+            </button>
+            <div
+              style="
+                position: absolute;
+                top: 38px;
+                left: 0;
+                right: 0;
+                text-align: center;
+                padding: 0 10px;
+              "
+            >
+              <div
+                id="sh-code"
+                style="
+                  font-size: 17px;
+                  font-weight: 900;
+                  color: white;
+                  font-family: var(--mono);
+                  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                "
+              ></div>
+              <div
+                id="sh-name"
+                style="
+                  font-size: 12px;
+                  color: rgba(255, 255, 255, 0.8);
+                  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                  margin-top: 2px;
+                "
+              ></div>
+            </div>
+          </div>
+
+          <!-- SELL button - large, centre ─────────────────────────── -->
+          <div
+            id="sh-shoe-sizes"
+            style="display: none; margin: 10px 12px 8px"
+          ></div>
+          <div
+            id="sh-selected-size-bar"
+            style="
+              display: none;
+              padding: 8px 12px;
+              margin: 0 12px 8px;
+              background: var(--green-light);
+              border: 1.5px solid var(--green);
+              border-radius: var(--r);
+              font-size: 12px;
+              font-weight: 700;
+              color: var(--green);
+              text-align: center;
+            "
+          ></div>
+
+          <!-- Prices & stock stats -->
+          <div
+            id="sh-price-cols"
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr 1fr 1fr;
+              gap: 6px;
+              margin: 12px 12px 10px;
+            "
+          >
+            <div class="sh-stat-box">
+              <div class="sh-stat-lbl">Buying</div>
+              <div class="sh-stat-val muted" id="sh-buy"></div>
+            </div>
+            <div class="sh-stat-box">
+              <div class="sh-stat-lbl">Selling</div>
+              <div class="sh-stat-val accent2" id="sh-sell"></div>
+            </div>
+            <div class="sh-stat-box accent-bg">
+              <div class="sh-stat-lbl">Stock</div>
+              <div class="sh-stat-val accent" id="sh-qty"></div>
+            </div>
+            <div class="sh-stat-box">
+              <div class="sh-stat-lbl">Sold</div>
+              <div class="sh-stat-val green" id="sh-sold">0</div>
+            </div>
+          </div>
+
+          <!-- Delete (left) - Restock (right) -->
+          <div id="sh-action-row" class="detail-action-row">
+            <button
+              type="button"
+              class="btn-del detail-action-btn"
+              onclick="deleteItem()"
+            >
+              <i class="fa-solid fa-trash"></i> Delete
+            </button>
+            <button
+              type="button"
+              class="detail-action-btn detail-action-restock"
+              onclick="toggleRestock()"
+            >
+              <i class="fa-solid fa-boxes-stacked"></i> Restock
+            </button>
+          </div>
+
+          <!-- Inline restock panel -->
+          <div
+            id="restock-panel"
+            class="detail-restock-panel"
+            style="display: none"
+          >
+            <div class="detail-restock-grid">
+              <input
+                id="restock-buy"
+                type="number"
+                min="0"
+                step="any"
+                inputmode="decimal"
+                placeholder="Buy price"
+                aria-label="Buy price"
+                class="detail-restock-field"
+              />
+              <input
+                id="restock-sell"
+                type="number"
+                min="0"
+                step="any"
+                inputmode="decimal"
+                placeholder="Sell price"
+                aria-label="Sell price"
+                class="detail-restock-field"
+              />
+              <input
+                id="restock-qty"
+                type="number"
+                min="1"
+                placeholder="Qty to add"
+                inputmode="numeric"
+                aria-label="Restock quantity"
+                class="detail-restock-field"
+              />
+            </div>
+            <div class="detail-restock-actions">
+              <button
+                type="button"
+                id="detail-restock-btn"
+                class="detail-restock-confirm"
+                onclick="confirmRestock()"
+              >
+                RESTOCK
+              </button>
+              <button
+                type="button"
+                class="detail-restock-cancel"
+                onclick="toggleRestock()"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              margin: 0 12px 10px;
+            "
+          >
+            <span
+              class="tag tag-cyan"
+              id="sh-type"
+              style="
+                font-size: 10px;
+                padding: 2px 8px;
+                flex-shrink: 0;
+                max-width: 80px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+              "
+            ></span>
+            <div
+              id="sh-code-large"
+              style="
+                font-size: 15px;
+                font-weight: 900;
+                font-family: var(--mono);
+                color: var(--text);
+                flex: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+              "
+            ></div>
+            <span
+              class="tag tag-purple"
+              id="sh-size"
+              style="font-size: 10px; padding: 2px 8px; flex-shrink: 0"
+            ></span>
+          </div>
+
+          <!-- Shoe size selector -->
+          <!-- hidden compat IDs -->
+          <span id="sh-total" style="display: none"></span>
+          <span id="sh-revenue" style="display: none"></span>
+          <span id="sh-profit-made" style="display: none"></span>
+          <span id="sh-profit" style="display: none"></span>
+
+          <div class="detail-sell-wrap">
+            <button
+              type="button"
+              id="sh-sell-btn"
+              class="detail-sell-btn"
+              onclick="openSellFromSheet()"
+            >
+              SELL
+            </button>
+          </div>
+        </div>
+        <!-- /info-panel -->
+      </div>
+    </div>
+    <!-- /detail-sheet -->
+</template>
+
+<template id="inventory-photo-import-template">
+<!-- ============================================================
+     PHOTO IMPORT SHEET
+     4-step flow: capture → loading → preview → importing
+     ============================================================ -->
+    <div class="sheet-overlay" id="photo-import-sheet">
+      <div
+        class="sheet"
+        style="max-height: 96vh; display: flex; flex-direction: column"
+      >
+        <div class="sheet-handle"></div>
+
+        <!-- STEP 1: Capture — single button, auto-extracts on pick -->
+        <div id="pi-step-capture">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              padding: 14px 14px 0;
+            "
+          >
+            <div class="sheet-title" style="margin: 0">
+              Add Stock from Photo
+            </div>
+            <button
+              onclick="closePhotoImport()"
+              style="
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                border: 1.5px solid var(--border);
+                background: var(--bg2);
+                color: var(--muted);
+                font-size: 14px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              "
+            >
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div class="pi-capture-area">
+            <div class="pi-capture-hint">
+              <i class="fa-solid fa-lightbulb" style="color: #f59e0b"></i>
+              Take a photo of your handwritten stock list — AI reads it
+              automatically
+            </div>
+            <!-- Single file input — OS shows camera/gallery choice -->
+            <input
+              type="file"
+              id="pi-file-input"
+              accept="image/*"
+              style="display: none"
+              onchange="onPhotoImportFileSelected(this)"
+            />
+            <label for="pi-file-input" class="pi-pick-btn">
+              <i class="fa-solid fa-camera"></i> Take or Choose Photo
+            </label>
+            <img
+              id="pi-image-preview"
+              class="pi-image-preview"
+              alt="Stock list"
+              style="display: none"
+            />
+          </div>
+        </div>
+
+        <!-- STEP 2: Loading (auto-triggered, no extra tap needed) -->
+        <div id="pi-step-loading" style="display: none">
+          <div class="pi-loading-area">
+            <img
+              id="pi-loading-thumb"
+              style="
+                width: 80px;
+                height: 80px;
+                object-fit: cover;
+                border-radius: 10px;
+                opacity: 0.6;
+                margin-bottom: 4px;
+              "
+            />
+            <div class="pi-spinner"></div>
+            <div class="pi-loading-title">Reading your list…</div>
+            <div class="pi-loading-sub">AI is identifying the items</div>
+          </div>
+        </div>
+
+        <!-- STEP 3: Preview / edit extracted rows -->
+        <div
+          id="pi-step-preview"
+          style="
+            display: none;
+            flex: 1;
+            overflow: hidden;
+            display: none;
+            flex-direction: column;
+          "
+        >
+          <div class="pi-preview-header">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <div class="sheet-title" style="margin: 0">Check & Import</div>
+                <span class="pi-count-badge" id="pi-count-badge">0 items</span>
+              </div>
+              <div
+                style="font-size: 11px; color: var(--muted); margin-top: 2px"
+              >
+                Fix any errors, then tap Import
+              </div>
+            </div>
+            <button
+              onclick="closePhotoImport()"
+              style="
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                border: 1.5px solid var(--border);
+                background: var(--bg2);
+                color: var(--muted);
+                font-size: 14px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              "
+            >
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div class="pi-table-wrap">
+            <table class="pi-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Code</th>
+                  <th>Category</th>
+                  <th class="pi-num">Qty</th>
+                  <th class="pi-num">Buy</th>
+                  <th class="pi-num">Sell</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="pi-preview-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pi-preview-footer">
+            <button class="pi-add-row-btn" onclick="piAddRow()">
+              <i class="fa-solid fa-plus"></i> Add Row
+            </button>
+            <button class="pi-cancel-btn" onclick="closePhotoImport()">
+              Cancel
+            </button>
+            <button class="pi-import-btn" onclick="importPhotoItems()">
+              <i class="fa-solid fa-file-import"></i> Import All
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP 4: Importing progress -->
+        <div id="pi-step-importing" style="display: none">
+          <div class="pi-importing-area">
+            <div style="font-size: 15px; font-weight: 700; margin-bottom: 14px">
+              Importing items…
+            </div>
+            <div class="pi-progress-track">
+              <div
+                class="pi-progress-fill"
+                id="pi-progress-fill"
+                style="width: 0%"
+              ></div>
+            </div>
+            <div class="pi-progress-label" id="pi-progress-label">
+              Preparing…
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+</template>
