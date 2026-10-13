@@ -489,6 +489,24 @@
   padding-bottom: 11px;
 }
 
+.hist-table .hist-totals-top td {
+  padding: 2px 1px !important;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.2px;
+}
+
+.hist-table .hist-total-label,
+.hist-table .hist-total-meta {
+  display: inline;
+}
+
+.hist-table .hist-total-meta {
+  margin-left: 3px;
+  font-size: 9px;
+}
+
 .hist-totals-top td:nth-child(2) {
   font-family: var(--sans);
   font-size: 13px;
@@ -840,10 +858,24 @@
 }
 
 .hist-days-total-row td {
-  padding: 5px 6px !important;
+  padding: 2px 4px !important;
   border-right: 1px solid var(--border);
   border-bottom: 2px solid var(--accent);
   white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.2px;
+}
+
+.hist-days-total-row .hist-total-label,
+.hist-days-total-row .hist-total-meta {
+  display: inline;
+}
+
+.hist-days-total-row .hist-total-meta {
+  margin-left: 3px;
+  font-size: 9px;
 }
 
 .hist-day-tr:last-child td {
