@@ -1,0 +1,1337 @@
+/* Sales module styles. Shared tokens and generic sheet/form styles remain in app.css. */
+
+/* Sell price max/min labels */
+.sell-lbl-max {
+  color: var(--accent2) !important;
+}
+
+.sell-lbl-min {
+  color: #d97706 !important;
+}
+
+.sell-lbl-tag {
+  display: inline-block;
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(30, 122, 62, 0.12);
+  color: var(--accent2);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  vertical-align: middle;
+}
+
+.sell-lbl-tag-min {
+  background: rgba(245, 158, 11, 0.15);
+  color: #92400e;
+}
+
+#offstock-sale-sheet .sheet {
+  max-width: 400px;
+  padding: 16px 14px 18px;
+  border-radius: 20px;
+}
+
+.offstock-sheet-header {
+  position: relative;
+  justify-content: center !important;
+  min-height: 36px;
+}
+
+.offstock-sheet-header > div {
+  text-align: center;
+}
+
+.offstock-sheet-header .sheet-title,
+.offstock-sheet-header .sheet-code {
+  text-align: center;
+}
+
+.offstock-sheet-header > button {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+#offstock-sale-sheet .stock-monitor-form {
+  padding: 10px;
+  margin-bottom: 0;
+}
+
+#offstock-sale-sheet .stock-form-grid {
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.offstock-category-qty > *,
+.offstock-sale-prices > * {
+  min-width: 0;
+}
+
+.offstock-sale-prices > .add-input {
+  padding-right: 5px;
+  padding-left: 5px;
+  font-size: 12px;
+}
+
+.offstock-category-qty .cat-pick-native {
+  width: 100%;
+  margin-top: 0;
+  padding-right: 24px;
+}
+
+.offstock-category-qty #off-qty {
+  min-width: 0;
+  padding-right: 8px;
+  padding-left: 8px;
+  font-size: 13px;
+}
+
+.sales-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sales-tabs .ops-tab {
+  gap: 6px;
+  padding: 11px 8px;
+  font-size: 13px;
+}
+
+#sales-slot-sell,
+#sales-slot-history {
+  padding-bottom: 12px;
+}
+
+.sell-item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sell-item-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.sell-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.sell-item-name {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.sell-item-meta {
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.sell-item-stock {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.sell-stock-val {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--mono);
+}
+
+.sell-stock-lbl {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.sell-totals {
+  background: var(--accent-light);
+  border: 1.5px solid #a8d8b5;
+  border-radius: var(--r);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.sell-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.sell-total-lbl {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.sell-total-big {
+  font-size: 20px;
+  font-weight: 800;
+  font-family: var(--mono);
+}
+
+.sell-total-mid {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--mono);
+}
+
+/* ── History page ────────────────────────────────────────────── */
+.hist-today-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--accent);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  margin-bottom: 12px;
+}
+
+.hist-today-date {
+  font-size: 15px;
+  font-weight: 800;
+  color: white;
+}
+
+.hist-today-sub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 1px;
+}
+
+.hist-today-stats {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 6px;
+}
+
+.hist-stat {
+  text-align: center;
+}
+
+.hist-stat-val {
+  font-size: 15px;
+  font-weight: 900;
+  font-family: var(--mono);
+  color: white;
+}
+
+.hist-stat-val.green {
+  color: #86efac;
+}
+
+.hist-stat-lbl {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.65);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.hist-custom-range {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.hist-custom-range label {
+  flex: 1;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.hist-custom-range .add-input {
+  width: 100%;
+  height: 34px;
+  margin-top: 3px;
+  box-sizing: border-box;
+  font-size: 12px;
+}
+
+.hist-period-totals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.hist-period-total {
+  background: var(--surface);
+  padding: 9px 4px;
+  text-align: center;
+}
+
+.hist-period-total-val {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.hist-period-total-lbl {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+
+.hist-total-positive {
+  color: var(--green);
+}
+
+.hist-total-negative {
+  color: var(--red);
+}
+
+.hist-table-wrap {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.hist-period-totals {
+  margin-top: 10px;
+}
+
+.hist-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+/* Column line separators */
+.hist-table-lined th,
+.hist-table-lined td {
+  border-right: 1px solid var(--border);
+}
+
+.hist-table-lined th:last-child,
+.hist-table-lined td:last-child {
+  border-right: none;
+}
+
+.hist-table th,
+.hist-table td {
+  padding: 4px 2px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap; /* never wrap — prevents vertical text */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Keep the item/title text flush left while lining up the numeric values */
+.hist-table th:nth-child(1),
+.hist-table td:nth-child(1) {
+  text-align: center;
+}
+
+.hist-table th:nth-child(2),
+.hist-table td:nth-child(2) {
+  text-align: left;
+}
+
+.hist-table th:nth-child(3),
+.hist-table td:nth-child(3),
+.hist-table th:nth-child(4),
+.hist-table td:nth-child(4),
+.hist-table th:nth-child(5),
+.hist-table td:nth-child(5),
+.hist-table th:nth-child(6),
+.hist-table td:nth-child(6) {
+  text-align: right;
+  padding-right: 2px;
+}
+
+.hist-table th:nth-child(7),
+.hist-table td:nth-child(7) {
+  text-align: center;
+}
+
+.hist-table th {
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+  background: var(--surface2);
+  padding: 5px 4px;
+}
+
+.hist-table td {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+/* Item name — sans serif, can wrap slightly */
+.hist-table td:nth-child(2) {
+  font-family: var(--sans);
+  font-size: 11px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+/* Column widths — sized to content, not pixels that cause wrapping */
+.hist-table th:nth-child(1),
+.hist-table td:nth-child(1) {
+  width: 6%;
+}
+
+.hist-table th:nth-child(2),
+.hist-table td:nth-child(2) {
+  width: 25%;
+}
+
+.hist-table th:nth-child(3),
+.hist-table td:nth-child(3) {
+  width: 10%;
+}
+
+.hist-table th:nth-child(4),
+.hist-table td:nth-child(4) {
+  width: 16%;
+}
+
+.hist-table th:nth-child(5),
+.hist-table td:nth-child(5) {
+  width: 16%;
+}
+
+.hist-table th:nth-child(6),
+.hist-table td:nth-child(6) {
+  width: 19%;
+}
+
+.hist-table th:nth-child(7),
+.hist-table td:nth-child(7) {
+  width: 8%;
+}
+
+.hist-num {
+  color: var(--muted) !important;
+  font-size: 10px !important;
+}
+
+.hist-table td.hp-pos {
+  color: var(--green);
+  font-weight: 800;
+}
+
+.hist-table td.hp-neg {
+  color: var(--red);
+  font-weight: 800;
+}
+
+.hist-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hist-sort-btn:active {
+  opacity: 0.65;
+}
+
+.hist-sort-arrow {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.hist-sort-arrow-active {
+  color: var(--accent);
+  opacity: 1;
+  font-weight: 900;
+}
+
+/* Totals row — pinned at top, distinct background */
+.hist-totals-top td {
+  background: var(--accent-light);
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent);
+  font-weight: 900;
+  font-size: 15px;
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+
+.hist-totals-top td:nth-child(2) {
+  font-family: var(--sans);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.hist-totals-top .hist-total-meta {
+  font-size: 11px;
+}
+
+.hist-total-label,
+.hist-total-meta {
+  display: block;
+}
+
+.hist-total-label {
+  text-transform: uppercase;
+}
+
+.hist-total-meta {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: none;
+}
+
+/* Clickable sale rows */
+.hist-clickable-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.hist-clickable-row:active {
+  background: var(--bg2);
+}
+
+.hist-td-chevron {
+  text-align: center !important;
+  padding: 4px 6px;
+  vertical-align: middle;
+  width: 28px;
+}
+
+/* Inventory status circle badge */
+/* Plain tick/cross — no circle, no border */
+.inv-circle {
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.inv-circle-found {
+  color: var(--green);
+}
+
+.inv-circle-missing {
+  color: var(--red);
+  opacity: 0.6;
+}
+
+/* ── Sale detail sheet ───────────────────────────────────────────── */
+.sds-info-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.sds-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sds-item-name {
+  font-size: 17px;
+  font-weight: 900;
+  color: var(--text);
+}
+
+.sds-item-code {
+  font-size: 12px;
+  color: var(--accent);
+  font-family: var(--mono);
+  margin-top: 2px;
+}
+
+.sds-item-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.sds-pm-cash {
+  background: rgba(30, 122, 62, 0.12);
+  color: var(--green);
+}
+
+.sds-pm-mpesa {
+  background: rgba(0, 122, 255, 0.1);
+  color: #0a84ff;
+}
+
+.sds-pm-till {
+  background: rgba(245, 158, 11, 0.12);
+  color: #92400e;
+}
+
+.sds-pm-credit {
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--red);
+}
+
+.sds-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.sds-stat {
+  text-align: center;
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 8px 4px;
+}
+
+.sds-stat-val {
+  font-size: 13px;
+  font-weight: 900;
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+.sds-stat-lbl {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.sds-date-row {
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sds-edit-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Action buttons */
+.sds-btn {
+  padding: 14px;
+  border-radius: var(--r);
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity 0.15s;
+}
+
+.sds-btn:active {
+  opacity: 0.75;
+}
+
+.sds-btn-edit {
+  background: rgba(30, 122, 62, 0.1);
+  color: var(--accent);
+  border: 1.5px solid rgba(30, 122, 62, 0.3);
+}
+
+.sds-btn-add {
+  background: rgba(0, 122, 255, 0.08);
+  color: #0a84ff;
+  border: 1.5px solid rgba(0, 122, 255, 0.25);
+}
+
+.sds-btn-del {
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--red);
+  border: 1.5px solid rgba(220, 38, 38, 0.25);
+  width: 100%;
+}
+
+#confirm-sale-btn {
+  background: #1e7a3e !important;
+  color: #fff !important;
+  text-transform: uppercase;
+}
+
+/* 4 summary cards */
+/* 4 summary cards — always ONE row, no icons */
+.pr-sum-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.pr-sum-card {
+  background: var(--surface);
+  padding: 10px 6px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.pr-sum-highlight {
+  background: #16a34a;
+}
+
+.pr-sum-icon {
+  display: none;
+}
+
+.pr-sum-body {
+  width: 100%;
+}
+
+.pr-sum-lbl {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.pr-sum-val {
+  font-size: 14px;
+  font-weight: 900;
+  font-family: var(--mono);
+  line-height: 1.2;
+}
+
+.pr-sum-sub {
+  display: none;
+}
+
+/* Past records — flat full-width table, one row per day */
+.pr-days-list {
+  margin-bottom: 10px;
+}
+
+.hist-days-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 12px;
+  border: 1px solid var(--border);
+}
+
+.hist-days-table thead th {
+  padding: 5px 6px;
+  text-align: left;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+  border-bottom: 2px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: var(--surface2);
+}
+
+.hist-days-table thead th:last-child,
+.hist-days-table tbody td:last-child {
+  border-right: 0;
+}
+
+.hist-days-table th,
+.hist-days-table td {
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hist-days-table .hdt-num {
+  text-align: right;
+}
+
+.hist-days-table .hdt-date {
+  width: 34%;
+  min-width: 0;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.hist-days-table th:nth-child(2),
+.hist-days-table td:nth-child(2) {
+  width: 15%;
+}
+
+.hist-days-table th:nth-child(3),
+.hist-days-table td:nth-child(3) {
+  width: 8%;
+}
+
+.hist-days-table th:nth-child(4),
+.hist-days-table td:nth-child(4),
+.hist-days-table th:nth-child(5),
+.hist-days-table td:nth-child(5),
+.hist-days-table th:nth-child(6),
+.hist-days-table td:nth-child(6) {
+  width: 13%;
+}
+
+.hist-days-table th:nth-child(7),
+.hist-days-table td:nth-child(7) {
+  width: 4%;
+}
+
+.hist-day-tr td {
+  padding: 4px 5px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.hist-days-total-row td {
+  padding: 5px 6px !important;
+  border-right: 1px solid var(--border);
+  border-bottom: 2px solid var(--accent);
+  white-space: nowrap;
+}
+
+.hist-day-tr:last-child td {
+  border-bottom: none;
+}
+
+.hist-day-tr:active td {
+  background: var(--bg2);
+}
+
+.hist-day-tr[aria-expanded="true"] td {
+  background: var(--bg2);
+}
+
+.hist-day-tr[aria-expanded="true"] .hdt-chev i {
+  transform: rotate(90deg);
+}
+
+.hdt-chev i {
+  transition: transform 0.15s ease;
+}
+
+.hist-day-detail-tr > td {
+  padding: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.hist-day-detail-tr .hist-table-wrap {
+  overflow-x: auto;
+}
+
+.hist-row-today td:first-child {
+  border-left: 3px solid var(--accent);
+  padding-left: 10px;
+}
+
+.hist-row-best td:first-child {
+  border-left: 3px solid #f59e0b;
+  padding-left: 10px;
+}
+
+.pr-day-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 10px;
+  cursor: pointer;
+  transition:
+    border-color 0.12s,
+    background 0.12s;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pr-day-card:active {
+  background: var(--bg2);
+}
+
+.pr-day-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+  overflow-x: auto;
+}
+
+.pr-day-date {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.pr-day-date strong {
+  font-size: 13px;
+}
+
+.pr-day-meta {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.pr-day-figures {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+}
+
+/* Insights footer */
+.pr-insights {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-top: 4px;
+}
+
+.pr-insights-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #16a34a;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.pr-insights-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.pr-insights-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.pr-insights-text {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 5px;
+  display: grid;
+  gap: 5px;
+}
+
+.pr-insight-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  line-height: 1.25;
+}
+
+.pr-insight-line strong {
+  color: var(--text);
+}
+
+.pr-insight-label {
+  font-weight: 800;
+}
+
+.pr-insight-earning .pr-insight-label,
+.pr-insight-earning > span:last-child {
+  color: var(--green);
+}
+
+.pr-insight-sold .pr-insight-label,
+.pr-insight-sold > span:last-child {
+  color: var(--accent);
+}
+
+.pr-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1.5px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pr-export-btn:active {
+  background: var(--accent);
+  color: white;
+}
+
+/* Summary: 2 per row, earning card full width */
+  /* Keep all 4 summary cards in one row on mobile — they're now compact */
+  .pr-sum-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+/* Day cards: already a scrollable row — 3 per viewport */
+  .pr-day-card {
+    flex: 0 0 calc(33% - 6px);
+  }
+
+/* Compact summary card on mobile */
+  .pr-sum-card {
+    padding: 10px 8px;
+    gap: 7px;
+  }
+
+.pr-sum-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+
+.pr-sum-val {
+    font-size: 15px;
+  }
+
+/* Day card compact */
+  .pr-day-card {
+    padding: 10px 8px;
+  }
+
+.pr-insights {
+    flex-wrap: wrap;
+  }
+
+.pr-export-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+/* ── Day mini-card grid (3 per row) — kept for backwards compat ─── */
+.hist-days-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+/* ── History controls bar ────────────────────────────────────────── */
+.hist-controls {
+  padding: 4px 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hist-controls-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hist-period-sel {
+  width: auto;
+  height: 34px;
+  font-size: 12px;
+  padding: 0 28px 0 8px;
+}
+
+.hist-search-wrap {
+  margin: 0 !important;
+}
+
+.hist-pay-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.hist-pay-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 11px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
+}
+
+.hist-pay-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* ── Day card: today + best-day highlights ───────────────────────── */
+.pr-day-card {
+  position: relative;
+}
+
+/* ── Today/drill-down 4-stat row ─────────────────────────────────── */
+.hist-day-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Drill-down expanded area */
+.hist-expanded-area {
+  background: var(--surface);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.hist-drill-header {
+  padding: 12px 14px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+
+.hist-filter-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
+.hist-navigation-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hist-navigation-controls[hidden] {
+  display: none !important;
+}
+
+.hist-navigation-controls [hidden] {
+  display: none !important;
+}
+
+.hist-filter-controls > #hist-range-label {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.hist-filter-controls > #hist-period-filter {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 140px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 28px 0 8px;
+  font-size: 12px;
+}
+
+.hist-navigation-controls .hist-drill-back,
+.hist-focused-today {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hist-navigation-controls .hist-drill-back {
+  margin: 0;
+  color: var(--accent);
+  background: var(--surface);
+}
+
+#hist-home-button {
+  margin: 0;
+}
+
+.hist-focused-today {
+  color: var(--surface);
+  background: var(--accent);
+}
+
+.hist-drill-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+
+.hist-drill-back:active {
+  opacity: 0.7;
+}
+
+.hist-drill-title {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.hist-focused-context {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.hist-empty-state,
+.hist-loading-state {
+  padding: 20px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.hist-error-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 12px;
+  color: var(--red);
+  font-size: 13px;
+  text-align: center;
+}
+
+.hist-error-state button {
+  border: 1px solid currentColor;
+  border-radius: 7px;
+  padding: 5px 10px;
+  color: inherit;
+  background: var(--surface);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hist-drill-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.hist-drill-stat {
+  text-align: center;
+}
+
+.hist-drill-val {
+  font-size: 13px;
+  font-weight: 900;
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+.hist-drill-lbl {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-top: 1px;
+}
+
+/* Keep old class refs harmless */
+.hist-day-card {
+  margin-bottom: 10px;
+}
+
+.hist-day-date {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.hist-day-count {
+  font-size: 10px;
+}
+
+.hist-day-chevron {
+  font-size: 11px;
+}
+
+/* Sale records are centered dialogs, so keep all four corners rounded. */
+#sale-detail-sheet > .sheet {
+  border-radius: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}

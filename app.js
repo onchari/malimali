@@ -1,7 +1,7 @@
 // ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
-const APP_VERSION = "2026.10.07.3";
+const APP_VERSION = "2026.10.13.9";
 
 // ===================================================================
 // APPLICATION RELEASE
@@ -1889,12 +1889,14 @@ function applyAddFormFootwearUI(isShoe) {
     return;
   }
   if (modeToggle) modeToggle.style.removeProperty("display");
-  // Shoe size panel is never shown in the add form — footwear saved as standard items
-  if (shoePanel) shoePanel.style.display = "none";
-  if (stdPricing) stdPricing.style.removeProperty("display");
+  const showShoePanel = isShoe && !_addFormIsRecord;
+  if (shoePanel) shoePanel.style.display = showShoePanel ? "block" : "none";
+  if (stdPricing)
+    stdPricing.style.display = showShoePanel ? "none" : "";
   // Hide the text size/variant field for footwear (sizes tracked externally)
   if (sizeField)
-    sizeField.style.display = isShoe && !_addFormIsRecord ? "none" : "";
+    sizeField.style.display = showShoePanel ? "none" : "";
+  if (showShoePanel) prepareShoeSizePickerUI();
 }
 
 function _sortTypes(a, b) {
@@ -2699,6 +2701,7 @@ function fmt(n) {
     })
   );
 }
+
 function toast(msg, type = "") {
   const t = document.getElementById("toast");
   if (!t) return;
@@ -2724,7 +2727,6 @@ let _operationsMounted = false;
 let _activeOperationsTab = "day";
 let _inventoryMounted = false;
 let _activeInventoryTab = "stock";
-let _activeStockControlTab = "wishlist";
 let _activeSalesTab = "sell";
 
 function saveLastView() {
@@ -2733,7 +2735,6 @@ function saveLastView() {
       KEY_LAST_VIEW,
       JSON.stringify({
         inventoryTab: _activeInventoryTab,
-        stockControlTab: _activeStockControlTab,
         wishlistSection:
           typeof _activeWishlistSection === "string"
             ? _activeWishlistSection
@@ -2748,14 +2749,19 @@ function saveLastView() {
 function restoreLastView() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY_LAST_VIEW) || "{}");
-    if (["stock", "stock-control", "add"].includes(saved.inventoryTab))
+    if (["stock", "stock-control", "wishlist", "add"].includes(saved.inventoryTab))
       _activeInventoryTab = saved.inventoryTab;
-    if (saved.inventoryTab === "wishlist" || saved.inventoryTab === "monitor") {
+    if (saved.inventoryTab === "monitor") _activeInventoryTab = "stock-control";
+    if (
+      saved.inventoryTab === "stock-control" &&
+      saved.stockControlTab === "monitor"
+    )
       _activeInventoryTab = "stock-control";
-      _activeStockControlTab = saved.inventoryTab;
-    }
-    if (["wishlist", "monitor"].includes(saved.stockControlTab))
-      _activeStockControlTab = saved.stockControlTab;
+    else if (
+      saved.inventoryTab === "stock-control" &&
+      saved.stockControlTab === "wishlist"
+    )
+      _activeInventoryTab = "wishlist";
     if (saved.wishlistSection === "list") _activeWishlistSection = "list";
     if (["day", "finance"].includes(saved.operationsTab))
       _activeOperationsTab = saved.operationsTab;
@@ -2768,6 +2774,7 @@ function mountInventoryPage() {
   if (_inventoryMounted) return;
   const stockSlot = document.getElementById("inventory-stock-slot");
   const wishSlot = document.getElementById("inventory-wishlist-slot");
+  const controlSlot = document.getElementById("inventory-stock-control-slot");
   const addSlot = document.getElementById("inventory-add-slot");
   const stockPage = document.getElementById("page-list");
   const wishPage = document.getElementById("page-wishlist");
@@ -2775,6 +2782,7 @@ function mountInventoryPage() {
   if (
     !stockSlot ||
     !wishSlot ||
+    !controlSlot ||
     !addSlot ||
     !stockPage ||
     !wishPage ||
@@ -2793,51 +2801,37 @@ function mountInventoryPage() {
 }
 
 function showInventoryTab(tab) {
-  if (tab === "wishlist" || tab === "monitor") {
-    _activeInventoryTab = "stock-control";
-    _activeStockControlTab = tab;
-  } else {
-    _activeInventoryTab = ["stock", "stock-control", "add"].includes(tab)
-      ? tab
+  _activeInventoryTab = ["stock", "stock-control", "wishlist", "add"].includes(
+    tab,
+  )
+    ? tab
+    : tab === "monitor"
+      ? "stock-control"
       : "stock";
-  }
   mountInventoryPage();
-  ["add", "stock", "stock-control"].forEach((name) => {
+  const selectedTab =
+    _activeInventoryTab === "add" ? "stock" : _activeInventoryTab;
+  ["stock", "stock-control", "wishlist", "add"].forEach((name) => {
     const btn = document.getElementById("inventory-tab-" + name);
     const slot = document.getElementById("inventory-" + name + "-slot");
-    if (btn) btn.classList.toggle("active", name === _activeInventoryTab);
+    if (btn) btn.classList.toggle("active", name === selectedTab);
     if (slot) slot.classList.toggle("active", name === _activeInventoryTab);
-  });
-  ["wishlist", "monitor"].forEach((name) => {
-    const btn = document.getElementById("inventory-stock-control-tab-" + name);
-    const slot = document.getElementById("inventory-" + name + "-slot");
-    if (btn) btn.classList.toggle("active", name === _activeStockControlTab);
-    if (slot) slot.classList.toggle("active", name === _activeStockControlTab);
+    if (btn) btn.setAttribute("aria-selected", String(name === selectedTab));
   });
   const sub = document.getElementById("inventory-sub");
   if (sub) {
     sub.textContent =
       {
-        add: "Add or restock inventory",
-        stock: "Current stock list",
-        "stock-control":
-          _activeStockControlTab === "monitor"
-            ? "Out of stock and not accounted items"
-            : "Prospective items to stock",
+        stock: "Browse products currently in stock, check quantities, and update item details.",
+        "stock-control": "Review items that are out of stock or need attention.",
+        wishlist: "Keep a list of products you may want to purchase.",
+        add: "Add a new product or record incoming stock.",
       }[_activeInventoryTab] || "";
   }
   if (_activeInventoryTab === "stock") renderList();
-  if (
-    _activeInventoryTab === "stock-control" &&
-    _activeStockControlTab === "wishlist"
-  ) {
-    if (typeof showWishlistSection === "function") showWishlistSection("list");
-  }
-  if (
-    _activeInventoryTab === "stock-control" &&
-    _activeStockControlTab === "monitor"
-  )
-    renderStockMonitor();
+  if (_activeInventoryTab === "wishlist" && typeof showWishlistSection === "function")
+    showWishlistSection("list");
+  if (_activeInventoryTab === "stock-control") renderStockMonitor();
   if (_activeInventoryTab === "add") {
     renderTypeSelect();
     updateProfitPreview();
@@ -2847,37 +2841,7 @@ function showInventoryTab(tab) {
 }
 
 function showStockControlTab(tab) {
-  _activeStockControlTab = tab === "monitor" ? "monitor" : "wishlist";
-  showInventoryTab("stock-control");
-}
-
-function showSalesTab(tab) {
-  _activeSalesTab = tab === "history" ? "history" : "sell";
-  ["sell", "history"].forEach((name) => {
-    const btn = document.getElementById("sales-tab-" + name);
-    const slot = document.getElementById("sales-slot-" + name);
-    if (btn) btn.classList.toggle("active", name === _activeSalesTab);
-    if (slot) slot.classList.toggle("active", name === _activeSalesTab);
-  });
-  const offBtn = document.getElementById("sales-offstock-btn");
-  if (offBtn) offBtn.style.display = _activeSalesTab === "sell" ? "" : "none";
-  const sub = document.getElementById("sales-sub");
-  if (sub) {
-    sub.textContent =
-      _activeSalesTab === "history"
-        ? "Today and past sales records"
-        : "Search stock and record a sale";
-  }
-  if (_activeSalesTab === "sell") {
-    renderSellPage();
-    setTimeout(() => {
-      const el = document.getElementById("sell-search");
-      if (el) el.focus();
-    }, 150);
-  } else {
-    renderHistoryPage();
-  }
-  saveLastView();
+  showInventoryTab(tab === "wishlist" ? "wishlist" : "stock-control");
 }
 
 function mountOperationsPage() {
@@ -2918,7 +2882,8 @@ function showOperationsTab(tab) {
 
 function resolvePageRoute(id) {
   if (id === "list" || id === "wishlist" || id === "add" || id === "monitor") {
-    _activeInventoryTab = id === "list" ? "stock" : id;
+    _activeInventoryTab =
+      id === "list" ? "stock" : id === "monitor" ? "stock-control" : id;
     return "inventory";
   }
   if (id === "day" || id === "finance") {
@@ -3867,24 +3832,26 @@ function renderTypeChips() {
   const topActive = types
     .filter((t) => t.parentId == null && isCategoryActive(t))
     .sort(_sortTypes);
-  chips.innerHTML =
-    '<span class="chip ' +
-    (activeTypeFilter === "all" ? "active" : "") +
-    '" onclick="setTypeFilter(\'all\', this)">All</span>' +
-    topActive
-      .map(
-        (t) =>
-          '<span class="chip ' +
-          (activeTypeFilter === t.name ? "active" : "") +
-          '" onclick="setTypeFilter(\'' +
-          escapeHtml(t.name).replace(/'/g, "\\'") +
-          "', this)\">" +
-          (t.emoji || "📦") +
-          " " +
-          escapeHtml(t.name) +
-          "</span>",
-      )
-      .join("");
+  const typeCount = (name) =>
+    allItems.filter((item) => itemMatchesTypeFilter(item, name)).length;
+  chips.innerHTML = `
+    <button type="button" class="chip ${activeTypeFilter === "all" ? "active" : ""}"
+      onclick="setTypeFilter('all', this)" aria-pressed="${activeTypeFilter === "all"}">
+      <i class="fa-solid fa-grip" aria-hidden="true"></i> All
+      <span class="chip-count">${allItems.length}</span>
+    </button>
+    ${topActive
+      .map((type) => {
+        const selected = activeTypeFilter === type.name;
+        const safeName = escapeHtml(type.name).replace(/'/g, "\\'");
+        return `<button type="button" class="chip ${selected ? "active" : ""}"
+          onclick="setTypeFilter('${safeName}', this)" aria-pressed="${selected}">
+          <span aria-hidden="true">${escapeHtml(type.emoji || "📦")}</span>
+          ${escapeHtml(type.name)}
+          <span class="chip-count">${typeCount(type.name)}</span>
+        </button>`;
+      })
+      .join("")}`;
 }
 
 function setTypeFilter(name, el) {
@@ -8057,7 +8024,7 @@ async function renderList() {
   _renderSizeGroupFilter();
 
   // Filter — if there's a query, rank by match score; otherwise sort by recency
-  let filtered = allItems
+  const filtered = allItems
     .filter((item) => {
       const matchSearch = !search || _gscScore(item, search) > 0;
       const matchType = itemMatchesTypeFilter(item, activeTypeFilter);
@@ -8069,16 +8036,39 @@ async function renderList() {
     });
 
   updateHeader();
+  const stockListCount = UI.el("stock-list-count");
+  if (stockListCount)
+    stockListCount.textContent =
+      filtered.length + " of " + allItems.length + " items";
 
   const list = UI.el("item-list");
   if (!list) return;
 
   if (!filtered.length) {
     list.style.border = "none";
-    list.innerHTML = `<div class="empty">
-      <div class="e-icon"><i class="fa-solid fa-${allItems.length ? "magnifying-glass" : "box"}"></i></div>
-      <p>${allItems.length ? "No items match your search." : "No items yet.\nTap Add Item to get started."}</p>
-    </div>`;
+    const hasNoItems = allItems.length === 0 && !search && activeTypeFilter === "all";
+    list.innerHTML = hasNoItems
+      ? `<div class="inventory-empty-state inventory-empty-first">
+          <div class="inventory-empty-art" aria-hidden="true">
+            <i class="fa-solid fa-box-open"></i>
+            <span><i class="fa-solid fa-plus"></i></span>
+          </div>
+          <h2>Your stock list is ready!</h2>
+          <p>Search for a product or choose a category,<br class="desktop-break"> or add a new item to get started.</p>
+          <div class="inventory-empty-actions">
+            <button type="button" class="import-photo-btn inventory-photo-import-btn" onclick="openPhotoImport()">
+              <i class="fa-solid fa-camera"></i> Add Stock from Photo
+            </button>
+            <button type="button" class="inventory-add-item-btn" onclick="showInventoryTab('add')">
+              <i class="fa-solid fa-plus"></i> Add Item
+            </button>
+          </div>
+        </div>`
+      : `<div class="inventory-empty-state inventory-empty-no-match">
+          <div class="inventory-empty-art" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></div>
+          <h2>No matching products</h2>
+          <p>Try another search or choose a different category.</p>
+        </div>`;
     renderStockMonitorSummary();
     return;
   }
@@ -8564,12 +8554,8 @@ function filterStockRows(rows, kind) {
 }
 
 async function renderStockMonitorSummary() {
-  const sub = document.getElementById("stock-monitor-sub");
-  if (!sub) return;
   const rows = await getStockMonitorRows();
-  const outCount = rows.filter((r) => r.kind === "out").length;
   const wishCount = rows.filter((r) => r.kind === "prospective").length;
-  sub.textContent = outCount + " out of stock";
   const wishSub = document.getElementById("wishlist-sub");
   if (wishSub) wishSub.textContent = wishCount + " prospective items";
 }
@@ -9952,9 +9938,7 @@ function _dashDateRange() {
   const today = todayDateStr();
   if (_dashPeriod === "today") return { from: today, to: today };
   if (_dashPeriod === "week") {
-    const d = new Date();
-    d.setDate(d.getDate() - 6);
-    return { from: d.toISOString().split("T")[0], to: today };
+    return { from: _weekStartDate(today), to: today };
   }
   if (_dashPeriod === "month") {
     const d = new Date();
@@ -9981,13 +9965,10 @@ function _dashPrevDateRange() {
     return { from: y, to: y };
   }
   if (_dashPeriod === "week") {
-    const end = new Date();
-    end.setDate(end.getDate() - 7);
-    const start = new Date(end);
-    start.setDate(start.getDate() - 6);
+    const previousSaturday = _historyDateOffset(_weekStartDate(today), -1);
     return {
-      from: start.toISOString().split("T")[0],
-      to: end.toISOString().split("T")[0],
+      from: _historyDateOffset(previousSaturday, -6),
+      to: previousSaturday,
     };
   }
   if (_dashPeriod === "month") {
@@ -10535,46 +10516,6 @@ function renderMotivationSettings() {
   }).join("");
 }
 
-function getSaleMotivation() {
-  const messages = getMotivationMessages();
-  if (!messages.length) return "";
-  const today = todayDateStr();
-  const year = today.slice(0, 4);
-  let state = {};
-  try {
-    state = JSON.parse(localStorage.getItem(MOTIVATION_STATE_KEY) || "{}");
-  } catch (_) {}
-  if (state.year !== year)
-    state = { year, used: [], categoryCounts: {}, lastUsed: {} };
-  if (!Array.isArray(state.used)) state.used = [];
-  if (!state.categoryCounts || typeof state.categoryCounts !== "object")
-    state.categoryCounts = {};
-  if (!state.lastUsed || typeof state.lastUsed !== "object")
-    state.lastUsed = {};
-  const available = messages.filter((m) => !state.used.includes(m.id));
-  const pool = available.length ? available : messages;
-  if (!available.length) {
-    state.used = [];
-    state.categoryCounts = {};
-  }
-  const notToday = pool.filter((m) => state.lastUsed[m.id] !== today);
-  const candidates = notToday.length ? notToday : pool;
-  const minCount = Math.min(
-    ...candidates.map((m) => state.categoryCounts[m.category] || 0),
-  );
-  const balanced = candidates.filter(
-    (m) => (state.categoryCounts[m.category] || 0) === minCount,
-  );
-  const chosen =
-    balanced[Math.floor(Math.random() * balanced.length)] || candidates[0];
-  state.used.push(chosen.id);
-  state.categoryCounts[chosen.category] =
-    (state.categoryCounts[chosen.category] || 0) + 1;
-  state.lastUsed[chosen.id] = today;
-  localStorage.setItem(MOTIVATION_STATE_KEY, JSON.stringify(state));
-  return chosen.category + ": " + chosen.text;
-}
-
 function showSplash(name, sell, profit, persist) {
   const splash = document.getElementById("splash");
   const circle = document.getElementById("splash-circle");
@@ -10641,23 +10582,6 @@ function showSplash(name, sell, profit, persist) {
   }, 2200);
 }
 
-function showSaleSuccess(profit) {
-  showSplash("", profit, profit, true);
-  const msg = document.getElementById("splash-msg");
-  const sub = document.getElementById("splash-sub");
-  const label = document.querySelector(
-    "#splash-profit-wrap .splash-profit-lbl",
-  );
-  const motivation = document.getElementById("splash-motivation");
-  if (msg) msg.textContent = "Congratulations!";
-  if (label) label.textContent = "Profit earned";
-  if (sub) sub.textContent = "You earned " + fmt(profit) + " from this sale.";
-  if (motivation) {
-    motivation.textContent = getSaleMotivation();
-    motivation.style.display = "block";
-  }
-}
-
 function closeSuccessSplash() {
   const splash = document.getElementById("splash");
   if (!splash) return;
@@ -10671,876 +10595,6 @@ function closeSuccessSplash() {
 window.closeSuccessSplash = closeSuccessSplash;
 
 // ===== EXPORT =====
-
-// ===== MAKE A SALE =====
-let currentSellItemId = null;
-let _selectedPayment = "cash"; // cash | mpesa
-let _isShoeSale = false;
-let _sellShoeItem = null;
-let _sellShoeSize = null; // full sizeRec object
-
-async function _legacySearchSell() {
-  try {
-    const q = (document.getElementById("sell-search").value || "")
-      .trim()
-      .toLowerCase();
-    const results = document.getElementById("sell-results");
-    if (!q) {
-      results.innerHTML = "";
-      return;
-    }
-    const items = await dbAll("items");
-    const matched = items.filter(
-      (i) =>
-        i.name.toLowerCase().includes(q) ||
-        i.code.toLowerCase().includes(q) ||
-        (i.size || "").toLowerCase().includes(q),
-    );
-    if (!matched.length) {
-      results.innerHTML =
-        '<div class="empty" style="padding:24px 0;"><div class="e-icon" style="font-size:36px;"><i class="fa-solid fa-magnifying-glass"></i></div><p>No items found</p></div>';
-      return;
-    }
-    results.innerHTML = matched
-      .map((item) => {
-        const t = getTypeObj(item.type);
-        const outOfStock = item.qty === 0;
-        const stockColor = outOfStock
-          ? "var(--red)"
-          : item.qty <= 3
-            ? "var(--amber)"
-            : "var(--green)";
-        return `<div class="item-card" onclick="${outOfStock ? "" : "openSellModal(" + item.id + ")"}"
-      style="margin-bottom:10px;${outOfStock ? "opacity:0.5;pointer-events:none;" : "cursor:pointer;"}">
-      <div class="item-top">
-        <div class="item-icon" style="background:${t.color || "var(--surface2)"};">${t.emoji}</div>
-        <div class="item-body">
-          <div class="item-code">${item.code}${item.size ? " - " + item.size : ""}</div>
-          <div class="item-name">${item.name || ""}</div>
-          <div class="item-tags">
-            <span class="tag tag-cyan">${item.type}</span>
-            <span class="tag" style="background:${outOfStock ? "var(--red-light)" : item.qty <= 3 ? "var(--amber-light)" : "var(--green-light)"};color:${stockColor};">
-              ${outOfStock ? "Out of stock" : item.qty + " pcs"}
-            </span>
-          </div>
-        </div>
-        <div class="item-right">
-          <div style="font-size:18px;font-weight:800;font-family:var(--mono);color:var(--accent2);">${fmt(item.sell)}</div>
-          <div style="font-size:11px;color:var(--green);font-family:var(--mono);margin-top:3px;">+${fmt(item.profit)} profit</div>
-          ${!outOfStock ? '<div style="margin-top:8px;background:var(--accent);color:white;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;text-align:center;">Sell</div>' : ""}
-        </div>
-      </div>
-    </div>`;
-      })
-      .join("");
-  } catch (e) {
-    console.error("[searchSell]", e);
-    toast("Error: " + e.message, "err");
-  }
-}
-
-let _sellSearchTimer = null;
-
-function onSellSearch(val) {
-  const clearBtn = document.getElementById("sell-search-clear");
-  if (clearBtn) clearBtn.style.display = val ? "flex" : "none";
-  clearTimeout(_sellSearchTimer);
-  _sellSearchTimer = setTimeout(() => searchSell(), 120);
-}
-window.onSellSearch = onSellSearch;
-
-function clearSellSearch() {
-  const inp = document.getElementById("sell-search");
-  const btn = document.getElementById("sell-search-clear");
-  if (inp) inp.value = "";
-  if (btn) btn.style.display = "none";
-  searchSell();
-}
-window.clearSellSearch = clearSellSearch;
-
-async function searchSell() {
-  try {
-    const raw = (document.getElementById("sell-search")?.value || "").trim();
-    const q = raw.toLowerCase();
-    const results = document.getElementById("sell-results");
-    if (!results) return;
-
-    // Use global allItems (same source as dashboard + inventory)
-    const items = allItems.length ? allItems : await dbAll("items");
-    await enrichShoeItems(items);
-    const sizes = await dbAll("shoe_sizes");
-
-    const rows = [];
-
-    for (const item of items) {
-      const score = q ? _gscScore(item, q) : 1;
-      if (q && score === 0) continue;
-
-      const t = getTypeObj(item.type);
-
-      if (item.isShoe) {
-        for (const sz of sizes.filter(
-          (record) => record.itemCode === item.code,
-        )) {
-          const availableQty = await readableStockQty(sz, sz.id);
-          if (availableQty <= 0) continue;
-          // Also score against size number
-          const szScore = q
-            ? Math.max(score, String(sz.size).includes(q) ? 20 : 0)
-            : 1;
-          if (q && szScore === 0) return;
-          const price = sz.sellPrice || item.sellPrice || item.sell || 0;
-          const buy = sz.buyPrice || item.buyPrice || item.buy || 0;
-          rows.push({
-            item,
-            t,
-            score: szScore,
-            label: item.name || item.code,
-            meta: item.code + " · Size " + sz.size,
-            qty: availableQty,
-            price,
-            profit: price - buy,
-            isRec: false,
-            action: `openSellShoeModal(${item.id},${sz.size})`,
-            extraTag: `<span class="tag tag-gray">Sz ${escapeHtml(String(sz.size))}</span>`,
-          });
-        }
-        continue;
-      }
-
-      // Standard + Record Only items
-      const availableQty = item.isRecord ? 0 : await readableStockQty(item);
-      const sellable = item.isRecord || availableQty > 0;
-      if (!sellable) continue;
-
-      const price = item.sellPrice || item.sell || 0;
-      const buy = item.buyPrice || item.buy || 0;
-      const meta =
-        item.code +
-        (item.variant || item.size ? " · " + (item.variant || item.size) : "");
-      rows.push({
-        item,
-        t,
-        score,
-        label: item.name || item.code,
-        meta,
-        qty: availableQty,
-        price,
-        profit: price - buy,
-        isRec: !!item.isRecord,
-        action: `openSellModal(${item.id})`,
-        extraTag: item.isRecord
-          ? '<span class="tag tag-record">RECORD</span>'
-          : "",
-      });
-    }
-
-    // Sort: by score desc (with query) or alphabetically (no query)
-    rows.sort((a, b) =>
-      q ? b.score - a.score : (a.label || "").localeCompare(b.label || ""),
-    );
-
-    const offStockBtn =
-      '<button onclick="openOffStockSale()" class="stock-add-wish-btn" ' +
-      'style="margin-bottom:12px;background:#1d4ed8;">' +
-      '<i class="fa-solid fa-plus"></i> Sell item not in stock</button>';
-
-    if (!rows.length) {
-      results.innerHTML =
-        `<div class="empty" style="padding:24px 0;">
-        <div class="e-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
-        <p>${q ? 'No items match "' + escapeHtml(raw) + '"' : "No sellable items in stock."}</p>
-      </div>` + offStockBtn;
-      return;
-    }
-
-    results.innerHTML =
-      offStockBtn +
-      rows
-        .slice(0, 120)
-        .map((row) => {
-          const qty = row.qty;
-          const isRec = row.isRec;
-          const stockLbl = isRec ? "∞" : qty + " pcs";
-          const stockCls = isRec
-            ? "var(--amber)"
-            : qty <= LOW_STOCK_LEVEL
-              ? "var(--amber)"
-              : "var(--green)";
-          const bgCls = isRec
-            ? "var(--amber-light,#fffbeb)"
-            : qty <= LOW_STOCK_LEVEL
-              ? "var(--amber-light)"
-              : "var(--green-light)";
-          const sellMin = row.item.sellPriceMin || 0;
-          const priceStr =
-            sellMin > 0 && sellMin < row.price
-              ? fmt(sellMin) + " – " + fmt(row.price)
-              : fmt(row.price);
-
-          return `<div class="item-card${isRec ? " item-card-record" : ""}" onclick="${row.action}"
-          style="margin-bottom:8px;cursor:pointer;">
-        <div class="item-top">
-          <div class="item-icon" style="background:${row.t.color || "var(--surface2)"};">${row.t.emoji}</div>
-          <div class="item-body">
-            <div class="item-code">${escapeHtml(row.meta)}</div>
-            <div class="item-name">${escapeHtml(row.label || "")}</div>
-            <div class="item-tags">
-              <span class="tag tag-cyan">${escapeHtml(row.item.type || "")}</span>
-              ${row.extraTag}
-              <span class="tag" style="background:${bgCls};color:${stockCls};">${stockLbl}</span>
-            </div>
-          </div>
-          <div class="item-right">
-            <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--accent2);">${priceStr}</div>
-            <div style="font-size:11px;color:${row.profit >= 0 ? "var(--green)" : "var(--red)"};font-family:var(--mono);margin-top:3px;">
-              ${row.profit >= 0 ? "+" : ""}${fmt(row.profit)} profit
-            </div>
-            <div style="margin-top:8px;background:var(--accent);color:white;border-radius:8px;
-              padding:5px 12px;font-size:12px;font-weight:700;text-align:center;">Sell</div>
-          </div>
-        </div>
-      </div>`;
-        })
-        .join("");
-  } catch (e) {
-    console.error("[searchSell]", e);
-    toast("Error: " + e.message, "err");
-  }
-}
-
-function selectPayment(method) {
-  _selectedPayment = method;
-  // Reset all payment buttons
-  document
-    .querySelectorAll(".pay-btn")
-    .forEach((btn) => btn.classList.remove("active"));
-  // Activate selected
-  const idMap = {
-    cash: "pay-cash",
-    mpesa: "pay-mpesa",
-    Cash: "pay-cash",
-    "M-Pesa": "pay-mpesa",
-  };
-  const btnId = idMap[method] || "pay-cash";
-  const btn = document.getElementById(btnId);
-  if (btn) btn.classList.add("active");
-}
-
-function openOffStockSale() {
-  renderOffstockTypeOptions();
-  const sheet = document.getElementById("offstock-sale-sheet");
-  if (sheet) sheet.classList.add("open");
-  setTimeout(() => document.getElementById("off-name")?.focus(), 80);
-}
-
-function closeOffStockSale() {
-  const sheet = document.getElementById("offstock-sale-sheet");
-  if (sheet) sheet.classList.remove("open");
-}
-
-function adjOffStockQty(delta) {
-  const input = document.getElementById("off-qty");
-  if (!input) return;
-  const current = parseInt(input.value, 10) || 0;
-  input.value = String(Math.max(0, Math.min(999999, current + delta)));
-}
-
-async function confirmOffStockSale() {
-  if (!requireOpenDay()) return;
-  const name = Input.text("off-name");
-  const code = sanitiseCode(Input.text("off-code"));
-  const selectedType = getCascadeCommittedValue("off-type", {
-    valueMode: "name",
-    requireLeaf: true,
-  });
-  const type = selectedType || "General";
-  const qtyRaw = Input.raw("off-qty");
-  const qty = qtyRaw === "" ? 1 : Number(qtyRaw);
-  const buyPrice = Input.money("off-buy");
-  const sellPrice = Input.money("off-sell");
-  const paymentMethod = "cash";
-  if (!Validate.text(name, "off-name", "Item name")) return;
-  if (qtyRaw !== "" && !Number.isInteger(qty))
-    return Validate.fail("Enter a whole quantity", "off-qty");
-  if (!Validate.restockQty(qty, "off-qty")) return;
-  if (
-    buyPrice !== null &&
-    !Validate.moneyRequired(buyPrice, "off-buy", "Buy price")
-  )
-    return;
-  if (!Validate.moneyRequired(sellPrice, "off-sell", "Sale price")) return;
-  const buy = buyPrice ?? 0;
-  if (sellPrice <= 0)
-    return Validate.fail("Sale price must be greater than zero", "off-sell");
-  if (buyPrice !== null && buy >= sellPrice)
-    return Validate.fail(
-      "Sale price must be higher than buy price",
-      "off-sell",
-    );
-
-  const revenue = qty * sellPrice;
-  const profit = buyPrice === null ? 0 : qty * (sellPrice - buy);
-  const sale = {
-    itemId: null,
-    itemCode: code,
-    itemName: name || code,
-    itemType: type,
-    qty,
-    buyPrice: buy,
-    sellPrice,
-    actualPrice: sellPrice,
-    revenue,
-    profit,
-    overridden: false,
-    paymentMethod,
-    unaccounted: true,
-    soldBy: currentUser ? currentUser.username : "system",
-    businessDate: todayDateStr(),
-    date: new Date().toISOString(),
-  };
-  const monitorRow = {
-    name: name || code,
-    code,
-    type,
-    qty,
-    estimatedCost: buy,
-    note: "Sold before stock count",
-    status: "unaccounted",
-    source: "sale-monitor",
-    saleId: sale.id,
-    createdAt: new Date().toISOString(),
-    createdBy: currentUser ? currentUser.username : "system",
-  };
-  const sellButton = document.querySelector(
-    "#offstock-sale-sheet .stock-add-wish-btn",
-  );
-  const originalButtonMarkup = sellButton?.innerHTML;
-  if (sellButton) {
-    sellButton.disabled = true;
-    sellButton.innerHTML =
-      '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
-  }
-  try {
-    await persistOffStockSaleAtomically(sale, monitorRow);
-  } catch (error) {
-    console.error("[confirmOffStockSale]", error);
-    toast(
-      "Could not record sale: " + (error.message || "Please try again"),
-      "err",
-    );
-    return;
-  } finally {
-    if (sellButton) {
-      sellButton.disabled = false;
-      sellButton.innerHTML = originalButtonMarkup;
-    }
-  }
-
-  ["off-name", "off-code", "off-buy", "off-sell"].forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.value = "";
-  });
-  const offQty = document.getElementById("off-qty");
-  if (offQty) offQty.value = "";
-  const offType = document.getElementById("off-type");
-  if (offType) offType.value = "";
-  renderOffstockTypeOptions();
-  closeOffStockSale();
-  try {
-    await renderStockMonitor();
-    await refreshSalesViews();
-  } catch (error) {
-    console.error("[confirmOffStockSale] view refresh failed", error);
-  }
-  try {
-    renderDashboard();
-  } catch (_) {
-    /* intentionally ignored */
-  }
-  try {
-    if (activeDay) updateDayLiveStats();
-  } catch (_) {
-    /* intentionally ignored */
-  }
-  scheduleSync();
-  const syncStatus = await saleSaveStatus();
-  toast(
-    syncStatus.pending
-      ? "Sale saved locally, sync pending - monitor marked NOT ACCOUNTED"
-      : "Sale recorded - monitor marked NOT ACCOUNTED",
-    syncStatus.pending ? "" : "ok",
-  );
-  showSaleSuccess(profit);
-}
-
-// Shows the "enter buy price" field only when the item/size has no cost on record yet.
-function _toggleSmBuyField(currentBuy) {
-  const field = document.getElementById("sm-buy-field");
-  const input = document.getElementById("sm-buy");
-  if (input) input.value = "";
-  if (field) field.style.display = currentBuy > 0 ? "none" : "";
-}
-
-async function openSellModal(itemId) {
-  try {
-    const item = await dbGet("items", itemId);
-    if (!item) {
-      toast("Warning: Item not found", "err");
-      return;
-    }
-    const availableQty = item.isRecord ? 0 : await readableStockQty(item);
-    if (availableQty <= 0 && !item.isRecord) {
-      toast(
-        "Warning: " +
-          (item.name || item.code) +
-          " is out of stock - restock first",
-        "err",
-      );
-      return;
-    }
-    currentSellItemId = itemId;
-    const t = getTypeObj(item.type);
-    document.getElementById("sm-icon").textContent = t.emoji;
-    document.getElementById("sm-icon").style.background =
-      t.color || "var(--surface2)";
-    document.getElementById("sm-name").textContent = item.name;
-    document.getElementById("sm-meta").textContent =
-      item.code +
-      (item.size ? " - " + item.size : "") +
-      (item.isRecord ? " · Record" : "");
-    document.getElementById("sm-stock").textContent = item.isRecord
-      ? "∞"
-      : availableQty;
-    const _itemSell = item.sellPrice || item.sell || 0;
-    const _itemBuy = item.buyPrice || item.buy || 0;
-    const _itemSellMin = item.sellPriceMin || 0;
-    document.getElementById("sm-sell").textContent = fmt(_itemSell);
-    const _smPriceRange = document.getElementById("sm-price-range");
-    const _smMinVal = document.getElementById("sm-price-min-val");
-    if (_smPriceRange) {
-      if (_itemSellMin > 0 && _itemSellMin < _itemSell) {
-        if (_smMinVal) _smMinVal.textContent = fmt(_itemSellMin);
-        _smPriceRange.style.display = "block";
-      } else {
-        _smPriceRange.style.display = "none";
-      }
-    }
-    const _maxProfit = _itemSell - _itemBuy;
-    const _minProfit = _itemSellMin > 0 ? _itemSellMin - _itemBuy : _maxProfit;
-    const _smProfit = document.getElementById("sm-profit");
-    if (_smProfit) {
-      _smProfit.textContent =
-        _itemSellMin > 0 && _itemSellMin < _itemSell
-          ? "+" + fmt(_minProfit) + " – +" + fmt(_maxProfit)
-          : (_maxProfit >= 0 ? "+" : "") + fmt(_maxProfit);
-    }
-    const _smProfitRange = document.getElementById("sm-profit-range");
-    if (_smProfitRange) _smProfitRange.style.display = "none";
-    const _tpel = document.getElementById("sm-total-profit");
-    if (_tpel)
-      _tpel.textContent = (_maxProfit >= 0 ? "+" : "") + fmt(_maxProfit);
-    document.getElementById("sm-cur").textContent = currency;
-    document.getElementById("sm-qty").value = 0;
-    document.getElementById("sm-qty").min = 0;
-    document.getElementById("sm-qty").max = item.isRecord
-      ? 999999
-      : availableQty;
-    document.getElementById("sm-actual").value = "";
-    _toggleSmBuyField(_itemBuy);
-    updateSellModal();
-    document.getElementById("sell-modal").classList.add("open");
-  } catch (e) {
-    console.error("[openSellModal]", e);
-    toast("Error: " + e.message, "err");
-  }
-}
-
-function closeSellModal() {
-  const modal = document.getElementById("sell-modal");
-  if (modal) modal.classList.remove("open");
-  currentSellItemId = null;
-  _isShoeSale = false;
-  _sellShoeItem = null;
-  _sellShoeSize = null;
-}
-
-async function updateSellModal() {
-  try {
-    if (!currentSellItemId) return;
-    const item = await dbGet("items", currentSellItemId);
-    // For shoe sales use the specific size record prices & stock
-    const basePrice =
-      _isShoeSale && _sellShoeSize
-        ? _sellShoeSize.sellPrice || item.sellPrice || item.sell || 0
-        : item.sell || item.sellPrice || 0;
-    const buyOnRecord =
-      _isShoeSale && _sellShoeSize
-        ? _sellShoeSize.buyPrice || item.buyPrice || item.buy || 0
-        : item.buy || item.buyPrice || 0;
-    const buyRaw = parseFloat(document.getElementById("sm-buy")?.value);
-    const baseBuy = !isNaN(buyRaw) && buyRaw >= 0 ? buyRaw : buyOnRecord;
-    const maxStock = item.isRecord
-      ? 999999
-      : await readableStockQty(
-          _isShoeSale && _sellShoeSize ? _sellShoeSize : item,
-          _isShoeSale && _sellShoeSize ? _sellShoeSize.id : null,
-        );
-    const qtyEl = document.getElementById("sm-qty");
-    const rawQty = qtyEl?.value ?? "";
-    let qty = Number(rawQty);
-    if (rawQty === "" || !Number.isFinite(qty) || qty < 0) qty = 0;
-    if (qty > maxStock) {
-      qty = maxStock;
-      if (qtyEl) qtyEl.value = String(qty);
-      toast("Only " + maxStock + " in stock", "err");
-    }
-    if (qtyEl) {
-      qtyEl.min = 0;
-      qtyEl.max = maxStock;
-    }
-    const actualRaw = parseFloat(document.getElementById("sm-actual").value);
-    const priceUsed =
-      !isNaN(actualRaw) && actualRaw > 0 ? actualRaw : basePrice;
-    const totalRev = qty * priceUsed;
-    const totalProfit = qty * (priceUsed - baseBuy);
-    const overridden =
-      !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== basePrice;
-    document.getElementById("sm-price-used").textContent =
-      fmt(priceUsed) + (overridden ? " (custom)" : " (default)");
-    document.getElementById("sm-total-rev").textContent = fmt(totalRev);
-    document.getElementById("sm-total-profit").textContent =
-      (totalProfit >= 0 ? "+" : "") + fmt(totalProfit);
-    document.getElementById("sm-total-profit").style.color =
-      totalProfit >= 0 ? "var(--green)" : "var(--red)";
-    document.getElementById("sm-qty").max = maxStock;
-    // Update per-item profit display + warn if below cost
-    const profitPerItem = priceUsed - baseBuy;
-    const smProfit = document.getElementById("sm-profit");
-    if (smProfit) {
-      smProfit.textContent =
-        (profitPerItem >= 0 ? "+" : "") + fmt(profitPerItem);
-      smProfit.style.color = profitPerItem >= 0 ? "var(--green)" : "var(--red)";
-    }
-    // ── Min-price floor warning ────────────────────────────────────
-    const sellMin =
-      _isShoeSale && _sellShoeSize
-        ? _sellShoeSize.sellPriceMin || 0
-        : item.sellPriceMin || 0;
-    const minWarn = document.getElementById("sm-min-warn");
-    const belowMin = sellMin > 0 && priceUsed > 0 && priceUsed < sellMin;
-    if (minWarn) minWarn.style.display = belowMin ? "block" : "none";
-
-    const confirmBtn = document.getElementById("confirm-sale-btn");
-    if (confirmBtn) {
-      confirmBtn.textContent = belowMin
-        ? "⚠ CONFIRM BELOW MIN"
-        : "CONFIRM SALE";
-      confirmBtn.style.background = belowMin ? "#d97706" : "#1e7a3e";
-      confirmBtn.title =
-        priceUsed < baseBuy && priceUsed > 0
-          ? "Warning: selling below cost price"
-          : "";
-    }
-  } catch (e) {
-    console.error("[updateSellModal]", e);
-    toast("Error: " + e.message, "err");
-  }
-}
-
-function adjSellQty(d) {
-  const inp = document.getElementById("sm-qty");
-  if (!inp) return;
-  let v = (parseInt(inp.value) || 0) + d;
-  const parsedMax = parseInt(inp.max, 10);
-  const max = Number.isFinite(parsedMax) ? Math.max(0, parsedMax) : 999999;
-  if (v > max) {
-    toast("Warning: Only " + max + " in stock", "err");
-    v = max;
-  }
-  inp.value = Math.max(0, v);
-  updateSellModal();
-}
-
-async function confirmSale() {
-  if (!currentSellItemId) return;
-  if (!requireOpenDay()) return;
-  await withSaleLock(currentSellItemId, () => confirmSaleUnlocked());
-}
-
-async function confirmSaleUnlocked() {
-  if (!currentSellItemId) return;
-  if (!requireOpenDay()) return;
-
-  // Gray out confirm button + show progress overlay
-  const _confirmBtn = document.getElementById("confirm-sale-btn");
-  _overlay.show("Processing Sale...", _confirmBtn);
-
-  try {
-    const item = await dbGet("items", currentSellItemId);
-    if (!item) {
-      toast("Item not found", "err");
-      closeSellModal();
-      _overlay.hide();
-      return;
-    }
-    if (_isShoeSale && _sellShoeSize) {
-      const currentSizes = await getShoeSizes(item.code);
-      const currentSize = currentSizes.find(
-        (size) => String(size.id) === String(_sellShoeSize.id),
-      );
-      if (!currentSize) {
-        toast("Shoe size is no longer available", "err");
-        closeSellModal();
-        return;
-      }
-      _sellShoeSize = currentSize;
-    }
-
-    // ── Read form values ───────────────────────────────────────────
-    const qtyEl = document.getElementById("sm-qty");
-    const actualEl = document.getElementById("sm-actual");
-    const buyEl = document.getElementById("sm-buy");
-    const qty = Number(qtyEl?.value || "0");
-    const actualRaw = parseFloat(actualEl?.value || "");
-    const buyEntered = parseFloat(buyEl?.value || "");
-
-    // ── Prices - use normalized sellPrice/buyPrice ─────────────────
-    const sellPrice =
-      _isShoeSale && _sellShoeSize
-        ? _sellShoeSize.sellPrice || item.sellPrice || item.sell || 0
-        : item.sellPrice || item.sell || 0;
-    const buyOnRecord =
-      _isShoeSale && _sellShoeSize
-        ? _sellShoeSize.buyPrice || item.buyPrice || item.buy || 0
-        : item.buyPrice || item.buy || 0;
-    // If there was no buy price on record, use whatever the user entered at sell time and save it.
-    const buyPriceEntered =
-      buyOnRecord <= 0 && !isNaN(buyEntered) && buyEntered >= 0;
-    const buyPrice = buyPriceEntered ? buyEntered : buyOnRecord;
-
-    const priceUsed =
-      !isNaN(actualRaw) && actualRaw > 0 ? actualRaw : sellPrice;
-
-    // ── Validate stock ─────────────────────────────────────────────
-    const maxQty =
-      _isShoeSale && _sellShoeSize
-        ? await readableStockQty(_sellShoeSize, _sellShoeSize.id)
-        : await readableStockQty(item);
-    const itemLabel = item.name || item.code;
-    if (!Number.isInteger(qty) || qty <= 0) {
-      Validate.fail("Enter a positive whole quantity to sell", "sm-qty");
-      _overlay.hide();
-      return;
-    }
-    if (!item.isRecord) {
-      if (qty > maxQty) {
-        Validate.fail(
-          "Only " + maxQty + " in stock - cannot sell " + qty,
-          "sm-qty",
-        );
-        _overlay.hide();
-        return;
-      }
-      if (!Validate.stock(qty, maxQty, itemLabel)) {
-        _overlay.hide();
-        return;
-      }
-    }
-
-    // ── Validate sale price and cost ────────────────────────────────
-    if (!Number.isFinite(sellPrice) || sellPrice <= 0) {
-      Validate.fail("Sale price must be greater than zero", "sm-actual");
-      _overlay.hide();
-      return;
-    }
-    if (!Number.isFinite(buyPrice) || buyPrice <= 0) {
-      Validate.fail("Buy price must be greater than zero", "sm-buy");
-      _overlay.hide();
-      return;
-    }
-    if (!Number.isFinite(priceUsed) || priceUsed <= 0) {
-      Validate.fail("Sale price must be greater than zero", "sm-actual");
-      _overlay.hide();
-      return;
-    }
-    if (buyPrice >= priceUsed) {
-      Validate.fail("Buy price must be less than sale price", "sm-buy");
-      _overlay.hide();
-      return;
-    }
-    const _sellMin =
-      _isShoeSale && _sellShoeSize
-        ? _sellShoeSize.sellPriceMin || 0
-        : item.sellPriceMin || 0;
-    if (_sellMin > 0 && priceUsed < _sellMin) {
-      const go = confirm(
-        "Price " +
-          fmt(priceUsed) +
-          " is below minimum " +
-          fmt(_sellMin) +
-          ".\nSell anyway?",
-      );
-      if (!go) {
-        _overlay.hide();
-        return;
-      }
-    }
-
-    const revenue = qty * priceUsed;
-    const profit = qty * (priceUsed - buyPrice);
-
-    const paymentMethod = "cash";
-
-    const sale = {
-      itemId: item.id,
-      itemCode: item.code,
-      itemName: item.name || item.code,
-      itemType: item.type || "",
-      itemSize:
-        _isShoeSale && _sellShoeSize
-          ? String(_sellShoeSize.size)
-          : item.variant || item.size || "",
-      qty,
-      buyPrice,
-      sellPrice,
-      actualPrice: priceUsed,
-      revenue,
-      profit,
-      overridden: !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== sellPrice,
-      paymentMethod,
-      soldBy: currentUser ? currentUser.username : "system",
-      businessDate: todayDateStr(), // auto-assigned by date
-      date: new Date().toISOString(),
-    };
-
-    // ── Persist a newly-entered buy price so future sales use it ────
-    if (buyPriceEntered) {
-      if (_isShoeSale && _sellShoeSize) {
-        _sellShoeSize.buyPrice = buyPrice;
-        _sellShoeSize.profit = sellPrice - buyPrice;
-      } else {
-        item.buyPrice = buyPrice;
-        item.profit = sellPrice - buyPrice;
-      }
-    }
-
-    // ── Deduct stock (skip for record-only items) ─────────────────
-    if (!item.isRecord) {
-      if (_isShoeSale && _sellShoeSize) {
-        _sellShoeSize.qty = Math.max(0, (_sellShoeSize.qty || 0) - qty);
-        _sellShoeSize.updatedAt = new Date().toISOString();
-        const allSz = await getShoeSizes(item.code);
-        item.qty = allSz.reduce((t, s) => t + s.qty, 0);
-        _sellShoeSize.qtyCache = Number(_sellShoeSize.qty || 0);
-        item.qtyCache = Number(item.qty || 0);
-      } else {
-        item.qty = Math.max(0, item.qty - qty);
-        item.qtyCache = Number(item.qty || 0);
-      }
-    }
-
-    // ── Record sale ────────────────────────────────────────────────
-    // Pre-assign fbId so IndexedDB stores it immediately
-    sale.fbId = stableSaleFbId(sale);
-    await persistSaleAtomically({
-      item,
-      shoeSize: !item.isRecord && _isShoeSale ? _sellShoeSize : null,
-      sale,
-      delta: item.isRecord ? 0 : -qty,
-      actor: currentUser ? currentUser.username : "system",
-    });
-
-    // Sales are the source of truth for revenue - no duplicate finance row.
-
-    // ── Close all overlays ─────────────────────────────────────────
-    closeSellModal(); // sell modal
-    closeSheet(); // detail sheet (if open)
-    closeShoeSizeActions(); // size action sheet (if open)
-
-    // ── Reset sell search if on sell page ─────────────────────────
-    const sellSearch = document.getElementById("sell-search");
-    const sellResults = document.getElementById("sell-results");
-    if (sellSearch) sellSearch.value = "";
-    if (sellResults) sellResults.innerHTML = "";
-
-    // ── Refresh UI ─────────────────────────────────────────────────
-    allItems = await dbAll("items");
-    await enrichShoeItems(allItems);
-    renderList();
-    renderDashboard();
-    updateHeader();
-    updateLowStockBadge();
-    scheduleSync();
-    try {
-      await refreshSalesViews();
-    } catch (_) {
-      /* intentionally ignored */
-    }
-    try {
-      if (activeDay) updateDayLiveStats();
-    } catch (_) {
-      /* intentionally ignored */
-    }
-    // Refresh finance page if it's currently visible
-    try {
-      const financeVisible =
-        document.getElementById("page-finance")?.classList.contains("active") ||
-        (document
-          .getElementById("page-operations")
-          ?.classList.contains("active") &&
-          _activeOperationsTab === "finance");
-      if (financeVisible) {
-        renderFinancePage();
-      }
-    } catch (_) {
-      /* intentionally ignored */
-    }
-
-    const syncStatus = await saleSaveStatus();
-    toast(
-      syncStatus.pending
-        ? fmt(revenue) + " - Sale saved locally, sync pending"
-        : fmt(revenue) + " - Profit: " + fmt(profit),
-      syncStatus.pending ? "" : "ok",
-    );
-    showSaleSuccess(profit);
-  } catch (err) {
-    console.error("[confirmSale]", err);
-    toast("Warning: Sale failed: " + (err.message || "Unknown error"), "err");
-  } finally {
-    _overlay.hide();
-  }
-}
-
-async function renderSellPage() {
-  try {
-    await searchSell();
-  } catch (e) {
-    console.error("[renderSellPage]", e);
-    toast("Error: " + e.message, "err");
-  }
-}
-
-async function refreshSalesViews() {
-  try {
-    await renderSellPage();
-  } catch (_) {
-    /* intentionally ignored */
-  }
-  try {
-    await renderHistoryPage();
-  } catch (_) {
-    /* intentionally ignored */
-  }
-}
-
-// close sell modal on backdrop click
-const _sellModal = document.getElementById("sell-modal");
-if (_sellModal)
-  _sellModal.addEventListener("click", function (e) {
-    if (e.target === this) closeSellModal();
-  });
 
 function addSyncLog() {} // bell removed
 
@@ -11953,6 +11007,74 @@ function _seedLocalDateStr(d) {
 async function seedDevDatabase() {
   const now = new Date();
   const soldItems = []; // flattened sellable lines: standard items + each shoe size
+  const seedDate = (daysAgo) => {
+    const date = new Date(now);
+    date.setDate(date.getDate() - daysAgo);
+    return date;
+  };
+  const purchaseBudgets = {};
+  for (const budget of [
+    {
+      key: "active",
+      name: "October Restock Plan",
+      amount: 85000,
+      status: "active",
+      startDaysAgo: 3,
+      endDaysAhead: 14,
+    },
+    {
+      key: "completed",
+      name: "Previous Household Order",
+      amount: 42000,
+      status: "completed",
+      startDaysAgo: 20,
+      endDaysAhead: 0,
+    },
+    {
+      key: "recycled",
+      name: "Archived Electronics Plan",
+      amount: 30000,
+      status: "recycled",
+      startDaysAgo: 35,
+      endDaysAhead: 0,
+    },
+  ]) {
+    const createdAt = seedDate(budget.startDaysAgo).toISOString();
+    const record = {
+      name: budget.name,
+      amount: budget.amount,
+      startDate: _seedLocalDateStr(seedDate(budget.startDaysAgo)),
+      endDate: _seedLocalDateStr(
+        new Date(now.getTime() + budget.endDaysAhead * 86400000),
+      ),
+      status: budget.status,
+      createdAt,
+      createdBy: "system",
+      ...(budget.status === "completed"
+        ? { completedAt: seedDate(2).toISOString() }
+        : {}),
+      ...(budget.status === "recycled"
+        ? { recycledAt: seedDate(12).toISOString() }
+        : {}),
+      purchaseHistory:
+        budget.status === "completed"
+          ? [
+              {
+                wishId: null,
+                itemName: "Household essentials",
+                qty: 12,
+                actualBuyPrice: 1250,
+                total: 15000,
+                date: seedDate(4).toISOString(),
+                createdBy: "system",
+              },
+            ]
+          : [],
+    };
+    record.id = await dbAdd("purchase_budgets", record);
+    purchaseBudgets[budget.key] = record;
+  }
+  _selectedPurchaseBudgetId = purchaseBudgets.active.id;
 
   // ── Standard items ──────────────────────────────────────────────
   for (const s of DEV_SEED_STANDARD_ITEMS) {
@@ -12023,6 +11145,7 @@ async function seedDevDatabase() {
   // ── Sales history - last 21 days, varied volume, occasional price overrides ──
   const paymentCycle = ["cash", "cash", "cash", "mpesa"];
   let saleSeq = 0;
+  const salesByBusinessDate = new Map();
   for (let dayOffset = 20; dayOffset >= 0; dayOffset--) {
     const d = new Date(now);
     d.setDate(d.getDate() - dayOffset);
@@ -12046,7 +11169,7 @@ async function seedDevDatabase() {
       const saleTime = new Date(d);
       saleTime.setHours(9 + (i % 9), (i * 17) % 60, 0, 0);
 
-      await dbAdd("sales", {
+      const sale = {
         itemId: pick.id,
         itemCode: pick.code,
         itemName: pick.name,
@@ -12055,17 +11178,72 @@ async function seedDevDatabase() {
         qty,
         buyPrice: pick.buyPrice,
         sellPrice: pick.sellPrice,
+        priceUsed: actualPrice,
         actualPrice,
         revenue,
         profit,
         overridden,
         paymentMethod: paymentCycle[saleSeq % paymentCycle.length],
-        soldBy: "system",
+        soldBy: ["onchari", "vanice", "trevor"][saleSeq % 3],
         businessDate,
         date: saleTime.toISOString(),
-      });
+      };
+      await dbAdd("sales", sale);
+      const dayStats = salesByBusinessDate.get(businessDate) || {
+        salesCount: 0,
+        revenue: 0,
+        profit: 0,
+        itemsSold: 0,
+      };
+      dayStats.salesCount++;
+      dayStats.revenue += revenue;
+      dayStats.profit += profit;
+      dayStats.itemsSold += qty;
+      salesByBusinessDate.set(businessDate, dayStats);
       saleSeq++;
     }
+  }
+
+  // ── Business day history with one currently open development day ──
+  for (let dayOffset = 20; dayOffset >= 0; dayOffset--) {
+    const date = seedDate(dayOffset);
+    const businessDate = _seedLocalDateStr(date);
+    const isToday = dayOffset === 0;
+    const openedAt = isToday ? new Date(now) : new Date(date);
+    if (!isToday) openedAt.setHours(8, 0, 0, 0);
+    const closedAt = new Date(date);
+    closedAt.setHours(18, 0, 0, 0);
+    const stats = salesByBusinessDate.get(businessDate) || {
+      salesCount: 0,
+      revenue: 0,
+      profit: 0,
+      itemsSold: 0,
+    };
+    await dbAdd("business_days", {
+      businessDate,
+      business_date: businessDate,
+      status: isToday ? "OPEN" : "LOCKED",
+      openedAt: openedAt.toISOString(),
+      opened_at: openedAt.toISOString(),
+      last_opened_at: openedAt.toISOString(),
+      closedAt: isToday ? null : closedAt.toISOString(),
+      closed_at: isToday ? null : closedAt.toISOString(),
+      final_locked_at: isToday ? null : new Date(closedAt.getTime() + 60000).toISOString(),
+      reopenedCount: 0,
+      reopened_count: 0,
+      openingCash: 5000,
+      openingTill: 8000,
+      openingMpesa: 2500,
+      cashCounted: isToday ? null : 5000 + Math.round(stats.revenue * 0.4),
+      tillCounted: isToday ? null : 8000 + Math.round(stats.revenue * 0.35),
+      mpesaCounted: isToday ? null : 2500 + Math.round(stats.revenue * 0.25),
+      salesCount: stats.salesCount,
+      revenue: stats.revenue,
+      profit: stats.profit,
+      itemsSold: stats.itemsSold,
+      notes: isToday ? "Development sample day" : "Development sample session",
+      createdAt: openedAt.toISOString(),
+    });
   }
 
   // ── Wishlist entries ─────────────────────────────────────────────
@@ -12207,11 +11385,16 @@ async function seedDevDatabase() {
       priority,
       source,
       purchaseStatus,
-      purchaseBudgetId: i % 3 === 0 ? "budget-" + (i + 1) : "",
+      purchaseBudgetId:
+        status === "stocked"
+          ? purchaseBudgets.completed.id
+          : status === "in_progress" || i % 5 === 0
+            ? purchaseBudgets.active.id
+            : "",
       type: category,
       dayPurchaseDate,
       stockedAt,
-      stockedItemId: status === "stocked" ? i + 100 : null,
+      stockedItemId: null,
       vendorQuotes,
       createdAt: now.toISOString(),
       createdBy: "system",
@@ -12277,6 +11460,23 @@ async function seedDevDatabase() {
   }
 
   const seededWishlistItems = await dbAll("wishlist");
+  const seededItemsByName = new Map(
+    (await dbAll("items")).map((item) => [
+      String(item.name || "").trim().toLowerCase(),
+      item,
+    ]),
+  );
+  for (const wish of seededWishlistItems) {
+    if (wishStatus(wish) !== "stocked") continue;
+    const match = seededItemsByName.get(
+      String(wish.name || "").trim().toLowerCase(),
+    );
+    const stockedItemId = match ? match.id : null;
+    if (String(wish.stockedItemId ?? "") !== String(stockedItemId ?? "")) {
+      wish.stockedItemId = stockedItemId;
+      await dbPut("wishlist", wish);
+    }
+  }
   const seededWishListMaps = {
     Electronics: seededWishlistItems.filter(
       (item) => String(item.category || "").toLowerCase() === "electronics",
@@ -12382,6 +11582,7 @@ async function seedDevDatabase() {
   }));
 
   localStorage.setItem(KEY_WISHLIST_SAVED_LISTS, JSON.stringify(savedLists));
+  localStorage.setItem(KEY_WISHLIST_SUPPLIERS, JSON.stringify(wishSuppliers));
 
   // ── Finance entries ──────────────────────────────────────────────
   const financeSeed = [
@@ -12409,6 +11610,18 @@ async function seedDevDatabase() {
       description: "Owner withdrawal",
       daysAgo: 4,
     },
+    {
+      type: "expense",
+      amount: 850,
+      description: "Cleaning supplies",
+      daysAgo: 2,
+    },
+    {
+      type: "injection",
+      amount: 12000,
+      description: "Restock working capital",
+      daysAgo: 1,
+    },
   ];
   for (const f of financeSeed) {
     const d = new Date(now);
@@ -12429,6 +11642,120 @@ async function seedDevDatabase() {
       createdBy: "system",
     });
   }
+
+  // ── Customer credit ledger ───────────────────────────────────────
+  const customerSeeds = [
+    {
+      customerId: "C-0001",
+      name: "Amina Wanjiku",
+      phone: "0700000101",
+      transactions: [
+        { type: "item", itemName: "School uniform shirt", qty: 2, unitPrice: 850, daysAgo: 8 },
+        { type: "payment", amount: 700, paymentMethod: "Cash", daysAgo: 3 },
+      ],
+    },
+    {
+      customerId: "C-0002",
+      name: "Brian Otieno",
+      phone: "0700000102",
+      transactions: [
+        { type: "item", itemName: "Cooking oil 1L", qty: 4, unitPrice: 320, daysAgo: 6 },
+        { type: "payment", amount: 1280, paymentMethod: "M-Pesa", daysAgo: 1 },
+      ],
+    },
+    {
+      customerId: "C-0003",
+      name: "Chao Kariuki",
+      phone: "0700000103",
+      transactions: [
+        { type: "item", itemName: "Extension cable", qty: 1, unitPrice: 650, daysAgo: 5 },
+        { type: "return", itemName: "Extension cable", qty: 1, unitPrice: 200, daysAgo: 2 },
+      ],
+    },
+    {
+      customerId: "C-0004",
+      name: "Deka Muli",
+      phone: "0700000104",
+      transactions: [
+        { type: "item", itemName: "Laundry basket", qty: 1, unitPrice: 380, daysAgo: 7 },
+        { type: "payment", amount: 600, paymentMethod: "Cash", daysAgo: 4 },
+      ],
+    },
+    {
+      customerId: "C-0005",
+      name: "Esther Njeri",
+      phone: "0700000105",
+      transactions: [],
+    },
+    {
+      customerId: "C-0006",
+      name: "Farah Hassan",
+      phone: "0700000106",
+      transactions: [
+        { type: "item", itemName: "LED bulbs", qty: 5, unitPrice: 180, daysAgo: 10 },
+        { type: "item", itemName: "Notebook A5", qty: 3, unitPrice: 80, daysAgo: 4 },
+        { type: "payment", amount: 500, paymentMethod: "M-Pesa", daysAgo: 1 },
+      ],
+    },
+  ];
+  for (const customerSeed of customerSeeds) {
+    const createdAt = seedDate(12).toISOString();
+    const customer = {
+      customerId: customerSeed.customerId,
+      name: customerSeed.name,
+      phone: customerSeed.phone,
+      balance: 0,
+      totalTaken: 0,
+      totalPaid: 0,
+      lastDate: "",
+      createdAt,
+      updatedAt: now.toISOString(),
+      fbId: "",
+    };
+    customer.id = await dbAdd("customers", customer);
+
+    let totalTaken = 0;
+    let totalReturns = 0;
+    let totalPaid = 0;
+    let lastDate = "";
+    for (const entry of customerSeed.transactions) {
+      const transactionDate = _seedLocalDateStr(seedDate(entry.daysAgo));
+      const isPayment = entry.type === "payment";
+      const totalValue = isPayment
+        ? 0
+        : Number(entry.qty) * Number(entry.unitPrice);
+      if (entry.type === "item") totalTaken += totalValue;
+      if (entry.type === "return") totalReturns += totalValue;
+      if (isPayment) totalPaid += Number(entry.amount);
+      if (transactionDate > lastDate) lastDate = transactionDate;
+      await dbAdd("customer_txns", {
+        customerId: customerSeed.customerId,
+        customerName: customerSeed.name,
+        type: entry.type,
+        itemName: entry.itemName || "",
+        variant: "",
+        size: "",
+        qty: entry.qty || 0,
+        unitPrice: entry.unitPrice || 0,
+        totalValue,
+        amount: isPayment
+          ? Number(entry.amount)
+          : entry.type === "return"
+            ? -totalValue
+            : totalValue,
+        paymentMethod: entry.paymentMethod || "",
+        note: "Development sample transaction",
+        date: transactionDate,
+        createdAt: seedDate(entry.daysAgo).toISOString(),
+        fbId: "",
+      });
+    }
+    customer.totalTaken = totalTaken;
+    customer.totalPaid = totalPaid;
+    customer.balance = totalTaken - totalReturns - totalPaid;
+    customer.lastDate = lastDate;
+    await dbPut("customers", customer);
+  }
 }
 
 // ── Rebuild the Development database with fresh sample data ─────────
@@ -12448,9 +11775,8 @@ async function rebuildDevDatabaseWithSeed() {
     "REBUILD DEVELOPMENT DATABASE\n\n" +
       "This wipes the local development database (" +
       DB_NAME +
-      ") only and replaces it with " +
-      "a fresh set of realistic sample data - items (incl. footwear sizes), 3 weeks of sales " +
-      "history, wishlist entries, and finance records.\n\n" +
+      ") only and replaces it with a clean, complete sample dataset for inventory, footwear, " +
+      "sales, customers, business days, purchase budgets, wishlist, and finance.\n\n" +
       "Your production data lives in a separate database and is never touched by this.\n\n" +
       "Type SEED to confirm:",
   );
@@ -12470,26 +11796,45 @@ async function rebuildDevDatabaseWithSeed() {
       STORES.BDAYS,
       STORES.TYPES,
       STORES.WISHLIST,
+      STORES.PURCHASE_BUDGETS,
+      "customers",
+      "customer_txns",
+      "stock_moves",
+      "photos",
+      "sync_queue",
+      "sync_dead_letters",
+      "sync_audit",
     ]);
+    if (db.objectStoreNames.contains("sync_meta")) {
+      await dbDelete("sync_meta", "stock_ledger_migration");
+    }
 
     allItems = [];
     activeDay = null;
     types = [];
+    _currentCustomerId = null;
+    _selectedWishlistIds.clear();
+    _activeWishlistView = "main";
+    clearAllPhotoCache();
+    _clearAllDayReconKeys();
 
     await loadTypes();
     await seedDevDatabase();
+    await runStockLedgerMigrationCutover();
     await loadActiveDay();
 
     allItems = await dbAll("items");
     await enrichShoeItems(allItems);
-    renderList();
-    renderDashboard();
+    await renderList();
+    await renderDashboard();
     updateHeader();
-    try {
-      updateLowStockBadge();
-    } catch (_) {
-      /* intentionally ignored */
-    }
+    await updateLowStockBadge();
+    await renderWishlistPage();
+    await renderPurchaseBudget();
+    await renderCustomerList("");
+    await renderFinancePage();
+    renderDayState();
+    await renderDaySessionsList();
 
     toast("Development database rebuilt with sample data!", "ok");
     console.log("[DEV SEED] Rebuild complete on " + DB_NAME);
@@ -13244,7 +12589,10 @@ async function _doRefresh() {
         renderWishlistPage();
       } catch (_) {}
     }
-    if (pid === "page-inventory" && _activeInventoryTab === "monitor") {
+    if (
+      pid === "page-inventory" &&
+      _activeInventoryTab === "stock-control"
+    ) {
       try {
         renderStockMonitor();
       } catch (_) {}
@@ -16147,57 +15495,6 @@ async function updateLowStockBadge() {
 // ═══════════════════════════════════════════════════════════
 // DELETE SALE
 // ═══════════════════════════════════════════════════════════
-async function deleteSale(saleId) {
-  try {
-    if (!confirm("Delete this sale record? Stock will NOT be restored."))
-      return;
-    const sale = await dbGet("sales", saleId);
-    if (sale) {
-      _rememberDeletedSale(sale);
-      await fbDeleteSale(sale);
-      await fbDeleteFinanceEntry({
-        type: "revenue",
-        saleId: sale.id,
-        amount: sale.revenue,
-        date: sale.businessDate || (sale.date || "").split("T")[0],
-        description: "Sale: " + (sale.itemName || sale.itemCode || "item"),
-      });
-      await _deleteLocalRevenueForSale(saleId);
-    }
-    await dbDelete("sales", saleId);
-    await refreshUI();
-    refreshSalesViews();
-    renderFinancePage();
-    toast("Sale record deleted", "");
-  } catch (e) {
-    console.error("[deleteSale]", e);
-    toast("Error: " + e.message, "err");
-  }
-}
-
-// ═══════════════════════════════════════════════════════════
-// SALES EXPORT BY DATE FILTER
-// ═══════════════════════════════════════════════════════════
-
-function filterSalesByPeriod(sales, period) {
-  const now = new Date();
-  return sales.filter((s) => {
-    const d = new Date(s.date);
-    if (period === "today") {
-      return d.toDateString() === now.toDateString();
-    } else if (period === "week") {
-      const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
-      return d >= weekAgo;
-    } else if (period === "month") {
-      return (
-        d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-      );
-    }
-    return true; // all
-  });
-}
-
-// ═══════════════════════════════════════════════════════════
 // DAY REPORT EXPORT
 // ═══════════════════════════════════════════════════════════
 
@@ -16385,6 +15682,7 @@ window.addEventListener("appinstalled", () => {
 });
 
 function showInstallBanner() {
+  if (_skipServiceWorkerOnLocal) return;
   if (localStorage.getItem("install_dismissed")) return;
   if (window.matchMedia("(display-mode: standalone)").matches) return;
   const banner = document.getElementById("install-banner");
@@ -16840,7 +16138,7 @@ function initPhotoViewers() {
   );
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+function initializeAppDom() {
   setLoginReady(!!_appDbReady);
   initCleanNumericInputs();
   initWishlistScreenshotWatch();
@@ -16853,7 +16151,12 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closePhotoLightbox();
   });
-});
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initializeAppDom, { once: true });
+} else {
+  setTimeout(initializeAppDom, 0);
+}
 
 // ===== AUTH / LOGIN =====
 const USERS = [
@@ -16966,6 +16269,16 @@ async function bootstrapAppData() {
   if (_appDataBootstrapped) return;
   _appDataBootstrapped = true;
   await loadActiveDay();
+  try {
+    await purgeExpiredRecycledCustomers();
+  } catch (error) {
+    console.error("[CUST] Startup recycle-bin cleanup failed:", error);
+    toast(
+      "Could not remove expired recycled customers: " +
+        (error.message || "Unknown error"),
+      "err",
+    );
+  }
   try {
     await _cleanupFinanceCoherence(true);
   } catch (_) {
@@ -19045,19 +18358,46 @@ let _gscTimer = null;
 /** Score how well an item matches the query (higher = better match) */
 function _gscScore(item, q) {
   if (!q) return 0;
+  const normalizedQuery = q.toLowerCase().trim();
   const name = (item.name || "").toLowerCase();
   const code = (item.code || "").toLowerCase();
   const type = (item.type || "").toLowerCase();
   const variant = (item.variant || item.size || "").toLowerCase();
+  const fields = [
+    code,
+    name,
+    type,
+    variant,
+    (item.category || "").toLowerCase(),
+  ];
   let s = 0;
-  if (code === q) s += 120;
-  if (name === q) s += 100;
-  if (code.startsWith(q)) s += 70;
-  if (name.startsWith(q)) s += 60;
-  if (code.includes(q)) s += 40;
-  if (name.includes(q)) s += 35;
-  if (variant.includes(q)) s += 20;
-  if (type.includes(q)) s += 10;
+  if (code === normalizedQuery) s += 120;
+  if (name === normalizedQuery) s += 100;
+  if (code.startsWith(normalizedQuery)) s += 70;
+  if (name.startsWith(normalizedQuery)) s += 60;
+  if (code.includes(normalizedQuery)) s += 40;
+  if (name.includes(normalizedQuery)) s += 35;
+  if (variant.includes(normalizedQuery)) s += 20;
+  if (type.includes(normalizedQuery)) s += 10;
+
+  const queryTokens = normalizedQuery.match(/[a-z0-9]+/g) || [];
+  const fieldTokens = fields.flatMap(
+    (field) => field.match(/[a-z0-9]+/g) || [],
+  );
+  if (!queryTokens.length) return s;
+
+  for (const queryToken of queryTokens) {
+    if (fieldTokens.includes(queryToken)) {
+      s += 15;
+    } else if (
+      queryToken.length >= 3 &&
+      fieldTokens.some((token) => token.startsWith(queryToken))
+    ) {
+      s += 10;
+    } else {
+      return 0;
+    }
+  }
   return s;
 }
 
@@ -20112,20 +19452,17 @@ function scheduleSync(delay = 1200) {
 // ═══════════════════════════════════════════════════════════
 // WINDOW EXPORTS - all onclick= handlers
 // ═══════════════════════════════════════════════════════════
-window.adjSellQty = adjSellQty;
 window.applyAppUpdate = applyAppUpdate;
 window.attemptLogin = attemptLogin;
 window.cancelEdit = cancelEdit;
 window.clearNotifs = clearNotifs;
 window.closePastSessionSheet = closePastSessionSheet;
 window.closeProfileSheet = closeProfileSheet;
-window.closeSellModal = closeSellModal;
 window.closeSheet = closeSheet;
 window.closeUserMenu = closeUserMenu;
 window.confirmCloseDay = confirmCloseDay;
 window.confirmLogout = confirmLogout;
 window.confirmRestock = confirmRestock;
-window.confirmSale = confirmSale;
 window.dashSetPeriod = dashSetPeriod;
 window.deleteItem = deleteItem;
 window.deleteType = deleteType;
@@ -20141,13 +19478,12 @@ window.installAppUpdate = installAppUpdate;
 window.checkForAppUpdate = checkForAppUpdate;
 window.onCodeInput = onCodeInput;
 window.openStockMonitor = openStockMonitor;
-window.openOffStockSale = openOffStockSale;
 window.openSellFromSheet = openSellFromSheet;
 window.pickEmoji = pickEmoji;
 window.pullFromFirebase = pullFromFirebase;
 window.removeAddPhoto = removeAddPhoto;
+renderList = renderInventoryStockTable;
 window.renderList = renderList;
-window.renderSellPage = renderSellPage;
 window.selectExistingItemFromDropdown = selectExistingItemFromDropdown;
 window.resetAllData = resetAllData;
 window.clearLocalData = clearLocalData;
@@ -20159,12 +19495,9 @@ window.saveFinanceEntry = saveFinanceEntry;
 window.saveFirebaseConfig = saveFirebaseConfig;
 window.saveItem = saveItem;
 window.saveWishlistItem = saveWishlistItem;
-window.searchSell = searchSell;
-window.selectPayment = selectPayment;
 window.showPage = showPage;
 window.showInventoryTab = showInventoryTab;
 window.showStockControlTab = showStockControlTab;
-window.showSalesTab = showSalesTab;
 window.showOperationsTab = showOperationsTab;
 window.showUserProfile = showUserProfile;
 window.toggleNotifPanel = toggleNotifPanel;
@@ -20175,10 +19508,7 @@ window.triggerInstall = triggerInstall;
 window.triggerSheetPhotoUpload = triggerSheetPhotoUpload;
 window.updateFinTypeColor = updateFinTypeColor;
 window.updateProfitPreview = updateProfitPreview;
-window.updateSellModal = updateSellModal;
 window.closeStockMonitor = closeStockMonitor;
-window.closeOffStockSale = closeOffStockSale;
-window.confirmOffStockSale = confirmOffStockSale;
 window.deleteWishlistItem = deleteWishlistItem;
 window.restockFromMonitor = restockFromMonitor;
 window.startWishlistRestock = startWishlistRestock;
@@ -20191,6 +19521,9 @@ function onTypeChange() {
   if (!shoePanel || !stdPricing) return;
 
   const isShoe = isAddFormFootwearContext();
+  if (isShoe && _addFormIsRecord && !UI.el("edit-id")?.value) {
+    setItemMode(false);
+  }
   _lastAddFormType = type;
 
   if (isShoe !== _addFormWasFootwear) {
@@ -20203,441 +19536,6 @@ function onTypeChange() {
   applyAddFormFootwearUI(isShoe);
 }
 window.onTypeChange = onTypeChange;
-
-let _histLastFilterKey = null;
-let _histManuallyCollapsedDate = null;
-
-async function renderHistoryPage() {
-  const today = todayDateStr();
-  // Ensure allItems is fresh for inventory status badges
-  if (!allItems.length) allItems = await dbAll("items");
-
-  const allSales = await dbAll("sales");
-
-  const filterEl = UI.el("hist-period-filter");
-  const filterVal = filterEl ? filterEl.value : "today";
-
-  // ── Timezone-safe local date helpers (no UTC shift) ────────────
-  function _localDateStr(offsetDays) {
-    const [y, m, d] = today.split("-").map(Number);
-    const dt = new Date(y, m - 1, d + offsetDays);
-    return (
-      dt.getFullYear() +
-      "-" +
-      String(dt.getMonth() + 1).padStart(2, "0") +
-      "-" +
-      String(dt.getDate()).padStart(2, "0")
-    );
-  }
-  function _monthStr(yearOff, monthOff) {
-    const [y, m] = today.split("-").map(Number);
-    const dt = new Date(y, m - 1 + monthOff + yearOff * 12, 1);
-    return (
-      dt.getFullYear() +
-      "-" +
-      String(dt.getMonth() + 1).padStart(2, "0") +
-      "-01"
-    );
-  }
-
-  // ── Filter ranges ──────────────────────────────────────────────
-  // cutoffStr  = earliest date to include (d >= cutoffStr)
-  // ceilingStr = exclusive upper bound    (d <  ceilingStr)
-  // includeToday = whether today's records appear in this view
-  let cutoffStr = null;
-  let ceilingStr = null;
-  let includeToday = false;
-  let rangeLabel = "Records";
-  const customRangeEl = document.getElementById("hist-custom-range");
-  const customFromEl = document.getElementById("hist-custom-from");
-  const customToEl = document.getElementById("hist-custom-to");
-  const filterKey = [
-    filterVal,
-    today,
-    customFromEl?.value || "",
-    customToEl?.value || "",
-  ].join("|");
-  if (_histLastFilterKey !== filterKey) {
-    _histLastFilterKey = filterKey;
-    _histManuallyCollapsedDate = null;
-  }
-  if (customRangeEl)
-    customRangeEl.style.display = filterVal === "custom" ? "flex" : "none";
-
-  if (filterVal === "today") {
-    cutoffStr = today; // only today (00:00 → now)
-    ceilingStr = null;
-    includeToday = true;
-    rangeLabel = new Date().toLocaleDateString("en-GB", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  } else if (filterVal === "yesterday") {
-    cutoffStr = _localDateStr(-1);
-    ceilingStr = today;
-    rangeLabel = new Date(_localDateStr(-1) + "T12:00:00").toLocaleDateString(
-      "en-GB",
-      {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      },
-    );
-  } else if (filterVal === "week") {
-    cutoffStr = _localDateStr(-6); // 7 days incl. today
-    includeToday = true;
-    rangeLabel = _localDateStr(-6) + " – " + today;
-  } else if (filterVal === "prev_week") {
-    cutoffStr = _localDateStr(-7); // 7 days before today
-    ceilingStr = today; // today excluded
-    rangeLabel = _localDateStr(-7) + " – " + _localDateStr(-1);
-  } else if (filterVal === "month") {
-    cutoffStr = _monthStr(0, 0); // 1st of this month → today
-    includeToday = true;
-    rangeLabel = _monthStr(0, 0) + " – " + today;
-  } else if (filterVal === "prev_month") {
-    cutoffStr = _localDateStr(-29); // rolling 30 days incl. today
-    includeToday = true;
-    rangeLabel = _localDateStr(-29) + " – " + today;
-  } else if (filterVal === "custom") {
-    const customFrom = customFromEl?.value || "";
-    const customTo = customToEl?.value || "";
-    if (customFrom && customTo && customFrom <= customTo) {
-      cutoffStr = customFrom;
-      const [y, m, d] = customTo.split("-").map(Number);
-      const nextDay = new Date(y, m - 1, d + 1);
-      ceilingStr =
-        nextDay.getFullYear() +
-        "-" +
-        String(nextDay.getMonth() + 1).padStart(2, "0") +
-        "-" +
-        String(nextDay.getDate()).padStart(2, "0");
-      includeToday = customTo >= today;
-      rangeLabel = customFrom + " – " + customTo;
-    } else {
-      cutoffStr = "9999-12-31";
-      rangeLabel =
-        customFrom && customTo ? "Invalid date range" : "Choose a date range";
-    }
-  } else if (filterVal === "all") {
-    cutoffStr = null;
-    includeToday = true;
-    rangeLabel = "All records";
-  }
-
-  // Show date range label
-  const rangeEl = document.getElementById("hist-range-label");
-  if (rangeEl) rangeEl.textContent = rangeLabel;
-
-  const byDate = {};
-  allSales.forEach((s) => {
-    const d =
-      s.businessDate ||
-      s.business_date ||
-      (s.date ? s.date.slice(0, 10) : null) ||
-      today;
-    if (d === today && !includeToday) return; // skip today unless filter includes it
-    if (d > today) return; // never show future records
-    if (cutoffStr && d < cutoffStr) return;
-    if (ceilingStr && d >= ceilingStr) return;
-    if (!byDate[d])
-      byDate[d] = {
-        sales: [],
-        revenue: 0,
-        profit: 0,
-        cost: 0,
-        qty: 0,
-        hours: {},
-      };
-    byDate[d].sales.push(s);
-    byDate[d].revenue += s.revenue || 0;
-    byDate[d].profit += s.profit || 0;
-    byDate[d].cost += (s.revenue || 0) - (s.profit || 0);
-    byDate[d].qty += s.qty || 0;
-    // Track hourly distribution for sparkline (0-23)
-    const hr = s.date ? new Date(s.date).getHours() : 12;
-    byDate[d].hours[hr] = (byDate[d].hours[hr] || 0) + (s.revenue || 0);
-  });
-
-  const datesSorted = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
-  const recList = UI.el("hist-records-list");
-  if (!recList) return;
-
-  if (!datesSorted.length) {
-    recList.innerHTML =
-      '<div style="color:var(--muted);font-size:13px;padding:24px 0;text-align:center;">No records in this period.</div>';
-    return;
-  }
-
-  // Insights are calculated from the records currently included by the filter.
-  const bestRevDay = datesSorted.reduce(
-    (best, d) => (byDate[d].revenue > (byDate[best]?.revenue || 0) ? d : best),
-    datesSorted[0],
-  );
-  const itemTotals = {};
-  Object.values(byDate).forEach((day) =>
-    day.sales.forEach((s) => {
-      const key = s.itemCode || s.itemName || "Item";
-      if (!itemTotals[key])
-        itemTotals[key] = {
-          name: s.itemName || s.itemCode || "Item",
-          qty: 0,
-          profit: 0,
-        };
-      itemTotals[key].qty += s.qty || 1;
-      itemTotals[key].profit += s.profit || 0;
-    }),
-  );
-  const itemStats = Object.values(itemTotals);
-  const bestEarning = itemStats.reduce(
-    (best, item) => (item.profit > (best?.profit || -Infinity) ? item : best),
-    null,
-  );
-  const bestSold = itemStats.reduce(
-    (best, item) => (item.qty > (best?.qty || 0) ? item : best),
-    null,
-  );
-  const insightText =
-    bestEarning && bestSold
-      ? `<div class="pr-insight-line pr-insight-earning"><span class="pr-insight-label">Top earning</span><strong>${escapeHtml(bestEarning.name)}</strong><span>${_fmtNum(bestEarning.profit)}</span></div>
-       <div class="pr-insight-line pr-insight-sold"><span class="pr-insight-label">Best seller</span><strong>${escapeHtml(bestSold.name)}</strong><span>${fmtN(bestSold.qty)} sold</span></div>`
-      : '<div class="pr-insight-line">No item sales in this period.</div>';
-
-  // Store byDate for click access
-  window._histByDate = byDate;
-
-  // Helper: build a 6-bar sparkline SVG from hourly data
-  function _sparkline(hours) {
-    const slots = [
-      [5, 9, "Morning"],
-      [9, 12, "Late morning"],
-      [12, 15, "Afternoon"],
-      [15, 18, "Eve"],
-      [18, 22, "Night"],
-      [22, 5, "Late night"],
-    ];
-    const vals = slots.map(([from, to]) => {
-      let v = 0;
-      for (let h = from; h !== to; h = (h + 1) % 24) v += hours[h] || 0;
-      return v;
-    });
-    const max = Math.max(...vals, 1);
-    const bars = vals
-      .map((v, i) => {
-        const h = Math.round((v / max) * 20) || 1;
-        const x = i * 9 + 1;
-        return `<rect x="${x}" y="${22 - h}" width="7" height="${h}" rx="1" fill="${v > 0 ? "#16a34a" : "#e5e7eb"}"/>`;
-      })
-      .join("");
-    return `<svg width="56" height="24" viewBox="0 0 56 24" class="hdc-spark">${bars}</svg>`;
-  }
-
-  // Running total for cumulative profit
-  let runningProfit = 0;
-
-  // Day table rows, newest first
-  const dayRows = datesSorted
-    .map((date) => {
-      const day = byDate[date];
-      const safeId = date.replace(/-/g, "");
-      const dt = new Date(date + "T12:00:00");
-      const label = dt.toLocaleDateString("en-GB", {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-      });
-      const earningColor = day.profit >= 0 ? "#16a34a" : "#dc2626";
-      const isBest = date === bestRevDay && datesSorted.length > 1;
-      const isToday = date === today;
-      const rowCls = isToday
-        ? " hist-row-today"
-        : isBest
-          ? " hist-row-best"
-          : "";
-      return `<tr class="hist-day-tr${rowCls}" onclick="expandHistDay('${safeId}')" style="cursor:pointer;">
-      <td class="hdt-date">${label}${isBest ? " ★" : ""}</td>
-      <td class="hdt-num">${day.sales.length}</td>
-      <td class="hdt-num">${_fmtNum(day.revenue)}</td>
-      <td class="hdt-num" style="color:${earningColor};font-weight:800;">${_fmtNum(day.profit)}</td>
-      <td class="hdt-chev"><i class="fa-solid fa-chevron-right"></i></td>
-    </tr>`;
-    })
-    .join("");
-  const dayCards = `<table class="hist-days-table">
-    <thead><tr>
-      <th class="hdt-date">Date</th>
-      <th class="hdt-num">Sales</th>
-      <th class="hdt-num">Revenue</th>
-      <th class="hdt-num">Earning</th>
-      <th class="hdt-chev"></th>
-    </tr></thead>
-    <tbody>${dayRows}</tbody>
-  </table>`;
-
-  const expandedDateBeforeRender = window._histExpandedDate;
-  recList.innerHTML = `
-    <!-- Day list rows -->
-    <div class="pr-days-list">${dayCards}</div>
-
-    <!-- Expanded detail area -->
-    <div id="hist-expanded-area" class="hist-expanded-area" style="display:none;"></div>
-
-    <!-- Insights + export -->
-    <div class="pr-insights">
-      <div class="pr-insights-icon"><i class="fa-solid fa-lightbulb"></i></div>
-      <div class="pr-insights-body">
-        <div class="pr-insights-title">Insights</div>
-        <div class="pr-insights-text">${insightText}</div>
-      </div>
-      <button class="pr-export-btn" onclick="exportSalesReport()">
-        <i class="fa-solid fa-download"></i> Export Report
-      </button>
-    </div>
-
-    </div>`;
-
-  const dateToExpand =
-    (datesSorted.length === 1 &&
-    _histManuallyCollapsedDate !== datesSorted[0]
-      ? datesSorted[0]
-      : null) ||
-    (expandedDateBeforeRender && byDate[expandedDateBeforeRender]
-      ? expandedDateBeforeRender
-      : null);
-  if (dateToExpand) {
-    _expandedHistDay = null;
-    expandHistDay(dateToExpand.replace(/-/g, ""));
-  }
-}
-
-// Money formatted for a table cell (no currency prefix - shown once in the header instead)
-function _fmtNum(n) {
-  return (parseFloat(n) || 0).toLocaleString("en-KE", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
-}
-
-let _histSort = { key: "date", dir: -1 };
-
-function _histSortArrow(key) {
-  if (_histSort.key !== key) return '<span class="hist-sort-arrow">↕</span>';
-  return `<span class="hist-sort-arrow hist-sort-arrow-active">${_histSort.dir === 1 ? "↑" : "↓"}</span>`;
-}
-
-function _histSortButton(label, key, title = label) {
-  return `<button type="button" class="hist-sort-btn" title="${title}" aria-label="${title}" onclick="sortHistTable('${key}')">${label}${_histSortArrow(key)}</button>`;
-}
-
-function sortHistTable(key) {
-  if (_histSort.key === key) _histSort.dir *= -1;
-  else {
-    _histSort.key = key;
-    _histSort.dir = key === "item" ? 1 : -1;
-  }
-  const date = window._histExpandedDate;
-  if (!date) return;
-  _expandedHistDay = null;
-  expandHistDay(date.replace(/-/g, ""));
-}
-window.sortHistTable = sortHistTable;
-
-// ── Tabular sale record renderer ────────────────────────────────────
-function _histTable(sales) {
-  const totals = sales.reduce(
-    (sum, sale) => {
-      const qty = sale.qty || 1;
-      sum.qty += qty;
-      sum.buy += (Number(sale.buyPrice) || 0) * qty;
-      sum.sale += (Number(sale.actualPrice || sale.sellPrice) || 0) * qty;
-      sum.profit += Number(sale.profit) || 0;
-      return sum;
-    },
-    { qty: 0, buy: 0, sale: 0, profit: 0 },
-  );
-  const sorted = [...sales].sort((a, b) => {
-    const qtyA = a.qty || 1,
-      qtyB = b.qty || 1;
-    const values =
-      {
-        date: [
-          new Date(a.date || 0).getTime(),
-          new Date(b.date || 0).getTime(),
-        ],
-        item: [
-          (a.itemName || a.itemCode || "Item").toLowerCase(),
-          (b.itemName || b.itemCode || "Item").toLowerCase(),
-        ],
-        unitCost: [Number(a.buyPrice) || 0, Number(b.buyPrice) || 0],
-        cost: [(a.buyPrice || 0) * qtyA, (b.buyPrice || 0) * qtyB],
-        revenue: [
-          (a.actualPrice || a.sellPrice || 0) * qtyA,
-          (b.actualPrice || b.sellPrice || 0) * qtyB,
-        ],
-        earning: [a.profit || 0, b.profit || 0],
-      }[_histSort.key] || [];
-    const result = values[0] < values[1] ? -1 : values[0] > values[1] ? 1 : 0;
-    return result * _histSort.dir;
-  });
-
-  const detailRows = sorted
-    .map((s, i) => {
-      const qty = s.qty || 1;
-      const unitCost = Number(s.buyPrice) || 0;
-      const buy = unitCost * qty;
-      const sell = (s.actualPrice || s.sellPrice || 0) * qty;
-      const profit = s.profit || 0;
-      const rawName =
-        (s.itemName || s.itemCode || "Item") +
-        (s.itemSize ? " · Sz " + s.itemSize : "") +
-        (qty > 1 ? " ×" + qty : "");
-      const click = s.id ? `onclick="openSaleDetail(${s.id})"` : "";
-      const profCls = profit >= 0 ? "hp-pos" : "hp-neg";
-      const inInv = allItems.some(
-        (item) =>
-          (s.itemId && item.id === s.itemId) ||
-          (s.itemCode && item.code === s.itemCode),
-      );
-      const invBadge = inInv
-        ? '<span class="inv-circle inv-circle-found" title="In inventory">✓</span>'
-        : '<span class="inv-circle inv-circle-missing" title="Not in inventory">✕</span>';
-      // Row number: 1 = most recent (top), n = oldest (bottom)
-      return (
-        `<tr class="hist-clickable-row" ${click}>` +
-        `<td class="hist-num">${i + 1}</td>` +
-        `<td>${escapeHtml(rawName)}</td>` +
-        `<td>${_fmtNum(unitCost)}</td>` +
-        `<td>${_fmtNum(buy)}</td>` +
-        `<td>${_fmtNum(sell)}</td>` +
-        `<td class="${profCls}">${_fmtNum(profit)}</td>` +
-        `<td class="hist-td-chevron">${invBadge}</td>` +
-        `</tr>`
-      );
-    })
-    .join("");
-
-  return (
-    `<div class="hist-table-wrap"><table class="hist-table hist-table-lined">` +
-    `<thead>` +
-    `<tr class="hist-totals-top"><td></td><td><strong class="hist-total-label">Totals</strong><span class="hist-total-meta">${fmtN(totals.qty)} items sold</span></td><td></td><td>${_fmtNum(totals.buy)}</td><td>${_fmtNum(totals.sale)}</td><td class="${totals.profit >= 0 ? "hp-pos" : "hp-neg"}">${_fmtNum(totals.profit)}</td><td></td></tr>` +
-    `<tr>` +
-    `<th class="hist-num">#</th>` +
-    `<th>${_histSortButton("Item", "item")}</th>` +
-    `<th>${_histSortButton("@", "unitCost", "Unit cost per item")}</th>` +
-    `<th>${_histSortButton("Buy", "cost")}</th>` +
-    `<th>${_histSortButton("Sale", "revenue")}</th>` +
-    `<th>${_histSortButton("Profit", "earning")}</th>` +
-    `<th></th>` +
-    `</tr>` +
-    `</thead>` +
-    `<tbody>${detailRows}</tbody>` +
-    `</table></div>`
-  );
-}
-window.renderHistoryPage = renderHistoryPage;
 
 /**
  * After a new item is saved, find every sale that shares the same itemCode
@@ -20667,478 +19565,6 @@ async function _backfillSalesForItem(item) {
 }
 
 // ── History day drill-down: hide grid, show full day detail ────────
-let _expandedHistDay = null;
-window._histExpandedDate = null;
-
-function expandHistDay(safeId) {
-  const grid = document.querySelector(".pr-days-list");
-  const area = document.getElementById("hist-expanded-area");
-  if (!area || !grid) return;
-
-  // Collapse if same card tapped again
-  if (_expandedHistDay === safeId) {
-    collapseHistDay();
-    return;
-  }
-  _expandedHistDay = safeId;
-
-  const date = safeId.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3");
-  const day = (window._histByDate || {})[date];
-  if (!day) return;
-  window._histExpandedDate = date;
-  _histManuallyCollapsedDate = null;
-
-  const rows = [...day.sales].sort(
-    (a, b) => new Date(b.date) - new Date(a.date),
-  );
-  const isToday = date === todayDateStr();
-
-  area.innerHTML = `
-  ${
-    !isToday
-      ? `<div class="hist-drill-header">
-    <button class="hist-drill-back" onclick="collapseHistDay()">
-      <i class="fa-solid fa-arrow-left"></i> All days
-    </button>
-  </div>`
-      : ""
-  }
-    ${_histTable(rows)}`;
-
-  // Hide the grid, show detail
-  grid.style.display = "none";
-  area.style.display = "block";
-}
-window.expandHistDay = expandHistDay;
-
-async function exportSalesReport() {
-  // Export only the currently visible period + filters
-  const allSales = await dbAll("sales");
-  const filterVal =
-    document.getElementById("hist-period-filter")?.value || "all";
-  const today = todayDateStr();
-  const _histPay = window._histPayFilter || "all";
-  const _histSearch = (document.getElementById("hist-item-search")?.value || "")
-    .toLowerCase()
-    .trim();
-
-  const filtered = [...allSales]
-    .filter((s) => {
-      const d = s.businessDate || (s.date || "").slice(0, 10);
-      if (filterVal === "today") {
-        if (d !== today) return false;
-      } else if (filterVal === "yesterday") {
-        const y = new Date();
-        y.setDate(y.getDate() - 1);
-        if (d !== y.toISOString().split("T")[0]) return false;
-      } else if (filterVal !== "all") {
-        // reuse same logic — just approximate by checking if in visible byDate
-        if (!window._histByDate?.[d] && d !== today) return false;
-      }
-      if (
-        _histPay !== "all" &&
-        (s.paymentMethod || "cash").toLowerCase() !== _histPay
-      )
-        return false;
-      if (
-        _histSearch &&
-        !(s.itemName || "").toLowerCase().includes(_histSearch) &&
-        !(s.itemCode || "").toLowerCase().includes(_histSearch)
-      )
-        return false;
-      return true;
-    })
-    .sort((a, b) => (b.businessDate || "").localeCompare(a.businessDate || ""));
-
-  const periodLabel = filterVal.replace("_", " ");
-  const rows = [
-    [
-      "Date",
-      "Item",
-      "Code",
-      "Qty",
-      "Buy Price",
-      "Revenue",
-      "Profit",
-      "Payment",
-    ],
-  ];
-  filtered.forEach((s) =>
-    rows.push([
-      s.businessDate || (s.date || "").slice(0, 10),
-      s.itemName || "",
-      s.itemCode || "",
-      s.qty || 1,
-      s.buyPrice || 0,
-      s.revenue || 0,
-      s.profit || 0,
-      s.paymentMethod || "cash",
-    ]),
-  );
-  const csv = rows
-    .map((r) =>
-      r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(","),
-    )
-    .join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement("a"), {
-    href: url,
-    download: "sales-" + periodLabel + ".csv",
-  });
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-  toast(filtered.length + " records exported", "ok");
-}
-window.exportSalesReport = exportSalesReport;
-
-/** Payment method chip selector */
-function histSetPay(method) {
-  window._histPayFilter = method;
-  document.querySelectorAll(".hist-pay-chip").forEach((b) => {
-    b.classList.toggle("active", b.dataset.pay === method);
-  });
-  renderHistoryPage();
-}
-window.histSetPay = histSetPay;
-
-function collapseHistDay() {
-  _expandedHistDay = null;
-  _histManuallyCollapsedDate = window._histExpandedDate;
-  window._histExpandedDate = null;
-  const grid = document.querySelector(".pr-days-list");
-  const area = document.getElementById("hist-expanded-area");
-  if (grid) grid.style.display = "grid";
-  if (area) {
-    area.style.display = "none";
-    area.innerHTML = "";
-  }
-}
-window.collapseHistDay = collapseHistDay;
-
-function toggleHistDay(safeId) {
-  expandHistDay(safeId);
-}
-window.toggleHistDay = toggleHistDay;
-
-// ══════════════════════════════════════════════════════════════════
-// SALE DETAIL SHEET
-// ══════════════════════════════════════════════════════════════════
-
-async function openSaleDetail(saleId) {
-  const sale = await dbGet("sales", saleId);
-  if (!sale) {
-    toast("Sale not found", "err");
-    return;
-  }
-  const linkedItem =
-    sale.itemId == null ? null : await dbGet("items", sale.itemId);
-
-  document.getElementById("sds-id").value = saleId;
-
-  // Populate view
-  const qty = sale.qty || 1;
-  const price = sale.actualPrice || sale.sellPrice || 0;
-  const buy = sale.buyPrice || 0;
-  const profit = sale.profit || qty * (price - buy);
-  const dateStr = sale.date
-    ? new Date(sale.date).toLocaleString("en-GB", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : sale.businessDate || "—";
-
-  document.getElementById("sds-name").textContent = sale.itemName || "—";
-  document.getElementById("sds-code").textContent = sale.itemCode || "";
-  document.getElementById("sds-qty").textContent = fmtN(qty);
-  document.getElementById("sds-price").textContent = fmt(price);
-  document.getElementById("sds-revenue").textContent = fmt(qty * price);
-  const profEl = document.getElementById("sds-profit");
-  profEl.textContent = (profit >= 0 ? "+" : "") + fmt(profit);
-  profEl.style.color = profit >= 0 ? "var(--green)" : "var(--red)";
-  document.getElementById("sds-date").textContent = dateStr;
-
-  const pm = (sale.paymentMethod || "cash").toUpperCase();
-  const pmBadge = document.getElementById("sds-payment-badge");
-  pmBadge.textContent = pm;
-  pmBadge.className =
-    "sds-item-badge sds-pm-" + (sale.paymentMethod || "cash").toLowerCase();
-
-  // Pre-fill edit form
-  document.getElementById("sds-edit-qty").value = qty;
-  document.getElementById("sds-edit-price").value = price;
-  const pmSel = document.getElementById("sds-edit-payment");
-  if (pmSel) pmSel.value = sale.paymentMethod || "cash";
-
-  const canMutate = canMutateSale(sale);
-  const editButton = document.getElementById("sds-edit-btn");
-  const deleteButton = document.getElementById("sds-delete-btn");
-  const addButton = document.getElementById("sds-add-btn");
-  if (editButton) {
-    editButton.style.display = "flex";
-    editButton.disabled = false;
-    editButton.style.opacity = "1";
-    editButton.style.cursor = "pointer";
-    editButton.title = canMutate
-      ? "Edit this sale"
-      : "Editing is restricted until the business day is open and an authorized account is signed in";
-  }
-  if (deleteButton) {
-    deleteButton.style.display = "flex";
-    deleteButton.disabled = false;
-    deleteButton.style.opacity = "1";
-    deleteButton.style.cursor = "pointer";
-    deleteButton.title = canMutate
-      ? "Delete or void this sale"
-      : "Deletion is restricted until the business day is open and an authorized account is signed in";
-  }
-  if (addButton) {
-    addButton.style.display = "flex";
-    addButton.disabled = false;
-    addButton.title = linkedItem
-      ? "This sale is already linked to inventory"
-      : "Add this sale to inventory";
-  }
-
-  // Reset to view mode
-  document.getElementById("sds-edit-form").style.display = "none";
-  document.getElementById("sds-view").style.display = "block";
-  document.getElementById("sds-actions").style.display = "flex";
-
-  document.getElementById("sale-detail-sheet").classList.add("open");
-}
-window.openSaleDetail = openSaleDetail;
-
-function closeSaleDetailSheet() {
-  document.getElementById("sale-detail-sheet").classList.remove("open");
-}
-window.closeSaleDetailSheet = closeSaleDetailSheet;
-
-function toggleSaleEditForm() {
-  const saleId = parseInt(document.getElementById("sds-id")?.value, 10);
-  if (!currentUser || !["super", "user"].includes(currentUser.role)) {
-    toast("Only authorized users can edit sales", "err");
-    return;
-  }
-  if (!activeDay || activeDay.status !== "OPEN") {
-    toast("Open the business day before editing a sale", "err");
-    return;
-  }
-  if (!Number.isInteger(saleId)) {
-    toast("Sale record not found", "err");
-    return;
-  }
-  const form = document.getElementById("sds-edit-form");
-  const view = document.getElementById("sds-view");
-  const acts = document.getElementById("sds-actions");
-  const showing = form.style.display !== "none";
-  form.style.display = showing ? "none" : "block";
-  view.style.display = "block";
-  // Hide action buttons while editing to reduce clutter
-  if (!showing) acts.style.display = "none";
-  else acts.style.display = "flex";
-}
-window.toggleSaleEditForm = toggleSaleEditForm;
-
-function discardSaleEdit() {
-  document.getElementById("sds-edit-form").style.display = "none";
-  document.getElementById("sds-actions").style.display = "flex";
-}
-window.discardSaleEdit = discardSaleEdit;
-function adjEditedSaleQty(delta) {
-  const input = document.getElementById("sds-edit-qty");
-  if (!input) return;
-  const current = parseInt(input.value, 10) || 1;
-  input.value = String(Math.max(1, Math.min(999999, current + delta)));
-}
-window.adjEditedSaleQty = adjEditedSaleQty;
-
-async function saveSaleEdit() {
-  try {
-    if (!currentUser || !["super", "user"].includes(currentUser.role)) {
-      toast("You do not have permission to edit sales", "err");
-      return;
-    }
-    if (!activeDay || activeDay.status !== "OPEN") {
-      toast("Sales can only be edited while the business day is open", "err");
-      return;
-    }
-
-    const id = parseInt(document.getElementById("sds-id").value, 10);
-    const qtyInput = document.getElementById("sds-edit-qty").value;
-    const priceInput = document.getElementById("sds-edit-price").value;
-    const qty = Number(qtyInput);
-    const price = Number(priceInput);
-    const pm = document.getElementById("sds-edit-payment").value || "cash";
-    if (!Number.isInteger(qty) || qty <= 0) {
-      toast("Quantity must be a positive whole number", "err");
-      return;
-    }
-    if (!Number.isFinite(price) || price <= 0) {
-      toast("Price must be greater than zero", "err");
-      return;
-    }
-    if (!["cash", "mpesa", "till", "credit"].includes(pm)) {
-      toast("Invalid payment method", "err");
-      return;
-    }
-
-    const sale = await dbGet("sales", id);
-    if (!sale) {
-      toast("Sale not found", "err");
-      return;
-    }
-    const saleDate = sale.businessDate || sale.business_date;
-    const activeDate = activeDay.businessDate || activeDay.business_date;
-    if (saleDate && saleDate !== activeDate) {
-      toast("Only sales from the open business day can be edited", "err");
-      return;
-    }
-
-    const item = sale.itemId == null ? null : await dbGet("items", sale.itemId);
-    const saleSize = sale.itemSize || sale.size;
-    const size =
-      item?.isShoe && saleSize
-        ? (await getShoeSizes(item.code)).find(
-            (record) => String(record.size) === String(saleSize),
-          )
-        : null;
-    const buy = [sale.buyPrice, size?.buyPrice, item?.buyPrice, item?.buy, sale.buy]
-      .map(Number)
-      .find((value) => Number.isFinite(value) && value > 0);
-    if (buy == null) {
-      toast("The sale and linked item have no valid buy price", "err");
-      return;
-    }
-    const minimumPrice = Number(size?.sellPriceMin || item?.sellPriceMin || 0);
-    if (minimumPrice > 0 && price < minimumPrice) {
-      toast("Price cannot be below the minimum sale price", "err");
-      return;
-    }
-    if (price <= buy) {
-      toast("Price must be greater than the buy price", "err");
-      return;
-    }
-
-    const oldQty = Number(sale.qty) || 0;
-    const stockDelta = oldQty - qty;
-    if (stockDelta !== 0 && !item) {
-      toast("The original inventory item could not be found", "err");
-      return;
-    }
-    if (stockDelta !== 0 && item?.isShoe && !size) {
-      toast("The original shoe size could not be found", "err");
-      return;
-    }
-    if (stockDelta < 0 && !item.isRecord) {
-      const available = size
-        ? await readableStockQty(size, size.id)
-        : await readableStockQty(item);
-      if (-stockDelta > available) {
-        toast("Not enough stock for the increased sale quantity", "err");
-        return;
-      }
-    }
-    if (stockDelta !== 0 && !item.isRecord) {
-      if (size) {
-        size.qty = Math.max(0, Number(size.qty || 0) + stockDelta);
-        size.qtyCache = Number(size.qty);
-        size.updatedAt = new Date().toISOString();
-        const allSizes = await getShoeSizes(item.code);
-        item.qty = allSizes.reduce(
-          (total, record) => total + Number(record.qty || 0),
-          0,
-        );
-      } else {
-        item.qty = Math.max(0, Number(item.qty || 0) + stockDelta);
-      }
-      item.qtyCache = Number(item.qty || 0);
-      item.updatedAt = new Date().toISOString();
-    }
-
-    sale.qty = qty;
-    sale.buyPrice = buy;
-    sale.actualPrice = price;
-    sale.sellPrice = price;
-    sale.paymentMethod = pm;
-    sale.revenue = qty * price;
-    sale.profit = qty * (price - buy);
-    sale.updatedAt = new Date().toISOString();
-    if (item) {
-      await persistSaleEditAtomically({
-        item,
-        shoeSize: size && !item.isRecord ? size : null,
-        sale,
-        delta: item.isRecord ? 0 : stockDelta,
-        actor: currentUser.username,
-      });
-    } else {
-      await dbPut("sales", sale);
-    }
-    closeSaleDetailSheet();
-    await refreshUI();
-    await renderHistoryPage();
-    try {
-      await renderSellPage();
-    } catch (_) {}
-    toast("Sale updated", "ok");
-  } catch (error) {
-    console.error("[saveSaleEdit]", error);
-    toast("Sale update failed: " + (error.message || "Unknown error"), "err");
-  }
-}
-window.saveSaleEdit = saveSaleEdit;
-
-async function deleteSaleFromDetail() {
-  const id = parseInt(document.getElementById("sds-id").value);
-  if (!id) return;
-  await voidSale(id);
-}
-window.deleteSaleFromDetail = deleteSaleFromDetail;
-
-async function saleAddToInventoryFromDetail() {
-  const id = parseInt(document.getElementById("sds-id").value);
-  const sale = await dbGet("sales", id);
-  if (!sale) {
-    toast("Sale not found", "err");
-    return;
-  }
-  if (sale.itemId != null && (await dbGet("items", sale.itemId))) {
-    toast("This sale is already linked to inventory", "");
-    return;
-  }
-  closeSaleDetailSheet();
-  showPage("add");
-  await new Promise((r) => setTimeout(r, 100));
-  // Match type or default to General
-  const matchType = types.find(
-    (t) => t.name === sale.itemType && isCategoryActive(t),
-  );
-  const useType = matchType
-    ? sale.itemType
-    : types.find((t) => t.name === "General" && isCategoryActive(t))
-      ? "General"
-      : "";
-  setAddFormType(useType, { skipTypeChange: false });
-  await new Promise((r) => setTimeout(r, 80));
-  const el = (id) => document.getElementById(id);
-  if (el("f-code")) el("f-code").value = sale.itemCode || "";
-  if (el("f-name")) el("f-name").value = sale.itemName || "";
-  if (el("f-qty")) el("f-qty").value = sale.qty || 1;
-  if (el("f-buy")) el("f-buy").value = sale.buyPrice > 0 ? sale.buyPrice : "";
-  if (el("f-sell"))
-    el("f-sell").value = sale.sellPrice > 0 ? sale.sellPrice : "";
-  updateProfitPreview();
-  setItemMode(false);
-  toast("Pre-filled from sale — save to link across system", "");
-}
-window.saleAddToInventoryFromDetail = saleAddToInventoryFromDetail;
-
 function renderAllShoeGroupCards() {
   const wrap = document.getElementById("shoe-size-groups");
   if (!wrap) return;
@@ -21630,51 +20056,6 @@ async function openShoeSizeEdit(itemId, size) {
   }, 100);
 }
 window.openShoeSizeEdit = openShoeSizeEdit;
-
-async function openSellShoeModal(itemId, size) {
-  const item = await dbGet("items", itemId);
-  if (!item) {
-    toast("Item not found", "err");
-    return;
-  }
-  const sizes = await getShoeSizes(item.code);
-  const sizeRec = sizes.find((s) => s.size === size);
-  const availableQty = sizeRec
-    ? await readableStockQty(sizeRec, sizeRec.id)
-    : 0;
-  if (!sizeRec || availableQty <= 0) {
-    toast("Size " + size + " is out of stock", "err");
-    return;
-  }
-  _isShoeSale = true;
-  _sellShoeItem = item;
-  _sellShoeSize = sizeRec;
-  currentSellItemId = itemId;
-  const t = getTypeObj(item.type);
-  const el = (id) => document.getElementById(id);
-  if (el("sm-icon")) {
-    el("sm-icon").textContent = t.emoji;
-    el("sm-icon").style.background = t.color || "var(--surface2)";
-  }
-  if (el("sm-name"))
-    el("sm-name").textContent = item.name + " (Size " + size + ")";
-  if (el("sm-meta")) el("sm-meta").textContent = item.code + " - Size " + size;
-  if (el("sm-stock")) el("sm-stock").textContent = availableQty;
-  if (el("sm-sell"))
-    el("sm-sell").textContent = fmt(sizeRec.sellPrice || item.sellPrice || 0);
-  if (el("sm-cur")) el("sm-cur").textContent = currency;
-  if (el("sm-qty")) {
-    el("sm-qty").value = 0;
-    el("sm-qty").min = 0;
-    el("sm-qty").max = availableQty;
-  }
-  if (el("sm-actual")) el("sm-actual").value = "";
-  _toggleSmBuyField(sizeRec.buyPrice || item.buyPrice || 0);
-  const sellModal = document.getElementById("sell-modal");
-  if (sellModal) sellModal.classList.add("open");
-  updateSellModal();
-}
-window.openSellShoeModal = openSellShoeModal;
 
 async function closeShoeSizeActions() {
   const sheet = document.getElementById("shoe-size-action-sheet");
@@ -22354,10 +20735,90 @@ async function saveNewCustomer() {
 window.saveNewCustomer = saveNewCustomer;
 
 // ── Customer List ──────────────────────────────────────────────────
+const CUSTOMER_RECYCLE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+let _customerRecycleCleanupPromise = null;
+let _customerListRenderId = 0;
+
+function customerRecycleExpiry(customer) {
+  const deletedAt = Date.parse(customer.deletedAt || customer.updatedAt || "");
+  return Number.isFinite(deletedAt)
+    ? deletedAt + CUSTOMER_RECYCLE_RETENTION_MS
+    : null;
+}
+
+async function permanentlyDeleteRecycledCustomer(customer) {
+  if (!customer || !customer.isDeleted)
+    throw new Error("Only customers in the recycle bin can be permanently deleted");
+
+  const transactions = (await dbAll("customer_txns")).filter(
+    (txn) => txn.customerId === customer.customerId,
+  );
+  for (const txn of transactions) {
+    if (!txn.fbId && txn.id != null) {
+      const ts = (txn.createdAt || new Date().toISOString())
+        .replace(/[^0-9]/g, "")
+        .slice(0, 14);
+      txn.fbId =
+        "ctxn_" +
+        (txn.customerId || "x") +
+        "_" +
+        ts +
+        "_" +
+        txn.id;
+      await dbPut("customer_txns", txn);
+    }
+    await cascadeDeleteRecord("customer_txns", txn.id, txn);
+  }
+  await cascadeDeleteRecord("customers", customer.id, customer);
+}
+
+async function purgeExpiredRecycledCustomers() {
+  if (_customerRecycleCleanupPromise) return _customerRecycleCleanupPromise;
+  _customerRecycleCleanupPromise = (async () => {
+    const now = Date.now();
+    const deleted = (await dbAll("customers")).filter(
+      (customer) => customer.isDeleted,
+    );
+    let purged = 0;
+    for (const customer of deleted) {
+      const expiresAt = customerRecycleExpiry(customer);
+      if (expiresAt == null || expiresAt > now) continue;
+      await permanentlyDeleteRecycledCustomer(customer);
+      purged++;
+    }
+    if (purged) {
+      console.info(
+        "[CUST] Permanently deleted " +
+          purged +
+          " customer(s) after 30-day recycle-bin retention",
+      );
+    }
+    return purged;
+  })();
+  try {
+    return await _customerRecycleCleanupPromise;
+  } finally {
+    _customerRecycleCleanupPromise = null;
+  }
+}
+
 async function renderCustomerList(query) {
   const container = document.getElementById("customer-list");
   if (!container) return;
-  let customers = (await dbAll("customers")).filter((c) => !c.isDeleted);
+  const renderId = ++_customerListRenderId;
+  try {
+    await purgeExpiredRecycledCustomers();
+  } catch (error) {
+    console.error("[CUST] Could not purge expired recycle-bin customers:", error);
+    toast(
+      "Could not remove expired recycled customers: " +
+        (error.message || "Unknown error"),
+      "err",
+    );
+  }
+  const allForBin = await dbAll("customers");
+  if (renderId !== _customerListRenderId) return;
+  let customers = allForBin.filter((c) => !c.isDeleted);
   const q = (query || "").trim().toLowerCase();
   if (q) {
     customers = customers.filter(
@@ -22373,16 +20834,15 @@ async function renderCustomerList(query) {
     return (a.name || "").localeCompare(b.name || "");
   });
 
+  let customerListHtml;
   if (!customers.length) {
-    container.innerHTML = `<div class="empty-state" style="padding:40px 20px;text-align:center;color:var(--muted);">
+    customerListHtml = `<div class="empty-state" style="padding:40px 20px;text-align:center;color:var(--muted);">
       <i class="fa-solid fa-users" style="font-size:32px;margin-bottom:10px;display:block;opacity:.3;"></i>
       <div>${q ? "No customers match your search." : "No customers yet. Tap <strong>+ Add Customer</strong> to get started."}</div>
     </div>`;
-    return;
-  }
-
-  container.innerHTML = customers
-    .map((c) => {
+  } else {
+    customerListHtml = customers
+      .map((c) => {
       const initials = (c.name || "?")
         .split(" ")
         .map((w) => w[0])
@@ -22410,12 +20870,13 @@ async function renderCustomerList(query) {
       </div>
       <i class="fa-solid fa-chevron-right" style="color:var(--muted);font-size:10px;margin-left:2px;flex-shrink:0;"></i>
     </div>`;
-    })
-    .join("");
+      })
+      .join("");
+  }
 
   // ── Recycle bin section (collapsed by default) ──────────────────
-  const allForBin = await dbAll("customers");
   const deleted = allForBin.filter((c) => c.isDeleted);
+  let recycleBinHtml = "";
   if (deleted.length && !q) {
     const binCards = deleted
       .map((c) => {
@@ -22425,17 +20886,41 @@ async function renderCustomerList(query) {
           .join("")
           .slice(0, 2)
           .toUpperCase();
-        return `<div class="cust-card" style="opacity:.55;" onclick="restoreCustomer('${escapeHtml(c.customerId)}')">
+        const expiresAt = customerRecycleExpiry(c);
+        const daysRemaining =
+          expiresAt == null
+            ? null
+            : Math.max(0, Math.ceil((expiresAt - Date.now()) / 86400000));
+        const retentionLabel =
+          daysRemaining == null
+            ? "Expiry date unavailable"
+            : daysRemaining === 0
+              ? "Expires today"
+              : daysRemaining +
+                " day" +
+                (daysRemaining === 1 ? "" : "s") +
+                " left";
+        const expiryDate =
+          expiresAt == null
+            ? ""
+            : " · expires " +
+              new Date(expiresAt).toLocaleDateString(undefined, {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              });
+        return `<div class="cust-card" style="opacity:.75;cursor:default;">
         <div class="cust-avatar" style="background:var(--muted);font-size:13px;">${escapeHtml(initials)}</div>
         <div class="cust-info">
           <div class="cust-name">${escapeHtml(c.name || "")}</div>
-          <div class="cust-meta">Tap to restore</div>
+          <div class="cust-meta">${escapeHtml(c.phone || "No phone")} · ${escapeHtml(retentionLabel + expiryDate)}</div>
         </div>
-        <i class="fa-solid fa-trash-arrow-up" style="color:var(--muted);font-size:12px;"></i>
+        <button type="button" class="cust-recycle-action restore" onclick="restoreCustomer('${escapeHtml(c.customerId)}')">Restore</button>
+        <button type="button" class="cust-recycle-action delete" onclick="permanentlyDeleteCustomer('${escapeHtml(c.customerId)}')">Delete now</button>
       </div>`;
       })
       .join("");
-    container.innerHTML += `
+    recycleBinHtml = `
       <div style="border-top:2px solid var(--border);margin-top:8px;">
         <div onclick="toggleCustRecycleBin()"
              style="display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;background:var(--bg2);">
@@ -22445,6 +20930,9 @@ async function renderCustomerList(query) {
         </div>
         <div id="cust-recycle-body" style="display:none;">${binCards}</div>
       </div>`;
+  }
+  if (renderId === _customerListRenderId) {
+    container.innerHTML = customerListHtml + recycleBinHtml;
   }
 }
 window.renderCustomerList = renderCustomerList;
@@ -22462,6 +20950,37 @@ async function restoreCustomer(customerId) {
   toast("Customer restored", "ok");
 }
 window.restoreCustomer = restoreCustomer;
+
+async function permanentlyDeleteCustomer(customerId) {
+  const customer = (await dbAll("customers")).find(
+    (entry) => entry.customerId === customerId && entry.isDeleted,
+  );
+  if (!customer) {
+    toast("Customer is no longer in the recycle bin", "err");
+    return;
+  }
+  if (
+    !confirm(
+      'Permanently delete "' +
+        (customer.name || "this customer") +
+        '" and their transaction history now? This cannot be undone.',
+    )
+  )
+    return;
+  try {
+    await permanentlyDeleteRecycledCustomer(customer);
+    await renderCustomerList("");
+    toast("Customer and transaction history permanently deleted", "ok");
+  } catch (error) {
+    console.error("[CUST] Permanent customer deletion failed:", error);
+    toast(
+      "Could not permanently delete customer: " +
+        (error.message || "Unknown error"),
+      "err",
+    );
+  }
+}
+window.permanentlyDeleteCustomer = permanentlyDeleteCustomer;
 
 // Show/hide recycle bin section
 function toggleCustRecycleBin() {
@@ -22520,7 +21039,7 @@ async function deleteCustomer() {
     !confirm(
       'Move "' +
         (customer.name || "this customer") +
-        '" to recycle bin?\n\nTheir records will be kept and can be restored later.',
+        '" to recycle bin?\n\nThe customer and transaction history will be kept for 30 days. You can restore the customer or delete it permanently sooner.',
     )
   )
     return;
@@ -22532,7 +21051,6 @@ async function deleteCustomer() {
   fbSyncCustomer(customer);
   toast("Moved to recycle bin", "");
   closeCustomerDetail();
-  await renderCustomerList("");
 }
 window.deleteCustomer = deleteCustomer;
 

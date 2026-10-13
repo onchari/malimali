@@ -1,0 +1,2133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manual Regression Test Suite - Mandela General Stores</title>
+    <style>
+      :root {
+        --bg: #f4f7f5;
+        --card: #ffffff;
+        --text: #1f2a37;
+        --muted: #5d6b7a;
+        --line: #dfe7e3;
+        --green: #176b4d;
+        --green-soft: #eaf7f1;
+        --amber: #d97706;
+        --amber-soft: #fff4df;
+        --red: #b42318;
+        --red-soft: #fff0f0;
+        --blue: #0f5db7;
+        --blue-soft: #edf4ff;
+        --purple: #6b4ec4;
+        --purple-soft: #f3eeff;
+        --shadow: 0 10px 30px rgba(20, 31, 22, 0.06);
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: linear-gradient(135deg, #0d4d34, #1b7a52);
+        color: #fff;
+        box-shadow: var(--shadow);
+      }
+
+      .topbar-inner {
+        max-width: 1500px;
+        margin: 0 auto;
+        padding: 18px 20px;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: clamp(1.8rem, 2vw + 1rem, 3rem);
+      }
+      .subhead {
+        font-size: 0.95rem;
+        opacity: 0.9;
+      }
+
+      .container {
+        max-width: 1500px;
+        margin: 0 auto;
+        padding: 24px 20px 50px;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 16px;
+        margin: 22px 0 26px;
+      }
+
+      .metric {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        padding: 16px 18px;
+      }
+      .metric-label {
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      .metric-value {
+        font-size: 2rem;
+        font-weight: 800;
+      }
+
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 18px 0 20px;
+      }
+
+      .filter-btn {
+        background: #fff;
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 8px 14px;
+        cursor: pointer;
+        font-weight: 700;
+      }
+      .filter-btn.active {
+        background: var(--green);
+        color: #fff;
+        border-color: var(--green);
+      }
+
+      .search-wrap {
+        margin: 10px 0 22px;
+      }
+      .search-wrap input {
+        width: min(100%, 420px);
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        font-size: 1rem;
+      }
+
+      .tests {
+        display: grid;
+        gap: 18px;
+      }
+
+      .test-card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-left: 8px solid #9aa7a0;
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+        padding: 18px;
+        transition: background-color 0.18s ease, border-color 0.18s ease;
+      }
+      .test-card.result-pass {
+        background: #d9f5e5;
+        border-color: #38a169;
+      }
+      .test-card.result-blocked {
+        background: #dbeafe;
+        border-color: #3b82f6;
+      }
+      .test-card.result-fail {
+        background: #fee2e2;
+        border-color: #ef4444;
+      }
+      .test-card.result-skipped {
+        background: #f1f5f9;
+        border-color: #94a3b8;
+      }
+      .test-card[data-priority="critical"] { border-left-color: var(--red); }
+      .test-card[data-priority="major"] { border-left-color: var(--amber); }
+      .test-card[data-priority="medium"] { border-left-color: var(--blue); }
+      .test-card[data-priority="minor"] { border-left-color: var(--purple); }
+      .test-card[data-priority="cosmetics"] { border-left-color: #7f8c8d; }
+
+      .test-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+
+      .id-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .test-id {
+        font-weight: 800;
+        color: var(--green);
+        font-size: 1.02rem;
+      }
+
+      .priority {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 999px;
+        padding: 6px 10px;
+      }
+      .priority.critical { background: var(--red-soft); color: var(--red); }
+      .priority.major { background: var(--amber-soft); color: var(--amber); }
+      .priority.medium { background: var(--blue-soft); color: var(--blue); }
+      .priority.minor { background: var(--purple-soft); color: var(--purple); }
+      .priority.cosmetics { background: #eef2f4; color: #4a5565; }
+
+      .test-title {
+        font-size: 1.15rem;
+        font-weight: 800;
+        margin: 8px 0 12px;
+      }
+
+      .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+        margin-bottom: 8px;
+      }
+
+      .field-box {
+        background: #f8faf9;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px 14px;
+      }
+      .field-label {
+        display: block;
+        font-weight: 800;
+        font-size: 0.76rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 7px;
+      }
+      .field-box p, .field-box ul {
+        margin: 0;
+        color: var(--text);
+      }
+      .field-box ul {
+        padding-left: 18px;
+      }
+
+      textarea, input[type="text"], select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font: inherit;
+        background: #fff;
+      }
+      textarea {
+        min-height: 100px;
+        resize: vertical;
+      }
+
+      .result-row {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 14px;
+      }
+
+      .attachment-section {
+        margin-top: 14px;
+        background: #fbfcfb;
+        border: 1px dashed var(--line);
+        border-radius: 12px;
+        padding: 12px;
+      }
+
+      .attachment-section input[type="file"] {
+        padding: 8px;
+        background: #fff;
+      }
+
+      .status-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+
+      .status-btn {
+        font-size: 0.82rem;
+        padding: 9px 15px;
+        font-weight: 800;
+        border-radius: 999px;
+        border: 2px solid transparent;
+        cursor: pointer;
+        background: #fff;
+      }
+      .status-btn[data-status="pass"] { color: var(--green); border-color: var(--green); }
+      .status-btn[data-status="blocked"] { color: var(--blue); border-color: var(--blue); }
+      .status-btn[data-status="fail"] { color: var(--red); border-color: var(--red); }
+      .status-btn[data-status="skipped"] { color: var(--muted); border-color: #94a3b8; }
+      .status-btn.clear-status-btn { color: var(--muted); border-color: var(--line); }
+      .status-btn.clear-status-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .status-btn.selected[data-status="pass"] { background: var(--green); color: #fff; }
+      .status-btn.selected[data-status="blocked"] { background: var(--blue); color: #fff; }
+      .status-btn.selected[data-status="fail"] { background: var(--red); color: #fff; }
+      .status-btn.selected[data-status="skipped"] { background: #64748b; color: #fff; }
+      .issue-draft-note {
+        margin-top: 10px;
+        font-size: 0.82rem;
+        color: var(--muted);
+      }
+      .issue-draft-link {
+        display: inline-block;
+        margin-top: 5px;
+        color: var(--blue);
+        font-weight: 800;
+      }
+
+      .pagination {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin: 14px 0;
+      }
+      .pagination button {
+        min-width: 110px;
+        padding: 11px 16px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        color: var(--text);
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .pagination button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .pagination .skip-btn {
+        min-width: 90px;
+        border-color: #64748b;
+        color: #475569;
+      }
+      .pagination .skip-btn:hover:not(:disabled) {
+        background: #f1f5f9;
+      }
+      .page-indicator {
+        color: var(--muted);
+        font-weight: 800;
+        text-align: center;
+      }
+
+      .toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin: 20px 0 12px;
+      }
+
+      .toolbar button {
+        background: var(--green);
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        padding: 12px 18px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .status-tabs {
+        display: flex;
+        gap: 10px;
+        margin: 0 0 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .status-tab {
+        padding: 10px 14px;
+        border: 0;
+        border-bottom: 3px solid transparent;
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .status-tab.active {
+        color: var(--green);
+        border-bottom-color: var(--green);
+      }
+
+      .footer-note {
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-top: 18px;
+      }
+
+      @media (max-width: 700px) {
+        .container { padding: 18px 14px 42px; }
+        .test-card { padding: 14px; }
+        .toolbar { align-items: stretch; }
+        .toolbar button { width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <h1>Manual Regression Test Suite</h1>
+        <div class="subhead">Mandela General Stores — End-to-end user workflow validation</div>
+      </div>
+    </header>
+
+    <main class="container">
+      <div class="summary-grid" id="summary"></div>
+
+      <div class="toolbar">
+        <div style="font-weight:700; color: var(--muted);">Filter by priority</div>
+        <button type="button" id="resetAll">Reset all results</button>
+      </div>
+
+      <div class="filters" id="filters"></div>
+      <div class="status-tabs" role="tablist" aria-label="Test case status">
+        <button type="button" class="status-tab active" id="allTestsTab" role="tab" aria-selected="true">All test cases</button>
+        <button type="button" class="status-tab" id="skippedTestsTab" role="tab" aria-selected="false">Skipped (0)</button>
+      </div>
+      <div class="search-wrap">
+        <input id="searchInput" type="text" placeholder="Search by ID, title, objective or module..." />
+      </div>
+
+      <nav class="pagination" aria-label="Test case pages">
+        <button type="button" id="previousTest">← Previous</button>
+        <span class="page-indicator" id="pageIndicator" aria-live="polite"></span>
+        <button type="button" class="skip-btn" id="skipTest">Skip</button>
+        <button type="button" id="nextTest">Next →</button>
+      </nav>
+      <section id="testList" class="tests"></section>
+      <nav class="pagination" aria-label="Test case pages">
+        <button type="button" id="previousTestBottom">← Previous</button>
+        <span class="page-indicator" id="pageIndicatorBottom" aria-live="polite"></span>
+        <button type="button" class="skip-btn" id="skipTestBottom">Skip</button>
+        <button type="button" id="nextTestBottom">Next →</button>
+      </nav>
+      <div class="footer-note">
+        This interactive checklist is meant for manual QA execution. Capture actual results, attach supporting files, and document defects in the field provided per case.
+      </div>
+    </main>
+
+    <script>
+      const priorities = ["critical", "major", "medium", "minor", "cosmetics"];
+      const tests = [
+        {
+          id: "MGS-001",
+          title: "Login with valid credentials",
+          module: "Authentication",
+          priority: "critical",
+          objective: "Confirm the user can access the application with a valid username and PIN.",
+          steps: [
+            "Open the app in the browser.",
+            "Enter a valid username and PIN from the allowed list.",
+            "Tap Sign In.",
+            "Observe landing page and role-specific access."
+          ],
+          expected: "The app loads the correct dashboard or allowed default page without any error. The user session starts successfully."
+        },
+        {
+          id: "MGS-002",
+          title: "Login with invalid credentials",
+          module: "Authentication",
+          priority: "critical",
+          objective: "Verify failed login attempts are rejected securely and do not grant access.",
+          steps: [
+            "Try a wrong username and correct PIN.",
+            "Try a valid username and wrong PIN.",
+            "Try both incorrect."
+          ],
+          expected: "The system shows an error message, keeps the user on the login screen, and does not open any protected page."
+        },
+        {
+          id: "MGS-003",
+          title: "Session restore after browser refresh",
+          module: "Authentication",
+          priority: "major",
+          objective: "Check that an authenticated session is restored correctly when the page reloads.",
+          steps: [
+            "Log in successfully.",
+            "Refresh the page.",
+            "Observe the app state and session expiry behavior."
+          ],
+          expected: "The user remains signed in within the configured session window. The app restores the user context and last page if valid."
+        },
+        {
+          id: "MGS-004",
+          title: "Session expiry and logout flow",
+          module: "Authentication",
+          priority: "major",
+          objective: "Ensure the session expires or logs out safely when it should.",
+          steps: [
+            "Sign in and leave the app idle for longer than the session timeout window.",
+            "Refresh or return to the app.",
+            "Attempt to access protected functionality."
+          ],
+          expected: "The system logs out cleanly, removes session state, and redirects to login without leaving protected data accessible."
+        },
+        {
+          id: "MGS-005",
+          title: "Role-based tab restriction",
+          module: "Access Control",
+          priority: "critical",
+          objective: "Validate that users only see allowed tabs and screens based on their role.",
+          steps: [
+            "Sign in as super user.",
+            "Sign in as regular user.",
+            "Sign in as clerk."
+          ],
+          expected: "Each user only sees permitted tabs and actions. Hidden functions remain inaccessible."
+        },
+        {
+          id: "MGS-006",
+          title: "Logout from the user menu",
+          module: "Authentication",
+          priority: "major",
+          objective: "Ensure the user can sign out cleanly from the UI.",
+          steps: [
+            "Log in successfully.",
+            "Open the user menu.",
+            "Choose Sign Out."
+          ],
+          expected: "The app clears the session and returns to the login screen or secure startup state."
+        },
+        {
+          id: "MGS-007",
+          title: "Dashboard loads key KPIs",
+          module: "Dashboard",
+          priority: "major",
+          objective: "Verify the dashboard calculates and displays summary KPIs accurately.",
+          steps: [
+            "Sign in and open the dashboard.",
+            "Review sales, profit, stock, and summary cards."
+          ],
+          expected: "The dashboard shows current totals and correct business metrics for available records."
+        },
+        {
+          id: "MGS-008",
+          title: "Global search finds item by name, code, or type",
+          module: "Dashboard",
+          priority: "major",
+          objective: "Confirm search is functional and returns relevant results.",
+          steps: [
+            "Open the dashboard search field.",
+            "Search by item name.",
+            "Search by code.",
+            "Search by item type or category."
+          ],
+          expected: "Relevant records are returned with matching attributes. Empty results are handled gracefully."
+        },
+        {
+          id: "MGS-009",
+          title: "No results search handling",
+          module: "Dashboard",
+          priority: "minor",
+          objective: "Check search UX when nothing matches.",
+          steps: [
+            "Search for a value that does not exist."
+          ],
+          expected: "The app clearly indicates no results and does not break or show stale data."
+        },
+        {
+          id: "MGS-010",
+          title: "Add new standard item",
+          module: "Inventory",
+          priority: "critical",
+          objective: "Validate creation of a basic stock item.",
+          steps: [
+            "Open Inventory > Add.",
+            "Enter a unique code and valid item details.",
+            "Save the item."
+          ],
+          expected: "The item is saved successfully, displayed in stock, and visible in the inventory list."
+        },
+        {
+          id: "MGS-011",
+          title: "Add duplicate item code",
+          module: "Inventory",
+          priority: "critical",
+          objective: "Ensure duplicate product codes are rejected or handled safely.",
+          steps: [
+            "Attempt to save an item with an already-used code."
+          ],
+          expected: "The app blocks duplicate creation and shows a clear validation message."
+        },
+        {
+          id: "MGS-012",
+          title: "Add item with missing required fields",
+          module: "Inventory",
+          priority: "critical",
+          objective: "Confirm required field validation works.",
+          steps: [
+            "Leave a mandatory field blank.",
+            "Try to save the item."
+          ],
+          expected: "Input validation blocks save and tells the user which fields are required."
+        },
+        {
+          id: "MGS-013",
+          title: "Add item with zero or negative stock values",
+          module: "Inventory",
+          priority: "major",
+          objective: "Verify the app rejects invalid stock values for standard items.",
+          steps: [
+            "Attempt to create an item with quantity 0, negative number, or invalid formatting."
+          ],
+          expected: "The system rejects invalid values or applies the defined policy consistently and prompts the user."
+        },
+        {
+          id: "MGS-014",
+          title: "Add footwear item with sizes",
+          module: "Inventory",
+          priority: "critical",
+          objective: "Test shoe inventory flows with multiple size rows.",
+          steps: [
+            "Open the footwear form.",
+            "Add a shoe SKU with several sizes.",
+            "Save the record."
+          ],
+          expected: "Each shoe size is persisted correctly and totals reflect the combined stock accurately."
+        },
+        {
+          id: "MGS-015",
+          title: "Add item with photo attachment",
+          module: "Inventory",
+          priority: "major",
+          objective: "Validate photo upload during item creation.",
+          steps: [
+            "Add a new item.",
+            "Attach an image.",
+            "Save the item."
+          ],
+          expected: "The image is stored and displays in the item details or stock list without breaking the form."
+        },
+        {
+          id: "MGS-016",
+          title: "Edit existing item details",
+          module: "Inventory",
+          priority: "major",
+          objective: "Ensure existing inventory records can be updated without data loss.",
+          steps: [
+            "Open an existing product record.",
+            "Change its category to a different active non-footwear category and edit another field.",
+            "Save the change."
+          ],
+          expected: "The selected category and other edits are saved and reflected in the stock list and category filters; the item code remains unchanged."
+        },
+        {
+          id: "MGS-017",
+          title: "Delete item from inventory",
+          module: "Inventory",
+          priority: "major",
+          objective: "Confirm item deletion is intentional and safe.",
+          steps: [
+            "Open an item detail sheet.",
+            "Choose delete/remove.",
+            "Confirm the action."
+          ],
+          expected: "The item is removed from stock and no orphaned references remain in the inventory list or sales history."
+        },
+        {
+          id: "MGS-018",
+          title: "View item stock details and quantity",
+          module: "Inventory",
+          priority: "major",
+          objective: "Check product details show accurate stock count.",
+          steps: [
+            "Open the stock list.",
+            "Select an item to view detail."
+          ],
+          expected: "The UI displays the correct available stock and relevant metadata."
+        },
+        {
+          id: "MGS-019",
+          title: "Sell a standard item",
+          module: "Sales",
+          priority: "critical",
+          objective: "Confirm the sale flow updates stock and records revenue.",
+          steps: [
+            "Open an item with stock.",
+            "Select Sell.",
+            "Enter a valid quantity and confirm sale."
+          ],
+          expected: "Stock decreases by the sold quantity. The sale is recorded and appears in sales history."
+        },
+        {
+          id: "MGS-020",
+          title: "Sell qty greater than available stock",
+          module: "Sales",
+          priority: "critical",
+          objective: "Ensure the app prevents overselling.",
+          steps: [
+            "Try to sell more units than are in stock."
+          ],
+          expected: "Validation blocks the transaction and shows a clear error without deducting any stock."
+        },
+        {
+          id: "MGS-021",
+          title: "Sell record-only item",
+          module: "Sales",
+          priority: "major",
+          objective: "Verify record-only items are sold without reducing stock quantities.",
+          steps: [
+            "Choose an item flagged as record-only.",
+            "Complete a sale."
+          ],
+          expected: "The sale is logged, while stock is not deducted."
+        },
+        {
+          id: "MGS-022",
+          title: "Sell a footwear item by size",
+          module: "Sales",
+          priority: "critical",
+          objective: "Validate shoe sales reduce only the selected size quantity.",
+          steps: [
+            "Open a shoe product.",
+            "Sell one size row.",
+            "Confirm."
+          ],
+          expected: "Only the selected size stock count decreases and the total reflects the correct remaining stock."
+        },
+        {
+          id: "MGS-023",
+          title: "Edit a sale after it is recorded",
+          module: "Sales",
+          priority: "major",
+          objective: "Check that sale editing is consistent and does not corrupt totals.",
+          steps: [
+            "Capture a sale.",
+            "Open the sales history.",
+            "Edit the sale quantity or price."
+          ],
+          expected: "The updated sale reflects new values, and totals reconcile correctly."
+        },
+        {
+          id: "MGS-024",
+          title: "Void a sale",
+          module: "Sales",
+          priority: "critical",
+          objective: "Confirm deletion/voiding a sale resets the affected stock and history accurately.",
+          steps: [
+            "Complete a sale.",
+            "Void the sale.",
+            "Check stock and dashboard totals."
+          ],
+          expected: "The sale is removed from history and related stock is restored without side effects."
+        },
+        {
+          id: "MGS-025",
+          title: "Sales history filters and date range",
+          module: "Sales",
+          priority: "major",
+          objective: "Verify correct filtering and display of sales records across time periods.",
+          steps: [
+            "Open sales history.",
+            "Use custom date filters and other selectors.",
+            "Review the list and totals.",
+            "Verify Today displays its transactions and summary by default.",
+            "Select Last Month and verify it uses the previous calendar month.",
+            "Open a date in a multi-day range, then use Back and Home."
+          ],
+          expected: "Sales History defaults to today's transactions with no Back button. This Week includes Sunday through today; Last Week includes the previous Sunday through Saturday; Last Month is the previous calendar month. Multi-day overviews show collapsed daily rows and a period total row with transactions, items, buy cost, sale amount, and profit. Opening a date shows only its transactions and totals. Back restores the previous filter/view; Home resets to Today and clears custom dates. Empty periods show a zero summary and a clear message; load failures offer Retry."
+        },
+        {
+          id: "MGS-026",
+          title: "Open business day",
+          module: "Operations",
+          priority: "critical",
+          objective: "Validate day management for daily operations.",
+          steps: [
+            "Open the Operations section.",
+            "Create or open a business day."
+          ],
+          expected: "The business day opens cleanly and displays active state."
+        },
+        {
+          id: "MGS-027",
+          title: "Close business day with reconciliation",
+          module: "Operations",
+          priority: "critical",
+          objective: "Ensure closing a day records the reconciliation flow correctly.",
+          steps: [
+            "Open a day.",
+            "Enter closing values and reconcile.",
+            "Close the day."
+          ],
+          expected: "The day transitions to CLOSED/LOCKED as per system rules without losing recorded values."
+        },
+        {
+          id: "MGS-028",
+          title: "Lock day after historical close",
+          module: "Operations",
+          priority: "major",
+          objective: "Confirm locked days cannot be edited.",
+          steps: [
+            "Lock a business day.",
+            "Attempt edits or new transactions against it."
+          ],
+          expected: "The app blocks modification and shows the appropriate message or disabled state."
+        },
+        {
+          id: "MGS-029",
+          title: "Finance investment entry",
+          module: "Finance",
+          priority: "major",
+          objective: "Verify investment recording is saved and totals update.",
+          steps: [
+            "Open Finance.",
+            "Add an investment with amount and description.",
+            "Save it."
+          ],
+          expected: "The investment appears in finance history and contributes correctly to totals."
+        },
+        {
+          id: "MGS-030",
+          title: "Finance expense entry and totals",
+          module: "Finance",
+          priority: "major",
+          objective: "Validate business expenditure is tracked correctly.",
+          steps: [
+            "Add an expense entry.",
+            "Review the summary and totals."
+          ],
+          expected: "The expense is stored and net totals reflect the increase in business spend."
+        },
+        {
+          id: "MGS-031",
+          title: "Finance withdrawal entry",
+          module: "Finance",
+          priority: "major",
+          objective: "Check that withdrawals are captured without errors.",
+          steps: [
+            "Create a withdrawal transaction.",
+            "Confirm it appears in the finance list."
+          ],
+          expected: "The withdrawal record is visible and totals are consistent with the accounting model."
+        },
+        {
+          id: "MGS-032",
+          title: "Negative or invalid finance values",
+          module: "Finance",
+          priority: "major",
+          objective: "Ensure invalid financial input is rejected.",
+          steps: [
+            "Try to save a negative amount or malformed finance entry."
+          ],
+          expected: "The system blocks invalid values and shows clear validation guidance."
+        },
+        {
+          id: "MGS-033",
+          title: "Wishlist item creation",
+          module: "Wishlist",
+          priority: "major",
+          objective: "Confirm wishlist entries can be added and managed.",
+          steps: [
+            "Open the wishlist section.",
+            "Add a wanted item, supplier, and status."
+          ],
+          expected: "The wishlist item is saved and visible in the list with the expected metadata."
+        },
+        {
+          id: "MGS-034",
+          title: "Supplier list management",
+          module: "Wishlist",
+          priority: "medium",
+          objective: "Validate supplier creation, editing, and deletion flow.",
+          steps: [
+            "Add a supplier.",
+            "Refresh or inspect the list.",
+            "Attempt to remove or duplicate a supplier."
+          ],
+          expected: "Suppliers display correctly, and duplicates or invalid input are prevented or handled."
+        },
+        {
+          id: "MGS-035",
+          title: "Add photo to wishlist item",
+          module: "Wishlist",
+          priority: "minor",
+          objective: "Verify wishlist photos are accepted and displayed.",
+          steps: [
+            "Add a wishlist item.",
+            "Attach an image file."
+          ],
+          expected: "The photo is saved and displayed without corrupting the form or record."
+        },
+        {
+          id: "MGS-036",
+          title: "Offline behavior and queueing",
+          module: "Sync",
+          priority: "critical",
+          objective: "Check that user actions still work while offline and are queued for later sync.",
+          steps: [
+            "Disconnect internet or use offline mode.",
+            "Create or update an item or sale.",
+            "Refresh the page."
+          ],
+          expected: "The app remains usable and queued changes retry once internet is restored."
+        },
+        {
+          id: "MGS-037",
+          title: "Restore local data from cloud",
+          module: "Sync",
+          priority: "major",
+          objective: "Verify the destructive restore process behaves as expected.",
+          steps: [
+            "Switch to a state with cloud data available.",
+            "Trigger Restore Local from Cloud."
+          ],
+          expected: "User is warned clearly, and local data is replaced only after confirmation."
+        },
+        {
+          id: "MGS-038",
+          title: "Push and pull sync with local changes",
+          module: "Sync",
+          priority: "critical",
+          objective: "Check cloud synchronization after local changes are made.",
+          steps: [
+            "Create a local change while online.",
+            "Run sync push/pull actions.",
+            "Confirm records propagate to the cloud and back."
+          ],
+          expected: "Local changes synchronize to the correct environment without data loss, duplication, or conflicts."
+        },
+        {
+          id: "MGS-039",
+          title: "Development vs production environment switch",
+          module: "Settings",
+          priority: "major",
+          objective: "Ensure environment detection and switching are correct.",
+          steps: [
+            "Open Settings.",
+            "Switch between Development and Production.",
+            "Observe the database and collection behavior."
+          ],
+          expected: "The app clearly reflects the active environment and does not mix production and dev data."
+        },
+        {
+          id: "MGS-040",
+          title: "Install PWA banner and install flow",
+          module: "PWA",
+          priority: "medium",
+          objective: "Validate the install prompt behavior for supported browsers.",
+          steps: [
+            "Open the site in a browser that supports PWA install.",
+            "Observe the install banner or install flow."
+          ],
+          expected: "The install prompt appears when appropriate and opens the install flow without blocking core app usage."
+        },
+        {
+          id: "MGS-041",
+          title: "Service worker and offline cache startup",
+          module: "PWA",
+          priority: "major",
+          objective: "Confirm the app remains available offline after cached startup.",
+          steps: [
+            "Load the app once while online.",
+            "Disable or disconnect network.",
+            "Reload the app."
+          ],
+          expected: "The app loads offline or falls back gracefully without crashing or showing a blank screen."
+        },
+        {
+          id: "MGS-042",
+          title: "Settings save and apply changes",
+          module: "Settings",
+          priority: "major",
+          objective: "Ensure settings persist and take effect immediately.",
+          steps: [
+            "Open Settings.",
+            "Modify a value such as currency, environment, or AI config.",
+            "Save and reload the page."
+          ],
+          expected: "The setting persists and is used correctly after reload without errors."
+        },
+        {
+          id: "MGS-043",
+          title: "AI key validation and configuration",
+          module: "Settings",
+          priority: "medium",
+          objective: "Check that the AI key feature handles valid and invalid input correctly.",
+          steps: [
+            "Open the AI settings card.",
+            "Attempt to save a blank key, invalid key, and valid key."
+          ],
+          expected: "Validation catches invalid values and valid keys enable the AI feature as expected."
+        },
+        {
+          id: "MGS-044",
+          title: "Long text and special characters input",
+          module: "General UX",
+          priority: "minor",
+          objective: "Check resilience when users type long values or characters such as apostrophes, commas, or symbols.",
+          steps: [
+            "Add inventory data with long names, special symbols, and punctuation.",
+            "Save and reload."
+          ],
+          expected: "Text is displayed correctly without truncation, breaking, or corruption."
+        },
+        {
+          id: "MGS-045",
+          title: "Empty inventory state",
+          module: "Inventory",
+          priority: "minor",
+          objective: "Verify the app behaves correctly when no inventory exists.",
+          steps: [
+            "Clear all inventory records or use an empty database state.",
+            "Open the stock list and add page."
+          ],
+          expected: "The app displays a clear empty state rather than a broken or blank screen."
+        },
+        {
+          id: "MGS-046",
+          title: "Browser refresh during active transaction",
+          module: "General UX",
+          priority: "major",
+          objective: "Check responsiveness and recovery after a refresh during save or sale operations.",
+          steps: [
+            "Start an item save or sale.",
+            "Refresh the page mid-process if possible."
+          ],
+          expected: "The app recovers cleanly, does not corrupt data, and does not leave duplication or inconsistent states."
+        },
+        {
+          id: "MGS-047",
+          title: "Cross-tab conflict handling",
+          module: "General UX",
+          priority: "major",
+          objective: "Verify that multiple tabs do not corrupt data or create inconsistent sync states.",
+          steps: [
+            "Open the app in two tabs.",
+            "Edit or create records in both tabs."
+          ],
+          expected: "Conflict handling is stable, no data loss occurs, and sync updates remain consistent."
+        },
+        {
+          id: "MGS-048",
+          title: "Cosmetic validation across navigation and spacing",
+          module: "UI Polish",
+          priority: "cosmetics",
+          objective: "Review UI clarity, spacing, alignment, and readability across main screens.",
+          steps: [
+            "Review the login, dashboard, inventory, sales, and settings screens on desktop and mobile sizes."
+          ],
+          expected: "Buttons, text, spacing, and layout remain aligned, legible, and visually consistent."
+        },
+        {
+          id: "MGS-049",
+          title: "Add and select product categories",
+          module: "Inventory",
+          priority: "major",
+          objective: "Verify category setup and selection stay consistent across item forms and filters.",
+          steps: ["Create a category and, if supported, a child category.", "Open Add Item and select each category.", "Save an item and filter the stock list by the category."],
+          expected: "The saved item is associated with the selected category and appears under the correct category filter."
+        },
+        {
+          id: "MGS-050",
+          title: "Edit item while preserving its unique code",
+          module: "Inventory",
+          priority: "major",
+          objective: "Check editing a product does not accidentally duplicate or change its SKU.",
+          steps: ["Open an existing item.", "Change its name or type but leave its code unchanged.", "Save and search by the original code."],
+          expected: "The existing record is updated once and remains searchable by its original unique code."
+        },
+        {
+          id: "MGS-051",
+          title: "Reject invalid item prices and quantities",
+          module: "Inventory",
+          priority: "critical",
+          objective: "Prevent malformed, negative, or out-of-range numeric values from corrupting stock or pricing.",
+          steps: ["Try blank, negative, alphabetic, decimal, and maximum-boundary values in price and quantity fields.", "Attempt to save each invalid combination."],
+          expected: "Invalid values are rejected or normalized according to the field rules; no bad item is saved and no existing item is changed."
+        },
+        {
+          id: "MGS-052",
+          title: "Calculate profit preview from buy and sell prices",
+          module: "Inventory",
+          priority: "major",
+          objective: "Validate the displayed profit preview follows the entered item prices.",
+          steps: ["Enter a buy price and a higher sell price.", "Change the sell price.", "Set the sell price below the buy price."],
+          expected: "The preview updates immediately and accurately, including the below-cost case, without saving unintended values."
+        },
+        {
+          id: "MGS-053",
+          title: "Create an item with variants",
+          module: "Inventory",
+          priority: "major",
+          objective: "Check that variant items are grouped and searched correctly.",
+          steps: ["Create multiple records sharing the intended item code/group with different variants.", "Save them and view the stock list.", "Search for the group code and a specific variant."],
+          expected: "Variants are grouped as designed, each variant retains its own correct stock and details, and search finds the expected records."
+        },
+        {
+          id: "MGS-054",
+          title: "Change stock measurement units",
+          module: "Settings / Inventory",
+          priority: "medium",
+          objective: "Verify an item's selected stock unit displays consistently in forms and details.",
+          steps: ["Choose a non-default unit when adding or editing an item.", "Save it and inspect its list and detail views.", "Reload the app and inspect again."],
+          expected: "The chosen unit persists and is displayed consistently without changing the numeric quantity."
+        },
+        {
+          id: "MGS-055",
+          title: "Restock a standard item",
+          module: "Inventory",
+          priority: "critical",
+          objective: "Confirm restocking increases quantity exactly once.",
+          steps: ["Open a stocked item and record its current quantity.", "Use the restock action and enter a valid quantity.", "Confirm and reopen the item."],
+          expected: "Stock increases by exactly the entered quantity and remains correct after navigation or reload."
+        },
+        {
+          id: "MGS-056",
+          title: "Cancel restock without changing stock",
+          module: "Inventory",
+          priority: "major",
+          objective: "Ensure dismissing a restock sheet does not apply a partial stock change.",
+          steps: ["Open the restock action.", "Enter a quantity, then cancel or close the sheet.", "Reopen the item details."],
+          expected: "The original quantity remains unchanged and no stock movement is recorded."
+        },
+        {
+          id: "MGS-057",
+          title: "Delete item and cancel confirmation",
+          module: "Inventory",
+          priority: "major",
+          objective: "Ensure cancelling item deletion preserves the item and its stock.",
+          steps: ["Open an item and start the delete action.", "Cancel the confirmation.", "Search for and reopen the item."],
+          expected: "The item, its variants or sizes, and its stock remain unchanged."
+        },
+        {
+          id: "MGS-058",
+          title: "Search stock and clear all filters",
+          module: "Inventory",
+          priority: "medium",
+          objective: "Check combined text search, category and shoe-size filters, and clear behavior.",
+          steps: ["Search by partial name and code.", "Apply a category and, for footwear, a size-group filter.", "Clear the search and filters."],
+          expected: "Results match all active filters; clearing them restores the full list without stale chips or hidden items."
+        },
+        {
+          id: "MGS-059",
+          title: "Out-of-stock monitor classification",
+          module: "Inventory",
+          priority: "major",
+          objective: "Verify out-of-stock and low-stock items appear in the appropriate monitor groups.",
+          steps: ["Prepare items with zero, low, and healthy quantities, including a shoe if available.", "Open the stock monitor.", "Compare monitor counts and items to stock details."],
+          expected: "Each item is classified correctly, shoe totals use size stock, and monitor counts match the displayed items."
+        },
+        {
+          id: "MGS-060",
+          title: "Set up shared-price footwear sizes",
+          module: "Inventory",
+          priority: "major",
+          objective: "Verify shared footwear pricing and size quantities save correctly.",
+          steps: ["Choose shared shoe pricing.", "Enter common prices and quantities for several sizes.", "Save and inspect the parent item and size rows."],
+          expected: "Each selected size is saved with the intended shared prices and its correct quantity."
+        },
+        {
+          id: "MGS-061",
+          title: "Set up per-size footwear prices",
+          module: "Inventory",
+          priority: "major",
+          objective: "Verify footwear size rows can retain their individual prices.",
+          steps: ["Choose per-size pricing.", "Enter different buy or sell prices and quantities for at least two sizes.", "Save and reopen the item."],
+          expected: "Each size retains its own price and quantity after saving and reopening."
+        },
+        {
+          id: "MGS-062",
+          title: "Footwear size totals and size-group filters",
+          module: "Inventory",
+          priority: "major",
+          objective: "Validate shoe stock totals and child, teen, and adult size-group filtering.",
+          steps: ["Create or use footwear with quantities in sizes spanning multiple groups.", "Check the parent total.", "Apply each size-group filter and compare the sizes shown."],
+          expected: "Totals equal the sum of size quantities, and each size appears only in the correct group."
+        },
+        {
+          id: "MGS-063",
+          title: "Bulk restock selected footwear sizes",
+          module: "Inventory",
+          priority: "major",
+          objective: "Check bulk shoe restock changes only the selected size rows.",
+          steps: ["Open a footwear item's bulk restock action.", "Add stock to two sizes and leave another unchanged.", "Confirm and inspect every size."],
+          expected: "Selected size quantities increase by the entered amounts; all unselected sizes remain unchanged."
+        },
+        {
+          id: "MGS-064",
+          title: "Remove item photo while editing",
+          module: "Inventory",
+          priority: "minor",
+          objective: "Ensure removing a photo does not clear unrelated item data.",
+          steps: ["Edit an item that has a photo.", "Remove its photo and save.", "Reopen the item and inspect its other fields."],
+          expected: "The photo is removed while the code, prices, category, quantity, and other fields remain intact."
+        },
+        {
+          id: "MGS-065",
+          title: "Review photo-based stock import before saving",
+          module: "Inventory",
+          priority: "major",
+          objective: "Validate the photo import review and editable row workflow.",
+          steps: ["Open Add Stock from Photo and provide a supported image.", "Review extracted rows and edit a name, code, or price.", "Cancel without importing."],
+          expected: "The review remains editable, cancelling creates no items, and existing stock is unchanged."
+        },
+        {
+          id: "MGS-066",
+          title: "Import valid photo-extracted stock rows",
+          module: "Inventory",
+          priority: "major",
+          objective: "Ensure confirmed photo import creates the intended inventory records.",
+          steps: ["Prepare a photo import with at least two valid rows.", "Review and correct the values.", "Import and search for each item."],
+          expected: "Only confirmed valid rows are imported and their codes, names, prices, quantities, and types match the review."
+        },
+        {
+          id: "MGS-067",
+          title: "Reject duplicate codes during stock import",
+          module: "Inventory",
+          priority: "critical",
+          objective: "Prevent photo import from silently creating duplicate SKUs or overwriting stock.",
+          steps: ["Prepare an import containing an existing code and a repeated code within the import.", "Review the warnings and attempt import."],
+          expected: "Duplicates are reported and handled according to the import rules; existing inventory is not silently overwritten."
+        },
+        {
+          id: "MGS-068",
+          title: "Create and edit a wishlist entry",
+          module: "Wishlist",
+          priority: "major",
+          objective: "Verify required wishlist fields, draft progression, saving, and later editing.",
+          steps: ["Attempt to save with required details missing.", "Complete the name and other required details, choose a unit, and save.", "Edit the entry and save again."],
+          expected: "Incomplete entries are blocked with guidance; valid entries save and edits persist without duplicate entries."
+        },
+        {
+          id: "MGS-069",
+          title: "Wishlist status and section filters",
+          module: "Wishlist",
+          priority: "medium",
+          objective: "Check wishlist entries move between applicable status or section views.",
+          steps: ["Create entries in different available statuses or sections.", "Switch the wishlist view and apply its filters.", "Change an entry's status and revisit the views."],
+          expected: "Each entry appears in the correct view and status changes persist."
+        },
+        {
+          id: "MGS-070",
+          title: "Select and bulk-edit wishlist entries",
+          module: "Wishlist",
+          priority: "major",
+          objective: "Verify bulk selection applies edits only to selected wishlist entries.",
+          steps: ["Select several entries and leave one unselected.", "Open bulk edit, change an available field, and save.", "Compare selected and unselected records."],
+          expected: "Selected entries receive the intended change; unselected records are not modified."
+        },
+        {
+          id: "MGS-071",
+          title: "Cancel bulk wishlist edit",
+          module: "Wishlist",
+          priority: "medium",
+          objective: "Ensure cancelling a bulk edit leaves all selected entries unchanged.",
+          steps: ["Select multiple wishlist entries and enter bulk edit.", "Change a field and cancel.", "Reopen the entries."],
+          expected: "No changes are persisted when the bulk edit is cancelled."
+        },
+        {
+          id: "MGS-072",
+          title: "Create and reopen a saved wishlist list",
+          module: "Wishlist",
+          priority: "major",
+          objective: "Check saved-list membership and reopening behavior.",
+          steps: ["Select wishlist entries and add them to a named saved list.", "Open the saved list.", "Change the general wishlist and reopen the saved list."],
+          expected: "The saved list retains the intended members and opens independently of unrelated wishlist changes."
+        },
+        {
+          id: "MGS-073",
+          title: "Export saved wishlist list",
+          module: "Wishlist",
+          priority: "medium",
+          objective: "Verify exporting a saved list produces a usable file with the correct entries.",
+          steps: ["Open a saved list with known entries.", "Export it.", "Open the downloaded file and compare its contents."],
+          expected: "The export completes and includes the correct saved-list item details without adding unrelated entries."
+        },
+        {
+          id: "MGS-074",
+          title: "Add selected wishlist items to pending list",
+          module: "Wishlist",
+          priority: "major",
+          objective: "Validate moving selected entries into the pending purchase workflow.",
+          steps: ["Select wishlist entries eligible for the pending list.", "Use the add-to-pending action.", "Open pending and verify the resulting entries."],
+          expected: "Only selected eligible entries are added, and repeated actions do not create unintended duplicates."
+        },
+        {
+          id: "MGS-075",
+          title: "Purchase budget metrics on dashboard",
+          module: "Dashboard / Wishlist",
+          priority: "medium",
+          objective: "Check active purchase budget information is reflected on the dashboard.",
+          steps: ["Review the dashboard with no active budget.", "Create or activate a budget with known planned amounts.", "Return to the dashboard."],
+          expected: "The empty state is correct without a budget; active budget metrics reflect the configured values."
+        },
+        {
+          id: "MGS-076",
+          title: "Sell a shoe when the chosen size is out of stock",
+          module: "Sales",
+          priority: "critical",
+          objective: "Prevent selling an unavailable shoe size when other sizes remain in stock.",
+          steps: ["Use a shoe item where one size has zero stock and another has stock.", "Attempt to sell the zero-stock size."],
+          expected: "The sale is blocked for the empty size; no other size quantity or total changes."
+        },
+        {
+          id: "MGS-077",
+          title: "Enter a sale quantity directly",
+          module: "Sales",
+          priority: "major",
+          objective: "Verify direct quantity entry accepts valid quantities and rejects invalid or excessive values.",
+          steps: ["Open a sell form for an item with sufficient stock.", "Enter a valid quantity directly.", "Try zero, negative, fractional where unsupported, and above-stock quantities."],
+          expected: "Valid values are accepted; invalid quantities are rejected before recording or deducting stock."
+        },
+        {
+          id: "MGS-078",
+          title: "Review and confirm sale price override",
+          module: "Sales",
+          priority: "major",
+          objective: "Check permitted price changes are reflected consistently in the sale and profit.",
+          steps: ["Open a sell form for an item.", "Enter a permitted alternate price.", "Review the displayed price and profit, then complete a test sale."],
+          expected: "The saved sale uses the confirmed price and its revenue and profit calculations use that price."
+        },
+        {
+          id: "MGS-079",
+          title: "Cancel a sale before confirmation",
+          module: "Sales",
+          priority: "major",
+          objective: "Ensure closing or cancelling the sale sheet does not record a transaction.",
+          steps: ["Open a sell form and enter a quantity.", "Cancel or close without confirming.", "Check stock and sales history."],
+          expected: "No sale is added and no stock is deducted."
+        },
+        {
+          id: "MGS-080",
+          title: "Sell an item not in stock",
+          module: "Sales / Wishlist",
+          priority: "major",
+          objective: "Verify the off-stock sale workflow records the sale and its follow-up monitor entry.",
+          steps: ["Open the off-stock sale action.", "Enter a valid item description, quantity, and price.", "Confirm and inspect sales history and the follow-up list."],
+          expected: "The off-stock sale is recorded once with the correct details and the expected follow-up record is created."
+        },
+        {
+          id: "MGS-081",
+          title: "Check payment method on a sale",
+          module: "Sales",
+          priority: "medium",
+          objective: "Ensure each supported payment method is saved with the sale.",
+          steps: ["Record separate test sales using available payment methods.", "Review each transaction in sales history."],
+          expected: "Each sale displays the payment method selected at checkout."
+        },
+        {
+          id: "MGS-082",
+          title: "History period totals and date boundaries",
+          module: "Sales",
+          priority: "major",
+          objective: "Verify history filters include the intended start and end dates and recalculate totals.",
+          steps: ["Create or identify sales on dates just before, on, and after the selected range.", "Apply a custom date range.", "Compare visible sales and totals."],
+          expected: "Only records within the selected date boundaries appear and all displayed totals match those records."
+        },
+        {
+          id: "MGS-083",
+          title: "Search and inspect a sale record",
+          module: "Sales",
+          priority: "medium",
+          objective: "Check sales history search and detail view identify the correct transaction.",
+          steps: ["Open history and search using a known item name or code.", "Open a matching record.", "Compare date, quantity, price, seller, and payment details."],
+          expected: "Search returns the correct matching sale and the detail view shows the saved transaction data."
+        },
+        {
+          id: "MGS-084",
+          title: "Sale edits preserve stock ledger consistency",
+          module: "Sales / Inventory",
+          priority: "critical",
+          objective: "Ensure editing sale quantity or price keeps inventory, sale history, and totals aligned.",
+          steps: ["Record a sale and note stock and totals.", "Edit the sale quantity or price using the supported flow.", "Recheck stock, sales history, and dashboard totals."],
+          expected: "The change is reflected once in the sale and all stock and financial totals reconcile."
+        },
+        {
+          id: "MGS-085",
+          title: "Void a shoe sale restores only the sold size",
+          module: "Sales / Inventory",
+          priority: "critical",
+          objective: "Check voiding a footwear sale restores the affected size and not other sizes.",
+          steps: ["Record a sale against one shoe size.", "Void the sale.", "Compare all size quantities and the parent total."],
+          expected: "Only the sold size is restored by the sale quantity; the parent total and history are correct."
+        },
+        {
+          id: "MGS-086",
+          title: "Create a customer with required name",
+          module: "Customers",
+          priority: "major",
+          objective: "Verify customer creation requires a usable name and handles optional phone safely.",
+          steps: ["Try saving a blank customer name.", "Create a customer with a valid name and no phone.", "Create one with a valid phone."],
+          expected: "Blank names are rejected; valid records save and optional phone values do not block creation."
+        },
+        {
+          id: "MGS-087",
+          title: "Search customer list by name and phone",
+          module: "Customers",
+          priority: "medium",
+          objective: "Check customer search matches supported name and phone input.",
+          steps: ["Create or identify customers with distinct names and phone numbers.", "Search by full and partial name, then by phone.", "Clear search."],
+          expected: "Relevant customers appear for each query and clearing search restores the list."
+        },
+        {
+          id: "MGS-088",
+          title: "Add an item to a customer ledger",
+          module: "Customers",
+          priority: "major",
+          objective: "Verify customer ledger item transactions update the balance and history.",
+          steps: ["Open a customer detail.", "Add an item with date, description, quantity, and unit price.", "Review the ledger and balance."],
+          expected: "A single correctly dated transaction is added and the customer balance reflects its amount."
+        },
+        {
+          id: "MGS-089",
+          title: "Record partial customer payment",
+          module: "Customers",
+          priority: "critical",
+          objective: "Ensure payment transactions reduce the customer balance by the amount received.",
+          steps: ["Use a customer with an outstanding balance.", "Record a partial payment with method, date, and note.", "Review the ledger and remaining balance."],
+          expected: "The payment appears once with its method and the balance decreases by exactly the received amount."
+        },
+        {
+          id: "MGS-090",
+          title: "Reject invalid customer payment amounts",
+          module: "Customers",
+          priority: "major",
+          objective: "Prevent zero, negative, or malformed payment amounts from changing balances.",
+          steps: ["Attempt to save zero, negative, and malformed payment amounts.", "Reopen the customer ledger."],
+          expected: "Invalid payments are rejected and neither the ledger nor balance changes."
+        },
+        {
+          id: "MGS-091",
+          title: "Edit customer ledger record",
+          module: "Customers",
+          priority: "major",
+          objective: "Check editing a customer transaction recalculates its balance correctly.",
+          steps: ["Create an item transaction or payment.", "Edit its date, description or amount.", "Review ledger order and balance."],
+          expected: "The existing transaction updates once and the displayed balance is recalculated correctly."
+        },
+        {
+          id: "MGS-092",
+          title: "Cancel customer record edit",
+          module: "Customers",
+          priority: "medium",
+          objective: "Ensure cancelling an edit does not change the customer ledger.",
+          steps: ["Open an existing ledger record for editing.", "Change fields and cancel.", "Reopen the record."],
+          expected: "Original values and customer balance remain unchanged."
+        },
+        {
+          id: "MGS-093",
+          title: "Delete customer and review recycle behavior",
+          module: "Customers",
+          priority: "major",
+          objective: "Verify deleting a customer keeps the customer and transaction history in the recycle bin for 30 days, unless the user deletes it sooner.",
+          steps: ["In a safe test database, create two customers with transaction history and move both to the recycle bin.", "Check they are hidden from the active list, remain in the recycle bin, and show how long until expiry.", "Restore the first customer before expiry and confirm its history is still present.", "For the second customer, confirm it remains in the bin on day 29; then open the app or customer list on day 30 or later.", "Move the first customer to the bin again, choose Delete now, and cancel once; confirm it stays in the bin. Repeat and confirm the permanent deletion."],
+          expected: "A deleted customer and its transaction history remain recoverable for 30 days and the bin shows the expiry time. Restoring keeps the history. On or after day 30, the next app start or customer-list open removes expired recycled customers and their history. Delete now asks for confirmation; cancelling keeps the record, while confirming permanently removes it and its linked transactions."
+        },
+        {
+          id: "MGS-094",
+          title: "Finance entry type, date, and description",
+          module: "Finance",
+          priority: "major",
+          objective: "Check valid finance entries save with their selected type, category, date, and description.",
+          steps: ["Create a test entry for each available finance type.", "Include a category when offered.", "Review the transaction list and summary."],
+          expected: "Each entry retains its details and contributes to the correct finance totals."
+        },
+        {
+          id: "MGS-095",
+          title: "Finance transaction filters and summaries",
+          module: "Finance",
+          priority: "medium",
+          objective: "Verify finance type filters show the right transactions and summaries.",
+          steps: ["Open finance transactions.", "Switch between all, investment, and expense filters.", "Compare visible rows and summary values."],
+          expected: "Only matching records display and the summary corresponds to the active filter."
+        },
+        {
+          id: "MGS-096",
+          title: "Finance value boundary and required-field validation",
+          module: "Finance",
+          priority: "major",
+          objective: "Prevent invalid amounts or incomplete finance transactions from being saved.",
+          steps: ["Try blank, zero, negative, and malformed amounts.", "Try saving without required details.", "Review the finance list."],
+          expected: "Invalid or incomplete entries are rejected with clear guidance and do not affect totals."
+        },
+        {
+          id: "MGS-097",
+          title: "Finance reconciliation action",
+          module: "Finance / Operations",
+          priority: "critical",
+          objective: "Check finance reconciliation action and its result against known test records.",
+          steps: ["Use the development database with known sales, expenses, and withdrawals.", "Run the available reconciliation action.", "Compare the reported result with an independent manual total."],
+          expected: "The reconciliation result matches the source records and any mismatch is clearly reported without changing unrelated records."
+        },
+        {
+          id: "MGS-098",
+          title: "Reject negative opening and closing balances",
+          module: "Operations",
+          priority: "major",
+          objective: "Ensure negative cash, till, M-Pesa, expense, or withdrawal values are not accepted.",
+          steps: ["Open a test business day.", "Enter a negative value in each applicable opening or closing field.", "Attempt to save or reconcile."],
+          expected: "Invalid negative amounts are blocked and the day is not saved with corrupted balances."
+        },
+        {
+          id: "MGS-099",
+          title: "Opening balances lock after saving",
+          module: "Operations",
+          priority: "critical",
+          objective: "Verify opening amounts are recorded once and become locked for the active day.",
+          steps: ["Open the business day and enter known cash, till, and M-Pesa opening amounts.", "Save and lock opening.", "Navigate away and return."],
+          expected: "The opening values persist, display as locked, and cannot be accidentally edited through the normal flow."
+        },
+        {
+          id: "MGS-100",
+          title: "Cancel day close and retain open-day state",
+          module: "Operations",
+          priority: "major",
+          objective: "Ensure cancelling the close form leaves the active day open.",
+          steps: ["Start closing an open day and enter values.", "Choose Cancel.", "Review the day status and reopen the close form."],
+          expected: "The day remains open and no closing values are committed by the cancelled attempt."
+        },
+        {
+          id: "MGS-101",
+          title: "Reconcile known day totals",
+          module: "Operations",
+          priority: "critical",
+          objective: "Check closing reconciliation against known cash, till, M-Pesa, injected money, expenses, and withdrawals.",
+          steps: ["Use a development day with known test transactions.", "Enter independently calculated closing values.", "Reconcile and compare the displayed difference and insights."],
+          expected: "The calculation matches the documented inputs and any shortage or overage is shown accurately."
+        },
+        {
+          id: "MGS-102",
+          title: "Redo closing while keeping opening balances",
+          module: "Operations",
+          priority: "major",
+          objective: "Verify the redo-closing action preserves opening data and permits corrected closing values.",
+          steps: ["Close a development test day.", "Choose Redo closing only.", "Enter corrected closing amounts and reconcile again."],
+          expected: "Opening balances remain unchanged and only the closing reconciliation is replaced by the corrected result."
+        },
+        {
+          id: "MGS-103",
+          title: "Review past business day sessions",
+          module: "Operations",
+          priority: "medium",
+          objective: "Check historical sessions display the correct business dates and reconciliation values.",
+          steps: ["Create and close two development test days with distinct totals.", "Open Past Sessions.", "Compare each session's date and totals."],
+          expected: "Past sessions are listed against the correct business date with their saved reconciliation details."
+        },
+        {
+          id: "MGS-104",
+          title: "Dashboard period selectors and totals",
+          module: "Dashboard",
+          priority: "major",
+          objective: "Verify today, week, month, and all-time selectors recalculate summary metrics.",
+          steps: ["Use test sales across multiple dates.", "Select each period.", "Compare displayed sales and profit to records in that range."],
+          expected: "Each period includes the correct dates and its KPIs update without carrying totals from another period."
+        },
+        {
+          id: "MGS-105",
+          title: "Low-stock dashboard and inventory indicators",
+          module: "Dashboard / Inventory",
+          priority: "major",
+          objective: "Check low-stock counts and alerts match inventory quantities.",
+          steps: ["Prepare items with healthy, low, and zero stock.", "Review dashboard alerts and inventory badges.", "Restock one item and refresh the views."],
+          expected: "Counts and alerts match current quantities and update after restocking."
+        },
+        {
+          id: "MGS-106",
+          title: "Development environment isolation",
+          module: "Settings / Sync",
+          priority: "critical",
+          objective: "Ensure development operations use only the development database and never upload to production.",
+          steps: ["Run the app on localhost and confirm Development is active.", "Create a uniquely named test record and make changes while online.", "Inspect sync status and verify the production environment is untouched."],
+          expected: "Development data stays in its separate local database, cloud sync remains disabled, and no production records are changed."
+        },
+        {
+          id: "MGS-107",
+          title: "Offline changes retry after reconnect",
+          module: "Sync",
+          priority: "critical",
+          objective: "Verify local writes survive network loss and retry safely when connectivity returns.",
+          steps: ["Go offline and create or edit a test item.", "Reload while offline and verify the local change.", "Reconnect and observe sync status."],
+          expected: "The local change persists offline and sync retries when online without losing or duplicating the record."
+        },
+        {
+          id: "MGS-108",
+          title: "Repeated sync is idempotent",
+          module: "Sync",
+          priority: "critical",
+          objective: "Check repeated push or retry actions do not create duplicate cloud records.",
+          steps: ["In a safe production test account or approved development environment, create one syncable record.", "Run the sync/retry flow more than once.", "Compare local and cloud record identifiers and counts."],
+          expected: "Retries update the same deterministic record and do not create duplicate records."
+        },
+        {
+          id: "MGS-109",
+          title: "Restore local data cancellation safety",
+          module: "Sync / Settings",
+          priority: "critical",
+          objective: "Ensure a destructive restore does not proceed if the user cancels its warning.",
+          steps: ["Use an approved non-production environment with identifiable local data.", "Start Restore Local from Cloud.", "Cancel the confirmation and inspect local data."],
+          expected: "Restore is cancelled and local records remain unchanged."
+        },
+        {
+          id: "MGS-110",
+          title: "Rebuild sync outbox from local records",
+          module: "Sync / Settings",
+          priority: "major",
+          objective: "Verify explicit outbox recovery queues eligible local data without deleting local records.",
+          steps: ["Use the development environment with representative local records.", "Run Retry all local changes or the outbox rebuild action.", "Inspect the result and confirm records remain locally available."],
+          expected: "Eligible data is queued for retry, local records are preserved, and progress or errors are reported."
+        },
+        {
+          id: "MGS-111",
+          title: "Service worker update prompt actions",
+          module: "PWA",
+          priority: "medium",
+          objective: "Check update notification can be applied or dismissed without blocking the current session.",
+          steps: ["When a new service worker is waiting, inspect the update banner.", "Choose Later and continue working.", "On a later test deployment, choose Update now."],
+          expected: "Dismissal keeps the current session usable; accepting applies the update and reloads as designed without losing persisted records."
+        },
+        {
+          id: "MGS-112",
+          title: "Add and remove a custom stock unit",
+          module: "Settings",
+          priority: "medium",
+          objective: "Verify custom unit validation, use, and removal behavior.",
+          steps: ["Add a custom abbreviation and full unit name.", "Use it on a test inventory item.", "Remove or disable the unit and inspect the existing item."],
+          expected: "Valid units can be added and selected; invalid duplicates are handled clearly and removing a unit does not corrupt saved item data."
+        },
+        {
+          id: "MGS-113",
+          title: "Reset stock units to defaults",
+          module: "Settings",
+          priority: "minor",
+          objective: "Check the unit reset action restores defaults and reports the active unit count.",
+          steps: ["Change enabled units or add a custom unit in a safe environment.", "Reset units to default.", "Reload Settings."],
+          expected: "Default units and active count are restored and remain consistent after reload."
+        },
+        {
+          id: "MGS-114",
+          title: "Add a sale motivation message",
+          module: "Settings",
+          priority: "minor",
+          objective: "Verify message category and text are saved and available after reload.",
+          steps: ["Choose a message category and add a valid message.", "Reload the app and inspect the message library.", "Complete a test sale in Development if safe."],
+          expected: "The message persists under its category and the sale flow uses an available message as designed."
+        },
+        {
+          id: "MGS-115",
+          title: "Save and remove AI API key",
+          module: "Settings / AI",
+          priority: "major",
+          objective: "Check AI key configuration can be saved and removed on the current device.",
+          steps: ["Save a valid test key without sharing it in screenshots or notes.", "Verify enabled status.", "Remove the key and reload Settings."],
+          expected: "The key status changes as expected and removal disables the AI configuration on that device."
+        },
+        {
+          id: "MGS-116",
+          title: "AI assistant handles missing key and failed request",
+          module: "AI Assistant",
+          priority: "medium",
+          objective: "Verify AI entry points fail clearly without interrupting normal app workflows.",
+          steps: ["Open AI Assistant without a configured key.", "Configure a test key that produces a controlled request failure.", "Use an AI action and return to the app."],
+          expected: "The app explains missing or failed AI requests, does not show misleading success, and normal inventory and sales remain usable."
+        },
+        {
+          id: "MGS-117",
+          title: "Notification panel and clear action",
+          module: "Notifications",
+          priority: "minor",
+          objective: "Check notifications open, display messages, and clear as expected.",
+          steps: ["Generate a development notification or sync status message.", "Open the notification panel.", "Clear notifications and reopen the panel."],
+          expected: "The panel displays available messages and clearing removes them without affecting business records."
+        },
+        {
+          id: "MGS-118",
+          title: "Preserve user input with HTML-like text",
+          module: "Security / General UX",
+          priority: "major",
+          objective: "Ensure user-entered text is rendered as text rather than executable markup.",
+          steps: ["In Development, enter harmless HTML-like text such as <b>test</b> in an item name, customer, or note.", "Save and view the record in list and detail screens."],
+          expected: "The value is safely displayed as text; no markup is executed, layout is not injected, and the saved text remains readable."
+        },
+        {
+          id: "MGS-119",
+          title: "Recover from unavailable local storage or database",
+          module: "General UX / Storage",
+          priority: "major",
+          objective: "Check startup reports local data failures instead of showing a false ready state.",
+          steps: ["Use browser developer tools in a disposable profile to simulate blocked storage or an IndexedDB failure.", "Reload the app and attempt login."],
+          expected: "A clear error is reported, protected actions do not proceed as if data were ready, and the existing production profile is not modified."
+        },
+        {
+          id: "MGS-120",
+          title: "Verify keyboard and touch navigation",
+          module: "Accessibility / UI",
+          priority: "minor",
+          objective: "Review core flows for keyboard focus visibility and usable touch targets.",
+          steps: ["Navigate login, inventory search, item forms, and status controls using Tab and Enter.", "Repeat on a narrow touch viewport.", "Check dialogs can be dismissed and focus remains understandable."],
+          expected: "Interactive controls can be reached and used, focus is visible, and mobile controls remain readable and operable."
+        }
+      ];
+
+      const summaryEl = document.getElementById('summary');
+      const filtersEl = document.getElementById('filters');
+      const testListEl = document.getElementById('testList');
+      const searchInput = document.getElementById('searchInput');
+      const resultStorageKey = 'mgs-manual-regression-results-v1';
+      let testResults = {};
+      try {
+        testResults = JSON.parse(localStorage.getItem(resultStorageKey) || '{}');
+      } catch (error) {
+        console.warn('Saved regression results could not be loaded.', error);
+      }
+      const attachedFiles = new Map();
+
+      let activePriority = 'all';
+      let activeStatusTab = 'all';
+      let currentPage = 0;
+
+      function saveResults() {
+        try {
+          localStorage.setItem(resultStorageKey, JSON.stringify(testResults));
+        } catch (error) {
+          console.error('Regression results could not be saved.', error);
+        }
+      }
+
+      function getFilteredTests() {
+        const query = searchInput.value.trim().toLowerCase();
+        return tests.filter((test) => {
+          const matchesPriority = activePriority === 'all' || test.priority === activePriority;
+          const matchesStatus =
+            activeStatusTab === 'all' ||
+            testResults[test.id]?.status === 'skipped';
+          const haystack = `${test.id} ${test.title} ${test.module} ${test.objective}`.toLowerCase();
+          const matchesSearch = !query || haystack.includes(query);
+          return matchesPriority && matchesStatus && matchesSearch;
+        });
+      }
+
+      function renderSummary() {
+        const counts = priorities.reduce((acc, pr) => {
+          acc[pr] = tests.filter((test) => test.priority === pr).length;
+          return acc;
+        }, {});
+
+        const cards = [
+          { label: 'Total tests', value: tests.length },
+          {
+            label: 'Completed',
+            value: `${tests.filter((test) => ['pass', 'blocked', 'fail'].includes(testResults[test.id]?.status)).length} / ${tests.length}`
+          },
+          {
+            label: 'Skipped',
+            value: tests.filter((test) => testResults[test.id]?.status === 'skipped').length
+          },
+          { label: 'Critical', value: counts.critical },
+          { label: 'Major', value: counts.major },
+          { label: 'Medium', value: counts.medium },
+          { label: 'Minor', value: counts.minor },
+          { label: 'Cosmetics', value: counts.cosmetics }
+        ];
+
+        summaryEl.innerHTML = cards.map((card) => `
+          <div class="metric">
+            <div class="metric-label">${card.label}</div>
+            <div class="metric-value">${card.value}</div>
+          </div>
+        `).join('');
+      }
+
+      function renderStatusTabs() {
+        const skippedCount = tests.filter(
+          (test) => testResults[test.id]?.status === 'skipped',
+        ).length;
+        const allTab = document.getElementById('allTestsTab');
+        const skippedTab = document.getElementById('skippedTestsTab');
+        skippedTab.textContent = `Skipped (${skippedCount})`;
+        allTab.classList.toggle('active', activeStatusTab === 'all');
+        skippedTab.classList.toggle('active', activeStatusTab === 'skipped');
+        allTab.setAttribute('aria-selected', String(activeStatusTab === 'all'));
+        skippedTab.setAttribute('aria-selected', String(activeStatusTab === 'skipped'));
+      }
+
+      function renderFilters() {
+        const filterOptions = ['all', ...priorities];
+        filtersEl.innerHTML = filterOptions.map((pr) => `
+          <button class="filter-btn ${activePriority === pr ? 'active' : ''}" data-priority="${pr}">
+            ${pr === 'all' ? 'All' : pr.charAt(0).toUpperCase() + pr.slice(1)}
+          </button>
+        `).join('');
+      }
+
+      function buildIssueDraftUrl(test, result, files) {
+        const title = `[Manual Regression] ${test.id}: ${test.title}`;
+        const evidence = files.length
+          ? `\n\nSelected evidence files (attach them to the issue before submitting):\n${files.map((file) => `- ${file.name}`).join('\n')}`
+          : '';
+        const body = [
+          `## Failed manual regression test: ${test.id}`,
+          '',
+          `**Title:** ${test.title}`,
+          `**Priority:** ${test.priority.toUpperCase()}`,
+          `**Module:** ${test.module}`,
+          '',
+          '**Objective**',
+          test.objective,
+          '',
+          '**Steps to reproduce**',
+          ...test.steps.map((step, index) => `${index + 1}. ${step}`),
+          '',
+          '**Expected result**',
+          test.expected,
+          '',
+          '**Actual result**',
+          result.actual?.trim() || '(No actual result entered yet.)',
+          evidence,
+          '',
+          '> This issue was prepared from the manual regression test page. Review and submit it on GitHub.'
+        ].join('\n');
+        const params = new URLSearchParams({ title, body });
+        return `https://github.com/onchari/malimali/issues/new?${params.toString()}`;
+      }
+
+      function buildTestSummary(test) {
+        const module = test.module.toLowerCase();
+        let extraCheck =
+          'Check the screen or record named in this test to make sure the result is clear, saved where needed, and does not change anything unrelated.';
+
+        if (module.includes('security') || module.includes('access control')) {
+          extraCheck =
+            'Check that only the right user can do this. A user without permission must not be able to make the change.';
+        } else if (module.includes('authentication')) {
+          extraCheck =
+            'Check that the right user signs in, sees only the pages they are allowed to use, and can sign out safely.';
+        } else if (module.includes('customer')) {
+          extraCheck = test.title.toLowerCase().includes('creat')
+            ? 'Check that the new customer appears in the customer list with the correct name and phone number. A blank name must not create a record.'
+            : 'Check that the customer history shows the right transaction and that the balance matches it.';
+        } else if (module.includes('sales')) {
+          extraCheck =
+            'Check that the sale appears once in the sales history, the totals are correct, and stock changes only when it should.';
+        } else if (module.includes('inventory')) {
+          extraCheck =
+            'Check that the item shows the right category, price, and quantity in the stock list, and that other items stay unchanged.';
+        } else if (module.includes('finance')) {
+          extraCheck =
+            'Check that the entry appears once in the finance list and is counted in the right total.';
+        } else if (module.includes('operations')) {
+          extraCheck =
+            'Check that the result is saved for the correct business day and that a locked day cannot be changed.';
+        } else if (module.includes('sync')) {
+          extraCheck =
+            'Check that the latest changes appear on other devices using the same environment after syncing, without missing or repeated records. Development and Production data must stay separate.';
+        } else if (module.includes('wishlist')) {
+          extraCheck =
+            'Check that the right item appears in the right list with the correct status and budget, without creating a duplicate.';
+        } else if (module.includes('dashboard')) {
+          extraCheck =
+            'Check that the figures match the saved records and the selected date range.';
+        } else if (module.includes('settings')) {
+          extraCheck =
+            'Check that the setting is still saved after you reopen the app and that it changes only the feature it controls.';
+        } else if (module.includes('ai assistant')) {
+          extraCheck =
+            'Check that the answer matches the question and available shop data. Shop records should not change unless you choose an action that changes them.';
+        } else if (module.includes('pwa')) {
+          extraCheck =
+            'Check that the app still opens and works as described after a refresh or when offline, where that applies.';
+        } else if (module.includes('notification')) {
+          extraCheck =
+            'Check that the alert is easy to understand, appears at the right time, and can be dismissed without changing shop records.';
+        } else if (
+          module.includes('accessibility') ||
+          module.includes('ui polish') ||
+          module.includes('general ux')
+        ) {
+          extraCheck =
+            'Check that the page is easy to read and use, and that buttons and messages behave as expected on the tested screen size or input method.';
+        }
+
+        return `Expected result in more detail: ${test.expected} ${extraCheck}`;
+      }
+
+      function renderTests() {
+        const filtered = getFilteredTests();
+        const maxPage = Math.max(0, filtered.length - 1);
+        currentPage = Math.min(currentPage, maxPage);
+        const pageTest = filtered[currentPage];
+        const pageIndicator = filtered.length
+          ? `Test ${currentPage + 1} of ${filtered.length}`
+          : 'No test cases';
+        ['pageIndicator', 'pageIndicatorBottom'].forEach((id) => {
+          document.getElementById(id).textContent = pageIndicator;
+        });
+        ['previousTest', 'previousTestBottom'].forEach((id) => {
+          document.getElementById(id).disabled = currentPage === 0;
+        });
+        ['nextTest', 'nextTestBottom'].forEach((id) => {
+          document.getElementById(id).disabled =
+            filtered.length === 0 || currentPage >= maxPage;
+        });
+        ['skipTest', 'skipTestBottom'].forEach((id) => {
+          document.getElementById(id).disabled =
+            filtered.length === 0 ||
+            activeStatusTab !== 'all' ||
+            pageTest?.id == null ||
+            testResults[pageTest.id]?.status === 'skipped';
+        });
+
+        if (!filtered.length) {
+          const emptyMessage =
+            activeStatusTab === 'skipped'
+              ? 'No test cases have been skipped yet.'
+              : 'No matching test cases found.';
+          testListEl.innerHTML = `<div class="test-card"><div class="test-title">${emptyMessage}</div></div>`;
+          return;
+        }
+
+        const result = testResults[pageTest.id] || {};
+        const files = attachedFiles.get(pageTest.id) || [];
+        const issueDraftUrl = result.status === 'fail'
+          ? buildIssueDraftUrl(pageTest, result, files)
+          : '';
+        testListEl.innerHTML = `
+          <article class="test-card ${result.status ? `result-${result.status}` : ''}" data-priority="${pageTest.priority}">
+            <div class="test-header">
+              <div class="id-row">
+                <span class="test-id">${pageTest.id}</span>
+                <span class="priority ${pageTest.priority}">${pageTest.priority}</span>
+              </div>
+              <span style="font-size: 0.8rem; color: var(--muted); font-weight: 700;">${pageTest.module}</span>
+            </div>
+
+            <div class="test-title">${pageTest.title}</div>
+
+            <div class="info-grid">
+              <div class="field-box" style="grid-column: 1 / -1;">
+                <span class="field-label">Expected Result - More Detail</span>
+                <p>${buildTestSummary(pageTest)}</p>
+              </div>
+              <div class="field-box">
+                <span class="field-label">What This Test Checks</span>
+                <p>${pageTest.objective}</p>
+              </div>
+              <div class="field-box">
+                <span class="field-label">What to Do</span>
+                <ul>
+                  ${pageTest.steps.map((step) => `<li>${step}</li>`).join('')}
+                </ul>
+              </div>
+              <div class="field-box" style="grid-column: 1 / -1;">
+                <span class="field-label">What Should Happen</span>
+                <p>${pageTest.expected}</p>
+              </div>
+            </div>
+
+            <div class="result-row">
+              <div class="field-box">
+                <span class="field-label">What Happened</span>
+                <textarea data-role="actual-result" placeholder="Describe the observed outcome, screenshots, issues, or defects found."></textarea>
+              </div>
+              <div class="field-box">
+                <span class="field-label">Status</span>
+                <div class="status-row">
+                  <button type="button" class="status-btn" data-status="pass" aria-pressed="${result.status === 'pass'}">PASS</button>
+                  <button type="button" class="status-btn" data-status="blocked" aria-pressed="${result.status === 'blocked'}">BLOCKED</button>
+                  <button type="button" class="status-btn" data-status="fail" aria-pressed="${result.status === 'fail'}">FAIL</button>
+                  <button type="button" class="status-btn" data-status="skipped" aria-pressed="${result.status === 'skipped'}">SKIPPED</button>
+                  <button type="button" class="status-btn clear-status-btn" data-role="clear-status" ${result.status ? '' : 'disabled'}>Clear status</button>
+                </div>
+                <div class="issue-draft-note" data-role="issue-draft-note" ${result.status === 'fail' ? '' : 'hidden'}>
+                  A GitHub issue draft was opened. Review it and submit on GitHub; attachments are not uploaded automatically.
+                  <a class="issue-draft-link" data-role="issue-draft-link" href="${issueDraftUrl}" target="_blank" rel="noopener noreferrer">Open GitHub issue draft</a>
+                </div>
+              </div>
+            </div>
+
+            <div class="attachment-section">
+              <div class="field-label">Attach document, video, or picture</div>
+              <input type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.mp4,.mov,.avi,.webm,.gif" data-role="attachment" />
+              <div style="margin-top: 10px; font-size: 0.82rem; color: var(--muted);" data-role="attachment-summary"></div>
+            </div>
+          </article>
+        `;
+
+        testListEl.querySelectorAll('.status-btn[data-status]').forEach((button) => {
+          const selected = button.dataset.status === result.status;
+          button.classList.toggle('selected', selected);
+          button.addEventListener('click', () => {
+            const nextStatus = button.dataset.status;
+            const openingFail = nextStatus === 'fail' && result.status !== 'fail';
+            const actualResult = testListEl.querySelector('[data-role="actual-result"]');
+            result.actual = actualResult.value;
+            result.status = nextStatus;
+            testResults[pageTest.id] = result;
+            saveResults();
+            renderSummary();
+            renderStatusTabs();
+            if (openingFail) {
+              const issueUrl = buildIssueDraftUrl(
+                pageTest,
+                result,
+                attachedFiles.get(pageTest.id) || [],
+              );
+              window.open(issueUrl, '_blank', 'noopener,noreferrer');
+            }
+            renderTests();
+          });
+        });
+
+        testListEl.querySelector('[data-role="clear-status"]').addEventListener('click', () => {
+          const actualResult = testListEl.querySelector('[data-role="actual-result"]');
+          result.actual = actualResult.value;
+          delete result.status;
+          if (!result.actual) delete testResults[pageTest.id];
+          else testResults[pageTest.id] = result;
+          saveResults();
+          renderSummary();
+          renderStatusTabs();
+          renderTests();
+        });
+
+        const actualResult = testListEl.querySelector('[data-role="actual-result"]');
+        actualResult.value = result.actual || '';
+        actualResult.addEventListener('input', () => {
+          result.actual = actualResult.value;
+          testResults[pageTest.id] = result;
+          saveResults();
+          if (result.status === 'fail') {
+            const issueLink = testListEl.querySelector('[data-role="issue-draft-link"]');
+            if (issueLink) {
+              issueLink.href = buildIssueDraftUrl(
+                pageTest,
+                result,
+                attachedFiles.get(pageTest.id) || [],
+              );
+            }
+          }
+        });
+        const attachmentSummary = testListEl.querySelector('[data-role="attachment-summary"]');
+        attachmentSummary.textContent = files.length
+          ? files.map((file) => file.name).join(', ')
+          : 'No file attached';
+
+        document.querySelectorAll('[data-role="attachment"]').forEach((input) => {
+          input.addEventListener('change', (event) => {
+            const selectedFiles = Array.from(event.target.files || []);
+            attachedFiles.set(pageTest.id, selectedFiles);
+            const summary = event.target.parentElement.querySelector('[data-role="attachment-summary"]');
+            summary.textContent = selectedFiles.length
+              ? selectedFiles.map((file) => file.name).join(', ')
+              : 'No file attached';
+            if (result.status === 'fail') {
+              const issueLink = testListEl.querySelector('[data-role="issue-draft-link"]');
+              if (issueLink) {
+                issueLink.href = buildIssueDraftUrl(pageTest, result, selectedFiles);
+              }
+            }
+          });
+        });
+      }
+
+      function movePage(direction) {
+        const count = getFilteredTests().length;
+        currentPage = Math.max(0, Math.min(currentPage + direction, count - 1));
+        renderTests();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      function skipCurrentTest() {
+        const filtered = getFilteredTests();
+        const pageTest = filtered[currentPage];
+        if (!pageTest || activeStatusTab !== 'all') return;
+        const result = testResults[pageTest.id] || {};
+        const actualResult = testListEl.querySelector('[data-role="actual-result"]');
+        if (actualResult) result.actual = actualResult.value;
+        result.status = 'skipped';
+        testResults[pageTest.id] = result;
+        saveResults();
+        renderSummary();
+        renderStatusTabs();
+        currentPage = Math.min(currentPage + 1, Math.max(0, filtered.length - 1));
+        renderTests();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      document.getElementById('previousTest').addEventListener('click', () => movePage(-1));
+      document.getElementById('previousTestBottom').addEventListener('click', () => movePage(-1));
+      document.getElementById('nextTest').addEventListener('click', () => movePage(1));
+      document.getElementById('nextTestBottom').addEventListener('click', () => movePage(1));
+      document.getElementById('skipTest').addEventListener('click', skipCurrentTest);
+      document.getElementById('skipTestBottom').addEventListener('click', skipCurrentTest);
+
+      document.getElementById('allTestsTab').addEventListener('click', () => {
+        activeStatusTab = 'all';
+        currentPage = 0;
+        renderStatusTabs();
+        renderTests();
+      });
+      document.getElementById('skippedTestsTab').addEventListener('click', () => {
+        activeStatusTab = 'skipped';
+        currentPage = 0;
+        renderStatusTabs();
+        renderTests();
+      });
+
+      filtersEl.addEventListener('click', (event) => {
+        const btn = event.target.closest('.filter-btn');
+        if (!btn) return;
+        activePriority = btn.dataset.priority;
+        currentPage = 0;
+        renderFilters();
+        renderTests();
+      });
+
+      searchInput.addEventListener('input', () => {
+        currentPage = 0;
+        renderTests();
+      });
+
+      document.getElementById('resetAll').addEventListener('click', () => {
+        if (!window.confirm('Reset all test statuses and actual results?')) return;
+        Object.keys(testResults).forEach((id) => delete testResults[id]);
+        attachedFiles.clear();
+        try {
+          localStorage.removeItem(resultStorageKey);
+        } catch (error) {
+          console.error('Saved regression results could not be cleared.', error);
+        }
+        renderSummary();
+        renderStatusTabs();
+        renderTests();
+      });
+
+      renderSummary();
+      renderFilters();
+      renderStatusTabs();
+      renderTests();
+    </script>
+  </body>
+</html>

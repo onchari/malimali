@@ -1,0 +1,862 @@
+<!-- Sales-owned page and sheet markup, mounted by the shared shell. -->
+<template id="sales-page-template">
+<div class="page" id="page-sell" style="padding: 12px 12px 0">
+      <div class="stock-toolbar">
+        <div>
+          <div class="stock-title">Sales</div>
+          <div class="stock-sub" id="sales-sub">
+            Record sales and view history
+          </div>
+        </div>
+        <button
+          class="stock-monitor-btn"
+          onclick="openOffStockSale()"
+          title="Sell item not in stock"
+          id="sales-offstock-btn"
+        >
+          <i class="fa-solid fa-plus"></i>
+        </button>
+      </div>
+
+      <div class="ops-tabs sales-tabs">
+        <button
+          class="ops-tab active"
+          id="sales-tab-sell"
+          onclick="showSalesTab('sell')"
+        >
+          <i class="fa-solid fa-cash-register"></i> Sell
+        </button>
+        <button
+          class="ops-tab"
+          id="sales-tab-history"
+          onclick="showSalesTab('history')"
+        >
+          <i class="fa-solid fa-clock-rotate-left"></i> History
+        </button>
+      </div>
+
+      <!-- Sell: search and item results -->
+      <div id="sales-slot-sell" class="ops-slot active">
+        <div class="search-wrap" style="margin-bottom: 10px">
+          <span class="s-icon"
+            ><i class="fa-solid fa-magnifying-glass"></i
+          ></span>
+          <input
+            class="search-input"
+            id="sell-search"
+            placeholder="Search by name, code, type…"
+            oninput="onSellSearch(this.value)"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button
+            id="sell-search-clear"
+            class="search-clear-btn"
+            onclick="clearSellSearch()"
+            style="display: none"
+            aria-label="Clear"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div id="sell-results"></div>
+      </div>
+
+      <!-- History: unified filter view -->
+      <div id="sales-slot-history" class="ops-slot">
+        <div id="hist-filter-controls" class="hist-filter-controls">
+          <div
+            id="hist-navigation-controls"
+            class="hist-navigation-controls"
+            hidden
+          >
+            <button
+              id="hist-home-button"
+              class="hist-focused-today"
+              onclick="showTodaySalesHistory()"
+              hidden
+              aria-label="Home — today's sales"
+              title="Today's sales"
+            >
+              <i class="fa-solid fa-house"></i>
+            </button>
+            <button
+              id="hist-back-button"
+              class="hist-drill-back"
+              onclick="historyBack()"
+              hidden
+            >
+              <i class="fa-solid fa-arrow-left"></i> Back
+            </button>
+          </div>
+          <span class="sec-label" id="hist-range-label">Records</span>
+          <select
+            id="hist-period-filter"
+            class="add-select"
+            onchange="changeSalesHistoryFilter(this.value)"
+          >
+            <option value="today" selected>Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="week">This Week</option>
+            <option value="prev_week">Last Week</option>
+            <option value="month">This Month</option>
+            <option value="prev_month">Last Month</option>
+            <option value="custom">Custom range</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        <div
+          id="hist-custom-range"
+          class="hist-custom-range"
+          style="display: none"
+        >
+          <label
+            >From
+            <input
+              id="hist-custom-from"
+              class="add-input"
+              type="date"
+              onchange="changeSalesCustomRange()"
+          /></label>
+          <label
+            >To
+            <input
+              id="hist-custom-to"
+              class="add-input"
+              type="date"
+              onchange="changeSalesCustomRange()"
+          /></label>
+        </div>
+        <div id="hist-records-list" style="padding: 0 0 80px"></div>
+      </div>
+    </div>
+</template>
+
+<template id="sales-sheets-template">
+<div class="sheet-overlay" id="sell-modal">
+      <div class="sheet">
+        <div class="sheet-handle"></div>
+
+        <!-- Item info row -->
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+          "
+        >
+          <div
+            id="sm-icon"
+            style="
+              width: 52px;
+              height: 52px;
+              border-radius: 14px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 28px;
+              flex-shrink: 0;
+            "
+          ></div>
+          <div style="flex: 1; min-width: 0">
+            <div
+              id="sm-name"
+              style="font-size: 17px; font-weight: 800; color: var(--text)"
+            ></div>
+            <div
+              id="sm-meta"
+              style="
+                font-size: 12px;
+                font-family: var(--mono);
+                color: var(--muted);
+                margin-top: 2px;
+              "
+            ></div>
+          </div>
+          <div style="text-align: right; flex-shrink: 0">
+            <div
+              id="sm-stock"
+              style="
+                font-size: 13px;
+                font-weight: 700;
+                font-family: var(--mono);
+              "
+            ></div>
+            <div style="font-size: 11px; color: var(--muted)">in stock</div>
+          </div>
+        </div>
+
+        <!-- Projected price + profit boxes -->
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 16px;
+          "
+        >
+          <div class="detail-box">
+            <div class="detail-key">SELL PRICE ↑ MAX</div>
+            <div
+              class="detail-val"
+              id="sm-sell"
+              style="color: var(--accent2); font-size: 18px"
+            ></div>
+            <div
+              id="sm-price-range"
+              style="
+                display: none;
+                font-size: 10px;
+                font-weight: 700;
+                color: #d97706;
+                margin-top: 2px;
+                font-family: var(--mono);
+              "
+            >
+              ↓ min: <span id="sm-price-min-val"></span>
+            </div>
+          </div>
+          <div class="detail-box">
+            <div class="detail-key">PROFIT / ITEM</div>
+            <div
+              class="detail-val"
+              id="sm-profit"
+              style="color: var(--green); font-size: 18px"
+            ></div>
+            <div
+              id="sm-profit-range"
+              style="
+                display: none;
+                font-size: 10px;
+                font-weight: 700;
+                color: var(--muted);
+                margin-top: 2px;
+                font-family: var(--mono);
+              "
+            ></div>
+          </div>
+        </div>
+        <!-- Below-minimum price warning -->
+        <div
+          id="sm-min-warn"
+          style="
+            display: none;
+            background: #fee2e2;
+            color: #991b1b;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 10px;
+          "
+        >
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          Price is below minimum — confirm to override
+        </div>
+
+        <!-- Quantity stepper -->
+        <div style="margin-bottom: 14px">
+          <div class="field-label" style="text-transform: uppercase">
+            QTY to sell
+          </div>
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              border: 2px solid var(--border);
+              border-radius: var(--r);
+              overflow: hidden;
+              background: var(--surface);
+            "
+          >
+            <button
+              type="button"
+              class="qty-btn"
+              onclick="adjSellQty(-1)"
+              aria-label="Decrease quantity"
+              style="
+                width: 52px;
+                height: 52px;
+                border: none;
+                background: var(--surface2);
+                font-size: 24px;
+                font-weight: 700;
+                cursor: pointer;
+                color: var(--text);
+                flex-shrink: 0;
+              "
+            >
+              <i class="fa-solid fa-minus" aria-hidden="true"></i>
+            </button>
+            <input
+              id="sm-qty"
+              type="number"
+              min="0"
+              step="1"
+              value="0"
+              placeholder="Qty to sell"
+              inputmode="numeric"
+              aria-label="Quantity to sell"
+              style="
+                flex: 1;
+                border: none;
+                text-align: center;
+                font-size: 24px;
+                font-weight: 800;
+                font-family: var(--mono);
+                color: var(--text);
+                background: transparent;
+                outline: none;
+                padding: 10px;
+              "
+              oninput="updateSellModal()"
+            />
+            <button
+              type="button"
+              class="qty-btn"
+              onclick="adjSellQty(1)"
+              aria-label="Increase quantity"
+              style="
+                width: 52px;
+                height: 52px;
+                border: none;
+                background: var(--surface2);
+                font-size: 24px;
+                font-weight: 700;
+                cursor: pointer;
+                color: var(--text);
+                flex-shrink: 0;
+              "
+            >
+              <i class="fa-solid fa-plus" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Buy price entry - only shown when the item has no buy price on record -->
+        <div id="sm-buy-field" style="margin-bottom: 14px; display: none">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              border: 2px solid var(--border);
+              border-radius: var(--r);
+              overflow: hidden;
+              background: var(--surface);
+            "
+          >
+            <span
+              style="
+                padding: 0 12px;
+                font-size: 13px;
+                font-weight: 700;
+                font-family: var(--mono);
+                color: var(--text2);
+                background: var(--surface2);
+                border-right: 2px solid var(--border);
+                min-height: 50px;
+                display: flex;
+                align-items: center;
+              "
+            >
+              KES
+            </span>
+            <input
+              id="sm-buy"
+              type="number"
+              placeholder="Buy price (optional)"
+              aria-label="Buy price"
+              min="0"
+              inputmode="decimal"
+              style="
+                flex: 1;
+                border: none;
+                font-size: 15px;
+                font-weight: 600;
+                font-family: var(--mono);
+                color: var(--text);
+                background: transparent;
+                outline: none;
+                padding: 13px 14px;
+              "
+              oninput="updateSellModal()"
+            />
+          </div>
+          <div
+            style="
+              font-size: 11px;
+              color: var(--muted);
+              margin-top: 4px;
+              padding: 0 2px;
+            "
+          >
+            No buy price on record - enter it to track profit accurately
+          </div>
+        </div>
+
+        <!-- Optional price override -->
+        <div style="margin-bottom: 14px">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              border: 2px solid var(--border);
+              border-radius: var(--r);
+              overflow: hidden;
+              background: var(--surface);
+            "
+          >
+            <span
+              id="sm-cur"
+              style="
+                padding: 0 12px;
+                font-size: 13px;
+                font-weight: 700;
+                font-family: var(--mono);
+                color: var(--accent);
+                background: var(--accent-light);
+                border-right: 2px solid var(--border);
+                min-height: 50px;
+                display: flex;
+                align-items: center;
+              "
+            >
+              KES
+            </span>
+            <input
+              id="sm-actual"
+              type="number"
+              placeholder="Actual price (optional)"
+              aria-label="Actual sale price"
+              min="0"
+              inputmode="decimal"
+              style="
+                flex: 1;
+                border: none;
+                font-size: 15px;
+                font-weight: 600;
+                font-family: var(--mono);
+                color: var(--text);
+                background: transparent;
+                outline: none;
+                padding: 13px 14px;
+              "
+              oninput="updateSellModal()"
+            />
+          </div>
+        </div>
+
+        <!-- Totals summary -->
+        <div
+          style="
+            background: var(--accent-light);
+            border: 1.5px solid #a8d8b5;
+            border-radius: var(--r);
+            padding: 14px 16px;
+            margin-bottom: 16px;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 6px;
+            "
+          >
+            <span style="font-size: 13px; color: var(--muted)">Price Used</span>
+            <span
+              id="sm-price-used"
+              style="
+                font-size: 13px;
+                font-weight: 700;
+                font-family: var(--mono);
+                color: var(--accent);
+              "
+            >
+            </span>
+          </div>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 6px;
+            "
+          >
+            <span style="font-size: 14px; font-weight: 700; color: var(--text)"
+              >Total Revenue</span
+            >
+            <span
+              id="sm-total-rev"
+              style="
+                font-size: 20px;
+                font-weight: 800;
+                font-family: var(--mono);
+                color: var(--accent2);
+              "
+            >
+            </span>
+          </div>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <span style="font-size: 13px; color: var(--muted)"
+              >Total Profit</span
+            >
+            <span
+              id="sm-total-profit"
+              style="
+                font-size: 16px;
+                font-weight: 700;
+                font-family: var(--mono);
+                color: var(--green);
+              "
+            >
+            </span>
+          </div>
+        </div>
+
+        <!-- Confirm Sale - large green, full width -->
+        <button
+          id="confirm-sale-btn"
+          onclick="confirmSale()"
+          style="
+            width: 100%;
+            padding: 18px;
+            background: #1e7a3e;
+            color: white;
+            border: none;
+            border-radius: var(--r);
+            font-size: 18px;
+            font-weight: 900;
+            cursor: pointer;
+            font-family: var(--sans);
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 14px rgba(30, 122, 62, 0.4);
+            margin-bottom: 8px;
+          "
+        >
+          CONFIRM SALE
+        </button>
+        <button
+          onclick="closeSellModal()"
+          style="
+            width: 100%;
+            padding: 12px;
+            background: transparent;
+            border: 1.5px solid var(--border);
+            border-radius: var(--r);
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            font-family: var(--sans);
+          "
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+    <!-- /sell-modal -->
+
+    <!-- Off-stock sale: records the sale and adds a NOT ACCOUNTED monitor row -->
+    <div class="sheet-overlay" id="offstock-sale-sheet">
+      <div class="sheet" style="max-height: 92vh; overflow: auto">
+        <div class="sheet-handle"></div>
+        <div
+          class="offstock-sheet-header"
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+          "
+        >
+          <div>
+            <div class="sheet-title">Sell Not In Stock</div>
+            <div class="sheet-code">
+              Use this form to sell directly without tracking stock
+            </div>
+          </div>
+          <button
+            onclick="closeOffStockSale()"
+            class="stock-icon-btn"
+            title="Close"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div class="stock-monitor-form">
+          <div class="stock-form-grid">
+            <input
+              class="add-input"
+              id="off-name"
+              type="text"
+              placeholder="Item name"
+              required
+            />
+            <input
+              class="add-input add-mono"
+              id="off-code"
+              type="text"
+              placeholder="Code (optional)"
+            />
+          </div>
+          <div class="stock-form-grid offstock-category-qty">
+            <div class="cat-cascade-field">
+              <div id="off-type-cascade" class="add-cascade"></div>
+              <input
+                type="hidden"
+                id="off-type"
+                value=""
+                aria-label="Category (optional)"
+              />
+            </div>
+            <input
+              class="add-input add-mono"
+              id="off-qty"
+              type="number"
+              min="1"
+              step="1"
+              inputmode="numeric"
+              placeholder="Qty? (1 if blank)"
+              aria-label="Quantity to sell (defaults to one)"
+            />
+          </div>
+          <div class="stock-form-grid offstock-sale-prices">
+            <input
+              class="add-input add-mono"
+              id="off-sell"
+              type="number"
+              min="0"
+              step="any"
+              inputmode="decimal"
+              placeholder="Sale price"
+              required
+            />
+            <input
+              class="add-input add-mono"
+              id="off-buy"
+              type="number"
+              min="0"
+              step="any"
+              inputmode="decimal"
+              placeholder="Buy price (optional)"
+            />
+          </div>
+          <button onclick="confirmOffStockSale()" class="stock-add-wish-btn">
+            <i class="fa-solid fa-cash-register"></i> Sell
+          </button>
+        </div>
+      </div>
+    </div>
+</template>
+
+<template id="sales-detail-sheet-template">
+<div class="sheet-overlay" id="sale-detail-sheet">
+<div
+        class="sheet"
+        style="max-height: 88vh; overflow-y: auto; padding-bottom: 12px"
+      >
+        <div class="sheet-handle"></div>
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+          "
+        >
+          <div class="sheet-title" style="margin: 0">Sale Record</div>
+          <button
+            onclick="closeSaleDetailSheet()"
+            aria-label="Close"
+            style="
+              width: 32px;
+              height: 32px;
+              border-radius: 50%;
+              border: 1.5px solid var(--border);
+              background: var(--bg2);
+              color: var(--muted);
+              font-size: 16px;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              flex-shrink: 0;
+            "
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <input type="hidden" id="sds-id" />
+
+        <!-- ── Info card ─────────────────────────────────────── -->
+        <div class="sds-info-card" id="sds-view">
+          <div class="sds-item-header">
+            <div>
+              <div class="sds-item-name" id="sds-name"></div>
+              <div class="sds-item-code" id="sds-code"></div>
+            </div>
+            <div class="sds-item-badge" id="sds-payment-badge"></div>
+          </div>
+          <div class="sds-stats-row">
+            <div class="sds-stat">
+              <div class="sds-stat-val" id="sds-qty"></div>
+              <div class="sds-stat-lbl">Qty</div>
+            </div>
+            <div class="sds-stat">
+              <div class="sds-stat-val" id="sds-price"></div>
+              <div class="sds-stat-lbl">Price</div>
+            </div>
+            <div class="sds-stat">
+              <div class="sds-stat-val" id="sds-revenue"></div>
+              <div class="sds-stat-lbl">Revenue</div>
+            </div>
+            <div class="sds-stat">
+              <div class="sds-stat-val" id="sds-profit"></div>
+              <div class="sds-stat-lbl">Profit</div>
+            </div>
+          </div>
+          <div class="sds-date-row">
+            <i class="fa-solid fa-calendar-days"></i>
+            <span id="sds-date"></span>
+          </div>
+        </div>
+
+        <!-- ── Edit form (hidden by default) ────────────────── -->
+        <div id="sds-edit-form" style="display: none; margin-bottom: 12px">
+          <div class="sds-edit-title">Edit Sale</div>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 8px;
+              margin-bottom: 10px;
+            "
+          >
+            <div>
+              <label class="add-field-lbl">Qty sold</label>
+              <div class="qty-row" aria-label="Quantity sold">
+                <button
+                  type="button"
+                  class="qty-btn"
+                  onclick="adjEditedSaleQty(-1)"
+                  aria-label="Decrease quantity"
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  id="sds-edit-qty"
+                  class="qty-input"
+                  min="1"
+                  step="1"
+                  inputmode="numeric"
+                  aria-label="Quantity sold"
+                />
+                <button
+                  type="button"
+                  class="qty-btn"
+                  onclick="adjEditedSaleQty(1)"
+                  aria-label="Increase quantity"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="add-field-lbl">Price sold</label>
+              <input
+                type="number"
+                id="sds-edit-price"
+                class="add-input add-center"
+                min="0"
+                inputmode="decimal"
+                placeholder="0"
+              />
+            </div>
+          </div>
+          <div style="margin-bottom: 12px">
+            <label class="add-field-lbl">Payment method</label>
+            <select
+              id="sds-edit-payment"
+              class="add-select"
+              style="width: 100%; margin-top: 4px"
+            >
+              <option value="cash">Cash</option>
+              <option value="mpesa">M-Pesa</option>
+              <option value="till">Till</option>
+              <option value="credit">Credit</option>
+            </select>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+            <button
+              class="btn-primary"
+              onclick="saveSaleEdit()"
+              style="padding: 13px"
+            >
+              <i class="fa-solid fa-floppy-disk"></i> Save
+            </button>
+            <button
+              onclick="discardSaleEdit()"
+              style="
+                padding: 13px;
+                border: 1.5px solid var(--border);
+                border-radius: var(--r);
+                background: transparent;
+                font-size: 14px;
+                font-weight: 700;
+                color: var(--muted);
+                cursor: pointer;
+              "
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+
+        <!-- ── Action buttons ────────────────────────────────── -->
+        <div
+          id="sds-actions"
+          style="
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 4px;
+          "
+        >
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+            <button
+              id="sds-edit-btn"
+              class="sds-btn sds-btn-edit"
+              onclick="toggleSaleEditForm()"
+            >
+              <i class="fa-solid fa-pen"></i> Edit
+            </button>
+            <button
+              id="sds-add-btn"
+              class="sds-btn sds-btn-add"
+              onclick="saleAddToInventoryFromDetail()"
+            >
+              <i class="fa-solid fa-box-archive"></i> Add to Inventory
+            </button>
+          </div>
+          <button
+            id="sds-delete-btn"
+            class="sds-btn sds-btn-del"
+            onclick="deleteSaleFromDetail()"
+          >
+            <i class="fa-solid fa-ban"></i> Delete / Void Sale
+          </button>
+        </div>
+      </div>
+    </div>
+</template>
