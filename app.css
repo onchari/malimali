@@ -2035,7 +2035,7 @@ body {
 
 /* ITEM CARDS */
 /* ── Stock list — striped table-style rows ─────────────────── */
-#item-list {
+[data-stocklist-items] {
   border: 1.5px solid var(--border);
   border-radius: var(--r-lg);
   overflow: hidden;
@@ -2157,6 +2157,17 @@ body {
   font-weight: 800;
   letter-spacing: 0.3px;
   background: #fef3c7;
+  color: #92400e;
+  padding: 0px 4px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.ic-badge-incomplete {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  background: #fff3d6;
   color: #92400e;
   padding: 0px 4px;
   border-radius: 4px;
@@ -9761,7 +9772,7 @@ body.photo-lightbox-open {
   border-top: none;
 }
 /* Even/odd for multiple shoe groups */
-#item-list > .shoe-group-header:nth-of-type(even) {
+[data-stocklist-items] > .shoe-group-header:nth-of-type(even) {
   background: #1a3352;
 }
 
@@ -9975,7 +9986,7 @@ body.photo-lightbox-open {
   user-select: none;
   -webkit-user-select: none;
 }
-#item-list > .type-group-header:nth-of-type(even) {
+[data-stocklist-items] > .type-group-header:nth-of-type(even) {
   background: #17322a;
 }
 

@@ -27,65 +27,301 @@
   color: #92400e;
 }
 
-#offstock-sale-sheet .sheet {
-  max-width: 400px;
-  padding: 16px 14px 18px;
-  border-radius: 20px;
-}
-
-.offstock-sheet-header {
+.sell-search-container {
   position: relative;
-  justify-content: center !important;
-  min-height: 36px;
+  max-width: 720px;
+  margin: 0 auto;
 }
 
-.offstock-sheet-header > div {
-  text-align: center;
+.app-sale-form-page {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 12px 16px 32px;
 }
 
-.offstock-sheet-header .sheet-title,
-.offstock-sheet-header .sheet-code {
-  text-align: center;
+.app-sale-form-header {
+  margin-bottom: 14px;
 }
 
-.offstock-sheet-header > button {
+.app-sale-form-content {
+  width: 100%;
+  max-width: 760px;
+  max-height: none;
+  margin: 0 auto;
+  overflow: visible;
+  box-shadow: none;
+  animation: none;
+}
+
+.sell-search-input {
+  min-height: 52px;
+  font-size: 16px !important;
+  border: 2px solid var(--border) !important;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.sell-search-input.is-found {
+  border-color: var(--green) !important;
+  background: rgba(30, 122, 62, 0.045);
+}
+
+.sell-search-input.is-missing {
+  border-color: var(--red) !important;
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.sell-search-status {
+  min-height: 24px;
+  padding: 6px 3px 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sell-search-status.is-found { color: var(--green); font-weight: 700; }
+.sell-search-status.is-missing { color: var(--red); font-weight: 700; }
+.sell-search-status.is-screen-reader-only {
   position: absolute;
-  top: 0;
-  right: 0;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
-#offstock-sale-sheet .stock-monitor-form {
+.sell-search-results {
+  position: absolute;
+  z-index: 20;
+  top: 50px;
+  left: 10%;
+  width: 80%;
+  box-sizing: border-box;
+  display: grid;
+  gap: 5px;
+  margin-top: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.12);
+  max-height: min(380px, 55vh);
+  overflow-y: auto;
+}
+
+.sell-search-results[hidden] { display: none; }
+
+.sell-search-message {
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sell-search-message.is-found {
+  color: var(--green);
+  background: rgba(30, 122, 62, 0.09);
+}
+
+.sell-search-option,
+.sell-search-new {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
   padding: 10px;
-  margin-bottom: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  background: var(--surface, #fff);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
 }
 
-#offstock-sale-sheet .stock-form-grid {
-  gap: 6px;
-  margin-bottom: 6px;
+.sell-search-option:hover,
+.sell-search-option.is-active,
+.sell-search-new:hover,
+.sell-search-new.is-active {
+  border-color: var(--green);
+  background: rgba(30, 122, 62, 0.05);
 }
 
-.offstock-category-qty > *,
-.offstock-sale-prices > * {
+.sell-search-option-main,
+.sell-search-option-data {
+  display: grid;
+  gap: 3px;
   min-width: 0;
 }
 
-.offstock-sale-prices > .add-input {
-  padding-right: 5px;
-  padding-left: 5px;
+.sell-search-name {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sell-search-meta,
+.sell-search-stock,
+.sell-search-price {
+  color: var(--muted);
   font-size: 12px;
 }
 
-.offstock-category-qty .cat-pick-native {
-  width: 100%;
-  margin-top: 0;
-  padding-right: 24px;
+.sell-search-option-data { justify-items: end; flex-shrink: 0; }
+.sell-search-price { color: var(--accent2); font-weight: 800; }
+
+.sell-search-badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--green);
+  background: rgba(30, 122, 62, 0.1);
+  font-size: 11px;
+  font-weight: 800;
 }
 
-.offstock-category-qty #off-qty {
-  min-width: 0;
-  padding-right: 8px;
-  padding-left: 8px;
+.sell-search-badge.is-incomplete {
+  color: #92400e;
+  background: #fff3d6;
+}
+
+.sell-search-new {
+  display: grid;
+  justify-content: stretch;
+  gap: 4px;
+  color: var(--red);
+  background: rgba(220, 38, 38, 0.08);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.sell-search-new span {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.sell-search-new:hover,
+.sell-search-new.is-active {
+  border-color: var(--red);
+  background: rgba(220, 38, 38, 0.12);
+}
+
+.sell-search-new:focus-visible {
+  outline: 3px solid rgba(220, 38, 38, 0.3);
+  outline-offset: 2px;
+}
+
+.sell-search-more,
+.sell-search-loading,
+.sell-search-error {
+  padding: 8px 10px;
+  color: var(--muted);
   font-size: 13px;
+}
+
+.sell-search-error { color: var(--red); }
+
+.quick-sell-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 0 80px;
+}
+
+.quick-sell-page-header {
+  margin-bottom: 12px;
+}
+
+.quick-sell-page-header .add-hero-sub {
+  max-width: 56ch;
+}
+
+.quick-sell-mode-toolbar {
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.quick-sell-mode-toolbar .add-entry-mode { min-width: 0; }
+.quick-sell-mode-toolbar .add-mode-bar {
+  width: max-content;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 5px 6px;
+}
+
+.quick-sell-mode-toolbar .mode-opt { font-size: 11px; }
+.quick-sell-mode-toolbar .mode-opt i { display: none; }
+.quick-sell-mode-toolbar .ios-toggle { width: 50px; height: 28px; }
+.quick-sell-mode-toolbar .ios-toggle-track {
+  border-radius: 28px;
+  padding-left: 6px;
+}
+.quick-sell-mode-toolbar .ios-toggle-thumb { width: 20px; height: 20px; }
+.quick-sell-mode-toolbar .ios-toggle input:checked ~ .ios-toggle-thumb {
+  transform: translateX(22px);
+}
+
+.quick-sell-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.quick-sell-field-wide { grid-column: 1 / -1; }
+.quick-sell-stock-field[hidden] { display: none !important; }
+.quick-sell-card { padding: 16px; }
+.quick-sell-fields .add-field { min-width: 0; }
+.quick-sell-fields .add-input { min-width: 0; font-size: 16px; }
+
+.quick-sell-error {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  color: var(--red);
+  background: rgba(220, 38, 38, 0.08);
+  font-size: 13px;
+}
+
+.quick-sell-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.quick-sell-actions button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 9px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.quick-sell-cancel { color: var(--text); background: var(--surface2); }
+.quick-sell-submit { color: #fff; background: var(--green); }
+.quick-sell-submit:disabled { opacity: 0.65; cursor: wait; }
+
+@media (max-width: 480px) {
+  .quick-sell-page-header { align-items: flex-start; }
+  .quick-sell-page-header .add-cancel-btn { flex-shrink: 0; }
+  .quick-sell-mode-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .quick-sell-card { padding: 12px; }
+  .quick-sell-fields { gap: 9px; }
+  .sell-search-option { align-items: flex-start; padding: 9px 7px; }
+  .sell-search-meta { font-size: 11px; }
+  .sell-search-stock,
+  .sell-search-price { font-size: 11px; }
 }
 
 .sales-tabs {

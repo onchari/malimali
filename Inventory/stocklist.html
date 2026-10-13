@@ -1,0 +1,50 @@
+<template id="stocklist-template">
+  <div class="stocklist-component" data-stocklist>
+    <div class="chips" data-stocklist-chips></div>
+
+    <div class="inventory-search-row">
+      <div class="search-wrap">
+        <span class="s-icon" aria-hidden="true"
+          ><i class="fa-solid fa-magnifying-glass"></i
+        ></span>
+        <input
+          class="search-input"
+          data-stocklist-search
+          placeholder="Search by name, code, type, size…"
+          autocomplete="off"
+          spellcheck="false"
+          oninput="onInventorySearch(this.value, this)"
+          onkeydown="onSellSearchKeydown(event, this)"
+        />
+        <button
+          class="search-clear-btn"
+          data-stocklist-search-clear
+          onclick="clearInventorySearch(this)"
+          style="display: none"
+          aria-label="Clear"
+          type="button"
+        >
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div
+        class="sell-search-results"
+        data-stocklist-sell-results
+        role="listbox"
+        hidden
+      ></div>
+      <div
+        class="sell-search-status is-screen-reader-only"
+        data-stocklist-sell-status
+        aria-live="polite"
+      >Search by name, code, type, size</div>
+    </div>
+
+    <div
+      data-stocklist-size-filter
+      style="display: none; padding: 0 0 8px; gap: 6px; flex-wrap: wrap"
+    ></div>
+
+    <div data-stocklist-items></div>
+  </div>
+</template>

@@ -1364,7 +1364,9 @@ async function renderList() {
 
 async function renderInventoryStockTable() {
   allItems = await dbAll("items");
-  const search = (UI.el("search")?.value || "").toLowerCase();
+  const search = (
+    document.querySelector("[data-stocklist-search]")?.value || ""
+  ).toLowerCase();
   const allSizes = await dbAll("shoe_sizes");
   const searchSizesByItemCode = new Map();
   allSizes.forEach((size) => {
@@ -1408,14 +1410,13 @@ async function renderInventoryStockTable() {
     stockListCount.textContent =
       filtered.length + " of " + allItems.length + " items";
 
-  const list = UI.el("item-list");
-  if (!list) return;
+  const lists = document.querySelectorAll("[data-stocklist-items]");
+  if (!lists.length) return;
 
   if (!filtered.length) {
-    list.style.border = "none";
     const hasNoItems =
       allItems.length === 0 && !search && activeTypeFilter === "all";
-    list.innerHTML = hasNoItems
+    const emptyMarkup = hasNoItems
       ? `<div class="inventory-empty-state inventory-empty-first">
           <div class="inventory-empty-art" aria-hidden="true">
             <i class="fa-solid fa-box-open"></i>
@@ -1437,6 +1438,10 @@ async function renderInventoryStockTable() {
           <h2>No matching products</h2>
           <p>Try another search or choose a different category.</p>
         </div>`;
+    lists.forEach((list) => {
+      list.style.border = "none";
+      list.innerHTML = emptyMarkup;
+    });
     renderStockMonitorSummary();
     return;
   }
@@ -1633,55 +1638,57 @@ async function renderInventoryStockTable() {
     });
   }
 
-  list.style.border = "";
-  list.innerHTML = `
-    <div class="inventory-stock-table-wrap">
-      <table class="inventory-stock-table">
-        <thead>
-          <tr>
-            <th scope="col">Code</th>
-            <th scope="col">Item</th>
-            <th scope="col">Qty</th>
-            <th scope="col" title="Buy price">Buy</th>
-            <th scope="col" title="Selling price">Sell</th>
-          </tr>
-        </thead>
-        <tbody>${rows.join("")}</tbody>
-      </table>
-    </div>`;
+  lists.forEach((list, listIndex) => {
+    list.style.border = "";
+    list.innerHTML = `
+      <div class="inventory-stock-table-wrap">
+        <table class="inventory-stock-table">
+          <thead>
+            <tr>
+              <th scope="col">Code</th>
+              <th scope="col">Item</th>
+              <th scope="col">Qty</th>
+              <th scope="col" title="Buy price">Buy</th>
+              <th scope="col" title="Selling price">Sell</th>
+            </tr>
+          </thead>
+          <tbody>${rows.join("")}</tbody>
+        </table>
+      </div>`;
 
-  list.querySelectorAll(".stock-table-expand").forEach((button) => {
-    button.addEventListener("click", () => {
-      const children = document.getElementById(
-        button.getAttribute("aria-controls"),
-      );
-      if (!children) return;
-      const expanded = button.getAttribute("aria-expanded") === "true";
-      button.setAttribute("aria-expanded", String(!expanded));
-      children.hidden = expanded;
-      button.setAttribute(
-        "aria-label",
-        `${expanded ? "Expand" : "Collapse"} ${button.dataset.itemName} sizes`,
-      );
+    list.querySelectorAll(".stock-table-expand").forEach((button) => {
+      const childRow = button.closest("tr")?.nextElementSibling;
+      if (!childRow) return;
+      childRow.id += "-" + listIndex;
+      button.setAttribute("aria-controls", childRow.id);
+      button.addEventListener("click", () => {
+        const expanded = button.getAttribute("aria-expanded") === "true";
+        button.setAttribute("aria-expanded", String(!expanded));
+        childRow.hidden = expanded;
+        button.setAttribute(
+          "aria-label",
+          `${expanded ? "Expand" : "Collapse"} ${button.dataset.itemName} sizes`,
+        );
+      });
     });
-  });
 
-  list.querySelectorAll(".inventory-stock-table tbody tr").forEach((row) => {
-    if (!row.hasAttribute("data-item-id")) return;
-    const openItem = () => {
-      const itemId = Number(row.dataset.itemId);
-      if (row.dataset.itemSize) {
-        openShoeSizeCard(row.dataset.itemCode, Number(row.dataset.itemSize));
-      } else {
-        openSheet(itemId);
-      }
-    };
-    row.addEventListener("click", openItem);
-    row.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openItem();
-      }
+    list.querySelectorAll(".inventory-stock-table tbody tr").forEach((row) => {
+      if (!row.hasAttribute("data-item-id")) return;
+      const openItem = () => {
+        const itemId = Number(row.dataset.itemId);
+        if (row.dataset.itemSize) {
+          openShoeSizeCard(row.dataset.itemCode, Number(row.dataset.itemSize));
+        } else {
+          openSheet(itemId);
+        }
+      };
+      row.addEventListener("click", openItem);
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openItem();
+        }
+      });
     });
   });
   renderStockMonitorSummary();
@@ -2233,6 +2240,16 @@ function triggerSheetPhotoUpload(event) {
 }
 
 async function openSheet(id) {
+  const detailPage = document.getElementById("detail-sheet");
+  if (!detailPage?.classList.contains("active")) {
+    const activePage = document.querySelector(".page.active");
+    const pageId = activePage?.id.replace(/^page-/, "") || "inventory";
+    window._detailReturnPage = pageId === "detail-sheet"
+      ? "inventory"
+      : pageId === "sell-modal"
+        ? "sell"
+        : pageId;
+  }
   currentDetailId = id;
   const item = await dbGet("items", id);
   if (!item) return;
@@ -2346,7 +2363,7 @@ async function openSheet(id) {
   set("sh-revenue", fmt(revenue));
   set("sh-profit-made", fmt(profitMade));
 
-  document.getElementById("detail-sheet").classList.add("open");
+  showPage("item-detail");
 
   const restockPanel = document.getElementById("restock-panel");
   if (restockPanel) restockPanel.style.display = "none";
@@ -2385,7 +2402,11 @@ async function openSheet(id) {
 
 function closeSheet() {
   const sheet = document.getElementById("detail-sheet");
-  if (sheet) sheet.classList.remove("open");
+  if (sheet?.classList.contains("active")) {
+    showPage(window._detailReturnPage || "inventory");
+  } else if (sheet) {
+    sheet.classList.remove("open");
+  }
   const ov = document.getElementById("saving-overlay");
   if (ov) ov.style.display = "none";
 }

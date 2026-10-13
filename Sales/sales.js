@@ -8,17 +8,19 @@ function showSalesTab(tab) {
     if (btn) btn.classList.toggle("active", name === _activeSalesTab);
     if (slot) slot.classList.toggle("active", name === _activeSalesTab);
   });
-  const offBtn = document.getElementById("sales-offstock-btn");
-  if (offBtn) offBtn.style.display = _activeSalesTab === "sell" ? "" : "none";
   const sub = document.getElementById("sales-sub");
   if (sub) {
     sub.textContent =
       _activeSalesTab === "history"
         ? "Today and past sales records"
-        : "Search stock and record a sale";
+        : "Search inventory to sell an item";
   }
   if (_activeSalesTab === "sell") {
     renderSellPage();
+    renderList().catch((error) => {
+      console.error("[showSalesTab] stock list failed to render", error);
+      toast("Inventory list could not be loaded: " + (error.message || "Unknown error"), "err");
+    });
     setTimeout(() => {
       const el = document.getElementById("sell-search");
       if (el) el.focus();
@@ -70,7 +72,8 @@ function getSaleMotivation() {
 }
 
 function showSaleSuccess(profit) {
-  showSplash("", profit, profit, true);
+  const hasProfit = profit != null && Number.isFinite(Number(profit));
+  showSplash("", hasProfit ? Number(profit) : 0, hasProfit ? Number(profit) : null, true);
   const msg = document.getElementById("splash-msg");
   const sub = document.getElementById("splash-sub");
   const label = document.querySelector(
@@ -78,8 +81,14 @@ function showSaleSuccess(profit) {
   );
   const motivation = document.getElementById("splash-motivation");
   if (msg) msg.textContent = "Congratulations!";
-  if (label) label.textContent = "Profit earned";
-  if (sub) sub.textContent = "You earned " + fmt(profit) + " from this sale.";
+  if (label) label.textContent = hasProfit ? "Profit earned" : "Profit";
+  if (sub) {
+    sub.textContent = hasProfit
+      ? "You earned " + fmt(Number(profit)) + " from this sale."
+      : "Sale recorded. Profit is unavailable because the item cost is unknown.";
+  }
+  const profitWrap = document.getElementById("splash-profit-wrap");
+  if (profitWrap) profitWrap.style.display = hasProfit ? "block" : "none";
   if (motivation) {
     motivation.textContent = getSaleMotivation();
     motivation.style.display = "block";
@@ -155,173 +164,421 @@ async function _legacySearchSell() {
 
 let _sellSearchTimer = null;
 
-function onSellSearch(val) {
-  const clearBtn = document.getElementById("sell-search-clear");
-  if (clearBtn) clearBtn.style.display = val ? "flex" : "none";
+async function searchSell() {
+  return _renderSellMatches(_sellSearchVersion);
+}
+
+let _sellSearchVersion = 0;
+let _sellSearchActiveIndex = -1;
+let _quickSellSaving = false;
+let _quickSellOutsideHandlerBound = false;
+let _quickSellIsRecord = true;
+
+function _setSellSearchState(state, message) {
+  const input = document.getElementById("sell-search");
+  const status = document.getElementById("sell-search-status");
+  const results = document.getElementById("sell-results");
+  if (!input || !status || !results) return;
+  input.classList.remove("is-found", "is-missing");
+  if (state === "found") input.classList.add("is-found");
+  if (state === "missing") input.classList.add("is-missing");
+  status.textContent = message;
+  status.className =
+    "sell-search-status is-screen-reader-only" + (state ? " is-" + state : "");
+}
+
+function _hideSellResults() {
+  const results = document.getElementById("sell-results");
+  const input = document.getElementById("sell-search");
+  if (results) {
+    results.hidden = true;
+    results.innerHTML = "";
+  }
+  if (input) {
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+  }
+  _sellSearchActiveIndex = -1;
+}
+
+function _bindSellSearchDismissal() {
+  if (_quickSellOutsideHandlerBound) return;
+  _quickSellOutsideHandlerBound = true;
+  document.addEventListener("click", (event) => {
+    const container = document.querySelector("[data-stocklist-sales]");
+    if (container && !container.contains(event.target)) _hideSellResults();
+  });
+}
+
+function onSellSearch(val, input = document.getElementById("sell-search")) {
+  if (!input || !input.closest("[data-stocklist-sales]")) return;
+  const version = ++_sellSearchVersion;
   clearTimeout(_sellSearchTimer);
-  _sellSearchTimer = setTimeout(() => searchSell(), 120);
+  _bindSellSearchDismissal();
+  const raw = String(val || "").trim();
+  if (raw.length < 2) {
+    _hideSellResults();
+    _setSellSearchState("", "Search item to sell");
+    return;
+  }
+  _setSellSearchState("", "Searching inventory…");
+  const results = document.getElementById("sell-results");
+  if (results) {
+    results.hidden = false;
+    results.innerHTML = '<div class="sell-search-loading">Searching inventory…</div>';
+  }
+  _sellSearchTimer = setTimeout(() => _renderSellMatches(version), 150);
 }
 window.onSellSearch = onSellSearch;
 
 function clearSellSearch() {
   const inp = document.getElementById("sell-search");
-  const btn = document.getElementById("sell-search-clear");
   if (inp) inp.value = "";
-  if (btn) btn.style.display = "none";
-  searchSell();
+  if (inp) onInventorySearch("", inp);
+  if (inp) inp.focus();
 }
 window.clearSellSearch = clearSellSearch;
 
-async function searchSell() {
+function onSellSearchKeydown(event, input) {
+  if (!input?.closest("[data-stocklist-sales]")) return;
+  const results = document.getElementById("sell-results");
+  if (!results || results.hidden) {
+    if (event.key === "Escape") _hideSellResults();
+    return;
+  }
+  const options = Array.from(results.querySelectorAll('[role="option"]'));
+  if (!options.length) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    _hideSellResults();
+    return;
+  }
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    _sellSearchActiveIndex =
+      (_sellSearchActiveIndex + direction + options.length) % options.length;
+    options.forEach((option, index) => {
+      const selected = index === _sellSearchActiveIndex;
+      option.setAttribute("aria-selected", String(selected));
+      option.classList.toggle("is-active", selected);
+    });
+    const active = options[_sellSearchActiveIndex];
+    const input = document.getElementById("sell-search");
+    if (input && active) input.setAttribute("aria-activedescendant", active.id);
+    if (active) active.scrollIntoView({ block: "nearest" });
+    return;
+  }
+  if (event.key === "Enter" && _sellSearchActiveIndex >= 0) {
+    event.preventDefault();
+    const active = options[_sellSearchActiveIndex];
+    if (active) active.click();
+  }
+}
+window.onSellSearchKeydown = onSellSearchKeydown;
+
+function _normaliseSellName(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+async function _renderSellMatches(version) {
   try {
-    const raw = (document.getElementById("sell-search")?.value || "").trim();
-    const q = raw.toLowerCase();
+    const input = document.getElementById("sell-search");
     const results = document.getElementById("sell-results");
-    if (!results) return;
-
-    // Use global allItems (same source as dashboard + inventory)
-    const items = allItems.length ? allItems : await dbAll("items");
-    await enrichShoeItems(items);
-    const sizes = await dbAll("shoe_sizes");
-
-    const rows = [];
-
-    for (const item of items) {
-      const score = q ? _gscScore(item, q) : 1;
-      if (q && score === 0) continue;
-
-      const t = getTypeObj(item.type);
-
-      if (item.isShoe) {
-        for (const sz of sizes.filter(
-          (record) => record.itemCode === item.code,
-        )) {
-          const availableQty = await readableStockQty(sz, sz.id);
-          if (availableQty <= 0) continue;
-          // Also score against size number
-          const szScore = q
-            ? Math.max(score, String(sz.size).includes(q) ? 20 : 0)
-            : 1;
-          if (q && szScore === 0) return;
-          const price = sz.sellPrice || item.sellPrice || item.sell || 0;
-          const buy = sz.buyPrice || item.buyPrice || item.buy || 0;
-          rows.push({
-            item,
-            t,
-            score: szScore,
-            label: item.name || item.code,
-            meta: item.code + " · Size " + sz.size,
-            qty: availableQty,
-            price,
-            profit: price - buy,
-            isRec: false,
-            action: `openSellShoeModal(${item.id},${sz.size})`,
-            extraTag: `<span class="tag tag-gray">Sz ${escapeHtml(String(sz.size))}</span>`,
-          });
-        }
-        continue;
-      }
-
-      // Standard + Record Only items
-      const availableQty = item.isRecord ? 0 : await readableStockQty(item);
-      const sellable = item.isRecord || availableQty > 0;
-      if (!sellable) continue;
-
-      const price = item.sellPrice || item.sell || 0;
-      const buy = item.buyPrice || item.buy || 0;
-      const meta =
-        item.code +
-        (item.variant || item.size ? " · " + (item.variant || item.size) : "");
-      rows.push({
-        item,
-        t,
-        score,
-        label: item.name || item.code,
-        meta,
-        qty: availableQty,
-        price,
-        profit: price - buy,
-        isRec: !!item.isRecord,
-        action: `openSellModal(${item.id})`,
-        extraTag: item.isRecord
-          ? '<span class="tag tag-record">RECORD</span>'
-          : "",
+    if (!input || !results || version !== _sellSearchVersion) return;
+    const raw = input.value.trim();
+    const query = _normaliseSellName(raw);
+    if (query.length < 2) return;
+    const items =
+      Array.isArray(allItems) && allItems.length ? allItems : await dbAll("items");
+    if (version !== _sellSearchVersion || input.value.trim() !== raw) return;
+    const matchedItems = items
+      .filter((item) => {
+        const name = _normaliseSellName(item.name);
+        const code = _normaliseSellName(item.code);
+        return name.includes(query) || code.includes(query);
+      })
+      .map((item) => {
+        const name = _normaliseSellName(item.name);
+        const code = _normaliseSellName(item.code);
+        const score =
+          (name === query ? 100 : name.startsWith(query) ? 60 : name.includes(query) ? 30 : 0) +
+          (code === query ? 80 : code.startsWith(query) ? 45 : code.includes(query) ? 20 : 0);
+        return { item, score };
+      })
+      .sort((a, b) => b.score - a.score || String(a.item.name || "").localeCompare(String(b.item.name || "")));
+    const totalMatches = matchedItems.length;
+    const maxMatches = matchedItems.slice(0, 8);
+    if (!totalMatches) {
+      _setSellSearchState("missing", "Item does not exist.");
+      results.hidden = false;
+      results.innerHTML = `
+        <button type="button" class="sell-search-new" role="option" id="sell-option-new">
+          <strong>“${escapeHtml(raw)}” is NOT in the inventory.</strong>
+          <span>Click to sell it and automatically add it PARTIALLY to the inventory.</span>
+        </button>`;
+      results.querySelector("#sell-option-new").addEventListener("click", () => {
+        const itemName = input.value.trim();
+        _hideSellResults();
+        openQuickSell(null, itemName);
       });
-    }
-
-    // Sort: by score desc (with query) or alphabetically (no query)
-    rows.sort((a, b) =>
-      q ? b.score - a.score : (a.label || "").localeCompare(b.label || ""),
-    );
-
-    const offStockBtn =
-      '<button onclick="openOffStockSale()" class="stock-add-wish-btn" ' +
-      'style="margin-bottom:12px;background:#1d4ed8;">' +
-      '<i class="fa-solid fa-plus"></i> Sell item not in stock</button>';
-
-    if (!rows.length) {
-      results.innerHTML =
-        `<div class="empty" style="padding:24px 0;">
-        <div class="e-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
-        <p>${q ? 'No items match "' + escapeHtml(raw) + '"' : "No sellable items in stock."}</p>
-      </div>` + offStockBtn;
+      input.setAttribute("aria-expanded", "true");
+      _sellSearchActiveIndex = 0;
       return;
     }
 
-    results.innerHTML =
-      offStockBtn +
-      rows
-        .slice(0, 120)
-        .map((row) => {
-          const qty = row.qty;
-          const isRec = row.isRec;
-          const stockLbl = isRec ? "∞" : qty + " pcs";
-          const stockCls = isRec
-            ? "var(--amber)"
-            : qty <= LOW_STOCK_LEVEL
-              ? "var(--amber)"
-              : "var(--green)";
-          const bgCls = isRec
-            ? "var(--amber-light,#fffbeb)"
-            : qty <= LOW_STOCK_LEVEL
-              ? "var(--amber-light)"
-              : "var(--green-light)";
-          const sellMin = row.item.sellPriceMin || 0;
-          const priceStr =
-            sellMin > 0 && sellMin < row.price
-              ? fmt(sellMin) + " – " + fmt(row.price)
-              : fmt(row.price);
-
-          return `<div class="item-card${isRec ? " item-card-record" : ""}" onclick="${row.action}"
-          style="margin-bottom:8px;cursor:pointer;">
-        <div class="item-top">
-          <div class="item-icon" style="background:${row.t.color || "var(--surface2)"};">${row.t.emoji}</div>
-          <div class="item-body">
-            <div class="item-code">${escapeHtml(row.meta)}</div>
-            <div class="item-name">${escapeHtml(row.label || "")}</div>
-            <div class="item-tags">
-              <span class="tag tag-cyan">${escapeHtml(row.item.type || "")}</span>
-              ${row.extraTag}
-              <span class="tag" style="background:${bgCls};color:${stockCls};">${stockLbl}</span>
-            </div>
-          </div>
-          <div class="item-right">
-            <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--accent2);">${priceStr}</div>
-            <div style="font-size:11px;color:${row.profit >= 0 ? "var(--green)" : "var(--red)"};font-family:var(--mono);margin-top:3px;">
-              ${row.profit >= 0 ? "+" : ""}${fmt(row.profit)} profit
-            </div>
-            <div style="margin-top:8px;background:var(--accent);color:white;border-radius:8px;
-              padding:5px 12px;font-size:12px;font-weight:700;text-align:center;">Sell</div>
-          </div>
-        </div>
-      </div>`;
-        })
-        .join("");
-  } catch (e) {
-    console.error("[searchSell]", e);
-    toast("Error: " + e.message, "err");
+    _setSellSearchState("found", `${totalMatches} match${totalMatches === 1 ? "" : "es"} in inventory. Select one.`);
+    const rows = [];
+    for (const { item } of maxMatches) {
+      const category = item.type || "No category";
+      const price = item.sellPrice ?? item.sell ?? null;
+      const quantity = item.isRecord ? null : await displayStockQty(item);
+      rows.push({
+        item,
+        name: item.name || item.code || "Unnamed item",
+        code: item.code || "No code",
+        category,
+        quantity,
+        price,
+        recordOnly: !!item.isRecord,
+      });
+    }
+    if (version !== _sellSearchVersion || input.value.trim() !== raw) return;
+    results.innerHTML = `
+      <div class="sell-search-message is-found">Showing ${Math.min(rows.length, 8)} of ${totalMatches} match${totalMatches === 1 ? "" : "es"} in inventory. Select one.</div>
+      ${rows.slice(0, 8).map((row, index) => `
+        <button type="button" class="sell-search-option" role="option" aria-selected="false" id="sell-option-${index}" data-item-id="${Number(row.item.id)}">
+          <span class="sell-search-option-main">
+            <span class="sell-search-name">${escapeHtml(row.name)}</span>
+            <span class="sell-search-meta">${escapeHtml(row.code)} · ${escapeHtml(row.category)}</span>
+          </span>
+          <span class="sell-search-option-data">
+            <span class="sell-search-stock">${row.recordOnly ? "Record Only" : `${Number(row.quantity || 0)} in stock`}</span>
+            <span class="sell-search-price">${row.price == null ? "Price not set" : fmt(row.price)}</span>
+            ${row.item.incomplete ? '<span class="sell-search-badge is-incomplete">Incomplete</span>' : '<span class="sell-search-badge">In inventory</span>'}
+          </span>
+        </button>`).join("")}
+      ${totalMatches > rows.length ? `<div class="sell-search-more">${totalMatches - rows.length} more inventory match${totalMatches - rows.length === 1 ? "" : "es"} not shown</div>` : ""}
+    `;
+    results.querySelectorAll(".sell-search-option").forEach((button) => {
+      button.addEventListener("click", () => {
+        const item = items.find((entry) => String(entry.id) === button.dataset.itemId);
+        if (!item) {
+          toast("This inventory item is no longer available. Search again.", "err");
+          return;
+        }
+        _hideSellResults();
+        if (item.incomplete) {
+          openQuickSell(item);
+        } else {
+          openSheet(item.id);
+        }
+      });
+    });
+    results.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    _sellSearchActiveIndex = -1;
+    _bindSellSearchDismissal();
+  } catch (error) {
+    console.error("[searchSell]", error);
+    const results = document.getElementById("sell-results");
+    if (results) {
+      results.hidden = false;
+      results.innerHTML = '<div class="sell-search-error">Could not search inventory. Please try again.</div>';
+    }
+    _setSellSearchState("", "Inventory search failed. Please try again.");
+    toast("Could not search inventory: " + (error.message || "Unknown error"), "err");
   }
 }
+
+function openQuickSell(item, typedName) {
+  const page = document.getElementById("quick-sell-page");
+  const salesView = document.getElementById("sales-main-view");
+  if (!page || !salesView) return;
+  const title = document.getElementById("quick-sell-title");
+  const note = document.getElementById("quick-sell-note");
+  if (title) title.textContent = item ? "Sell incomplete item" : "Sell item not in inventory";
+  if (note) {
+    note.textContent = item
+      ? "Record this sale and update the item's available details."
+      : "This item will be added to inventory as Record Only. Stock quantity will not be tracked. Enter item name and sell price; other details are optional.";
+  }
+  const setValue = (id, value) => {
+    const field = document.getElementById(id);
+    if (field) field.value = value == null ? "" : String(value);
+  };
+  setValue("quick-sell-item-id", item ? item.id : "");
+  setValue("quick-sell-name", item ? item.name : typedName || "");
+  setValue("quick-sell-qty", "0");
+  setValue("quick-sell-stock-qty", item && !item.isRecord ? item.qty || 0 : 0);
+  setValue("quick-sell-price", item ? item.sellPrice ?? item.sell ?? "" : "");
+  setValue("quick-sell-buy", item && item.buyPrice != null ? item.buyPrice : item && item.buy != null ? item.buy : 0);
+  setValue("quick-sell-code", item ? item.code || "" : "");
+  setQuickSellMode(item ? item.isRecord !== false : true);
+  _quickSellSaving = false;
+  const submit = document.getElementById("quick-sell-submit");
+  if (submit) {
+    submit.disabled = false;
+    submit.innerHTML = '<i class="fa-solid fa-check"></i> Sell item';
+  }
+  const error = document.getElementById("quick-sell-error");
+  if (error) {
+    error.hidden = true;
+    error.textContent = "";
+  }
+  salesView.hidden = true;
+  page.hidden = false;
+  window.scrollTo(0, 0);
+  setTimeout(() => document.getElementById("quick-sell-name")?.focus(), 80);
+}
+window.openQuickSell = openQuickSell;
+
+function closeQuickSell() {
+  const page = document.getElementById("quick-sell-page");
+  const salesView = document.getElementById("sales-main-view");
+  if (page) page.hidden = true;
+  if (salesView) salesView.hidden = false;
+  document.getElementById("sell-search")?.focus();
+}
+window.closeQuickSell = closeQuickSell;
+
+function setQuickSellMode(isRecord) {
+  _quickSellIsRecord = !!isRecord;
+  const toggle = document.getElementById("quick-sell-mode-toggle");
+  if (toggle) toggle.checked = !_quickSellIsRecord;
+  const modeBar = document.getElementById("quick-sell-item-mode");
+  if (modeBar) modeBar.classList.toggle("record-mode", _quickSellIsRecord);
+  document
+    .getElementById("quick-sell-mode-record")
+    ?.classList.toggle("mode-opt-active", _quickSellIsRecord);
+  document
+    .getElementById("quick-sell-mode-track")
+    ?.classList.toggle("mode-opt-active", !_quickSellIsRecord);
+  const stockField = document.getElementById("quick-sell-stock-field");
+  if (stockField) {
+    stockField.hidden = _quickSellIsRecord;
+    stockField.style.display = _quickSellIsRecord ? "none" : "";
+  }
+  const note = document.getElementById("quick-sell-mode-note");
+  const message = document.getElementById("quick-sell-mode-message");
+  const subtitle = document.getElementById("quick-sell-note");
+  const isExistingItem = !!document.getElementById("quick-sell-item-id")?.value;
+  if (note) note.classList.toggle("track-mode-note", !_quickSellIsRecord);
+  if (message) {
+    message.textContent = _quickSellIsRecord
+      ? "Qty not tracked - item always shows as available for sale."
+      : "Qty is tracked - enter the stock available before this sale.";
+  }
+  if (subtitle) {
+    subtitle.textContent = isExistingItem
+      ? _quickSellIsRecord
+        ? "Record this sale and update the item's available details."
+        : "Record this sale and reduce the item's tracked stock by the quantity sold."
+      : _quickSellIsRecord
+        ? "This item will be added to inventory as Record Only. Stock quantity will not be tracked. Enter item name and sell price; code is optional."
+        : "This item will be added to inventory with tracked stock, reduced by the quantity sold. Enter item name, stock quantity, and sell price.";
+  }
+}
+window.setQuickSellMode = setQuickSellMode;
+async function submitQuickSell() {
+  if (_quickSellSaving) return;
+  if (!requireOpenDay()) return;
+  const name = document.getElementById("quick-sell-name")?.value.trim().replace(/\s+/g, " ") || "";
+  const qtyRaw = document.getElementById("quick-sell-qty")?.value ?? "";
+  const qty = Number(qtyRaw);
+  const stockQtyRaw = document.getElementById("quick-sell-stock-qty")?.value ?? "0";
+  const stockQty = Number(stockQtyRaw);
+  const priceRaw = document.getElementById("quick-sell-price")?.value ?? "";
+  const sellPrice = priceRaw.trim() === "" ? NaN : Number(priceRaw);
+  const buyRaw = document.getElementById("quick-sell-buy")?.value ?? "";
+  const buyPrice = buyRaw.trim() === "" ? 0 : Number(buyRaw);
+  const code = sanitiseCode(document.getElementById("quick-sell-code")?.value || "");
+  const itemIdRaw = document.getElementById("quick-sell-item-id")?.value || "";
+  const errorBox = document.getElementById("quick-sell-error");
+  const showError = (message) => {
+    if (errorBox) {
+      errorBox.textContent = message;
+      errorBox.hidden = false;
+    }
+  };
+  if (!name) return showError("Enter an item name.");
+  const saleQty = qty;
+  if (!Number.isInteger(saleQty) || saleQty < 1 || saleQty > 999999)
+    return showError("Quantity must be a whole number of at least 1.");
+  if (!Number.isFinite(sellPrice) || sellPrice <= 0)
+    return showError("Enter a sell price greater than zero.");
+  if (!Number.isFinite(buyPrice) || buyPrice < 0)
+    return showError("Buy price must be 0 or more.");
+  if (!_quickSellIsRecord) {
+    if (!Number.isInteger(stockQty) || stockQty < 0 || stockQty > 999999)
+      return showError("Stock quantity must be a whole number of 0 or more.");
+    if (stockQty < saleQty)
+      return showError("Stock quantity must be at least the quantity being sold.");
+  }
+  if (code && code.length > 40) return showError("Code must be 40 characters or fewer.");
+
+  const item = {
+    id: itemIdRaw ? Number(itemIdRaw) : null,
+    name,
+    code,
+    buyPrice,
+    sellPrice,
+    isRecord: _quickSellIsRecord,
+    stockQty: _quickSellIsRecord ? 0 : stockQty,
+  };
+  const sale = {
+    itemName: name,
+    qty: saleQty,
+    sellPrice,
+    actualPrice: sellPrice,
+    revenue: saleQty * sellPrice,
+    paymentMethod: "cash",
+  };
+  _quickSellSaving = true;
+  if (errorBox) {
+    errorBox.hidden = true;
+    errorBox.textContent = "";
+  }
+  const submit = document.getElementById("quick-sell-submit");
+  if (submit) {
+    submit.disabled = true;
+    submit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+  }
+  try {
+    const result = await persistQuickSellAtomically({ item, sale });
+    closeQuickSell();
+    try {
+      allItems = await dbAll("items");
+      await renderList();
+      await renderDashboard();
+      await renderStockMonitor();
+      await refreshSalesViews();
+      if (activeDay) updateDayLiveStats();
+      scheduleSync();
+    } catch (refreshError) {
+      console.error("[submitQuickSell] sale saved but view refresh failed", refreshError);
+      toast("Sale saved, but some views could not refresh. Reload to see the latest inventory.", "err");
+    }
+    const search = document.getElementById("sell-search");
+    if (search) {
+      search.value = "";
+      onSellSearch("");
+    }
+    showPage("history");
+    showSaleSuccess(result.sale.profit);
+  } catch (saveError) {
+    console.error("[submitQuickSell]", saveError);
+    showError("Sale was not saved. " + (saveError.message || "Please try again."));
+    toast("Could not save sale: " + (saveError.message || "Please try again"), "err");
+  } finally {
+    _quickSellSaving = false;
+    if (submit) {
+      submit.disabled = false;
+      submit.innerHTML = '<i class="fa-solid fa-rotate-right"></i> Retry Sell item';
+    }
+  }
+}
+window.submitQuickSell = submitQuickSell;
 
 function selectPayment(method) {
   _selectedPayment = method;
@@ -341,159 +598,27 @@ function selectPayment(method) {
   if (btn) btn.classList.add("active");
 }
 
-function openOffStockSale() {
-  renderOffstockTypeOptions();
-  const sheet = document.getElementById("offstock-sale-sheet");
-  if (sheet) sheet.classList.add("open");
-  setTimeout(() => document.getElementById("off-name")?.focus(), 80);
-}
-
-function closeOffStockSale() {
-  const sheet = document.getElementById("offstock-sale-sheet");
-  if (sheet) sheet.classList.remove("open");
-}
-
-function adjOffStockQty(delta) {
-  const input = document.getElementById("off-qty");
-  if (!input) return;
-  const current = parseInt(input.value, 10) || 0;
-  input.value = String(Math.max(0, Math.min(999999, current + delta)));
-}
-
-async function confirmOffStockSale() {
-  if (!requireOpenDay()) return;
-  const name = Input.text("off-name");
-  const code = sanitiseCode(Input.text("off-code"));
-  const selectedType = getCascadeCommittedValue("off-type", {
-    valueMode: "name",
-    requireLeaf: true,
-  });
-  const type = selectedType || "General";
-  const qtyRaw = Input.raw("off-qty");
-  const qty = qtyRaw === "" ? 1 : Number(qtyRaw);
-  const buyPrice = Input.money("off-buy");
-  const sellPrice = Input.money("off-sell");
-  const paymentMethod = "cash";
-  if (!Validate.text(name, "off-name", "Item name")) return;
-  if (qtyRaw !== "" && !Number.isInteger(qty))
-    return Validate.fail("Enter a whole quantity", "off-qty");
-  if (!Validate.restockQty(qty, "off-qty")) return;
-  if (
-    buyPrice !== null &&
-    !Validate.moneyRequired(buyPrice, "off-buy", "Buy price")
-  )
-    return;
-  if (!Validate.moneyRequired(sellPrice, "off-sell", "Sale price")) return;
-  const buy = buyPrice ?? 0;
-  if (sellPrice <= 0)
-    return Validate.fail("Sale price must be greater than zero", "off-sell");
-  if (buyPrice !== null && buy >= sellPrice)
-    return Validate.fail(
-      "Sale price must be higher than buy price",
-      "off-sell",
-    );
-
-  const revenue = qty * sellPrice;
-  const profit = buyPrice === null ? 0 : qty * (sellPrice - buy);
-  const sale = {
-    itemId: null,
-    itemCode: code,
-    itemName: name || code,
-    itemType: type,
-    qty,
-    buyPrice: buy,
-    sellPrice,
-    actualPrice: sellPrice,
-    revenue,
-    profit,
-    overridden: false,
-    paymentMethod,
-    unaccounted: true,
-    soldBy: currentUser ? currentUser.username : "system",
-    businessDate: todayDateStr(),
-    date: new Date().toISOString(),
-  };
-  const monitorRow = {
-    name: name || code,
-    code,
-    type,
-    qty,
-    estimatedCost: buy,
-    note: "Sold before stock count",
-    status: "unaccounted",
-    source: "sale-monitor",
-    saleId: sale.id,
-    createdAt: new Date().toISOString(),
-    createdBy: currentUser ? currentUser.username : "system",
-  };
-  const sellButton = document.querySelector(
-    "#offstock-sale-sheet .stock-add-wish-btn",
-  );
-  const originalButtonMarkup = sellButton?.innerHTML;
-  if (sellButton) {
-    sellButton.disabled = true;
-    sellButton.innerHTML =
-      '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
-  }
-  try {
-    await persistOffStockSaleAtomically(sale, monitorRow);
-  } catch (error) {
-    console.error("[confirmOffStockSale]", error);
-    toast(
-      "Could not record sale: " + (error.message || "Please try again"),
-      "err",
-    );
-    return;
-  } finally {
-    if (sellButton) {
-      sellButton.disabled = false;
-      sellButton.innerHTML = originalButtonMarkup;
-    }
-  }
-
-  ["off-name", "off-code", "off-buy", "off-sell"].forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.value = "";
-  });
-  const offQty = document.getElementById("off-qty");
-  if (offQty) offQty.value = "";
-  const offType = document.getElementById("off-type");
-  if (offType) offType.value = "";
-  renderOffstockTypeOptions();
-  closeOffStockSale();
-  try {
-    await renderStockMonitor();
-    await refreshSalesViews();
-  } catch (error) {
-    console.error("[confirmOffStockSale] view refresh failed", error);
-  }
-  try {
-    renderDashboard();
-  } catch (_) {
-    /* intentionally ignored */
-  }
-  try {
-    if (activeDay) updateDayLiveStats();
-  } catch (_) {
-    /* intentionally ignored */
-  }
-  scheduleSync();
-  const syncStatus = await saleSaveStatus();
-  toast(
-    syncStatus.pending
-      ? "Sale saved locally, sync pending - monitor marked NOT ACCOUNTED"
-      : "Sale recorded - monitor marked NOT ACCOUNTED",
-    syncStatus.pending ? "" : "ok",
-  );
-  showSaleSuccess(profit);
-}
-
 // Shows the "enter buy price" field only when the item/size has no cost on record yet.
 function _toggleSmBuyField(currentBuy) {
   const field = document.getElementById("sm-buy-field");
   const input = document.getElementById("sm-buy");
   if (input) input.value = "";
   if (field) field.style.display = currentBuy > 0 ? "none" : "";
+}
+
+function _showSellFormPage() {
+  const sellPage = document.getElementById("sell-modal");
+  if (!sellPage?.classList.contains("active")) {
+    const activePage = document.querySelector(".page.active");
+    const pageId = activePage?.id || "page-sell";
+    window._sellFormReturnPage =
+      pageId === "detail-sheet"
+        ? "item-detail"
+        : pageId === "sell-modal"
+          ? "sell"
+          : pageId.replace(/^page-/, "") || "sell";
+  }
+  showPage("sell-form");
 }
 
 async function openSellModal(itemId) {
@@ -563,7 +688,7 @@ async function openSellModal(itemId) {
     document.getElementById("sm-actual").value = "";
     _toggleSmBuyField(_itemBuy);
     updateSellModal();
-    document.getElementById("sell-modal").classList.add("open");
+    _showSellFormPage();
   } catch (e) {
     console.error("[openSellModal]", e);
     toast("Error: " + e.message, "err");
@@ -572,11 +697,12 @@ async function openSellModal(itemId) {
 
 function closeSellModal() {
   const modal = document.getElementById("sell-modal");
-  if (modal) modal.classList.remove("open");
+  const wasActive = modal?.classList.contains("active");
   currentSellItemId = null;
   _isShoeSale = false;
   _sellShoeItem = null;
   _sellShoeSize = null;
+  if (wasActive) showPage(window._sellFormReturnPage || "sell");
 }
 
 async function updateSellModal() {
@@ -896,6 +1022,7 @@ async function confirmSaleUnlocked() {
     } catch (_) {
       /* intentionally ignored */
     }
+    showPage("history");
     // Refresh finance page if it's currently visible
     try {
       const financeVisible =
@@ -948,13 +1075,6 @@ async function refreshSalesViews() {
     /* intentionally ignored */
   }
 }
-
-// close sell modal on backdrop click
-const _sellModal = document.getElementById("sell-modal");
-if (_sellModal)
-  _sellModal.addEventListener("click", function (e) {
-    if (e.target === this) closeSellModal();
-  });
 
 async function deleteSale(saleId) {
   try {
@@ -1424,15 +1544,21 @@ function _histSalesTotals(sales) {
       sum.qty += qty;
       sum.buy += (Number(sale.buyPrice) || 0) * qty;
       sum.sale += (Number(sale.actualPrice || sale.sellPrice) || 0) * qty;
-      sum.profit += Number(sale.profit) || 0;
+      if (sale.profit == null || !Number.isFinite(Number(sale.profit)))
+        sum.unknownProfit += 1;
+      else sum.profit += Number(sale.profit);
       return sum;
     },
-    { transactions: 0, qty: 0, buy: 0, sale: 0, profit: 0 },
+    { transactions: 0, qty: 0, buy: 0, sale: 0, profit: 0, unknownProfit: 0 },
   );
 }
 
 function _histTotalsRow(totals) {
-  return `<tr class="hist-totals-top"><td></td><td><strong class="hist-total-label">Totals</strong><span class="hist-total-meta">${_histCountLabel(totals.transactions, "transaction")} · ${_histCountLabel(totals.qty, "item")}</span></td><td></td><td>${_fmtNum(totals.buy)}</td><td>${_fmtNum(totals.sale)}</td><td class="${totals.profit >= 0 ? "hp-pos" : "hp-neg"}">${_fmtNum(totals.profit)}</td><td></td></tr>`;
+  const profitTotal =
+    totals.unknownProfit > 0
+      ? `Unavailable for ${fmtN(totals.unknownProfit)} sale${totals.unknownProfit === 1 ? "" : "s"}`
+      : _fmtNum(totals.profit);
+  return `<tr class="hist-totals-top"><td></td><td><strong class="hist-total-label">Totals</strong><span class="hist-total-meta">${_histCountLabel(totals.transactions, "transaction")} · ${_histCountLabel(totals.qty, "item")}</span></td><td></td><td>${_fmtNum(totals.buy)}</td><td>${_fmtNum(totals.sale)}</td><td class="${totals.unknownProfit ? "" : totals.profit >= 0 ? "hp-pos" : "hp-neg"}">${profitTotal}</td><td></td></tr>`;
 }
 
 // ── Tabular sale record renderer ────────────────────────────────────
@@ -1466,16 +1592,18 @@ function _histTable(sales) {
   const detailRows = sorted
     .map((s, i) => {
       const qty = s.qty || 1;
-      const unitCost = Number(s.buyPrice) || 0;
+      const hasCost = s.buyPrice != null && Number.isFinite(Number(s.buyPrice));
+      const unitCost = hasCost ? Number(s.buyPrice) : 0;
       const buy = unitCost * qty;
       const sell = (s.actualPrice || s.sellPrice || 0) * qty;
-      const profit = s.profit || 0;
+      const hasProfit = s.profit != null && Number.isFinite(Number(s.profit));
+      const profit = hasProfit ? Number(s.profit) : 0;
       const rawName =
         (s.itemName || s.itemCode || "Item") +
         (s.itemSize ? " · Sz " + s.itemSize : "") +
         (qty > 1 ? " ×" + qty : "");
       const click = s.id ? `onclick="openSaleDetail(${s.id})"` : "";
-      const profCls = profit >= 0 ? "hp-pos" : "hp-neg";
+      const profCls = !hasProfit ? "" : profit >= 0 ? "hp-pos" : "hp-neg";
       const inInv = allItems.some(
         (item) =>
           (s.itemId && item.id === s.itemId) ||
@@ -1489,10 +1617,10 @@ function _histTable(sales) {
         `<tr class="hist-clickable-row" ${click}>` +
         `<td class="hist-num">${i + 1}</td>` +
         `<td>${escapeHtml(rawName)}</td>` +
-        `<td>${_fmtNum(unitCost)}</td>` +
-        `<td>${_fmtNum(buy)}</td>` +
+        `<td>${hasCost ? _fmtNum(unitCost) : "N/A"}</td>` +
+        `<td>${hasCost ? _fmtNum(buy) : "N/A"}</td>` +
         `<td>${_fmtNum(sell)}</td>` +
-        `<td class="${profCls}">${_fmtNum(profit)}</td>` +
+        `<td class="${profCls}">${hasProfit ? _fmtNum(profit) : "N/A"}</td>` +
         `<td class="hist-td-chevron">${invBadge}</td>` +
         `</tr>`
       );
@@ -1661,9 +1789,9 @@ async function exportSalesReport() {
       s.itemName || "",
       s.itemCode || "",
       s.qty || 1,
-      s.buyPrice || 0,
+      s.buyPrice ?? "",
       s.revenue || 0,
-      s.profit || 0,
+      s.profit ?? "",
       s.paymentMethod || "cash",
     ]),
   );
@@ -1724,8 +1852,9 @@ async function openSaleDetail(saleId) {
   // Populate view
   const qty = sale.qty || 1;
   const price = sale.actualPrice || sale.sellPrice || 0;
-  const buy = sale.buyPrice || 0;
-  const profit = sale.profit || qty * (price - buy);
+  const hasProfit = sale.buyPrice != null && sale.profit != null;
+  const buy = sale.buyPrice == null ? 0 : Number(sale.buyPrice);
+  const profit = hasProfit ? Number(sale.profit) : null;
   const dateStr = sale.date
     ? new Date(sale.date).toLocaleString("en-GB", {
         day: "numeric",
@@ -1742,8 +1871,14 @@ async function openSaleDetail(saleId) {
   document.getElementById("sds-price").textContent = fmt(price);
   document.getElementById("sds-revenue").textContent = fmt(qty * price);
   const profEl = document.getElementById("sds-profit");
-  profEl.textContent = (profit >= 0 ? "+" : "") + fmt(profit);
-  profEl.style.color = profit >= 0 ? "var(--green)" : "var(--red)";
+  profEl.textContent = hasProfit
+    ? (profit >= 0 ? "+" : "") + fmt(profit)
+    : "N/A - cost unknown";
+  profEl.style.color = hasProfit
+    ? profit >= 0
+      ? "var(--green)"
+      : "var(--red)"
+    : "var(--muted)";
   document.getElementById("sds-date").textContent = dateStr;
 
   const pm = (sale.paymentMethod || "cash").toUpperCase();
@@ -2061,8 +2196,7 @@ async function openSellShoeModal(itemId, size) {
   }
   if (el("sm-actual")) el("sm-actual").value = "";
   _toggleSmBuyField(sizeRec.buyPrice || item.buyPrice || 0);
-  const sellModal = document.getElementById("sell-modal");
-  if (sellModal) sellModal.classList.add("open");
+  _showSellFormPage();
   updateSellModal();
 }
 window.openSellShoeModal = openSellShoeModal;

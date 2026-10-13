@@ -3,6 +3,28 @@
   padding: 0 !important;
   animation: none !important;
 }
+.app-detail-page {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 12px 16px 32px;
+}
+.app-detail-page-header {
+  margin: 0 auto 14px;
+}
+.app-detail-page-content {
+  position: relative;
+  width: 100%;
+  max-width: 920px;
+  max-height: none !important;
+  margin: 0 auto;
+  overflow: visible !important;
+  border-radius: 16px;
+  box-shadow: none;
+  animation: none;
+}
+.app-detail-page-content > .sheet-handle {
+  display: none;
+}
 #inventory-stock-slot #page-list,
 #inventory-wishlist-slot #page-wishlist {
   padding: 8px 10px 20px;
@@ -146,6 +168,7 @@
   border-color: var(--accent);
 }
 .inventory-search-row {
+  position: relative;
   display: flex;
   justify-content: center;
   margin-bottom: 14px;
@@ -161,17 +184,17 @@
   box-shadow: none;
   padding-left: 48px;
 }
-#inventory-stock-slot #type-chips {
+.stocklist-component [data-stocklist-chips] {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
   gap: 6px;
   margin: 0 0 14px;
   padding: 2px 0 4px;
 }
-#inventory-stock-slot #type-chips[hidden] {
+.stocklist-component [data-stocklist-chips][hidden] {
   display: none;
 }
-#inventory-stock-slot #type-chips .chip {
+.stocklist-component [data-stocklist-chips] .chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -186,7 +209,7 @@
   font-size: 10px;
   font-weight: 700;
 }
-#inventory-stock-slot #type-chips .chip.active {
+.stocklist-component [data-stocklist-chips] .chip.active {
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
@@ -207,7 +230,7 @@
   background: rgba(255, 255, 255, 0.2);
   color: #fff;
 }
-#inventory-stock-slot #item-list {
+.stocklist-component [data-stocklist-items] {
   overflow: hidden;
   margin-bottom: 0;
   border: 0;
@@ -501,11 +524,11 @@
   .inventory-search-row .search-wrap {
     width: 80%;
   }
-  #inventory-stock-slot #type-chips {
+  .stocklist-component [data-stocklist-chips] {
     grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
     gap: 5px;
   }
-  #inventory-stock-slot #type-chips .chip {
+  .stocklist-component [data-stocklist-chips] .chip {
     gap: 3px;
     padding: 2px 3px;
     font-size: 9px;

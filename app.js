@@ -681,69 +681,260 @@ function persistSaleAtomically({
   });
 }
 
-function persistOffStockSaleAtomically(sale, monitorRow) {
+function persistQuickSellAtomically({ item, sale } = {}) {
   return new Promise((resolve, reject) => {
     if (!_dbReady(reject)) return;
     const syncable =
       _appDbReady &&
       db.objectStoreNames.contains("sync_queue") &&
       db.objectStoreNames.contains("sync_meta");
-    const stores = ["sales", "wishlist"];
+    const stores = ["items", "sales", "wishlist"];
     if (syncable) stores.push("sync_queue", "sync_meta");
     try {
       const tx = db.transaction(stores, "readwrite");
-      const saleRequest = tx.objectStore("sales").add(sale);
+      const itemStore = tx.objectStore("items");
+      const itemsRequest = itemStore.getAll();
       const stateRequest = syncable
         ? tx.objectStore("sync_meta").get("state")
         : null;
+      let records;
       let state;
-      let saleId;
+      let recordsReady = false;
+      let stateReady = !syncable;
       let finalized = false;
-      const finalize = () => {
-        if (finalized || saleId == null || (syncable && state === undefined))
-          return;
-        finalized = true;
-        sale.id = saleId;
-        sale.fbId = stableSaleFbId(sale);
-        monitorRow.saleId = sale.id;
-        const monitorRequest = tx.objectStore("wishlist").add(monitorRow);
-        monitorRequest.onsuccess = (event) => {
-          monitorRow.id = event.target.result;
-          if (!syncable) return;
-          const meta = state || {
-            key: "state",
-            clock: 0,
-            clientId: _syncClient(),
-          };
-          let clock = Math.max(Number(meta.clock) || 0, _syncClock);
-          const now = new Date().toISOString();
-          const queue = (collection, record) => {
-            _prepareSyncRecord(collection, record);
-            clock += 1;
-            record._syncMutationId = _syncUuid();
-            record._syncVersion = clock;
-            record._syncClient = _syncClient();
-            record._syncUpdatedAt = now;
-            record._syncDeleted = false;
-            tx.objectStore(collection).put(record);
-            tx.objectStore("sync_queue").add(
-              _queueRecord(collection, record, "upsert", clock, now),
-            );
-          };
-          queue("sales", sale);
-          queue("wishlist", monitorRow);
-          tx.objectStore("sync_meta").put({
-            ...meta,
-            key: "state",
-            clock,
-            clientId: _syncClient(),
-            updatedAt: now,
-          });
-          _syncClock = clock;
-        };
+      let operationError = null;
+      let result = null;
+      const fail = (error) => {
+        operationError = error instanceof Error ? error : new Error(String(error));
+        try {
+          tx.abort();
+        } catch (_) {
+          reject(operationError);
+        }
       };
-      saleRequest.onsuccess = (event) => {
-        saleId = event.target.result;
+      const queueSyncRecords = (entries) => {
+        if (!syncable) return;
+        const meta = state || {
+          key: "state",
+          clock: 0,
+          clientId: _syncClient(),
+        };
+        let clock = Math.max(Number(meta.clock) || 0, _syncClock);
+        const now = new Date().toISOString();
+        entries.forEach(([collection, record]) => {
+          _prepareSyncRecord(collection, record);
+          clock += 1;
+          record._syncMutationId = _syncUuid();
+          record._syncVersion = clock;
+          record._syncClient = _syncClient();
+          record._syncUpdatedAt = now;
+          record._syncDeleted = false;
+          tx.objectStore(collection).put(record);
+          tx.objectStore("sync_queue").add(
+            _queueRecord(collection, record, "upsert", clock, now),
+          );
+        });
+        tx.objectStore("sync_meta").put({
+          ...meta,
+          key: "state",
+          clock,
+          clientId: _syncClient(),
+          updatedAt: now,
+        });
+        _syncClock = clock;
+      };
+      const finalize = () => {
+        if (finalized || !recordsReady || !stateReady) return;
+        finalized = true;
+        try {
+          const normalizeName = (value) =>
+            String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+          const selectedId = item.id == null ? null : Number(item.id);
+          const selected = selectedId == null
+            ? null
+            : records.find((record) => Number(record.id) === selectedId);
+          if (selectedId != null && (!selected || !selected.incomplete))
+            throw new Error("This item is no longer incomplete. Search inventory again.");
+          const duplicate = records.find(
+            (record) => normalizeName(record.name) === normalizeName(item.name),
+          );
+          if (selected && duplicate && Number(duplicate.id) !== Number(selected.id))
+            throw new Error("Another inventory item already has that name.");
+          const finalItem = selected || duplicate || { createdAt: new Date().toISOString() };
+          const creating = !selected && !duplicate;
+          const updateItem = creating || !!selected || !!duplicate?.incomplete;
+          const isRecord = item.isRecord !== false;
+          const stockQty = Number(item.stockQty ?? 0);
+          const saleQty = Number(sale.qty);
+          if (!isRecord && (!Number.isInteger(stockQty) || stockQty < saleQty))
+            throw new Error("Stock quantity must be at least the quantity being sold.");
+          if (creating) {
+            finalItem.name = item.name;
+            finalItem.qty = isRecord ? 0 : stockQty - saleQty;
+            finalItem.isRecord = isRecord;
+            finalItem.source = "off-stock-sale";
+          } else if (updateItem) {
+            finalItem.name = item.name;
+            finalItem.isRecord = isRecord;
+            finalItem.qty = isRecord ? 0 : stockQty - saleQty;
+          }
+          const suppliedCode = String(item.code || "").trim();
+          if (suppliedCode) {
+            const codeOwner = records.find(
+              (record) =>
+                record.code === suppliedCode &&
+                Number(record.id) !== Number(finalItem.id),
+            );
+            if (codeOwner)
+              throw new Error("That code is already assigned to another inventory item.");
+            finalItem.code = suppliedCode;
+          } else if (creating) {
+            delete finalItem.code;
+          }
+          if (item.type) finalItem.type = item.type;
+          else if (creating) delete finalItem.type;
+          if (item.buyPrice !== null && item.buyPrice !== undefined) {
+            finalItem.buyPrice = Number(item.buyPrice);
+            finalItem.buy = Number(item.buyPrice);
+          }
+          if (updateItem) {
+            finalItem.sellPrice = Number(item.sellPrice);
+            finalItem.sell = Number(item.sellPrice);
+            const knownBuy = finalItem.buyPrice ?? finalItem.buy;
+            finalItem.profit =
+              knownBuy == null
+                ? null
+                : Number(item.sellPrice) - Number(knownBuy);
+          }
+          const knownBuyPrice = finalItem.buyPrice ?? finalItem.buy;
+          const knownSellPrice = finalItem.sellPrice ?? finalItem.sell;
+          const requiredMissing = [];
+          if (!String(finalItem.name || "").trim()) requiredMissing.push("name");
+          if (!String(finalItem.type || "").trim()) requiredMissing.push("category");
+          if (!String(finalItem.code || "").trim()) requiredMissing.push("code");
+          if (
+            knownBuyPrice == null ||
+            !Number.isFinite(Number(knownBuyPrice)) ||
+            Number(knownBuyPrice) < 0
+          )
+            requiredMissing.push("buyPrice");
+          if (
+            knownSellPrice == null ||
+            !Number.isFinite(Number(knownSellPrice)) ||
+            Number(knownSellPrice) < 0
+          )
+            requiredMissing.push("sellPrice");
+          if (updateItem) {
+            finalItem.incomplete = requiredMissing.length > 0;
+            finalItem.missingFields = requiredMissing;
+            finalItem.updatedAt = new Date().toISOString();
+            finalItem.updatedBy = currentUser ? currentUser.username : "system";
+            finalItem.source = finalItem.source || "off-stock-sale";
+            if (!finalItem.fbId) {
+              finalItem.fbId = finalItem.code
+                ? stableItemFbId(finalItem)
+                : "itm_offstock_" + _syncUuid();
+            }
+          }
+
+          const buyKnown =
+            knownBuyPrice != null &&
+            Number.isFinite(Number(knownBuyPrice)) &&
+            Number(knownBuyPrice) >= 0;
+          const saleBuyPrice = buyKnown ? Number(knownBuyPrice) : null;
+          Object.assign(sale, {
+            itemId: finalItem.id == null ? null : finalItem.id,
+            itemCode: finalItem.code || "",
+            itemName: finalItem.name || item.name,
+            itemType: finalItem.type || "",
+            buyPrice: saleBuyPrice,
+            profit: buyKnown
+              ? Number(sale.qty) * (Number(sale.sellPrice) - saleBuyPrice)
+              : null,
+            unaccounted: true,
+            offStock: true,
+            soldBy: currentUser ? currentUser.username : "system",
+            businessDate: (() => {
+              const parts = new Intl.DateTimeFormat("en-CA", {
+                timeZone: "Africa/Nairobi",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+              }).formatToParts(new Date());
+              const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+              return `${values.year}-${values.month}-${values.day}`;
+            })(),
+            date: new Date().toISOString(),
+          });
+          const monitorRow = {
+            monitorId: null,
+            saleId: null,
+            itemId: finalItem.id == null ? null : finalItem.id,
+            name: finalItem.name || item.name,
+            code: finalItem.code || "",
+            type: finalItem.type || "",
+            qty: Number(sale.qty),
+            estimatedCost: buyKnown
+              ? saleBuyPrice * Number(sale.qty)
+              : null,
+            note: "Sold before stock count",
+            status: "needs-restock",
+            source: "sale-monitor",
+            createdAt: new Date().toISOString(),
+            createdBy: currentUser ? currentUser.username : "system",
+          };
+          if (creating) {
+            const addItemRequest = itemStore.add(finalItem);
+            addItemRequest.onsuccess = (event) => {
+              finalItem.id = event.target.result;
+              sale.itemId = finalItem.id;
+              monitorRow.itemId = finalItem.id;
+              if (!finalItem.code)
+                finalItem.fbId = "itm_offstock_" + String(finalItem.id) + "_" + _syncUuid();
+              else
+                finalItem.fbId = stableItemFbId(finalItem);
+              itemStore.put(finalItem);
+              addSaleAndMonitor(finalItem, monitorRow);
+            };
+          } else {
+            sale.itemId = finalItem.id;
+            monitorRow.itemId = finalItem.id;
+            if (updateItem) itemStore.put(finalItem);
+            addSaleAndMonitor(finalItem, monitorRow, updateItem);
+          }
+        } catch (error) {
+          fail(error);
+        }
+      };
+
+      const addSaleAndMonitor = (finalItem, monitorRow, includeItem = true) => {
+        try {
+          const saleRequest = tx.objectStore("sales").add(sale);
+          saleRequest.onsuccess = (event) => {
+            sale.id = event.target.result;
+            sale.fbId = stableSaleFbId(sale);
+            monitorRow.saleId = sale.id;
+            monitorRow.monitorId = "sale-monitor:" + sale.id;
+            monitorRow.fbId = "wish_sale_monitor_" + sale.id;
+            const monitorRequest = tx.objectStore("wishlist").add(monitorRow);
+            monitorRequest.onsuccess = (monitorEvent) => {
+              monitorRow.id = monitorEvent.target.result;
+              queueSyncRecords([
+                ...(includeItem ? [["items", finalItem]] : []),
+                ["sales", sale],
+                ["wishlist", monitorRow],
+              ]);
+              result = { item: finalItem, sale, monitorRow };
+            };
+          };
+        } catch (error) {
+          fail(error);
+        }
+      };
+
+      itemsRequest.onsuccess = (event) => {
+        records = event.target.result || [];
+        recordsReady = true;
         finalize();
       };
       if (stateRequest) {
@@ -753,17 +944,18 @@ function persistOffStockSaleAtomically(sale, monitorRow) {
             clock: 0,
             clientId: _syncClient(),
           };
+          stateReady = true;
           finalize();
         };
-      } else {
-        state = null;
       }
       tx.onerror = (event) => reject(event.target.error || tx.error);
       tx.onabort = () =>
-        reject(tx.error || new Error("Off-stock sale transaction aborted"));
+        reject(operationError || tx.error || new Error("Quick sale transaction aborted"));
       tx.oncomplete = () => {
+        _notifySyncLocalChange("items");
         _notifySyncLocalChange("sales");
-        resolve({ sale, monitorRow });
+        _notifySyncLocalChange("wishlist");
+        resolve(result);
       };
     } catch (error) {
       reject(error);
@@ -1916,6 +2108,7 @@ function getOrderedTypesForDropdown() {
 
 function itemMatchesTypeFilter(item, filterName) {
   if (filterName === "all") return true;
+  if (filterName === "incomplete") return !!item.incomplete;
   if ((item.type || "") === filterName) return true;
   const itemRec = getTypeRecord(item.type);
   const filterRec = getTypeRecord(filterName);
@@ -2909,9 +3102,21 @@ function showPage(id) {
   document
     .querySelectorAll(".nav-btn")
     .forEach((b) => b.classList.remove("active"));
-  const pageEl = document.getElementById("page-" + id);
+  const pageEl = document.getElementById(
+    id === "item-detail"
+      ? "detail-sheet"
+      : id === "sell-form"
+        ? "sell-modal"
+        : "page-" + id,
+  );
   if (pageEl) pageEl.classList.add("active");
-  const tabEl = document.getElementById("tab-" + id);
+  const tabId =
+    id === "item-detail"
+      ? navAccessKey(window._detailReturnPage || "inventory")
+      : id === "sell-form"
+        ? "sell"
+        : id;
+  const tabEl = document.getElementById("tab-" + tabId);
   if (tabEl) tabEl.classList.add("active");
   if (id === "dash") renderDashboard();
   if (id === "inventory") showInventoryTab(_activeInventoryTab);
@@ -3827,18 +4032,23 @@ function renderTypeSelect() {
 }
 
 function renderTypeChips() {
-  const chips = document.getElementById("type-chips");
-  if (!chips) return;
+  const chipContainers = document.querySelectorAll("[data-stocklist-chips]");
+  if (!chipContainers.length) return;
   const topActive = types
     .filter((t) => t.parentId == null && isCategoryActive(t))
     .sort(_sortTypes);
   const typeCount = (name) =>
     allItems.filter((item) => itemMatchesTypeFilter(item, name)).length;
-  chips.innerHTML = `
+  const markup = `
     <button type="button" class="chip ${activeTypeFilter === "all" ? "active" : ""}"
       onclick="setTypeFilter('all', this)" aria-pressed="${activeTypeFilter === "all"}">
       <i class="fa-solid fa-grip" aria-hidden="true"></i> All
       <span class="chip-count">${allItems.length}</span>
+    </button>
+    <button type="button" class="chip ${activeTypeFilter === "incomplete" ? "active" : ""}"
+      onclick="setTypeFilter('incomplete', this)" aria-pressed="${activeTypeFilter === "incomplete"}">
+      <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i> Incomplete
+      <span class="chip-count">${allItems.filter((item) => item.incomplete).length}</span>
     </button>
     ${topActive
       .map((type) => {
@@ -3852,6 +4062,9 @@ function renderTypeChips() {
         </button>`;
       })
       .join("")}`;
+  chipContainers.forEach((chips) => {
+    chips.innerHTML = markup;
+  });
 }
 
 function setTypeFilter(name, el) {
@@ -3859,11 +4072,11 @@ function setTypeFilter(name, el) {
   if (name === "all" || !isFootwearType(name)) {
     window._activeSizeGroupFilter = "all";
     document
-      .querySelectorAll('[id^="sgf-"]')
+      .querySelectorAll("[data-size-group-filter]")
       .forEach((b) => b.classList.remove("active"));
   }
   document
-    .querySelectorAll("#type-chips .chip")
+    .querySelectorAll("[data-stocklist-chips] .chip")
     .forEach((c) => c.classList.remove("active"));
   if (el) el.classList.add("active");
   _renderSizeGroupFilter();
@@ -7132,10 +7345,14 @@ function parsePriceInput(value) {
 // ===== SAVE ITEM =====
 function resetInventoryListForNewItem() {
   activeTypeFilter = "all";
-  const search = UI.el("search");
-  if (search) search.value = "";
-  const clearSearch = UI.el("search-clear");
-  if (clearSearch) clearSearch.style.display = "none";
+  document.querySelectorAll("[data-stocklist-search]").forEach((search) => {
+    search.value = "";
+  });
+  document
+    .querySelectorAll("[data-stocklist-search-clear]")
+    .forEach((clearSearch) => {
+      clearSearch.style.display = "none";
+    });
 }
 
 async function saveItem() {
@@ -7367,16 +7584,25 @@ async function saveItem() {
     const type = UI.el("f-type")?.value || "";
     const code = sanitiseCode(UI.el("f-code")?.value || "");
     const name = (UI.el("f-name")?.value || "").trim().replace(/[ \t]+/g, " ");
+    const editIdNumber = /^\d+$/.test(editIdRaw) ? Number(editIdRaw) : null;
+    const originalForEdit = editIdNumber ? await dbGet("items", editIdNumber) : null;
+    if (editIdNumber && !originalForEdit) {
+      toast("Warning: Item not found", "err");
+      return;
+    }
+    const isIncompleteEdit = !!originalForEdit?.incomplete;
     if (!name) {
       return Validate.fail("Enter item name", "f-name");
     }
-    if (!code) {
+    if (!code && !isIncompleteEdit) {
       toast("Warning: Enter item code", "err");
       return;
     }
-    if (!editIdRaw) {
+    if (code && (!editIdRaw || isIncompleteEdit)) {
       const codeMatches = await findCodeMatchesForSave(code);
-      const existingCode = codeMatches.find((i) => i.code === code);
+      const existingCode = codeMatches.find(
+        (i) => i.code === code && Number(i.id) !== editIdNumber,
+      );
       // Footwear: same code is OK when adding/updating sizes on an existing shoe SKU
       const addingShoeSizes =
         existingCode && isFootwearType(type) && existingCode.isShoe;
@@ -7520,7 +7746,6 @@ async function saveItem() {
       isRecord,
       createdAt: new Date().toISOString(),
     };
-
     if (editIdRaw) {
       const resolvedId = parseInt(editIdRaw);
       if (!resolvedId || isNaN(resolvedId)) {
@@ -7551,6 +7776,39 @@ async function saveItem() {
         updatedBy: currentUser ? currentUser.username : "system",
         fbId: original ? original.fbId : undefined,
       });
+      if (isIncompleteEdit) {
+        const missingFields = [];
+        if (!name) missingFields.push("name");
+        if (!type.trim()) missingFields.push("category");
+        if (!code) {
+          missingFields.push("code");
+          delete saved.code;
+        }
+        if (buyRaw.trim() === "" || !Number.isFinite(buy))
+          missingFields.push("buyPrice");
+        if (sellRaw.trim() === "" || !Number.isFinite(sell))
+          missingFields.push("sellPrice");
+        if (buyRaw.trim() === "") {
+          delete saved.buyPrice;
+          delete saved.buy;
+        }
+        if (sellRaw.trim() === "") {
+          delete saved.sellPrice;
+          delete saved.sell;
+        }
+        saved.incomplete = missingFields.length > 0;
+        saved.missingFields = missingFields;
+        saved.profit =
+          missingFields.includes("buyPrice") ||
+          missingFields.includes("sellPrice")
+            ? null
+            : sell - buy;
+        if (!saved.fbId) {
+          saved.fbId = saved.code
+            ? stableItemFbId(saved)
+            : "itm_offstock_" + String(saved.id);
+        }
+      }
       await dbPut("items", saved);
       if (!isRecord && qty !== previousQty) {
         await appendStockMove({
@@ -7688,7 +7946,6 @@ function clearForm() {
   _addFormWasFootwear = false;
   _addFormIsRecord = true;
   _preloadShoeCode = "";
-  const pageAdd = document.getElementById("page-add");
   if (pageAdd) pageAdd.classList.remove("footwear-add-mode");
   const cascadeWrap = document.getElementById("f-type-cascade");
   if (cascadeWrap) delete cascadeWrap.dataset.footwearMode;
@@ -8019,7 +8276,9 @@ function cancelEdit() {
 // ===== RENDER LIST =====
 async function renderList() {
   allItems = await dbAll("items");
-  const search = (UI.el("search")?.value || "").toLowerCase();
+  const search = (
+    document.querySelector("[data-stocklist-search]")?.value || ""
+  ).toLowerCase();
   renderTypeChips();
   _renderSizeGroupFilter();
 
@@ -8041,13 +8300,12 @@ async function renderList() {
     stockListCount.textContent =
       filtered.length + " of " + allItems.length + " items";
 
-  const list = UI.el("item-list");
-  if (!list) return;
+  const lists = document.querySelectorAll("[data-stocklist-items]");
+  if (!lists.length) return;
 
   if (!filtered.length) {
-    list.style.border = "none";
     const hasNoItems = allItems.length === 0 && !search && activeTypeFilter === "all";
-    list.innerHTML = hasNoItems
+    const emptyMarkup = hasNoItems
       ? `<div class="inventory-empty-state inventory-empty-first">
           <div class="inventory-empty-art" aria-hidden="true">
             <i class="fa-solid fa-box-open"></i>
@@ -8069,6 +8327,10 @@ async function renderList() {
           <h2>No matching products</h2>
           <p>Try another search or choose a different category.</p>
         </div>`;
+    lists.forEach((list) => {
+      list.style.border = "none";
+      list.innerHTML = emptyMarkup;
+    });
     renderStockMonitorSummary();
     return;
   }
@@ -8174,7 +8436,7 @@ async function renderList() {
       const allOut = sizes.every((sz) => (ledgerSizeQty.get(sz.id) || 0) <= 0);
       const hasOut = sizes.some((sz) => (ledgerSizeQty.get(sz.id) || 0) <= 0);
       const isExpanded =
-        (UI.el("search")?.value || "").length > 0 ||
+        search.length > 0 ||
         (_expandedShoeGroups && _expandedShoeGroups.has(item.code));
 
       cards.push(`
@@ -8284,7 +8546,7 @@ async function renderList() {
       const allOut = variants.every((v) => (ledgerSizeQty.get(v.id) || 0) <= 0);
       const hasOut = variants.some((v) => (ledgerSizeQty.get(v.id) || 0) <= 0);
       const isExpanded =
-        (UI.el("search")?.value || "").length > 0 ||
+        search.length > 0 ||
         (_expandedShoeGroups && _expandedShoeGroups.has(item.code));
 
       cards.push(`
@@ -8350,7 +8612,7 @@ async function renderList() {
 
       const { parentType, items: groupItems } = _typeGroupMap[ptId];
       const isExpanded =
-        (UI.el("search")?.value || "").length > 0 ||
+        search.length > 0 ||
         _expandedTypeGroups.has(ptId);
       const groupTotalQty = groupItems.reduce(
         (s, i) => s + (ledgerItemQty.get(i.id) || 0),
@@ -8463,6 +8725,7 @@ async function renderList() {
               <div class="ic-row2">
                 <span class="ic-type">${escapeHtml(item.type)}</span>
                 ${isRec ? '<span class="ic-badge ic-badge-rec">RECORD</span>' : ""}
+                ${item.incomplete ? '<span class="ic-badge ic-badge-incomplete">INCOMPLETE</span>' : ""}
                 <span class="ic-dot" style="background:${stockDot};"></span>
                 <span class="ic-stock">${stockLabel}</span>
                 ${soldQty > 0 ? '<span class="ic-sold">· ' + soldQty + " sold</span>" : ""}
@@ -8477,8 +8740,10 @@ async function renderList() {
     }
   }
 
-  list.style.border = "";
-  list.innerHTML = cards.join("");
+  lists.forEach((list) => {
+    list.style.border = "";
+    list.innerHTML = cards.join("");
+  });
   renderStockMonitorSummary();
 }
 
@@ -8528,8 +8793,9 @@ async function getStockMonitorRows() {
     .filter((w) => (w.status || "prospective") !== "stocked")
     .forEach((w) =>
       rows.push({
-        kind:
-          (w.status || "") === "unaccounted" ? "unaccounted" : "prospective",
+        kind: ["unaccounted", "needs-restock"].includes(w.status || "")
+          ? "unaccounted"
+          : "prospective",
         wishId: w.id,
         name: w.name || w.code || "Prospective item",
         code: w.code || "",
@@ -8537,8 +8803,11 @@ async function getStockMonitorRows() {
         qty: w.qty || 0,
         buyPrice: w.estimatedCost || 0,
         note: w.note || "",
-        label:
-          (w.status || "") === "unaccounted" ? "Not accounted" : "Prospective",
+        label: (w.status || "") === "needs-restock"
+          ? "Needs restock"
+          : (w.status || "") === "unaccounted"
+            ? "Not accounted"
+            : "Prospective",
       }),
     );
 
@@ -9619,6 +9888,16 @@ function triggerSheetPhotoUpload(event) {
 }
 
 async function openSheet(id) {
+  const detailPage = document.getElementById("detail-sheet");
+  if (!detailPage?.classList.contains("active")) {
+    const activePage = document.querySelector(".page.active");
+    const pageId = activePage?.id.replace(/^page-/, "") || "inventory";
+    window._detailReturnPage = pageId === "detail-sheet"
+      ? "inventory"
+      : pageId === "sell-modal"
+        ? "sell"
+        : pageId;
+  }
   currentDetailId = id;
   const item = await dbGet("items", id);
   if (!item) return;
@@ -9664,6 +9943,8 @@ async function openSheet(id) {
   set("sh-name", item.name);
   set("sh-code", item.code + (item.size ? " - " + item.size : ""));
   set("sh-type", item.type);
+  const incompleteBadge = document.getElementById("sh-incomplete-badge");
+  if (incompleteBadge) incompleteBadge.style.display = item.incomplete ? "inline-block" : "none";
   const tbadge = document.getElementById("sh-type-badge");
   if (tbadge) tbadge.textContent = t.emoji + " " + item.type;
   set("sh-size", item.size || "-");
@@ -9732,7 +10013,7 @@ async function openSheet(id) {
   set("sh-revenue", fmt(revenue));
   set("sh-profit-made", fmt(profitMade));
 
-  document.getElementById("detail-sheet").classList.add("open");
+  showPage("item-detail");
 
   const restockPanel = document.getElementById("restock-panel");
   if (restockPanel) restockPanel.style.display = "none";
@@ -9741,6 +10022,7 @@ async function openSheet(id) {
   const shSellBtn = document.getElementById("sh-sell-btn");
   const delBtn = document.querySelector("#detail-sheet .btn-del");
   const editBtn = document.querySelector("#detail-sheet .btn-edit");
+  if (editBtn) editBtn.textContent = item.incomplete ? "Complete details" : "Edit";
   const restockBtn = document.querySelector(
     "#detail-sheet .detail-action-restock",
   );
@@ -9771,7 +10053,11 @@ async function openSheet(id) {
 
 function closeSheet() {
   const sheet = document.getElementById("detail-sheet");
-  if (sheet) sheet.classList.remove("open");
+  if (sheet?.classList.contains("active")) {
+    showPage(window._detailReturnPage || "inventory");
+  } else if (sheet) {
+    sheet.classList.remove("open");
+  }
   const ov = document.getElementById("saving-overlay");
   if (ov) ov.style.display = "none";
 }
@@ -9888,20 +10174,18 @@ async function editItem() {
     UI.el("f-name").value = item.name || "";
     UI.el("f-size").value = item.variant || item.size || ""; // normalized field name
     UI.el("f-qty").value = item.qty ?? "";
-    UI.el("f-buy").value = item.buyPrice || item.buy || "";
-    UI.el("f-sell").value = item.sellPrice || item.sell || "";
+    UI.el("f-buy").value = item.buyPrice ?? item.buy ?? "";
+    UI.el("f-sell").value = item.sellPrice ?? item.sell ?? "";
     const _editSellMin = UI.el("f-sell-min");
     if (_editSellMin) _editSellMin.value = item.sellPriceMin || "";
     // Lock code and type - identifying fields
-    ["f-code"].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.disabled = true;
-        el.style.opacity = "0.45";
-        el.style.cursor = "not-allowed";
-      }
-    });
-    setAddTypeLocked(true);
+    const codeInput = UI.el("f-code");
+    if (codeInput) {
+      codeInput.disabled = !item.incomplete;
+      codeInput.style.opacity = item.incomplete ? "" : "0.45";
+      codeInput.style.cursor = item.incomplete ? "" : "not-allowed";
+    }
+    setAddTypeLocked(!item.incomplete);
     setSaveBtnLabel("Save changes");
     const _ml2 = UI.el("form-mode-label");
     if (_ml2) {
@@ -15499,11 +15783,6 @@ async function updateLowStockBadge() {
 // ═══════════════════════════════════════════════════════════
 
 // ===== CLOSE SHEET ON BACKDROP =====
-const _detailSheet = document.getElementById("detail-sheet");
-if (_detailSheet)
-  _detailSheet.addEventListener("click", function (e) {
-    if (e.target === this) closeSheet();
-  });
 const _wishDetailSheet = document.getElementById("wishlist-detail-sheet");
 if (_wishDetailSheet)
   _wishDetailSheet.addEventListener("click", function (e) {
@@ -16212,6 +16491,9 @@ let _appDbReady = false;
 let _appDataBootstrapped = false;
 
 function navAccessKey(id) {
+  if (id === "item-detail")
+    return navAccessKey(window._detailReturnPage || "inventory");
+  if (id === "sell-form") return "sell";
   if (id === "list" || id === "wishlist" || id === "add" || id === "monitor")
     return "inventory";
   if (id === "day" || id === "finance") return "operations";
@@ -18552,10 +18834,10 @@ function gscViewAll() {
   const q = (document.getElementById("gsc-input")?.value || "").trim();
   gscClear();
   showPage("list");
-  const inv = document.getElementById("search");
+  const inv = document.querySelector("[data-stocklist-search]");
   if (inv) {
     inv.value = q;
-    onInventorySearch(q);
+    onInventorySearch(q, inv);
   }
 }
 
@@ -18566,20 +18848,31 @@ window.gscOpenItem = gscOpenItem;
 window.gscViewAll = gscViewAll;
 
 // ── Inventory search wrapper (adds clear button, re-uses renderList) ─
-function onInventorySearch(val) {
-  const btn = document.getElementById("search-clear");
-  if (btn) btn.style.display = val ? "flex" : "none";
+function onInventorySearch(val, source) {
+  document.querySelectorAll("[data-stocklist]").forEach((component) => {
+    const search = component.querySelector("[data-stocklist-search]");
+    const clearButton = component.querySelector("[data-stocklist-search-clear]");
+    if (search && search !== source) search.value = val;
+    if (clearButton) clearButton.style.display = val ? "flex" : "none";
+  });
   renderList();
+  if (source?.closest("[data-stocklist-sales]")) {
+    onSellSearch(val, source);
+  }
 }
 
-function clearInventorySearch() {
-  const inp = document.getElementById("search");
-  const btn = document.getElementById("search-clear");
+function clearInventorySearch(trigger) {
+  const component = trigger?.closest("[data-stocklist]");
+  const inp =
+    component?.querySelector("[data-stocklist-search]") ||
+    document.querySelector("[data-stocklist-search]");
   if (inp) {
     inp.value = "";
+    onInventorySearch("", inp);
+    inp.focus();
+  } else {
+    renderList();
   }
-  if (btn) btn.style.display = "none";
-  renderList();
 }
 
 window.onInventorySearch = onInventorySearch;
@@ -18702,17 +18995,23 @@ window.setItemMode = setItemMode;
 function setSizeGroupFilter(group) {
   window._activeSizeGroupFilter = group;
   document
-    .querySelectorAll('[id^="sgf-"]')
+    .querySelectorAll("[data-size-group-filter]")
     .forEach((b) => b.classList.remove("active"));
-  const btn = document.getElementById("sgf-" + group);
-  if (btn) btn.classList.add("active");
+  document
+    .querySelectorAll("[data-size-group-filter]")
+    .forEach((button) => {
+      button.classList.toggle(
+        "active",
+        button.dataset.sizeGroupFilter === group,
+      );
+    });
   renderList();
 }
 window.setSizeGroupFilter = setSizeGroupFilter;
 
 function _renderSizeGroupFilter() {
-  const wrap = document.getElementById("shoe-size-filter");
-  if (!wrap) return;
+  const wraps = document.querySelectorAll("[data-stocklist-size-filter]");
+  if (!wraps.length) return;
   const groups = getShoeGroups();
   if (
     window._activeSizeGroupFilter !== "all" &&
@@ -18722,8 +19021,6 @@ function _renderSizeGroupFilter() {
   }
   const footwearSelected =
     activeTypeFilter !== "all" && isFootwearType(activeTypeFilter);
-  wrap.style.display = footwearSelected ? "flex" : "none";
-  wrap.replaceChildren();
   const filters = [
     ["all", "All"],
     ...Object.entries(groups).map(([group, config]) => [
@@ -18731,23 +19028,24 @@ function _renderSizeGroupFilter() {
       group + " - " + config.label,
     ]),
   ];
-  filters.forEach(([group, label]) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.id = "sgf-" + group;
-    button.className =
-      "fin-filter-btn" +
-      (window._activeSizeGroupFilter === group ? " active" : "");
-    button.textContent = label;
-    button.addEventListener("click", () => setSizeGroupFilter(group));
-    wrap.appendChild(button);
-  });
   if (!footwearSelected) {
     window._activeSizeGroupFilter = "all";
-    wrap.querySelectorAll(".fin-filter-btn").forEach((button) => {
-      button.classList.toggle("active", button.id === "sgf-all");
-    });
   }
+  wraps.forEach((wrap) => {
+    wrap.style.display = footwearSelected ? "flex" : "none";
+    wrap.replaceChildren();
+    filters.forEach(([group, label]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.sizeGroupFilter = group;
+      button.className =
+        "fin-filter-btn" +
+        (window._activeSizeGroupFilter === group ? " active" : "");
+      button.textContent = label;
+      button.addEventListener("click", () => setSizeGroupFilter(group));
+      wrap.appendChild(button);
+    });
+  });
 }
 
 // ═══════════════════════════════════════════════════════════

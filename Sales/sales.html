@@ -1,6 +1,7 @@
 <!-- Sales-owned page and sheet markup, mounted by the shared shell. -->
 <template id="sales-page-template">
 <div class="page" id="page-sell" style="padding: 12px 12px 0">
+    <div id="sales-main-view">
       <div class="stock-toolbar">
         <div>
           <div class="stock-title">Sales</div>
@@ -8,14 +9,6 @@
             Record sales and view history
           </div>
         </div>
-        <button
-          class="stock-monitor-btn"
-          onclick="openOffStockSale()"
-          title="Sell item not in stock"
-          id="sales-offstock-btn"
-        >
-          <i class="fa-solid fa-plus"></i>
-        </button>
       </div>
 
       <div class="ops-tabs sales-tabs">
@@ -35,31 +28,9 @@
         </button>
       </div>
 
-      <!-- Sell: search and item results -->
+      <!-- One shared stock-list search filters inventory and finds sale items. -->
       <div id="sales-slot-sell" class="ops-slot active">
-        <div class="search-wrap" style="margin-bottom: 10px">
-          <span class="s-icon"
-            ><i class="fa-solid fa-magnifying-glass"></i
-          ></span>
-          <input
-            class="search-input"
-            id="sell-search"
-            placeholder="Search by name, code, type…"
-            oninput="onSellSearch(this.value)"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <button
-            id="sell-search-clear"
-            class="search-clear-btn"
-            onclick="clearSellSearch()"
-            style="display: none"
-            aria-label="Clear"
-          >
-            <i class="fa-solid fa-xmark"></i>
-          </button>
-        </div>
-        <div id="sell-results"></div>
+        <div id="stocklist-sales-mount"></div>
       </div>
 
       <!-- History: unified filter view -->
@@ -130,12 +101,82 @@
         <div id="hist-records-list" style="padding: 0 0 80px"></div>
       </div>
     </div>
+    <section id="quick-sell-page" class="quick-sell-page" aria-labelledby="quick-sell-title" hidden>
+      <header class="add-hero quick-sell-page-header">
+        <div class="add-hero-text">
+          <h1 class="add-hero-title" id="quick-sell-title">Sell item not in inventory</h1>
+          <p class="add-hero-sub" id="quick-sell-note">
+            This item will be added to inventory as Record Only. Stock quantity will not be tracked.
+          </p>
+        </div>
+        <button type="button" class="add-cancel-btn" onclick="closeQuickSell()">Back to Sales</button>
+      </header>
+      <input id="quick-sell-item-id" type="hidden" />
+      <section class="add-card add-entry-card quick-sell-card" aria-label="Sale details">
+        <div class="add-entry-toolbar quick-sell-mode-toolbar">
+          <div class="add-entry-mode">
+            <div id="quick-sell-item-mode" class="add-mode-bar record-mode">
+              <div class="mode-opt mode-opt-active" id="quick-sell-mode-record">Record Only</div>
+              <label class="ios-toggle" for="quick-sell-mode-toggle" title="Record Only / Track Stock">
+                <input type="checkbox" id="quick-sell-mode-toggle" onchange="setQuickSellMode(!this.checked)" />
+                <span class="ios-toggle-track"><span class="ios-toggle-on-label">ON</span></span>
+                <span class="ios-toggle-thumb"></span>
+              </label>
+              <div class="mode-opt" id="quick-sell-mode-track">Track Stock</div>
+            </div>
+          </div>
+          <div id="quick-sell-mode-note" class="record-mode-note" role="status" aria-live="polite">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            <span id="quick-sell-mode-message">Qty not tracked - item always shows as available for sale.</span>
+          </div>
+        </div>
+        <div class="quick-sell-fields add-entry-fields">
+          <label class="add-field quick-sell-field-wide">
+            <span class="add-label">Item name <span class="add-required">*</span></span>
+            <input class="add-input" id="quick-sell-name" type="text" maxlength="120" autocomplete="off" required />
+          </label>
+          <label class="add-field">
+            <span class="add-label">Quantity to sell <span class="add-required">*</span></span>
+            <input class="add-input" id="quick-sell-qty" type="number" min="0" step="1" inputmode="numeric" value="0" required />
+          </label>
+          <label class="add-field quick-sell-stock-field" id="quick-sell-stock-field" hidden>
+            <span class="add-label">Stock quantity <span class="add-hint">(starts at 0)</span></span>
+            <input class="add-input" id="quick-sell-stock-qty" type="number" min="0" step="1" inputmode="numeric" value="0" />
+          </label>
+          <label class="add-field">
+            <span class="add-label">Sell price <span class="add-required">*</span></span>
+            <input class="add-input" id="quick-sell-price" type="number" min="0" step="0.01" inputmode="decimal" required />
+          </label>
+          <label class="add-field">
+            <span class="add-label">Buy price</span>
+            <input class="add-input" id="quick-sell-buy" type="number" min="0" step="0.01" inputmode="decimal" value="0" />
+          </label>
+          <label class="add-field">
+            <span class="add-label">Code <span class="add-hint">(optional)</span></span>
+            <input class="add-input add-mono" id="quick-sell-code" type="text" maxlength="40" autocomplete="off" />
+          </label>
+        </div>
+        <div id="quick-sell-error" class="quick-sell-error" role="alert" hidden></div>
+        <div class="quick-sell-actions">
+          <button type="button" class="quick-sell-cancel" onclick="closeQuickSell()">Cancel</button>
+          <button type="button" class="quick-sell-submit" id="quick-sell-submit" onclick="submitQuickSell()">
+            <i class="fa-solid fa-check"></i> Sell item
+          </button>
+        </div>
+      </section>
+    </section>
+    </div>
 </template>
 
 <template id="sales-sheets-template">
-<div class="sheet-overlay" id="sell-modal">
-      <div class="sheet">
-        <div class="sheet-handle"></div>
+<div class="page app-sale-form-page" id="sell-modal">
+      <header class="add-hero app-sale-form-header">
+        <div class="add-hero-text">
+          <h1 class="add-hero-title">Sell item</h1>
+        </div>
+        <button type="button" class="add-cancel-btn" onclick="closeSellModal()">Back</button>
+      </header>
+      <div class="sheet app-sale-form-content">
 
         <!-- Item info row -->
         <div
@@ -565,98 +606,6 @@
     </div>
     <!-- /sell-modal -->
 
-    <!-- Off-stock sale: records the sale and adds a NOT ACCOUNTED monitor row -->
-    <div class="sheet-overlay" id="offstock-sale-sheet">
-      <div class="sheet" style="max-height: 92vh; overflow: auto">
-        <div class="sheet-handle"></div>
-        <div
-          class="offstock-sheet-header"
-          style="
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 12px;
-          "
-        >
-          <div>
-            <div class="sheet-title">Sell Not In Stock</div>
-            <div class="sheet-code">
-              Use this form to sell directly without tracking stock
-            </div>
-          </div>
-          <button
-            onclick="closeOffStockSale()"
-            class="stock-icon-btn"
-            title="Close"
-          >
-            <i class="fa-solid fa-xmark"></i>
-          </button>
-        </div>
-        <div class="stock-monitor-form">
-          <div class="stock-form-grid">
-            <input
-              class="add-input"
-              id="off-name"
-              type="text"
-              placeholder="Item name"
-              required
-            />
-            <input
-              class="add-input add-mono"
-              id="off-code"
-              type="text"
-              placeholder="Code (optional)"
-            />
-          </div>
-          <div class="stock-form-grid offstock-category-qty">
-            <div class="cat-cascade-field">
-              <div id="off-type-cascade" class="add-cascade"></div>
-              <input
-                type="hidden"
-                id="off-type"
-                value=""
-                aria-label="Category (optional)"
-              />
-            </div>
-            <input
-              class="add-input add-mono"
-              id="off-qty"
-              type="number"
-              min="1"
-              step="1"
-              inputmode="numeric"
-              placeholder="Qty? (1 if blank)"
-              aria-label="Quantity to sell (defaults to one)"
-            />
-          </div>
-          <div class="stock-form-grid offstock-sale-prices">
-            <input
-              class="add-input add-mono"
-              id="off-sell"
-              type="number"
-              min="0"
-              step="any"
-              inputmode="decimal"
-              placeholder="Sale price"
-              required
-            />
-            <input
-              class="add-input add-mono"
-              id="off-buy"
-              type="number"
-              min="0"
-              step="any"
-              inputmode="decimal"
-              placeholder="Buy price (optional)"
-            />
-          </div>
-          <button onclick="confirmOffStockSale()" class="stock-add-wish-btn">
-            <i class="fa-solid fa-cash-register"></i> Sell
-          </button>
-        </div>
-      </div>
-    </div>
 </template>
 
 <template id="sales-detail-sheet-template">

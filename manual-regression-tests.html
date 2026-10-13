@@ -1322,12 +1322,12 @@
         },
         {
           id: "MGS-080",
-          title: "Sell an item not in stock",
+          title: "Sell a missing item from search",
           module: "Sales / Wishlist",
           priority: "major",
-          objective: "Verify the off-stock sale workflow records the sale and its follow-up monitor entry.",
-          steps: ["Open the off-stock sale action.", "Enter a valid item description, quantity, and price.", "Confirm and inspect sales history and the follow-up list."],
-          expected: "The off-stock sale is recorded once with the correct details and the expected follow-up record is created."
+          objective: "Verify the unified Sell search creates an incomplete inventory item and its linked sale and restock monitor row atomically.",
+          steps: ["Open Sell and search for a name that is not in inventory.", "Choose the new-item action, enter quantity, sale price, payment method, and leave buy price, code, or category empty.", "Submit once, then inspect the sale, inventory list, and restock monitor."],
+          expected: "One linked sale, one quantity-zero Incomplete inventory item, and one needs-restock monitor row are saved; unknown buy cost remains unavailable."
         },
         {
           id: "MGS-081",

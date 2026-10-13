@@ -48,7 +48,7 @@
     <!-- App styles -->
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="Inventory/inventory.css" />
-    <link rel="stylesheet" href="Sales/sales.css" />
+    <link rel="stylesheet" href="Sales/sales.css?v=20261014.08" />
 
     <!-- ── Firebase SDK (ES module - must stay inline in <head>) ── -->
     <!-- Loaded as a module so Firebase ESM imports work correctly.
@@ -4012,7 +4012,18 @@
           mount.replaceWith(document.importNode(template.content, true));
         });
 
-        const salesResponse = await fetch("Sales/sales.html");
+        const stocklistResponse = await fetch("Inventory/stocklist.html?v=20261014.08");
+        if (!stocklistResponse.ok) {
+          throw new Error("Stock list markup request failed: " + stocklistResponse.status);
+        }
+        const stocklistFragment = document.createElement("template");
+        stocklistFragment.innerHTML = await stocklistResponse.text();
+        const stocklistTemplate = stocklistFragment.content.querySelector("#stocklist-template");
+        if (!stocklistTemplate) {
+          throw new Error("Unable to load shared stock list markup");
+        }
+
+        const salesResponse = await fetch("Sales/sales.html?v=20261014.08");
         if (!salesResponse.ok) {
           throw new Error("Sales markup request failed: " + salesResponse.status);
         }
@@ -4032,6 +4043,35 @@
           mount.replaceWith(document.importNode(template.content, true));
         });
 
+        ["stocklist-inventory-mount", "stocklist-sales-mount"].forEach((mountId) => {
+          const mount = document.getElementById(mountId);
+          if (!mount) {
+            throw new Error("Unable to mount shared stock list: " + mountId);
+          }
+          const stocklist = document.importNode(stocklistTemplate.content, true);
+          if (mountId === "stocklist-sales-mount") {
+            const component = stocklist.querySelector("[data-stocklist]");
+            const search = stocklist.querySelector("[data-stocklist-search]");
+            const results = stocklist.querySelector("[data-stocklist-sell-results]");
+            const status = stocklist.querySelector("[data-stocklist-sell-status]");
+            if (!component || !search || !results || !status) {
+              throw new Error("Sales stock list is missing its unified search controls");
+            }
+            component.setAttribute("data-stocklist-sales", "");
+            search.id = "sell-search";
+            search.classList.add("sell-search-input");
+            search.setAttribute("role", "combobox");
+            search.setAttribute("aria-autocomplete", "list");
+            search.setAttribute("aria-haspopup", "listbox");
+            search.setAttribute("aria-expanded", "false");
+            search.setAttribute("aria-controls", "sell-results");
+            search.setAttribute("aria-describedby", "sell-search-status");
+            results.id = "sell-results";
+            status.id = "sell-search-status";
+          }
+          mount.replaceWith(stocklist);
+        });
+
         const scripts = [
           "Inventory/navigation.js",
           "Inventory/inventory-items.js",
@@ -4042,7 +4082,7 @@
         for (const path of scripts) {
           await new Promise((resolve, reject) => {
             const script = document.createElement("script");
-            script.src = path + "?v=20261013.9";
+            script.src = path + "?v=20261014.08";
             script.onload = resolve;
             script.onerror = () => reject(new Error("Unable to load " + path));
             document.body.appendChild(script);

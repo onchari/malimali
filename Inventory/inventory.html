@@ -47,7 +47,7 @@
     <!-- ==============================================================
      PAGE: STOCK LIST  (id="page-list")
      Shows all items as compact clickable cards.
-     renderList() in Inventory/inventory-items.js builds the stock table in #item-list.
+     renderList() fills the shared Stocklist component mounted below.
      Cards sorted newest-first (by createdAt).
      Clicking a card calls openSheet(item.id).
      ============================================================== -->
@@ -71,40 +71,7 @@
         </div>
       </div>
 
-      <!-- Category chips - populated by renderTypeChips() -->
-      <div class="chips" id="type-chips"></div>
-
-      <div class="inventory-search-row">
-        <div class="search-wrap">
-          <span class="s-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
-          <input
-            class="search-input"
-            id="search"
-            placeholder="Search by name, code, type, size…"
-            autocomplete="off"
-            spellcheck="false"
-            oninput="onInventorySearch(this.value)"
-          />
-          <button
-            id="search-clear"
-            class="search-clear-btn"
-            onclick="clearInventorySearch()"
-            style="display: none"
-            aria-label="Clear"
-          >
-            <i class="fa-solid fa-xmark"></i>
-          </button>
-        </div>
-      </div>
-
-      <!-- Shoe size-group filter - only when Footwear category is selected -->
-      <div
-        id="shoe-size-filter"
-        style="display: none; padding: 0 0 8px; gap: 6px; flex-wrap: wrap"
-      ></div>
-
-      <!-- Item cards injected here -->
-      <div id="item-list"></div>
+      <div id="stocklist-inventory-mount"></div>
     </div>
     <!-- /page-list -->
 
@@ -908,15 +875,21 @@
     </div>
 
     <!-- ==============================================================
-     SHEET: ITEM DETAIL  (id="detail-sheet")
+     PAGE: ITEM DETAIL  (id="detail-sheet")
      Opens when a stock card is tapped.
-     openSheet(id) in Inventory/inventory-items.js populates all *id* elements.
+     openSheet(id) in app.js populates all *id* elements.
      Top: 400px photo area (pannable with touch, pinch-to-zoom).
-     Bottom: prices, stock counts, restock, edit, delete, CLOSE.
+     Bottom: prices, stock counts, restock, edit, delete, and return.
      ============================================================== -->
-    <div class="sheet-overlay" id="detail-sheet">
+    <div class="page app-detail-page" id="detail-sheet">
+      <header class="add-hero app-detail-page-header">
+        <div class="add-hero-text">
+          <h1 class="add-hero-title">Item details</h1>
+        </div>
+        <button type="button" class="add-cancel-btn" onclick="closeSheet()">Back</button>
+      </header>
       <div
-        class="sheet"
+        class="sheet app-detail-page-content"
         style="
           padding: 0;
           display: flex;
@@ -1158,6 +1131,21 @@
                   margin-top: 2px;
                 "
               ></div>
+                <span
+                  id="sh-incomplete-badge"
+                  style="
+                    display: none;
+                    margin-top: 4px;
+                    padding: 2px 7px;
+                    border-radius: 999px;
+                    color: #fff7ed;
+                    background: #9a3412;
+                    font-size: 9px;
+                    font-weight: 800;
+                    letter-spacing: 0.04em;
+                    text-transform: uppercase;
+                  "
+                >Incomplete</span>
             </div>
           </div>
 
