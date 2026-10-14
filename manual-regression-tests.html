@@ -724,11 +724,11 @@
           priority: "major",
           objective: "Check that sale editing is consistent and does not corrupt totals.",
           steps: [
-            "Capture a sale.",
+            "Capture a sale, including one linked to an item with a buy price of zero.",
             "Open the sales history.",
-            "Edit the sale quantity or price."
+            "Edit the sale quantity, price, or payment method."
           ],
-          expected: "The updated sale reflects new values, and totals reconcile correctly."
+          expected: "The zero-cost sale can be edited; the updated sale reflects new values, and totals reconcile correctly."
         },
         {
           id: "MGS-024",
@@ -1299,7 +1299,7 @@
           module: "Sales",
           priority: "major",
           objective: "Verify direct quantity entry accepts valid quantities and rejects invalid or excessive values.",
-          steps: ["Open a sell form for an item with sufficient stock.", "Enter a valid quantity directly.", "Try zero, negative, fractional where unsupported, and above-stock quantities."],
+          steps: ["Open a sell form for an item with sufficient stock and a Record Only item.", "Enter a valid quantity directly.", "Try zero, negative, fractional, greater than 999,999, and above-stock quantities."],
           expected: "Valid values are accepted; invalid quantities are rejected before recording or deducting stock."
         },
         {
@@ -1308,8 +1308,8 @@
           module: "Sales",
           priority: "major",
           objective: "Check permitted price changes are reflected consistently in the sale and profit.",
-          steps: ["Open a sell form for an item.", "Enter a permitted alternate price.", "Review the displayed price and profit, then complete a test sale."],
-          expected: "The saved sale uses the confirmed price and its revenue and profit calculations use that price."
+          steps: ["Open a sell form for an item with a zero buy price, and another without a recorded buy price.", "For the latter, try a negative buy price, then 0; enter a permitted alternate price with cents, then try a zero or negative actual price.", "Review the displayed price and profit, then complete a test sale with valid values."],
+          expected: "Zero buy cost and valid decimal prices are accepted; negative buy prices and explicit zero/negative actual sale prices are rejected rather than silently replaced by defaults; saved totals use the confirmed price."
         },
         {
           id: "MGS-079",
@@ -1326,8 +1326,8 @@
           module: "Sales / Wishlist",
           priority: "major",
           objective: "Verify the unified Sell search creates an incomplete inventory item and its linked sale and restock monitor row atomically.",
-          steps: ["Open Sell and search for a name that is not in inventory.", "Choose the new-item action, enter quantity, sale price, payment method, and leave buy price, code, or category empty.", "Submit once, then inspect the sale, inventory list, and restock monitor."],
-          expected: "One linked sale, one quantity-zero Incomplete inventory item, and one needs-restock monitor row are saved; unknown buy cost remains unavailable."
+          steps: ["Open Sell and search for a name that is not in inventory.", "Choose the new-item action, enter quantity and sale price, leave buy price at 0, select a category, then submit once.", "Repeat with the explicit Buy price is unknown option, then inspect each sale, inventory item, and restock monitor row."],
+          expected: "Each sale links to one inventory item and one needs-restock monitor row; selected category is saved; known zero cost remains 0 while the explicit unknown choice saves a null cost and unavailable profit."
         },
         {
           id: "MGS-081",
@@ -1688,6 +1688,15 @@
           objective: "Review core flows for keyboard focus visibility and usable touch targets.",
           steps: ["Navigate login, inventory search, item forms, and status controls using Tab and Enter.", "Repeat on a narrow touch viewport.", "Check dialogs can be dismissed and focus remains understandable."],
           expected: "Interactive controls can be reached and used, focus is visible, and mobile controls remain readable and operable."
+        },
+        {
+          id: "MGS-121",
+          title: "Sell search matches stock-list fields",
+          module: "Sales / Inventory",
+          priority: "major",
+          objective: "Keep Sales dropdown matches consistent with stock-list matching for item type, category, and size or variant.",
+          steps: ["Prepare inventory items with distinct types, categories, and size/variant values.", "In Sell, search using a type, category, and size/variant that are not part of the item name or code.", "Compare the filtered stock list with dropdown results and select each matching item."],
+          expected: "Every item matched by the stock-list search also appears in Sell dropdown results; no matching item is offered as not in inventory."
         }
       ];
 

@@ -22,7 +22,7 @@ Sales and Inventory use one shared stock-list search on the Sales page. The cash
 | FR-6  | From item details, Sell opens the standard sale form as an in-app page. Existing sale, pricing, shoe-size, stock, and validation logic is preserved.                                       |
 | FR-7  | **Item does not exist:** one full-card button contains "**<typed name> is NOT in the inventory.**" and "Click to sell it and automatically add it PARTIALLY to the inventory." |
 | FR-8  | Tapping anywhere on that card opens an independent, in-page sale form using Inventory form styling, with the typed name filled in. It does not use a popup or reuse the Add Item form. |
-| FR-9  | The form requires item name, quantity to sell, and sell price. Quantity to sell, buy price, and tracked stock quantity default to 0. Record Only is selected by default; Track Stock reveals stock quantity. |
+| FR-9  | The form requires item name, quantity to sell, and sell price. Quantity to sell, buy price, and tracked stock quantity default to 0. An explicit "Buy price is unknown" option stores an unknown cost as null. Category is optional for recording the sale and can be selected to complete that inventory detail. Record Only is selected by default; Track Stock reveals stock quantity. |
 | FR-10 | Submitting saves the sale and new Record Only inventory item atomically. If the save fails, nothing is written and the form retains its values with a retryable error.                      |
 | FR-11 | After a successful save, the sale form and any item-details page close before the existing sale success screen is shown.                                                                   |
 | FR-12 | Incomplete items show an "Incomplete" badge in the inventory list and can be filtered. Opening one lets the user fill in the missing details. Saving them clears the flag.                 |
@@ -34,15 +34,15 @@ Selling an existing item through the standard sale form changes nothing here. Fo
 
 | Record               | Fields                                                                                                                          | Notes                                                                                                                                                                                           |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Inventory item (new) | id, name, code, quantity, buy price, sell price, isRecord, incomplete flag, missing fields, source, created at                     | Quantity is 0 and `isRecord` is true. Missing inventory details are tracked as Incomplete. Source is "off-stock-sale". Buy price may be unknown.                                                |
+| Inventory item (new) | id, name, code, category, quantity, buy price, sell price, isRecord, incomplete flag, missing fields, source, created at          | Quantity is 0 and `isRecord` is true. Missing inventory details are tracked as Incomplete. Source is "off-stock-sale". Buy price defaults to known zero; the explicit unknown option stores null. |
 | Sale                 | id, item id, item name, quantity, sell price, actual price, buy price, payment method, off-stock flag, business date, timestamp    | Links to the new or existing Incomplete item.                                                                                                                                                     |
 | Restock monitor row  | Numeric local `id`, sale and item IDs, quantity, estimated cost, status                                                             | Created with the sale for stock-monitor tracking.                                                                                                                                                  |
 
 ## Business rules and validation
 
 - Item name and sell price are required. Sell price must be greater than zero.
-- Buy price, quantity to sell, and Track Stock quantity default to 0. Quantity to sell must be at least 1; Track Stock quantity must be at least the quantity being sold. Code is optional.
-- An Incomplete item is complete when name, category, code, buy price, and sell price are all present. A buy price of 0 is present; an empty buy price is unknown.
+- Buy price, quantity to sell, and Track Stock quantity default to 0. The explicit "Buy price is unknown" option distinguishes a null/unknown cost from a known zero cost. Category is optional; selecting an active category fills the item category and can clear that missing detail. Quantity to sell must be at least 1; Track Stock quantity must be at least the quantity being sold. Code is optional.
+- An Incomplete item is complete when name, category, code, buy price, and sell price are all present. A buy price of 0 is present; only the explicit unknown option means the buy price is unknown.
 - The payment method is Cash; the missing-item form does not show a payment selector.
 - The business date is calculated in the Africa/Nairobi time zone, the same way as everywhere else in the app.
 - The item is created as Record Only with quantity 0, so the sale does not deduct tracked stock.

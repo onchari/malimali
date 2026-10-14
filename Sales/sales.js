@@ -293,19 +293,8 @@ async function _renderSellMatches(version) {
       Array.isArray(allItems) && allItems.length ? allItems : await dbAll("items");
     if (version !== _sellSearchVersion || input.value.trim() !== raw) return;
     const matchedItems = items
-      .filter((item) => {
-        const name = _normaliseSellName(item.name);
-        const code = _normaliseSellName(item.code);
-        return name.includes(query) || code.includes(query);
-      })
-      .map((item) => {
-        const name = _normaliseSellName(item.name);
-        const code = _normaliseSellName(item.code);
-        const score =
-          (name === query ? 100 : name.startsWith(query) ? 60 : name.includes(query) ? 30 : 0) +
-          (code === query ? 80 : code.startsWith(query) ? 45 : code.includes(query) ? 20 : 0);
-        return { item, score };
-      })
+      .map((item) => ({ item, score: _gscScore(item, raw) }))
+      .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || String(a.item.name || "").localeCompare(String(b.item.name || "")));
     const totalMatches = matchedItems.length;
     const maxMatches = matchedItems.slice(0, 8);
@@ -412,8 +401,27 @@ function openQuickSell(item, typedName) {
   setValue("quick-sell-qty", "0");
   setValue("quick-sell-stock-qty", item && !item.isRecord ? item.qty || 0 : 0);
   setValue("quick-sell-price", item ? item.sellPrice ?? item.sell ?? "" : "");
-  setValue("quick-sell-buy", item && item.buyPrice != null ? item.buyPrice : item && item.buy != null ? item.buy : 0);
+  const existingBuyPrice = item ? item.buyPrice ?? item.buy : 0;
+  setValue("quick-sell-buy", existingBuyPrice ?? 0);
   setValue("quick-sell-code", item ? item.code || "" : "");
+  const category = document.getElementById("quick-sell-category");
+  if (category) {
+    const options = ['<option value="">Choose category...</option>'];
+    walkCategoryTree((type, depth) => {
+      if (!isCategoryActive(type) || _categoryHasActiveChildren(type.id)) return;
+      const prefix = depth ? "\u2003".repeat(depth) + "\u21b3 " : "";
+      options.push(
+        `<option value="${escapeHtml(type.name)}">${escapeHtml(prefix + (type.emoji || "📦") + " " + type.name)}</option>`,
+      );
+    });
+    category.innerHTML = options.join("");
+    category.value = item?.type || "";
+  }
+  const buyUnknown = document.getElementById("quick-sell-buy-unknown");
+  if (buyUnknown) {
+    buyUnknown.checked = !!item && existingBuyPrice == null;
+    toggleQuickSellBuyUnknown(buyUnknown.checked);
+  }
   setQuickSellMode(item ? item.isRecord !== false : true);
   _quickSellSaving = false;
   const submit = document.getElementById("quick-sell-submit");
@@ -432,6 +440,12 @@ function openQuickSell(item, typedName) {
   setTimeout(() => document.getElementById("quick-sell-name")?.focus(), 80);
 }
 window.openQuickSell = openQuickSell;
+
+function toggleQuickSellBuyUnknown(isUnknown) {
+  const input = document.getElementById("quick-sell-buy");
+  if (input) input.disabled = !!isUnknown;
+}
+window.toggleQuickSellBuyUnknown = toggleQuickSellBuyUnknown;
 
 function closeQuickSell() {
   const page = document.getElementById("quick-sell-page");
@@ -491,7 +505,13 @@ async function submitQuickSell() {
   const priceRaw = document.getElementById("quick-sell-price")?.value ?? "";
   const sellPrice = priceRaw.trim() === "" ? NaN : Number(priceRaw);
   const buyRaw = document.getElementById("quick-sell-buy")?.value ?? "";
-  const buyPrice = buyRaw.trim() === "" ? 0 : Number(buyRaw);
+  const buyIsUnknown = !!document.getElementById("quick-sell-buy-unknown")?.checked;
+  const buyPrice = buyIsUnknown
+    ? null
+    : buyRaw.trim() === ""
+      ? NaN
+      : Number(buyRaw);
+  const category = document.getElementById("quick-sell-category")?.value.trim() || "";
   const code = sanitiseCode(document.getElementById("quick-sell-code")?.value || "");
   const itemIdRaw = document.getElementById("quick-sell-item-id")?.value || "";
   const errorBox = document.getElementById("quick-sell-error");
@@ -502,25 +522,30 @@ async function submitQuickSell() {
     }
   };
   if (!name) return showError("Enter an item name.");
+  if (name.length > 120)
+    return showError("Item name must be 120 characters or fewer.");
   const saleQty = qty;
   if (!Number.isInteger(saleQty) || saleQty < 1 || saleQty > 999999)
-    return showError("Quantity must be a whole number of at least 1.");
+    return showError("Quantity must be a whole number from 1 to 999,999.");
   if (!Number.isFinite(sellPrice) || sellPrice <= 0)
     return showError("Enter a sell price greater than zero.");
-  if (!Number.isFinite(buyPrice) || buyPrice < 0)
+  if (buyPrice !== null && (!Number.isFinite(buyPrice) || buyPrice < 0))
     return showError("Buy price must be 0 or more.");
   if (!_quickSellIsRecord) {
     if (!Number.isInteger(stockQty) || stockQty < 0 || stockQty > 999999)
-      return showError("Stock quantity must be a whole number of 0 or more.");
+      return showError("Stock quantity must be a whole number from 0 to 999,999.");
     if (stockQty < saleQty)
       return showError("Stock quantity must be at least the quantity being sold.");
   }
   if (code && code.length > 40) return showError("Code must be 40 characters or fewer.");
+  if (itemIdRaw && (!Number.isInteger(Number(itemIdRaw)) || Number(itemIdRaw) <= 0))
+    return showError("This inventory item is invalid. Search again.");
 
   const item = {
     id: itemIdRaw ? Number(itemIdRaw) : null,
     name,
     code,
+    type: category,
     buyPrice,
     sellPrice,
     isRecord: _quickSellIsRecord,
@@ -532,8 +557,15 @@ async function submitQuickSell() {
     sellPrice,
     actualPrice: sellPrice,
     revenue: saleQty * sellPrice,
+    profit: buyPrice == null ? null : saleQty * (sellPrice - buyPrice),
     paymentMethod: "cash",
   };
+  if (
+    !Number.isFinite(sale.revenue) ||
+    (sale.profit != null && !Number.isFinite(sale.profit))
+  ) {
+    return showError("Sale totals are too large to record.");
+  }
   _quickSellSaving = true;
   if (errorBox) {
     errorBox.hidden = true;
@@ -842,25 +874,38 @@ async function confirmSaleUnlocked() {
     const actualEl = document.getElementById("sm-actual");
     const buyEl = document.getElementById("sm-buy");
     const qty = Number(qtyEl?.value || "0");
-    const actualRaw = parseFloat(actualEl?.value || "");
-    const buyEntered = parseFloat(buyEl?.value || "");
+    const actualInput = actualEl?.value.trim() || "";
+    const buyInput = buyEl?.value.trim() || "";
+    const actualRaw = actualInput === "" ? NaN : Number(actualInput);
+    const buyEntered = buyInput === "" ? null : Number(buyInput);
 
     // ── Prices - use normalized sellPrice/buyPrice ─────────────────
     const sellPrice =
       _isShoeSale && _sellShoeSize
         ? _sellShoeSize.sellPrice || item.sellPrice || item.sell || 0
         : item.sellPrice || item.sell || 0;
-    const buyOnRecord =
+    const buyOnRecord = Number(
       _isShoeSale && _sellShoeSize
-        ? _sellShoeSize.buyPrice || item.buyPrice || item.buy || 0
-        : item.buyPrice || item.buy || 0;
+        ? _sellShoeSize.buyPrice ?? item.buyPrice ?? item.buy ?? 0
+        : item.buyPrice ?? item.buy ?? 0,
+    );
+    if (buyEntered !== null && (!Number.isFinite(buyEntered) || buyEntered < 0)) {
+      Validate.fail("Buy price must be 0 or more", "sm-buy");
+      _overlay.hide();
+      return;
+    }
+    if (!Number.isNaN(actualRaw) && (!Number.isFinite(actualRaw) || actualRaw <= 0)) {
+      Validate.fail("Actual sale price must be greater than zero", "sm-actual");
+      _overlay.hide();
+      return;
+    }
     // If there was no buy price on record, use whatever the user entered at sell time and save it.
     const buyPriceEntered =
-      buyOnRecord <= 0 && !isNaN(buyEntered) && buyEntered >= 0;
+      buyOnRecord <= 0 && buyEntered !== null;
     const buyPrice = buyPriceEntered ? buyEntered : buyOnRecord;
 
     const priceUsed =
-      !isNaN(actualRaw) && actualRaw > 0 ? actualRaw : sellPrice;
+      Number.isFinite(actualRaw) && actualRaw > 0 ? actualRaw : sellPrice;
 
     // ── Validate stock ─────────────────────────────────────────────
     const maxQty =
@@ -868,8 +913,8 @@ async function confirmSaleUnlocked() {
         ? await readableStockQty(_sellShoeSize, _sellShoeSize.id)
         : await readableStockQty(item);
     const itemLabel = item.name || item.code;
-    if (!Number.isInteger(qty) || qty <= 0) {
-      Validate.fail("Enter a positive whole quantity to sell", "sm-qty");
+    if (!Number.isInteger(qty) || qty < 1 || qty > 999999) {
+      Validate.fail("Enter a whole quantity from 1 to 999,999", "sm-qty");
       _overlay.hide();
       return;
     }
@@ -894,8 +939,8 @@ async function confirmSaleUnlocked() {
       _overlay.hide();
       return;
     }
-    if (!Number.isFinite(buyPrice) || buyPrice <= 0) {
-      Validate.fail("Buy price must be greater than zero", "sm-buy");
+    if (!Number.isFinite(buyPrice) || buyPrice < 0) {
+      Validate.fail("Buy price must be 0 or more", "sm-buy");
       _overlay.hide();
       return;
     }
@@ -929,6 +974,11 @@ async function confirmSaleUnlocked() {
 
     const revenue = qty * priceUsed;
     const profit = qty * (priceUsed - buyPrice);
+    if (!Number.isFinite(revenue) || !Number.isFinite(profit)) {
+      Validate.fail("Sale totals are too large to record", "sm-actual");
+      _overlay.hide();
+      return;
+    }
 
     const paymentMethod = "cash";
 
@@ -1938,7 +1988,7 @@ function closeSaleDetailSheet() {
 window.closeSaleDetailSheet = closeSaleDetailSheet;
 
 function toggleSaleEditForm() {
-  const saleId = parseInt(document.getElementById("sds-id")?.value, 10);
+  const saleId = Number(document.getElementById("sds-id")?.value);
   if (!currentUser || !["super", "user"].includes(currentUser.role)) {
     toast("Only authorized users can edit sales", "err");
     return;
@@ -1947,7 +1997,7 @@ function toggleSaleEditForm() {
     toast("Open the business day before editing a sale", "err");
     return;
   }
-  if (!Number.isInteger(saleId)) {
+  if (!Number.isInteger(saleId) || saleId <= 0) {
     toast("Sale record not found", "err");
     return;
   }
@@ -1987,14 +2037,18 @@ async function saveSaleEdit() {
       return;
     }
 
-    const id = parseInt(document.getElementById("sds-id").value, 10);
+    const id = Number(document.getElementById("sds-id").value);
     const qtyInput = document.getElementById("sds-edit-qty").value;
     const priceInput = document.getElementById("sds-edit-price").value;
     const qty = Number(qtyInput);
     const price = Number(priceInput);
     const pm = document.getElementById("sds-edit-payment").value || "cash";
-    if (!Number.isInteger(qty) || qty <= 0) {
-      toast("Quantity must be a positive whole number", "err");
+    if (!Number.isInteger(id) || id <= 0) {
+      toast("Sale record not found", "err");
+      return;
+    }
+    if (!Number.isInteger(qty) || qty < 1 || qty > 999999) {
+      toast("Quantity must be a whole number from 1 to 999,999", "err");
       return;
     }
     if (!Number.isFinite(price) || price <= 0) {
@@ -2026,9 +2080,16 @@ async function saveSaleEdit() {
             (record) => String(record.size) === String(saleSize),
           )
         : null;
-    const buy = [sale.buyPrice, size?.buyPrice, item?.buyPrice, item?.buy, sale.buy]
+    const buy = [
+      sale.buyPrice,
+      size?.buyPrice,
+      item?.buyPrice,
+      item?.buy,
+      sale.buy,
+    ]
+      .filter((value) => value !== null && value !== undefined && value !== "")
       .map(Number)
-      .find((value) => Number.isFinite(value) && value > 0);
+      .find((value) => Number.isFinite(value) && value >= 0);
     if (buy == null) {
       toast("The sale and linked item have no valid buy price", "err");
       return;
@@ -2042,8 +2103,18 @@ async function saveSaleEdit() {
       toast("Price must be greater than the buy price", "err");
       return;
     }
+    const revenue = qty * price;
+    const profit = qty * (price - buy);
+    if (!Number.isFinite(revenue) || !Number.isFinite(profit)) {
+      toast("Sale totals are too large to record", "err");
+      return;
+    }
 
-    const oldQty = Number(sale.qty) || 0;
+    const oldQty = Number(sale.qty);
+    if (!Number.isInteger(oldQty) || oldQty < 1 || oldQty > 999999) {
+      toast("The original sale quantity is invalid; it cannot be edited", "err");
+      return;
+    }
     const stockDelta = oldQty - qty;
     if (stockDelta !== 0 && !item) {
       toast("The original inventory item could not be found", "err");
@@ -2084,8 +2155,8 @@ async function saveSaleEdit() {
     sale.actualPrice = price;
     sale.sellPrice = price;
     sale.paymentMethod = pm;
-    sale.revenue = qty * price;
-    sale.profit = qty * (price - buy);
+    sale.revenue = revenue;
+    sale.profit = profit;
     sale.updatedAt = new Date().toISOString();
     if (item) {
       await persistSaleEditAtomically({
@@ -2113,14 +2184,21 @@ async function saveSaleEdit() {
 window.saveSaleEdit = saveSaleEdit;
 
 async function deleteSaleFromDetail() {
-  const id = parseInt(document.getElementById("sds-id").value);
-  if (!id) return;
+  const id = Number(document.getElementById("sds-id")?.value);
+  if (!Number.isInteger(id) || id <= 0) {
+    toast("Sale record not found", "err");
+    return;
+  }
   await voidSale(id);
 }
 window.deleteSaleFromDetail = deleteSaleFromDetail;
 
 async function saleAddToInventoryFromDetail() {
-  const id = parseInt(document.getElementById("sds-id").value);
+  const id = Number(document.getElementById("sds-id")?.value);
+  if (!Number.isInteger(id) || id <= 0) {
+    toast("Sale record not found", "err");
+    return;
+  }
   const sale = await dbGet("sales", id);
   if (!sale) {
     toast("Sale not found", "err");

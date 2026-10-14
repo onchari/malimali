@@ -791,11 +791,25 @@ function persistQuickSellAtomically({ item, sale } = {}) {
           } else if (creating) {
             delete finalItem.code;
           }
-          if (item.type) finalItem.type = item.type;
-          else if (creating) delete finalItem.type;
+          const suppliedType = String(item.type || "").trim();
+          if (suppliedType) {
+            const selectedType = types.find((type) => type.name === suppliedType);
+            if (
+              !selectedType ||
+              !isCategoryActive(selectedType) ||
+              _categoryHasActiveChildren(selectedType.id)
+            )
+              throw new Error("Choose an active item category.");
+            finalItem.type = selectedType.name;
+          } else if (creating) {
+            delete finalItem.type;
+          }
           if (item.buyPrice !== null && item.buyPrice !== undefined) {
             finalItem.buyPrice = Number(item.buyPrice);
             finalItem.buy = Number(item.buyPrice);
+          } else if (updateItem) {
+            finalItem.buyPrice = null;
+            finalItem.buy = null;
           }
           if (updateItem) {
             finalItem.sellPrice = Number(item.sellPrice);
@@ -18640,17 +18654,22 @@ let _gscTimer = null;
 /** Score how well an item matches the query (higher = better match) */
 function _gscScore(item, q) {
   if (!q) return 0;
-  const normalizedQuery = q.toLowerCase().trim();
-  const name = (item.name || "").toLowerCase();
-  const code = (item.code || "").toLowerCase();
-  const type = (item.type || "").toLowerCase();
-  const variant = (item.variant || item.size || "").toLowerCase();
+  const normalize = (value) =>
+    String(value == null ? "" : value)
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, " ");
+  const normalizedQuery = normalize(q);
+  const name = normalize(item.name);
+  const code = normalize(item.code);
+  const type = normalize(item.type);
+  const variant = normalize(item.variant || item.size);
   const fields = [
     code,
     name,
     type,
     variant,
-    (item.category || "").toLowerCase(),
+    normalize(item.category),
   ];
   let s = 0;
   if (code === normalizedQuery) s += 120;

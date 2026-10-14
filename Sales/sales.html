@@ -135,22 +135,32 @@
             <span class="add-label">Item name <span class="add-required">*</span></span>
             <input class="add-input" id="quick-sell-name" type="text" maxlength="120" autocomplete="off" required />
           </label>
+          <label class="add-field quick-sell-field-wide">
+            <span class="add-label">Category <span class="add-hint">(optional; select to complete this detail)</span></span>
+            <select class="add-select" id="quick-sell-category">
+              <option value="">Choose category...</option>
+            </select>
+          </label>
           <label class="add-field">
             <span class="add-label">Quantity to sell <span class="add-required">*</span></span>
-            <input class="add-input" id="quick-sell-qty" type="number" min="0" step="1" inputmode="numeric" value="0" required />
+            <input class="add-input" id="quick-sell-qty" type="number" min="0" max="999999" step="1" inputmode="numeric" value="0" required />
           </label>
           <label class="add-field quick-sell-stock-field" id="quick-sell-stock-field" hidden>
             <span class="add-label">Stock quantity <span class="add-hint">(starts at 0)</span></span>
-            <input class="add-input" id="quick-sell-stock-qty" type="number" min="0" step="1" inputmode="numeric" value="0" />
+            <input class="add-input" id="quick-sell-stock-qty" type="number" min="0" max="999999" step="1" inputmode="numeric" value="0" />
           </label>
           <label class="add-field">
             <span class="add-label">Sell price <span class="add-required">*</span></span>
             <input class="add-input" id="quick-sell-price" type="number" min="0" step="0.01" inputmode="decimal" required />
           </label>
-          <label class="add-field">
-            <span class="add-label">Buy price</span>
+          <div class="add-field">
+            <label class="add-label" for="quick-sell-buy">Buy price</label>
             <input class="add-input" id="quick-sell-buy" type="number" min="0" step="0.01" inputmode="decimal" value="0" />
-          </label>
+            <label class="add-hint" for="quick-sell-buy-unknown">
+              <input id="quick-sell-buy-unknown" type="checkbox" onchange="toggleQuickSellBuyUnknown(this.checked)" />
+              Buy price is unknown
+            </label>
+          </div>
           <label class="add-field">
             <span class="add-label">Code <span class="add-hint">(optional)</span></span>
             <input class="add-input add-mono" id="quick-sell-code" type="text" maxlength="40" autocomplete="off" />
@@ -334,6 +344,7 @@
               id="sm-qty"
               type="number"
               min="0"
+              max="999999"
               step="1"
               value="0"
               placeholder="Qty to sell"
@@ -409,6 +420,7 @@
               placeholder="Buy price (optional)"
               aria-label="Buy price"
               min="0"
+              step="0.01"
               inputmode="decimal"
               style="
                 flex: 1;
@@ -471,6 +483,7 @@
               placeholder="Actual price (optional)"
               aria-label="Actual sale price"
               min="0"
+              step="0.01"
               inputmode="decimal"
               style="
                 flex: 1;
@@ -707,6 +720,7 @@
                   id="sds-edit-qty"
                   class="qty-input"
                   min="1"
+                  max="999999"
                   step="1"
                   inputmode="numeric"
                   aria-label="Quantity sold"
@@ -728,6 +742,7 @@
                 id="sds-edit-price"
                 class="add-input add-center"
                 min="0"
+                step="0.01"
                 inputmode="decimal"
                 placeholder="0"
               />
