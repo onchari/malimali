@@ -1,7 +1,7 @@
 // ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
-const APP_VERSION = "2026.10.13.9";
+const APP_VERSION = "2026.10.14.09";
 
 // ===================================================================
 // APPLICATION RELEASE
@@ -25,9 +25,9 @@ const CODE_MAX_QTY = 9999;
 const LOW_STOCK_LEVEL = 1;
 const OUT_STOCK_LEVEL = 0;
 const SHOE_GROUP_DEFAULTS = Object.freeze({
-  S: Object.freeze({ min: 20, max: 28, label: "Children" }),
-  M: Object.freeze({ min: 29, max: 36, label: "Teens" }),
-  L: Object.freeze({ min: 37, max: 45, label: "Adults" }),
+  S: Object.freeze({ min: 19, max: 28, label: "Children" }),
+  M: Object.freeze({ min: 29, max: 39, label: "Teens" }),
+  L: Object.freeze({ min: 40, max: 50, label: "Adults" }),
 });
 
 function initDB() {
@@ -20099,62 +20099,54 @@ function renderAllShoeGroupCards() {
   const entries = Object.entries(groups).sort((a, b) => a[1].min - b[1].min);
   const signature = JSON.stringify(entries);
   if (wrap.dataset.groupsSignature !== signature) {
-    wrap.innerHTML = entries
-      .map(
-        ([group, config]) =>
-          '<div class="sg-card" id="sg-card-' +
-          escapeHtml(group) +
-          '" data-group="' +
-          escapeHtml(group) +
-          '"><div class="sg-card-head"><span class="sg-ltr">' +
-          escapeHtml(group) +
-          '</span><span class="sg-range" id="sg-range-' +
-          escapeHtml(group) +
-          '">' +
-          config.min +
-          "–" +
-          config.max +
-          '</span><span class="sg-name" aria-hidden="true">' +
-          escapeHtml(config.label) +
-          '</span></div><div class="sg-card-sizes" id="sg-card-sizes-' +
-          escapeHtml(group) +
-          '"></div></div>',
-      )
-      .join("");
+    wrap.innerHTML =
+      '<div class="sg-card" id="sg-card-all"><div class="sg-card-head">' +
+      '<span class="sg-card-title">Select sizes</span>' +
+      '<span class="sg-range">Configured in Settings</span></div>' +
+      '<div class="sg-card-sizes" id="sg-card-sizes-all"></div></div>';
     wrap.dataset.groupsSignature = signature;
   }
 
-  entries.forEach(([g, config]) => {
-    const container = document.getElementById("sg-card-sizes-" + g);
-    const card = document.getElementById("sg-card-" + g);
-    if (!container) return;
-    const { min, max } = config;
-    container.innerHTML = "";
-    for (let s = min; s <= max; s++) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      const isLocked = _shoeState.lockedSizes.has(s);
-      btn.className =
-        "sz-btn" +
-        (_shoeState.sizes.has(s) ? " sz-active" : "") +
-        (isLocked ? " sz-locked" : "");
-      btn.id = "sz-" + s;
-      btn.textContent = String(s);
-      if (isLocked) {
-        btn.disabled = true;
-        btn.title = "Already in stock";
-      } else {
-        btn.onclick = () => toggleShoeSize(s);
-      }
-      container.appendChild(btn);
+  const container = document.getElementById("sg-card-sizes-all");
+  if (!container) return;
+  const sizes = [
+    ...new Set(
+      entries.flatMap(([, config]) =>
+        Array.from(
+          { length: config.max - config.min + 1 },
+          (_, index) => config.min + index,
+        ),
+      ),
+    ),
+  ].sort((a, b) => a - b);
+  container.replaceChildren();
+  _shoeState.shownGroups.clear();
+  sizes.forEach((size) => {
+    const btn = document.createElement("button");
+    const isLocked = _shoeState.lockedSizes.has(size);
+    const isSelected = _shoeState.sizes.has(size);
+    btn.type = "button";
+    btn.className =
+      "sz-btn" +
+      (isSelected ? " sz-active" : "") +
+      (isLocked ? " sz-locked" : "");
+    btn.id = "sz-" + size;
+    btn.textContent = String(size);
+    btn.setAttribute("aria-pressed", String(isSelected));
+    if (isLocked) {
+      btn.disabled = true;
+      btn.title = "Already in stock";
+    } else {
+      btn.onclick = () => toggleShoeSize(size);
     }
-    const anySelected = _getGroupSizes(g).some((sz) =>
-      _shoeState.sizes.has(sz),
-    );
-    if (card) card.classList.toggle("sg-card-active", anySelected);
-    if (anySelected) _shoeState.shownGroups.add(g);
-    else _shoeState.shownGroups.delete(g);
+    container.appendChild(btn);
+
+    const group = _shoeState.groupFor(size);
+    if (isSelected && group) _shoeState.shownGroups.add(group);
   });
+  const card = document.getElementById("sg-card-all");
+  if (card)
+    card.classList.toggle("sg-card-active", _shoeState.sizes.size > 0);
 }
 
 function selectSizeGroup(g) {

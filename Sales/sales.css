@@ -1607,3 +1607,111 @@
   overflow-y: auto;
   overflow-x: hidden;
 }
+
+.hist-table-wrap,
+.hist-days-table-wrap,
+.hist-day-detail-tr .hist-table-wrap {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.hist-table,
+.hist-days-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.hist-table th:nth-child(n),
+.hist-table td:nth-child(n),
+.hist-days-table th:nth-child(n),
+.hist-days-table td:nth-child(n) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .hist-table-wrap,
+  .hist-days-table-wrap,
+  .hist-day-detail-tr .hist-table-wrap {
+    overflow-x: hidden;
+  }
+
+  .hist-table,
+  .hist-days-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .hist-table th:nth-child(n),
+  .hist-table td:nth-child(n),
+  .hist-days-table th:nth-child(n),
+  .hist-days-table td:nth-child(n) {
+    min-width: 0;
+    padding: 4px 2px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  .hist-table th:nth-child(1),
+  .hist-table td:nth-child(1) {
+    width: 4%;
+  }
+
+  .hist-table th:nth-child(2),
+  .hist-table td:nth-child(2) {
+    width: 19%;
+  }
+
+  .hist-table th:nth-child(3),
+  .hist-table td:nth-child(3),
+  .hist-table th:nth-child(4),
+  .hist-table td:nth-child(4),
+  .hist-table th:nth-child(5),
+  .hist-table td:nth-child(5),
+  .hist-table th:nth-child(6),
+  .hist-table td:nth-child(6) {
+    width: 18%;
+  }
+
+  .hist-table th:nth-child(7),
+  .hist-table td:nth-child(7) {
+    width: 5%;
+  }
+
+  .hist-days-table .hdt-date,
+  .hist-days-table th:nth-child(1),
+  .hist-days-table td:nth-child(1) {
+    width: 28%;
+  }
+
+  .hist-days-table th:nth-child(2),
+  .hist-days-table td:nth-child(2) {
+    width: 17%;
+  }
+
+  .hist-days-table th:nth-child(3),
+  .hist-days-table td:nth-child(3) {
+    width: 9%;
+  }
+
+  .hist-days-table th:nth-child(4),
+  .hist-days-table td:nth-child(4),
+  .hist-days-table th:nth-child(5),
+  .hist-days-table td:nth-child(5) {
+    width: 13%;
+  }
+
+  .hist-days-table th:nth-child(6),
+  .hist-days-table td:nth-child(6) {
+    width: 14%;
+  }
+
+  .hist-days-table th:nth-child(7),
+  .hist-days-table td:nth-child(7) {
+    width: 6%;
+  }
+}

@@ -1142,12 +1142,12 @@
         },
         {
           id: "MGS-060",
-          title: "Set up shared-price footwear sizes",
+          title: "Select footwear sizes and enter stock details",
           module: "Inventory",
           priority: "major",
-          objective: "Verify shared footwear pricing and size quantities save correctly.",
-          steps: ["Choose shared shoe pricing.", "Enter common prices and quantities for several sizes.", "Save and inspect the parent item and size rows."],
-          expected: "Each selected size is saved with the intended shared prices and its correct quantity."
+          objective: "Verify configured shoe sizes appear in one selection card, followed by quantity and pricing entry.",
+          steps: ["Open the footwear form and confirm its size buttons cover the configured ranges (19-50 by default).", "Change the size ranges in Settings and confirm only those sizes appear, once each.", "Select multiple sizes, enter shared quantity and buy/sell prices in the following card, then save."],
+          expected: "All configured sizes are selectable in one card; each selected size saves with the intended quantity, prices, and size-group assignment."
         },
         {
           id: "MGS-061",

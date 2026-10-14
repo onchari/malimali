@@ -9002,15 +9002,15 @@ body.photo-lightbox-open {
 }
 .sg-card {
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   padding: 10px 12px;
-  border: 1.5px solid var(--border);
-  border-radius: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
   background: var(--surface2);
   box-sizing: border-box;
 }
@@ -9018,147 +9018,31 @@ body.photo-lightbox-open {
   background: var(--accent-light);
   border-color: var(--accent);
 }
-.add-card-shoe .sg-row-full .sg-card:first-child {
-  border-top-left-radius: var(--r);
-  border-top-right-radius: var(--r);
-}
-.add-card-shoe .sg-row-full .sg-card:last-child {
-  border-bottom-left-radius: var(--r);
-  border-bottom-right-radius: var(--r);
-}
 .sg-card-head {
-  flex-shrink: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 2px;
-  text-align: center;
-  width: 52px;
+  justify-content: space-between;
+  gap: 8px;
 }
-.sg-ltr {
-  font-size: 18px;
+.sg-card-title {
+  font-size: 13px;
   font-weight: 800;
-  line-height: 1;
 }
 .sg-range {
-  font-size: 9px;
+  color: var(--muted);
+  font-size: 10px;
   font-weight: 700;
-  font-family: var(--mono);
-}
-.sg-name {
-  font-size: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.35px;
-}
-
-/* S — Children (blue) */
-#sg-card-S {
-  background: #eff6ff;
-  border-color: #93c5fd;
-  border-left: 4px solid #1d4ed8;
-}
-#sg-card-S .sg-ltr {
-  color: #1d4ed8;
-}
-#sg-card-S .sg-range {
-  color: #3b82f6;
-}
-#sg-card-S .sg-name {
-  color: #1e40af;
-}
-#sg-card-S.sg-card-active {
-  background: #dbeafe;
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 1px rgba(29, 78, 216, 0.12);
-}
-#sg-card-S .sz-btn {
-  background: #fff;
-  border-color: #93c5fd;
-  color: #1e40af;
-}
-#sg-card-S .sz-btn.sz-active {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
-  color: #fff;
-}
-
-/* M — Teens (green) */
-#sg-card-M {
-  background: #f0fdf4;
-  border-color: #86efac;
-  border-left: 4px solid #16a34a;
-}
-#sg-card-M .sg-ltr {
-  color: #16a34a;
-}
-#sg-card-M .sg-range {
-  color: #22c55e;
-}
-#sg-card-M .sg-name {
-  color: #15803d;
-}
-#sg-card-M.sg-card-active {
-  background: #dcfce7;
-  border-color: #4ade80;
-  box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.12);
-}
-#sg-card-M .sz-btn {
-  background: #fff;
-  border-color: #86efac;
-  color: #15803d;
-}
-#sg-card-M .sz-btn.sz-active {
-  background: #16a34a;
-  border-color: #16a34a;
-  color: #fff;
-}
-
-/* L — Adults (amber) */
-#sg-card-L {
-  background: #fffbeb;
-  border-color: #fcd34d;
-  border-left: 4px solid #d97706;
-}
-#sg-card-L .sg-ltr {
-  color: #b45309;
-}
-#sg-card-L .sg-range {
-  color: #d97706;
-}
-#sg-card-L .sg-name {
-  color: #92400e;
-}
-#sg-card-L.sg-card-active {
-  background: #fef3c7;
-  border-color: #fbbf24;
-  box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.12);
-}
-#sg-card-L .sz-btn {
-  background: #fff;
-  border-color: #fcd34d;
-  color: #92400e;
-}
-#sg-card-L .sz-btn.sz-active {
-  background: #d97706;
-  border-color: #d97706;
-  color: #fff;
 }
 .sg-card-sizes {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 5px;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 7px;
 }
 .sg-card-sizes .sz-btn {
-  flex: 0 0 auto;
-  min-width: 34px;
+  min-width: 0;
   width: auto;
-  min-height: 34px;
-  padding: 0 8px;
+  min-height: 40px;
+  padding: 0 4px;
   font-size: 12px;
 }
 #sz-grid,
@@ -9269,6 +9153,19 @@ body.photo-lightbox-open {
 }
 .shoe-stock-form {
   margin-top: 4px;
+}
+.shoe-size-settings-hint,
+.shoe-pricing-hint {
+  margin: 7px 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.shoe-pricing-title {
+  margin: 0 0 3px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
 }
 .shoe-form-grid {
   display: grid;
