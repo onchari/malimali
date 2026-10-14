@@ -21,15 +21,9 @@ function normalizeArray(value) {
 
 function computeDrift(data) {
   const items = normalizeArray(data.items);
-  const sales = normalizeArray(data.sales);
   const shoeSizes = normalizeArray(data.shoe_sizes || data.shoeSizes);
-
-  const soldByItem = new Map();
-  for (const sale of sales) {
-    const itemIdRaw = sale.itemId ?? sale.item_id ?? sale.itemCode ?? sale.item_code;
-    const itemKey = String(itemIdRaw ?? 'unknown');
-    soldByItem.set(itemKey, (soldByItem.get(itemKey) || 0) + toNumber(sale.qty, 0));
-  }
+  const stockMoves = normalizeArray(data.stock_moves || data.stockMoves);
+  const movementQtyByItem = new Map();
 
   const shoeQtyByItem = new Map();
   for (const size of shoeSizes) {
@@ -38,28 +32,48 @@ function computeDrift(data) {
     shoeQtyByItem.set(itemKey, (shoeQtyByItem.get(itemKey) || 0) + toNumber(size.qty, 0));
   }
 
+  for (const move of stockMoves) {
+    const itemIdRaw = move.itemId ?? move.item_id ?? move.itemCode ?? move.item_code;
+    const itemKey = String(itemIdRaw ?? 'unknown');
+    movementQtyByItem.set(
+      itemKey,
+      (movementQtyByItem.get(itemKey) || 0) + toNumber(move.delta, 0),
+    );
+  }
+
   const rows = [];
   for (const item of items) {
     const itemIdRaw = item.id ?? item.itemId ?? item.code;
     const itemKey = String(itemIdRaw ?? 'unknown');
-    const soldQty = soldByItem.get(itemKey) || 0;
     const currentQty = item.isShoe
       ? shoeQtyByItem.get(itemKey) || toNumber(item.qty, 0)
       : toNumber(item.qty, 0);
-    const delta = soldQty - currentQty;
+    const hasMovements = movementQtyByItem.has(itemKey);
+    const ledgerQty = hasMovements ? movementQtyByItem.get(itemKey) : null;
+    const delta = hasMovements ? ledgerQty - currentQty : null;
     rows.push({
       itemId: item.id ?? item.itemId ?? item.code ?? itemKey,
       code: item.code || item.name || itemKey,
       name: item.name || item.code || itemKey,
       isShoe: !!item.isShoe,
-      soldQty,
       currentQty,
+      ledgerQty,
+      comparable: hasMovements,
       delta,
     });
   }
 
-  const totalDrift = rows.reduce((sum, row) => sum + row.delta, 0);
-  return { rows, totalDrift };
+  const comparableRows = rows.filter((row) => row.comparable);
+  const totalDrift =
+    comparableRows.length === rows.length
+      ? comparableRows.reduce((sum, row) => sum + row.delta, 0)
+      : null;
+  return {
+    rows,
+    totalDrift,
+    comparable: comparableRows.length,
+    notComparable: rows.length - comparableRows.length,
+  };
 }
 
 function loadDataFromFile(filePath) {
@@ -84,19 +98,21 @@ function main() {
       { itemId: 'i2', size: 39, qty: 5 },
       { itemId: 'i2', size: 40, qty: 4 },
     ],
-    sales: [
-      { itemId: 'i1', qty: 3 },
-      { itemId: 'i1', qty: 2 },
-      { itemId: 'i2', qty: 2 },
-      { itemId: 'i2', qty: 1 },
+    stock_moves: [
+      { itemId: 'i1', delta: 12, reason: 'migrate' },
+      { itemId: 'i2', sizeId: '39', delta: 5, reason: 'migrate' },
+      { itemId: 'i2', sizeId: '40', delta: 4, reason: 'migrate' },
     ],
   };
 
   const data = target ? loadDataFromFile(target) : sample;
   const result = computeDrift(data);
 
-  console.log('Stock drift report');
-  console.log('Total drift:', result.totalDrift);
+  console.log('Stock ledger reconciliation (movement totals compared with current stock)');
+  console.log(
+    'Total variance:',
+    result.totalDrift == null ? 'unavailable (some items have no ledger movements)' : result.totalDrift,
+  );
   console.log('Rows:');
 
   if (!result.rows.length) {
@@ -106,7 +122,7 @@ function main() {
 
   for (const row of result.rows) {
     console.log(
-      `${row.code} | sold=${row.soldQty} | current=${row.currentQty} | delta=${row.delta} | shoe=${row.isShoe ? 'yes' : 'no'}`,
+      `${row.code} | ledger=${row.ledgerQty == null ? 'unavailable' : row.ledgerQty} | current=${row.currentQty} | variance=${row.delta == null ? 'unavailable' : row.delta} | comparable=${row.comparable ? 'yes' : 'no'} | shoe=${row.isShoe ? 'yes' : 'no'}`,
     );
   }
 }

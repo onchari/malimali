@@ -1331,12 +1331,12 @@
         },
         {
           id: "MGS-081",
-          title: "Check payment method on a sale",
+          title: "Verify sales entry is cash-only",
           module: "Sales",
           priority: "medium",
-          objective: "Ensure each supported payment method is saved with the sale.",
-          steps: ["Record separate test sales using available payment methods.", "Review each transaction in sales history."],
-          expected: "Each sale displays the payment method selected at checkout."
+          objective: "Keep sale entry aligned with the cash-only workflow.",
+          steps: ["Record a standard sale and a missing-item quick sale.", "Review each transaction in sales history."],
+          expected: "Both entry flows save Cash without displaying an unused payment selector; legacy sale payment details remain readable."
         },
         {
           id: "MGS-082",
@@ -1695,8 +1695,71 @@
           module: "Sales / Inventory",
           priority: "major",
           objective: "Keep Sales dropdown matches consistent with stock-list matching for item type, category, and size or variant.",
-          steps: ["Prepare inventory items with distinct types, categories, and size/variant values.", "In Sell, search using a type, category, and size/variant that are not part of the item name or code.", "Compare the filtered stock list with dropdown results and select each matching item."],
+          steps: ["Prepare inventory items with distinct types, categories, variants, and footwear size records that are absent from the parent item name/code.", "In Sell, search using each value.", "Compare the filtered stock list with dropdown results and select each matching item."],
           expected: "Every item matched by the stock-list search also appears in Sell dropdown results; no matching item is offered as not in inventory."
+        },
+        {
+          id: "MGS-122",
+          title: "Repeat sale edits without overwriting stock movements",
+          module: "Sales / Inventory",
+          priority: "critical",
+          objective: "Ensure every committed quantity edit has one distinct, stable stock movement.",
+          steps: ["In Development, note an item's derived quantity and the sale's movement records.", "Edit the same sale quantity twice, saving after each edit.", "Reopen the item and compare the ledger-derived quantity with the expected stock."],
+          expected: "Both edits remain represented by distinct movement IDs; ledger-derived stock equals opening stock minus the final sale quantity."
+        },
+        {
+          id: "MGS-123",
+          title: "Edit an unlinked off-stock sale offline",
+          module: "Sales / Sync",
+          priority: "major",
+          objective: "Verify edits to unlinked sales update both local data and the durable sync outbox.",
+          steps: ["In Development, create a quick sale for a missing item, then disconnect the network.", "Edit its quantity or price and save.", "Inspect the sale monitor row and queued sales/wishlist changes, then reconnect and sync."],
+          expected: "The edit saves locally, the monitor quantity and estimated cost match the edited sale, sync operations remain queued offline, and cloud values update after reconnect."
+        },
+        {
+          id: "MGS-124",
+          title: "Void a sale exactly once",
+          module: "Sales / Inventory",
+          priority: "critical",
+          objective: "Keep sale deletion, stock restoration, ledger movement, finance cleanup, monitor cleanup, and sync queue consistent.",
+          steps: ["In Development, record a tracked item sale and note stock, ledger, finance, and monitor records.", "Void the sale while offline.", "Check the local sale, restored quantity, ledger move, and queued tombstones; attempt to open/void the same sale again."],
+          expected: "The local void is atomic, stock is restored once, related rows are removed, sync tombstones are queued, and retrying cannot restore stock a second time."
+        },
+        {
+          id: "MGS-125",
+          title: "Display legacy prices and quantities consistently",
+          module: "Sales / History",
+          priority: "major",
+          objective: "Verify aliases and absent legacy fields use the same normalized values across history, details, and exports.",
+          steps: ["In a disposable Development database, prepare sales using legacy priceUsed/buy aliases, absent quantity, explicit zero quantity, and unknown cost.", "Compare period totals, table rows, sale details, and CSV export."],
+          expected: "Legacy price aliases are included, missing quantity uses the documented legacy default of one, explicit zero remains zero, and unknown cost/profit display as unavailable."
+        },
+        {
+          id: "MGS-126",
+          title: "Use Nairobi business dates consistently",
+          module: "Sales / Dashboard",
+          priority: "major",
+          objective: "Check timestamp-only sales and dashboard date labels at UTC/Nairobi day boundaries.",
+          steps: ["In Development, prepare timestamp-only sales on either side of Nairobi midnight and near UTC midnight.", "Review sales history filters and the dashboard's seven-day sparkline."],
+          expected: "Timestamp-only records, today highlighting, weekday labels, and history filters all use Africa/Nairobi calendar dates."
+        },
+        {
+          id: "MGS-127",
+          title: "Complete a sale without waiting for view refresh",
+          module: "Sales / Performance",
+          priority: "major",
+          objective: "Ensure sale confirmation reports the committed sale promptly when inventory/history refresh work is large.",
+          steps: ["In Development, populate a large catalogue and stock-movement ledger.", "Complete a standard sale and a quick sale.", "Observe the saving indicator and success screen while background views refresh."],
+          expected: "The atomic save resolves, saving state clears, and success is shown before slower dashboard/list/history refresh completes; refresh failures clearly report that the sale itself was saved."
+        },
+        {
+          id: "MGS-128",
+          title: "Neutralize spreadsheet formulas in CSV",
+          module: "Sales / Export",
+          priority: "major",
+          objective: "Prevent user-controlled text cells from executing spreadsheet formulas when opened.",
+          steps: ["In Development, create an item name and code starting with =, +, -, or @.", "Export sales to CSV and inspect the affected cells in a text editor and spreadsheet."],
+          expected: "Formula-leading text is prefixed safely while CSV quoting and embedded quote handling remain valid."
         }
       ];
 

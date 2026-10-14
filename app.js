@@ -545,17 +545,27 @@ function persistSaleAtomically({
       const saleStore = tx.objectStore("sales");
       const ledgerStore = hasLedger ? tx.objectStore("stock_moves") : null;
       const saleRequest = saleStore.add(sale);
-      const movesRequest = hasLedger ? ledgerStore.getAll() : null;
+      const movesRequests = hasLedger
+        ? _stockMoveItemKeys(item.id).map((key) =>
+            ledgerStore.index("idx_item_id").getAll(key),
+          )
+        : [];
       const stateRequest = syncable
         ? tx.objectStore("sync_meta").get("state")
         : null;
       let saleId;
       let moves = [];
       let state;
+      let loadedMoveRequests = 0;
       let finalized = false;
 
       const finalize = () => {
-        if (finalized || saleId == null || (syncable && state === undefined))
+        if (
+          finalized ||
+          saleId == null ||
+          loadedMoveRequests < movesRequests.length ||
+          (syncable && state === undefined)
+        )
           return;
         finalized = true;
         sale.id = saleId;
@@ -648,14 +658,17 @@ function persistSaleAtomically({
         saleId = event.target.result;
         finalize();
       };
-      if (movesRequest) {
+      for (const movesRequest of movesRequests) {
         movesRequest.onsuccess = (event) => {
-          moves = event.target.result || [];
+          const records = event.target.result || [];
+          const byId = new Map(moves.map((move) => [String(move.id), move]));
+          for (const move of records) byId.set(String(move.id), move);
+          moves = Array.from(byId.values());
+          loadedMoveRequests += 1;
           finalize();
         };
-      } else {
-        finalize();
       }
+      if (!movesRequests.length) finalize();
       if (stateRequest) {
         stateRequest.onsuccess = (event) => {
           state = event.target.result || {
@@ -1062,56 +1075,65 @@ function persistStockMutationAtomically({
 }
 
 function persistSaleEditAtomically({
-  item,
+  item = null,
   shoeSize = null,
   sale,
   delta,
   actor,
+  monitorRows = [],
 } = {}) {
   return new Promise((resolve, reject) => {
     if (!_dbReady(reject)) return;
-    const hasSize = !!shoeSize && db.objectStoreNames.contains("shoe_sizes");
+    const hasSize =
+      !!item && !!shoeSize && db.objectStoreNames.contains("shoe_sizes");
     const hasLedger =
-      db.objectStoreNames.contains("stock_moves") && Number(delta) !== 0;
+      !!item &&
+      db.objectStoreNames.contains("stock_moves") &&
+      Number(delta) !== 0;
+    const hasMonitorRows =
+      monitorRows.length > 0 && db.objectStoreNames.contains("wishlist");
     const syncable =
       _appDbReady &&
       db.objectStoreNames.contains("sync_queue") &&
       db.objectStoreNames.contains("sync_meta");
-    const stores = ["items", "sales"];
+    const stores = ["sales"];
+    if (item) stores.push("items");
     if (hasSize) stores.push("shoe_sizes");
     if (hasLedger) stores.push("stock_moves");
+    if (hasMonitorRows) stores.push("wishlist");
     if (syncable) stores.push("sync_queue", "sync_meta");
     try {
       const tx = db.transaction(stores, "readwrite");
+      const movementRef = `sale:${sale.id}:edit:${_syncUuid()}`;
+      const moveId = hasLedger
+        ? _stockMoveId({
+            reason: "sale_edit",
+            refId: movementRef,
+            itemId: item.id,
+            sizeId: hasSize ? shoeSize.id : null,
+          })
+        : null;
       const move = hasLedger
         ? {
-            id: _stockMoveId({
-              reason: "sale_edit",
-              refId: `sale:${sale.id}:edit`,
-              itemId: item.id,
-              sizeId: hasSize ? shoeSize.id : null,
-            }),
+            id: moveId,
             itemId: String(item.id),
             sizeId: hasSize ? String(shoeSize.id) : null,
             delta: Number(delta),
             reason: "sale_edit",
-            refId: `sale:${sale.id}:edit:${sale.updatedAt}`,
+            refId: movementRef,
             actor: String(actor || _syncClient()),
             source: "app",
             createdAt: new Date().toISOString(),
             _hlc: _nextHlc(),
             _serverUpdatedAt: new Date().toISOString(),
-            fbId: _stockMoveId({
-              reason: "sale_edit",
-              refId: `sale:${sale.id}:edit`,
-              itemId: item.id,
-              sizeId: hasSize ? shoeSize.id : null,
-            }),
+            fbId: moveId,
           }
         : null;
-      tx.objectStore("items").put(item);
+      if (item) tx.objectStore("items").put(item);
       if (hasSize) tx.objectStore("shoe_sizes").put(shoeSize);
       tx.objectStore("sales").put(sale);
+      if (hasMonitorRows)
+        for (const row of monitorRows) tx.objectStore("wishlist").put(row);
       if (move) tx.objectStore("stock_moves").put(move);
       if (syncable) {
         const stateRequest = tx.objectStore("sync_meta").get("state");
@@ -1136,9 +1158,11 @@ function persistSaleEditAtomically({
               _queueRecord(collection, record, "upsert", clock, now),
             );
           };
-          queue("items", item);
+          if (item) queue("items", item);
           if (hasSize) queue("shoe_sizes", shoeSize);
           queue("sales", sale);
+          if (hasMonitorRows)
+            for (const row of monitorRows) queue("wishlist", row);
           if (move) queue("stock_moves", move);
           tx.objectStore("sync_meta").put({
             ...meta,
@@ -1163,6 +1187,181 @@ function persistSaleEditAtomically({
   });
 }
 
+function persistSaleVoidAtomically({
+  sale,
+  item = null,
+  shoeSize = null,
+  restoreQty = 0,
+  finances = [],
+  monitorRows = [],
+} = {}) {
+  return new Promise((resolve, reject) => {
+    if (!_dbReady(reject)) return;
+    const hasSize =
+      !!shoeSize && db.objectStoreNames.contains("shoe_sizes");
+    const hasLedger =
+      !!item &&
+      !item.isRecord &&
+      Number(restoreQty) > 0 &&
+      db.objectStoreNames.contains("stock_moves");
+    const syncable =
+      _appDbReady &&
+      db.objectStoreNames.contains("sync_queue") &&
+      db.objectStoreNames.contains("sync_meta");
+    const stores = ["sales"];
+    if (item) stores.push("items");
+    if (hasSize) stores.push("shoe_sizes");
+    if (hasLedger) stores.push("stock_moves");
+    if (db.objectStoreNames.contains("finances")) stores.push("finances");
+    if (db.objectStoreNames.contains("wishlist")) stores.push("wishlist");
+    if (syncable) stores.push("sync_queue", "sync_meta");
+
+    try {
+      const tx = db.transaction([...new Set(stores)], "readwrite");
+      const now = new Date().toISOString();
+      const movementRef = `sale:${sale.id}`;
+      const moveId = hasLedger
+        ? _stockMoveId({
+            reason: "void",
+            refId: movementRef,
+            itemId: item.id,
+            sizeId: hasSize ? shoeSize.id : null,
+          })
+        : null;
+      const move = hasLedger
+        ? {
+            id: moveId,
+            itemId: String(item.id),
+            sizeId: hasSize ? String(shoeSize.id) : null,
+            delta: Number(restoreQty),
+            reason: "void",
+            refId: movementRef,
+            actor: currentUser ? currentUser.username : "system",
+            source: "app",
+            createdAt: now,
+            _hlc: _nextHlc(),
+            _serverUpdatedAt: now,
+            fbId: moveId,
+          }
+        : null;
+
+      const commit = (meta) => {
+        let clock = Math.max(Number(meta?.clock) || 0, _syncClock);
+        const queue = (collection, record, operation) => {
+          if (operation === "upsert") _prepareSyncRecord(collection, record);
+          else if (!record.fbId) return;
+          clock += 1;
+          record._syncMutationId = _syncUuid();
+          record._syncVersion = clock;
+          record._syncClient = _syncClient();
+          record._syncUpdatedAt = now;
+          if (operation === "upsert") record._syncDeleted = false;
+          tx.objectStore("sync_queue").add(
+            _queueRecord(collection, record, operation, clock, now),
+          );
+        };
+
+        if (item) tx.objectStore("items").put(item);
+        if (hasSize) tx.objectStore("shoe_sizes").put(shoeSize);
+        if (move) tx.objectStore("stock_moves").put(move);
+        tx.objectStore("sales").delete(sale.id);
+        for (const finance of finances) {
+          if (db.objectStoreNames.contains("finances"))
+            tx.objectStore("finances").delete(finance.id);
+        }
+        for (const row of monitorRows) {
+          if (db.objectStoreNames.contains("wishlist"))
+            tx.objectStore("wishlist").delete(row.id);
+        }
+
+        if (syncable) {
+          sale.fbId = sale.fbId || stableSaleFbId(sale);
+          queue("sales", sale, "delete");
+          if (item) queue("items", item, "upsert");
+          if (hasSize) queue("shoe_sizes", shoeSize, "upsert");
+          if (move) queue("stock_moves", move, "upsert");
+          for (const finance of finances)
+            queue("finances", finance, "delete");
+          for (const row of monitorRows)
+            queue("wishlist", row, "delete");
+          tx.objectStore("sync_meta").put({
+            ...(meta || {}),
+            key: "state",
+            clock,
+            clientId: _syncClient(),
+            updatedAt: now,
+          });
+          _syncClock = clock;
+        }
+      };
+
+      if (syncable) {
+        const request = tx.objectStore("sync_meta").get("state");
+        request.onsuccess = () => commit(request.result || null);
+      } else {
+        commit(null);
+      }
+      tx.onerror = (event) => reject(event.target.error || tx.error);
+      tx.onabort = () =>
+        reject(tx.error || new Error("Sale void transaction aborted"));
+      tx.oncomplete = () => {
+        _notifySyncLocalChange("sales");
+        resolve();
+      };
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function _stockMoveItemKeys(itemId) {
+  const keys = [String(itemId)];
+  const numericId = Number(itemId);
+  if (Number.isFinite(numericId)) keys.push(numericId);
+  return keys;
+}
+
+async function _stockMovesForItem(itemId) {
+  if (!db || !db.objectStoreNames.contains("stock_moves")) return [];
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction("stock_moves", "readonly");
+      const store = tx.objectStore("stock_moves");
+      if (!store.indexNames.contains("idx_item_id")) {
+        const request = store.getAll();
+        request.onsuccess = () => {
+          resolve(
+            (request.result || []).filter(
+              (move) => String(move.itemId) === String(itemId),
+            ),
+          );
+        };
+        request.onerror = () => reject(request.error || tx.error);
+      } else {
+        const index = store.index("idx_item_id");
+        const requests = _stockMoveItemKeys(itemId).map((key) =>
+          index.getAll(key),
+        );
+        const byId = new Map();
+        let completed = 0;
+        for (const request of requests) {
+          request.onsuccess = () => {
+            for (const move of request.result || [])
+              byId.set(String(move.id), move);
+            completed += 1;
+            if (completed === requests.length)
+              resolve(Array.from(byId.values()));
+          };
+          request.onerror = () => reject(request.error || tx.error);
+        }
+      }
+      tx.onerror = () => reject(tx.error || new Error("Stock read failed"));
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 async function deriveQty(itemId, sizeId = null) {
   if (!itemId || !db || !db.objectStoreNames.contains("stock_moves")) {
     if (itemId == null) return 0;
@@ -1179,9 +1378,8 @@ async function deriveQty(itemId, sizeId = null) {
     }
     return Number(item.qty || 0);
   }
-  const moves = await dbAll("stock_moves");
+  const moves = await _stockMovesForItem(itemId);
   const qty = moves
-    .filter((m) => String(m.itemId) === String(itemId))
     .filter((m) =>
       sizeId == null || sizeId === ""
         ? m.sizeId == null
@@ -1196,21 +1394,17 @@ async function readableStockQty(item, sizeId = null) {
   if (sizeId != null && sizeId !== "") {
     const itemId = item.itemId ?? item.id;
     if (item.qtyCache != null && Number.isFinite(Number(item.qtyCache))) {
-      const moves = await dbAll("stock_moves");
+      const moves = await _stockMovesForItem(itemId);
       const hasLedgerMoves = moves.some(
-        (move) =>
-          String(move.itemId) === String(itemId) &&
-          String(move.sizeId) === String(sizeId),
+        (move) => String(move.sizeId) === String(sizeId),
       );
       if (hasLedgerMoves) return Number(item.qtyCache);
       return Number(item.qty ?? 0);
     }
     if (item.id != null || item.itemId != null) {
-      const moves = await dbAll("stock_moves");
+      const moves = await _stockMovesForItem(itemId);
       const hasLedgerMoves = moves.some(
-        (move) =>
-          String(move.itemId) === String(itemId) &&
-          String(move.sizeId) === String(sizeId),
+        (move) => String(move.sizeId) === String(sizeId),
       );
       return hasLedgerMoves
         ? await deriveQty(itemId, sizeId)
@@ -1219,20 +1413,18 @@ async function readableStockQty(item, sizeId = null) {
     return Number(item.qty || 0);
   }
   if (item.qtyCache != null && Number.isFinite(Number(item.qtyCache))) {
-    const moves = await dbAll("stock_moves");
+    const moves = await _stockMovesForItem(item.id);
     const hasLedgerMoves = moves.some(
       (move) =>
-        String(move.itemId) === String(item.id) &&
         (move.sizeId == null || move.sizeId === ""),
     );
     if (hasLedgerMoves) return Number(item.qtyCache);
     return Number(item.qty ?? 0);
   }
   if (item.id != null) {
-    const moves = await dbAll("stock_moves");
+    const moves = await _stockMovesForItem(item.id);
     const hasLedgerMoves = moves.some(
       (move) =>
-        String(move.itemId) === String(item.id) &&
         (move.sizeId == null || move.sizeId === ""),
     );
     return hasLedgerMoves
@@ -1678,6 +1870,19 @@ async function cascadeDeleteRecord(store, id, record = null) {
   if (!db.objectStoreNames.contains(store)) return;
   const localRecord = record || (await dbGet(store, id));
   if (!localRecord) return;
+  if (store === "items") {
+    const moves = await _stockMovesForItem(localRecord.id);
+    if (moves.length)
+      throw new Error(
+        "This item has stock-movement history and cannot be deleted. Keep it in inventory and set its quantity to zero instead.",
+      );
+  } else if (store === "shoe_sizes" && localRecord.itemId != null) {
+    const moves = await _stockMovesForItem(localRecord.itemId);
+    if (moves.some((move) => String(move.sizeId) === String(localRecord.id)))
+      throw new Error(
+        "This shoe size has stock-movement history and cannot be deleted. Keep the size with zero stock instead.",
+      );
+  }
   const fbKey =
     localRecord.fbId ||
     (store === "wishlist" && typeof stableWishFbId === "function"
@@ -5395,126 +5600,6 @@ let _wishlistAddToSavedListId = "";
 let _selectedSavedWishlistListId = "";
 const KEY_WISHLIST_SAVED_LISTS = "mgs_wishlist_saved_lists";
 const _selectedWishlistIds = new Set();
-
-function getSavedWishlistLists() {
-  try {
-    const saved = JSON.parse(
-      localStorage.getItem(KEY_WISHLIST_SAVED_LISTS) || "[]",
-    );
-    return Array.isArray(saved)
-      ? saved
-          .filter(
-            (list) =>
-              list &&
-              typeof list === "object" &&
-              typeof list.name === "string" &&
-              list.name.trim() &&
-              Array.isArray(list.itemIds),
-          )
-          .map((list) => ({
-            ...list,
-            category: String(list.category || "").trim(),
-            supply: String(list.supply || "").trim(),
-            budget: Number(list.budget || 0) || 0,
-            status: ["planned", "ordering", "partial", "complete"].includes(
-              list.status,
-            )
-              ? list.status
-              : "planned",
-            dueDate: String(list.dueDate || "").trim(),
-            itemIds: [
-              ...new Set(
-                list.itemIds
-                  .map((id) => Number(id))
-                  .filter((id) => Number.isInteger(id)),
-              ),
-            ],
-          }))
-      : [];
-  } catch (_) {
-    return [];
-  }
-}
-
-function persistSavedWishlistLists(lists) {
-  localStorage.setItem(KEY_WISHLIST_SAVED_LISTS, JSON.stringify(lists));
-}
-
-function getWishlistListMembership(itemId, lists) {
-  return (
-    lists.find((list) =>
-      (list.itemIds || []).some((id) => String(id) === String(itemId)),
-    ) || null
-  );
-}
-
-function removeWishlistItemsFromLists(lists, itemIds) {
-  const ids = new Set(itemIds.map((id) => String(id)));
-  lists.forEach((list) => {
-    list.itemIds = (list.itemIds || []).filter((id) => !ids.has(String(id)));
-  });
-}
-
-async function runAtomicWishlistOperation(itemIds, updateRecord, updateLists) {
-  const ids = [
-    ...new Set(
-      itemIds.map((id) => Number(id)).filter((id) => Number.isInteger(id)),
-    ),
-  ];
-  const previousRecords = (
-    await Promise.all(ids.map((id) => dbGet("wishlist", id)))
-  ).filter(Boolean);
-  const previousLists = localStorage.getItem(KEY_WISHLIST_SAVED_LISTS);
-  try {
-    for (const record of previousRecords) {
-      updateRecord(record);
-      await dbPut("wishlist", record);
-    }
-    updateLists();
-  } catch (error) {
-    for (const record of previousRecords) {
-      try {
-        await dbPut("wishlist", record);
-      } catch (_) {}
-    }
-    if (previousLists === null)
-      localStorage.removeItem(KEY_WISHLIST_SAVED_LISTS);
-    else localStorage.setItem(KEY_WISHLIST_SAVED_LISTS, previousLists);
-    throw error;
-  }
-}
-
-function moveWishlistItemsToSavedList(itemIds, targetListId) {
-  const lists = getSavedWishlistLists();
-  const target = lists.find((list) => list.id === targetListId);
-  if (!target) return { ok: false, reason: "Saved list not found" };
-  const targetIds = new Set((target.itemIds || []).map((id) => String(id)));
-  const ids = [
-    ...new Set(
-      itemIds.map((id) => Number(id)).filter((id) => Number.isInteger(id)),
-    ),
-  ];
-  const duplicates = ids.filter((id) => targetIds.has(String(id)));
-  if (duplicates.length)
-    return {
-      ok: false,
-      reason: "One or more items already exist in the destination list",
-    };
-  removeWishlistItemsFromLists(lists, ids);
-  target.itemIds = [...new Set([...(target.itemIds || []), ...ids])];
-  persistSavedWishlistLists(lists);
-  return { ok: true, target };
-}
-
-function moveWishlistItemsToGeneralList(itemIds) {
-  const lists = getSavedWishlistLists();
-  removeWishlistItemsFromLists(lists, itemIds);
-  persistSavedWishlistLists(lists);
-}
-
-function assignWishlistItemToSavedList(itemId, listId) {
-  return moveWishlistItemsToSavedList([itemId], listId).ok;
-}
 
 function getSavedWishlistListForAdd() {
   if (_activeWishlistView !== "saved") return null;
@@ -10083,6 +10168,14 @@ async function deleteItem() {
       toast("Item not found", "err");
       return;
     }
+    const stockMoves = await _stockMovesForItem(toDelete.id);
+    if (stockMoves.length) {
+      toast(
+        "This item has stock-movement history and cannot be deleted. Keep it in inventory and set its quantity to zero instead.",
+        "err",
+      );
+      return;
+    }
     // Warn if item has sales history
     const allSales = await dbAll("sales");
     const itemSales = allSales.filter(
@@ -10627,10 +10720,15 @@ async function renderDashboard() {
   const sparkEl = document.getElementById("d-sparkline");
   const sparkLbls = document.getElementById("d-sparkline-labels");
   if (sparkWrap && sparkEl) {
+    const businessToday = todayDateStr();
+    const [businessYear, businessMonth, businessDay] = businessToday
+      .split("-")
+      .map(Number);
     const days7 = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (6 - i));
-      return d.toISOString().split("T")[0];
+      const date = new Date(
+        Date.UTC(businessYear, businessMonth - 1, businessDay - (6 - i)),
+      );
+      return date.toISOString().slice(0, 10);
     });
     const dayRevs = days7.map((date) =>
       allSales
@@ -10658,7 +10756,7 @@ async function renderDashboard() {
         sparkLbls.innerHTML = days7
           .map(
             (d, i) =>
-              `<div style="flex:1;text-align:center;font-size:9px;color:var(--muted);font-weight:${days7[i] === today ? 800 : 600};">${new Date(d + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" }).slice(0, 2)}</div>`,
+              `<div style="flex:1;text-align:center;font-size:9px;color:var(--muted);font-weight:${days7[i] === today ? 800 : 600};">${new Date(d + "T12:00:00Z").toLocaleDateString("en-GB", { timeZone: "Africa/Nairobi", weekday: "short" }).slice(0, 2)}</div>`,
           )
           .join("");
     }
@@ -12696,7 +12794,7 @@ async function updateSyncDot() {
       _applySyncState(
         "ahead",
         "Not uploaded",
-        unsynced.length + " local item(s) waiting to upload — tap Upload",
+        unsynced.length + " local item(s) waiting — uploads resume when app is open",
       );
       return;
     }
@@ -12718,7 +12816,7 @@ async function updateSyncDot() {
         _applySyncState(
           "ahead",
           "Waiting",
-          pending + " " + noun + " waiting to upload",
+          pending + " " + noun + " waiting — uploads resume when app is open",
         );
       }
       return;
@@ -12737,8 +12835,13 @@ async function updateSyncDot() {
     );
     _clearSyncProgress();
   } catch (e) {
-    _applySyncState("synced", "Synced", "In sync");
-    _clearSyncProgress();
+    _lastSyncError = e.message || "Could not read local sync state";
+    _applySyncState(
+      "error",
+      "Sync status unknown",
+      "Could not verify sync status — tap Sync to retry",
+    );
+    console.error("[SYNC] failed to read sync status:", e);
   }
 }
 window.updateSyncDot = updateSyncDot;
@@ -12757,6 +12860,8 @@ async function syncPushOnly() {
     setFbStatus("on");
     toast("Changes uploaded ✓", "ok");
   } catch (e) {
+    _lastSyncError = e.message || "Upload failed";
+    setFbStatus("error");
     toast("Upload failed: " + e.message, "err");
   }
   await updateSyncDot();
@@ -12833,6 +12938,7 @@ async function runForceSync(silent = false) {
     if (!silent) toast("Sync complete ✓", "ok");
   } catch (e) {
     _lastSyncError = e.message;
+    setFbStatus("error");
     if (!silent) toast("Sync failed: " + e.message, "err");
     console.error("[SYNC] runForceSync failed:", e);
   }
@@ -12948,6 +13054,7 @@ async function _onComeOnline() {
     setFbStatus("on");
     toast("Online — sync complete", "ok");
   } catch (e) {
+    _lastSyncError = e.message || "Sync failed while reconnecting";
     setFbStatus("error");
   }
 }
@@ -14452,9 +14559,14 @@ async function forcePushToFirebase(silent = false) {
   // Local writes are queued at the point of change. Do not scan and requeue
   // every local record here, otherwise each manual push creates a full upload.
   const result = await processSyncQueue(true);
+  if (result.failed > 0) {
+    _lastSyncError = _lastSyncError || `${result.failed} upload(s) failed`;
+    throw new Error(
+      `${result.failed} change(s) failed to upload; queued changes were kept for retry`,
+    );
+  }
   if (!silent) {
-    if (result.failed) toast("Sync failed — will retry automatically", "err");
-    else toast("All local changes pushed ✓", "ok");
+    toast("All local changes pushed ✓", "ok");
   }
 }
 
@@ -14785,13 +14897,14 @@ let _warned1145 = null; // date string of the last 11:45 PM warning shown
 
 // ── DATE / TIME HELPERS ──────────────────────────────────────────────
 function todayDateStr() {
-  // Use local date, not UTC - important for UTC+3 (Nairobi) where
-  // new Date().toISOString() returns UTC which drifts 3 hours behind local time
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return y + "-" + m + "-" + day;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Nairobi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString("en-GB", {
@@ -15133,6 +15246,46 @@ async function deleteSaleMonitorRows(saleId) {
 
 async function voidSale(saleId) {
   try {
+    const sale = await dbGet("sales", saleId);
+    if (!sale) {
+      toast("Sale not found", "err");
+      return;
+    }
+    if (!canMutateSale(sale)) {
+      toast("This sale cannot be voided by your account or on this day", "err");
+      return;
+    }
+    const quantity = Number(sale.qty == null ? 1 : sale.qty);
+    const message =
+      'Void sale of "' +
+      (sale.itemName || sale.itemCode || "item") +
+      '"' +
+      (sale.itemSize ? " (Size " + sale.itemSize + ")" : "") +
+      " × " +
+      quantity +
+      " for " +
+      fmt(sale.revenue || 0) +
+      "?\n\nStock will be restored.";
+    if (!confirm(message)) return;
+    const lockId =
+      sale.itemId == null ? "unlinked:" + sale.id : sale.itemId;
+    const saleRevision =
+      sale._syncMutationId ||
+      sale.updatedAt ||
+      JSON.stringify([sale.qty, sale.actualPrice, sale.revenue, sale.itemId]);
+    await withSaleLock(lockId, () =>
+      _voidSaleUnlocked(saleId, saleRevision),
+    );
+  } catch (error) {
+    console.error("[voidSale]", error);
+    toast("Sale could not be voided: " + (error.message || "Unknown error"), "err");
+  }
+}
+
+async function _voidSaleUnlocked(saleId, expectedRevision) {
+  let voidCommitted = false;
+  let deleteMarkerFailed = false;
+  try {
     const _voidSale = await dbGet("sales", saleId);
     if (!_voidSale) {
       toast("Sale not found", "err");
@@ -15142,99 +15295,106 @@ async function voidSale(saleId) {
       toast("This sale cannot be voided by your account or on this day", "err");
       return;
     }
-    const _voidMsg = _voidSale
-      ? 'Void sale of "' +
-        (_voidSale.itemName || _voidSale.itemCode || "item") +
-        '"' +
-        (_voidSale.itemSize ? " (Size " + _voidSale.itemSize + ")" : "") +
-        " × " +
-        (_voidSale.qty || 1) +
-        " for " +
-        fmt(_voidSale.revenue || 0) +
-        "?\n\nStock will be restored."
-      : "Void this sale? Stock will be restored.";
-    if (!confirm(_voidMsg)) return;
     const sale = await dbGet("sales", saleId);
     if (!sale) {
       toast("Sale not found", "err");
       return;
     }
+    const currentRevision =
+      sale._syncMutationId ||
+      sale.updatedAt ||
+      JSON.stringify([sale.qty, sale.actualPrice, sale.revenue, sale.itemId]);
+    if (currentRevision !== expectedRevision) {
+      toast("Sale changed while confirming. Reopen it and try again.", "err");
+      return;
+    }
     const item =
       sale.itemId == null ? null : await dbGet("items", sale.itemId);
+    if (sale.itemId != null && !item) {
+      toast("Cannot void sale: original inventory item is missing", "err");
+      return;
+    }
+    let shoeSize = null;
     if (item?.isShoe && (sale.itemSize || sale.size)) {
       const sizes = await getShoeSizes(item.code);
-      const size = sizes.find(
+      shoeSize = sizes.find(
         (record) => record.size === parseInt(sale.itemSize || sale.size, 10),
       );
-      if (!size) {
+      if (!shoeSize) {
         toast("Cannot void sale: original shoe size is missing", "err");
         return;
       }
     }
-    if (!sale.fbId) {
-      sale.fbId = stableSaleFbId(sale);
-      await dbPut("sales", sale);
-    }
-    if (!(await fbDeleteSale(sale))) {
-      toast(
-        "Sale was not voided because sync deletion could not be queued",
-        "err",
-      );
+    const restoreQty = Number(sale.qty == null ? 1 : sale.qty);
+    if (!Number.isInteger(restoreQty) || restoreQty < 1) {
+      toast("Cannot void sale: recorded quantity is invalid", "err");
       return;
     }
 
-    // Restore stock
-    const restoreQty = Number(sale.qty) || 1;
+    let stockItem = null;
+    let stockSize = null;
     if (item && !item.isRecord) {
-      if (item.isShoe && (sale.itemSize || sale.size)) {
-        // Restore shoe size qty
-        const sizes = await getShoeSizes(item.code);
-        const sz = sizes.find(
-          (s) => s.size === parseInt(sale.itemSize || sale.size),
+      if (shoeSize) {
+        const available = await readableStockQty(shoeSize, shoeSize.id);
+        shoeSize.qty = available + restoreQty;
+        shoeSize.qtyCache = shoeSize.qty;
+        shoeSize.updatedAt = new Date().toISOString();
+        const allSizes = await getShoeSizes(item.code);
+        item.qty = allSizes.reduce(
+          (total, size) =>
+            total +
+            (String(size.id) === String(shoeSize.id)
+              ? shoeSize.qty
+              : Number(size.qty || 0)),
+          0,
         );
-        if (sz) {
-          sz.qty += restoreQty;
-          sz.updatedAt = new Date().toISOString();
-          await dbPut("shoe_sizes", sz);
-          await appendStockMove({
-            itemId: item.id,
-            sizeId: sz.id,
-            delta: restoreQty,
-            reason: "void",
-            refId: `sale:${sale.id}`,
-            actor: currentUser ? currentUser.username : "system",
-          });
-          const allSz = await getShoeSizes(item.code);
-          item.qty = allSz.reduce((t, s) => t + s.qty, 0);
-        }
+        stockSize = shoeSize;
       } else {
-        item.qty += restoreQty;
-        await appendStockMove({
-          itemId: item.id,
-          delta: restoreQty,
-          reason: "void",
-          refId: `sale:${sale.id}`,
-          actor: currentUser ? currentUser.username : "system",
-        });
+        item.qty = (await readableStockQty(item)) + restoreQty;
       }
+      item.qtyCache = Number(item.qty || 0);
       item.updatedAt = new Date().toISOString();
-      await dbPut("items", item);
-      fbSyncItem(item);
+      stockItem = item;
     }
 
-    // Delete sale record
-    _rememberDeletedSale(sale);
-    const finPayload = {
-      type: "revenue",
-      saleId: sale.id,
-      amount: sale.revenue,
-      date: sale.businessDate || (sale.date || "").split("T")[0],
-      description: "Sale: " + (sale.itemName || sale.itemCode || "item"),
-    };
-    await fbDeleteFinanceEntry(finPayload);
-    await _deleteLocalRevenueForSale(saleId);
-    await deleteSaleMonitorRows(sale.id);
-    await dbDelete("sales", saleId);
+    const finances = db.objectStoreNames.contains("finances")
+      ? (await dbAll("finances")).filter(
+          (entry) =>
+            entry.type === "revenue" &&
+            String(entry.saleId) === String(sale.id),
+        )
+      : [];
+    const monitorRows = db.objectStoreNames.contains("wishlist")
+      ? (await dbAll("wishlist")).filter(
+          (wish) =>
+            wish.source === "sale-monitor" &&
+            String(wish.saleId) === String(sale.id),
+        )
+      : [];
+    sale.fbId = sale.fbId || stableSaleFbId(sale);
+    await persistSaleVoidAtomically({
+      sale,
+      item: stockItem,
+      shoeSize: stockSize,
+      restoreQty,
+      finances,
+      monitorRows,
+    });
+    voidCommitted = true;
+    try {
+      _rememberDeletedSale(sale);
+    } catch (error) {
+      console.error("[voidSale] delete marker could not be stored", error);
+      deleteMarkerFailed = true;
+    }
+    scheduleSync();
+    closeSaleDetailSheet();
+    toast(
+      deleteMarkerFailed
+        ? "Sale voided and queued for sync, but its local deletion marker could not be saved"
+        : "Sale voided - stock restored",
+      deleteMarkerFailed ? "err" : "ok",
+    );
 
     // Refresh
     allItems = await dbAll("items");
@@ -15248,17 +15408,19 @@ async function voidSale(saleId) {
     } catch (_) {
       /* intentionally ignored */
     }
-    closeSaleDetailSheet();
     try {
       await renderHistoryPage();
     } catch (_) {
       /* intentionally ignored */
     }
-    scheduleSync();
-    toast("Sale voided - stock restored", "ok");
   } catch (e) {
     console.error("[voidSale]", e);
-    toast("Error: " + e.message, "err");
+    toast(
+      voidCommitted
+        ? "Sale was voided, but a screen refresh failed: " + e.message
+        : "Error: " + e.message,
+      "err",
+    );
   }
 }
 
@@ -15830,7 +15992,14 @@ if ("serviceWorker" in navigator && !_skipServiceWorkerOnLocal) {
       navigator.serviceWorker.addEventListener("message", (e) => {
         if (e.data && e.data.type === "BACKGROUND_SYNC") {
           if (fbReady && fbDb && navigator.onLine)
-            forcePushToFirebase(true).then(() => pullFromFirebase(true));
+            forcePushToFirebase(true)
+              .then(() => pullFromFirebase(true))
+              .catch((error) => {
+                _lastSyncError = error.message || "Background sync failed";
+                setFbStatus("error");
+                console.error("[SYNC] background sync failed:", error);
+                updateSyncDot();
+              });
         }
       });
       function onNewWorker(worker) {
@@ -19078,23 +19247,62 @@ function _renderSizeGroupFilter() {
 // ═══════════════════════════════════════════════════════════
 
 const DAY_RECON_KEY = (date) => "mgs_recon_" + date;
+const _dayReconMigrationStarted = new Set();
 
 function _getDayRecon(date) {
   try {
-    return JSON.parse(localStorage.getItem(DAY_RECON_KEY(date)) || "null");
+    const local = JSON.parse(
+      localStorage.getItem(DAY_RECON_KEY(date)) || "null",
+    );
+    const dayDate = activeDay?.businessDate || activeDay?.business_date;
+    if (local) {
+      if (dayDate === date && !activeDay.reconciliation) {
+        activeDay.reconciliation = local;
+        if (!_dayReconMigrationStarted.has(date)) {
+          _dayReconMigrationStarted.add(date);
+          dbPut("business_days", activeDay).catch((error) => {
+            console.error("[day-reconciliation] migration failed", error);
+            toast("Reconciliation is saved locally; cloud sync migration failed", "err");
+          });
+        }
+      }
+      return local;
+    }
+    return dayDate === date ? activeDay.reconciliation || null : null;
   } catch (e) {
+    console.error("[day-reconciliation] local state could not be read", e);
     return null;
   }
 }
 function _saveDayRecon(date, data) {
   try {
     localStorage.setItem(DAY_RECON_KEY(date), JSON.stringify(data));
-  } catch (e) {}
+  } catch (error) {
+    console.error("[day-reconciliation] local state could not be saved", error);
+    toast("Could not save reconciliation on this device", "err");
+    return;
+  }
+  const dayDate = activeDay?.businessDate || activeDay?.business_date;
+  if (dayDate === date) {
+    activeDay.reconciliation = data;
+    activeDay.reconciliationUpdatedAt = new Date().toISOString();
+    dbPut("business_days", activeDay).catch((error) => {
+      console.error("[day-reconciliation] cloud queue update failed", error);
+      toast("Reconciliation is saved on this device; sync failed", "err");
+    });
+  }
 }
 function _clearDayRecon(date) {
-  try {
-    localStorage.removeItem(DAY_RECON_KEY(date));
-  } catch (e) {}
+  localStorage.removeItem(DAY_RECON_KEY(date));
+  const dayDate = activeDay?.businessDate || activeDay?.business_date;
+  if (dayDate === date) {
+    activeDay.reconciliation = null;
+    activeDay.reconciliationUpdatedAt = new Date().toISOString();
+    dbPut("business_days", activeDay).catch((error) => {
+      console.error("[day-reconciliation] clear sync failed", error);
+      toast("Reconciliation was cleared locally; sync failed", "err");
+    });
+  }
 }
 
 // ── openDay: existing logic + advance to opening form ────────────
@@ -19144,6 +19352,8 @@ async function _doCloseDay() {
   );
   const items = await dbAll("items");
   activeDay.status = "CLOSED";
+  activeDay.reconciliation = _getDayRecon(today);
+  activeDay.reconciliationUpdatedAt = new Date().toISOString();
   activeDay.closed_at = now.toISOString();
   activeDay.salesCount = daySales.length;
   activeDay.revenue = daySales.reduce((s, x) => s + x.revenue, 0);

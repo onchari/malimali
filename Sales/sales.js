@@ -95,9 +95,31 @@ function showSaleSuccess(profit) {
   }
 }
 
+function refreshSalesAfterSave() {
+  setTimeout(async () => {
+    try {
+      allItems = await dbAll("items");
+      await enrichShoeItems(allItems);
+      await renderList();
+      await renderDashboard();
+      await renderStockMonitor();
+      await refreshSalesViews();
+      if (activeDay) updateDayLiveStats();
+      updateHeader();
+      updateLowStockBadge();
+      scheduleSync();
+    } catch (error) {
+      console.error("[refreshSalesAfterSave] sale saved but refresh failed", error);
+      toast(
+        "Sale saved, but some views could not refresh. Reload to see the latest data.",
+        "err",
+      );
+    }
+  }, 0);
+}
+
 // ===== MAKE A SALE =====
 let currentSellItemId = null;
-let _selectedPayment = "cash"; // cash | mpesa
 let _isShoeSale = false;
 let _sellShoeItem = null;
 let _sellShoeSize = null; // full sizeRec object
@@ -281,6 +303,39 @@ function _normaliseSellName(value) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function _saleQuantity(sale) {
+  if (sale.qty == null || sale.qty === "") return 1;
+  const quantity = Number(sale.qty);
+  return Number.isFinite(quantity) && quantity >= 0 ? quantity : 0;
+}
+
+function _saleUnitPrice(sale) {
+  for (const value of [sale.actualPrice, sale.sellPrice, sale.priceUsed]) {
+    if (value == null || value === "") continue;
+    const price = Number(value);
+    if (Number.isFinite(price) && price >= 0) return price;
+  }
+  return 0;
+}
+
+function _saleBuyPrice(sale) {
+  for (const value of [sale.buyPrice, sale.buy]) {
+    if (value == null || value === "") continue;
+    const price = Number(value);
+    if (Number.isFinite(price) && price >= 0) return price;
+  }
+  return null;
+}
+
+function _firstSalePrice(...values) {
+  for (const value of values) {
+    if (value == null || value === "") continue;
+    const price = Number(value);
+    if (Number.isFinite(price) && price >= 0) return price;
+  }
+  return null;
+}
+
 async function _renderSellMatches(version) {
   try {
     const input = document.getElementById("sell-search");
@@ -292,10 +347,36 @@ async function _renderSellMatches(version) {
     const items =
       Array.isArray(allItems) && allItems.length ? allItems : await dbAll("items");
     if (version !== _sellSearchVersion || input.value.trim() !== raw) return;
-    const matchedItems = items
-      .map((item) => ({ item, score: _gscScore(item, raw) }))
-      .filter(({ score }) => score > 0)
-      .sort((a, b) => b.score - a.score || String(a.item.name || "").localeCompare(String(b.item.name || "")));
+    const itemScores = new Map();
+    const itemById = new Map(items.map((item) => [String(item.id), item]));
+    const itemByCode = new Map(items.map((item) => [String(item.code), item]));
+    for (const item of items) {
+      const score = _gscScore(item, raw);
+      if (score > 0) itemScores.set(String(item.id), { item, score });
+    }
+    const shoeItems = items.filter((item) => item.isShoe);
+    if (shoeItems.length) {
+      const shoeSizes = await dbAll("shoe_sizes");
+      for (const size of shoeSizes) {
+        const parent =
+          itemById.get(String(size.itemId)) ||
+          itemByCode.get(String(size.itemCode));
+        if (!parent) continue;
+        if (!parent.isShoe) continue;
+        const score = _gscScore(
+          { ...parent, variant: String(size.size ?? "") },
+          raw,
+        );
+        const key = String(parent.id);
+        if (score > 0 && score > (itemScores.get(key)?.score || 0))
+          itemScores.set(key, { item: parent, score, matchedSize: size });
+      }
+    }
+    const matchedItems = [...itemScores.values()].sort(
+      (a, b) =>
+        b.score - a.score ||
+        String(a.item.name || "").localeCompare(String(b.item.name || "")),
+    );
     const totalMatches = matchedItems.length;
     const maxMatches = matchedItems.slice(0, 8);
     if (!totalMatches) {
@@ -318,12 +399,19 @@ async function _renderSellMatches(version) {
 
     _setSellSearchState("found", `${totalMatches} match${totalMatches === 1 ? "" : "es"} in inventory. Select one.`);
     const rows = [];
-    for (const { item } of maxMatches) {
+    for (const { item, matchedSize } of maxMatches) {
       const category = item.type || "No category";
-      const price = item.sellPrice ?? item.sell ?? null;
-      const quantity = item.isRecord ? null : await displayStockQty(item);
+      const price = matchedSize
+        ? matchedSize.sellPrice ?? item.sellPrice ?? item.sell ?? null
+        : item.sellPrice ?? item.sell ?? null;
+      const quantity = item.isRecord
+        ? null
+        : matchedSize
+          ? await readableStockQty(matchedSize, matchedSize.id)
+          : await displayStockQty(item);
       rows.push({
         item,
+        size: matchedSize?.size,
         name: item.name || item.code || "Unnamed item",
         code: item.code || "No code",
         category,
@@ -339,7 +427,7 @@ async function _renderSellMatches(version) {
         <button type="button" class="sell-search-option" role="option" aria-selected="false" id="sell-option-${index}" data-item-id="${Number(row.item.id)}">
           <span class="sell-search-option-main">
             <span class="sell-search-name">${escapeHtml(row.name)}</span>
-            <span class="sell-search-meta">${escapeHtml(row.code)} · ${escapeHtml(row.category)}</span>
+            <span class="sell-search-meta">${escapeHtml(row.code)} · ${escapeHtml(row.category)}${row.size == null ? "" : ` · Size ${escapeHtml(row.size)}`}</span>
           </span>
           <span class="sell-search-option-data">
             <span class="sell-search-stock">${row.recordOnly ? "Record Only" : `${Number(row.quantity || 0)} in stock`}</span>
@@ -560,8 +648,10 @@ async function submitQuickSell() {
     profit: buyPrice == null ? null : saleQty * (sellPrice - buyPrice),
     paymentMethod: "cash",
   };
+  const totalCost = buyPrice == null ? null : saleQty * buyPrice;
   if (
     !Number.isFinite(sale.revenue) ||
+    (totalCost != null && !Number.isFinite(totalCost)) ||
     (sale.profit != null && !Number.isFinite(sale.profit))
   ) {
     return showError("Sale totals are too large to record.");
@@ -579,25 +669,15 @@ async function submitQuickSell() {
   try {
     const result = await persistQuickSellAtomically({ item, sale });
     closeQuickSell();
-    try {
-      allItems = await dbAll("items");
-      await renderList();
-      await renderDashboard();
-      await renderStockMonitor();
-      await refreshSalesViews();
-      if (activeDay) updateDayLiveStats();
-      scheduleSync();
-    } catch (refreshError) {
-      console.error("[submitQuickSell] sale saved but view refresh failed", refreshError);
-      toast("Sale saved, but some views could not refresh. Reload to see the latest inventory.", "err");
-    }
     const search = document.getElementById("sell-search");
     if (search) {
       search.value = "";
       onSellSearch("");
     }
     showPage("history");
+    toast("Sale saved", "ok");
     showSaleSuccess(result.sale.profit);
+    refreshSalesAfterSave();
   } catch (saveError) {
     console.error("[submitQuickSell]", saveError);
     showError("Sale was not saved. " + (saveError.message || "Please try again."));
@@ -611,24 +691,6 @@ async function submitQuickSell() {
   }
 }
 window.submitQuickSell = submitQuickSell;
-
-function selectPayment(method) {
-  _selectedPayment = method;
-  // Reset all payment buttons
-  document
-    .querySelectorAll(".pay-btn")
-    .forEach((btn) => btn.classList.remove("active"));
-  // Activate selected
-  const idMap = {
-    cash: "pay-cash",
-    mpesa: "pay-mpesa",
-    Cash: "pay-cash",
-    "M-Pesa": "pay-mpesa",
-  };
-  const btnId = idMap[method] || "pay-cash";
-  const btn = document.getElementById(btnId);
-  if (btn) btn.classList.add("active");
-}
 
 // Shows the "enter buy price" field only when the item/size has no cost on record yet.
 function _toggleSmBuyField(currentBuy) {
@@ -683,8 +745,8 @@ async function openSellModal(itemId) {
     document.getElementById("sm-stock").textContent = item.isRecord
       ? "∞"
       : availableQty;
-    const _itemSell = item.sellPrice || item.sell || 0;
-    const _itemBuy = item.buyPrice || item.buy || 0;
+    const _itemSell = _firstSalePrice(item.sellPrice, item.sell) || 0;
+    const _itemBuy = _firstSalePrice(item.buyPrice, item.buy);
     const _itemSellMin = item.sellPriceMin || 0;
     document.getElementById("sm-sell").textContent = fmt(_itemSell);
     const _smPriceRange = document.getElementById("sm-price-range");
@@ -697,12 +759,19 @@ async function openSellModal(itemId) {
         _smPriceRange.style.display = "none";
       }
     }
-    const _maxProfit = _itemSell - _itemBuy;
-    const _minProfit = _itemSellMin > 0 ? _itemSellMin - _itemBuy : _maxProfit;
+    const _maxProfit = _itemBuy == null ? null : _itemSell - _itemBuy;
+    const _minProfit =
+      _itemBuy == null
+        ? null
+        : _itemSellMin > 0
+          ? _itemSellMin - _itemBuy
+          : _maxProfit;
     const _smProfit = document.getElementById("sm-profit");
     if (_smProfit) {
       _smProfit.textContent =
-        _itemSellMin > 0 && _itemSellMin < _itemSell
+        _maxProfit == null
+          ? "N/A"
+          : _itemSellMin > 0 && _itemSellMin < _itemSell
           ? "+" + fmt(_minProfit) + " – +" + fmt(_maxProfit)
           : (_maxProfit >= 0 ? "+" : "") + fmt(_maxProfit);
     }
@@ -710,7 +779,10 @@ async function openSellModal(itemId) {
     if (_smProfitRange) _smProfitRange.style.display = "none";
     const _tpel = document.getElementById("sm-total-profit");
     if (_tpel)
-      _tpel.textContent = (_maxProfit >= 0 ? "+" : "") + fmt(_maxProfit);
+      _tpel.textContent =
+        _maxProfit == null
+          ? "N/A"
+          : (_maxProfit >= 0 ? "+" : "") + fmt(_maxProfit);
     document.getElementById("sm-cur").textContent = currency;
     document.getElementById("sm-qty").value = 0;
     document.getElementById("sm-qty").min = 0;
@@ -744,14 +816,22 @@ async function updateSellModal() {
     // For shoe sales use the specific size record prices & stock
     const basePrice =
       _isShoeSale && _sellShoeSize
-        ? _sellShoeSize.sellPrice || item.sellPrice || item.sell || 0
-        : item.sell || item.sellPrice || 0;
+        ? _firstSalePrice(_sellShoeSize.sellPrice, item.sellPrice, item.sell) || 0
+        : _firstSalePrice(item.sellPrice, item.sell) || 0;
     const buyOnRecord =
       _isShoeSale && _sellShoeSize
-        ? _sellShoeSize.buyPrice || item.buyPrice || item.buy || 0
-        : item.buy || item.buyPrice || 0;
-    const buyRaw = parseFloat(document.getElementById("sm-buy")?.value);
-    const baseBuy = !isNaN(buyRaw) && buyRaw >= 0 ? buyRaw : buyOnRecord;
+        ? _firstSalePrice(
+            _sellShoeSize.buyPrice,
+            item.buyPrice,
+            item.buy,
+          )
+        : _firstSalePrice(item.buyPrice, item.buy);
+    const buyInput = document.getElementById("sm-buy")?.value.trim() || "";
+    const buyRaw = buyInput === "" ? null : Number(buyInput);
+    const baseBuy =
+      buyRaw != null && Number.isFinite(buyRaw) && buyRaw >= 0
+        ? buyRaw
+        : buyOnRecord;
     const maxStock = item.isRecord
       ? 999999
       : await readableStockQty(
@@ -775,24 +855,39 @@ async function updateSellModal() {
     const priceUsed =
       !isNaN(actualRaw) && actualRaw > 0 ? actualRaw : basePrice;
     const totalRev = qty * priceUsed;
-    const totalProfit = qty * (priceUsed - baseBuy);
+    const totalProfit =
+      baseBuy == null ? null : qty * (priceUsed - baseBuy);
     const overridden =
       !isNaN(actualRaw) && actualRaw > 0 && actualRaw !== basePrice;
     document.getElementById("sm-price-used").textContent =
       fmt(priceUsed) + (overridden ? " (custom)" : " (default)");
     document.getElementById("sm-total-rev").textContent = fmt(totalRev);
     document.getElementById("sm-total-profit").textContent =
-      (totalProfit >= 0 ? "+" : "") + fmt(totalProfit);
+      totalProfit == null
+        ? "N/A"
+        : (totalProfit >= 0 ? "+" : "") + fmt(totalProfit);
     document.getElementById("sm-total-profit").style.color =
-      totalProfit >= 0 ? "var(--green)" : "var(--red)";
+      totalProfit == null
+        ? "var(--muted)"
+        : totalProfit >= 0
+          ? "var(--green)"
+          : "var(--red)";
     document.getElementById("sm-qty").max = maxStock;
     // Update per-item profit display + warn if below cost
-    const profitPerItem = priceUsed - baseBuy;
+    const profitPerItem =
+      baseBuy == null ? null : priceUsed - baseBuy;
     const smProfit = document.getElementById("sm-profit");
     if (smProfit) {
       smProfit.textContent =
-        (profitPerItem >= 0 ? "+" : "") + fmt(profitPerItem);
-      smProfit.style.color = profitPerItem >= 0 ? "var(--green)" : "var(--red)";
+        profitPerItem == null
+          ? "N/A"
+          : (profitPerItem >= 0 ? "+" : "") + fmt(profitPerItem);
+      smProfit.style.color =
+        profitPerItem == null
+          ? "var(--muted)"
+          : profitPerItem >= 0
+            ? "var(--green)"
+            : "var(--red)";
     }
     // ── Min-price floor warning ────────────────────────────────────
     const sellMin =
@@ -884,11 +979,14 @@ async function confirmSaleUnlocked() {
       _isShoeSale && _sellShoeSize
         ? _sellShoeSize.sellPrice || item.sellPrice || item.sell || 0
         : item.sellPrice || item.sell || 0;
-    const buyOnRecord = Number(
+    const buyOnRecordRaw =
       _isShoeSale && _sellShoeSize
-        ? _sellShoeSize.buyPrice ?? item.buyPrice ?? item.buy ?? 0
-        : item.buyPrice ?? item.buy ?? 0,
-    );
+        ? _firstSalePrice(
+            _sellShoeSize.buyPrice,
+            item.buyPrice,
+            item.buy,
+          )
+        : _firstSalePrice(item.buyPrice, item.buy);
     if (buyEntered !== null && (!Number.isFinite(buyEntered) || buyEntered < 0)) {
       Validate.fail("Buy price must be 0 or more", "sm-buy");
       _overlay.hide();
@@ -901,8 +999,9 @@ async function confirmSaleUnlocked() {
     }
     // If there was no buy price on record, use whatever the user entered at sell time and save it.
     const buyPriceEntered =
-      buyOnRecord <= 0 && buyEntered !== null;
-    const buyPrice = buyPriceEntered ? buyEntered : buyOnRecord;
+      (buyOnRecordRaw == null || buyOnRecordRaw === 0) &&
+      buyEntered !== null;
+    const buyPrice = buyPriceEntered ? buyEntered : buyOnRecordRaw;
 
     const priceUsed =
       Number.isFinite(actualRaw) && actualRaw > 0 ? actualRaw : sellPrice;
@@ -939,7 +1038,7 @@ async function confirmSaleUnlocked() {
       _overlay.hide();
       return;
     }
-    if (!Number.isFinite(buyPrice) || buyPrice < 0) {
+    if (buyPrice != null && (!Number.isFinite(buyPrice) || buyPrice < 0)) {
       Validate.fail("Buy price must be 0 or more", "sm-buy");
       _overlay.hide();
       return;
@@ -949,7 +1048,7 @@ async function confirmSaleUnlocked() {
       _overlay.hide();
       return;
     }
-    if (buyPrice >= priceUsed) {
+    if (buyPrice != null && buyPrice >= priceUsed) {
       Validate.fail("Buy price must be less than sale price", "sm-buy");
       _overlay.hide();
       return;
@@ -973,8 +1072,14 @@ async function confirmSaleUnlocked() {
     }
 
     const revenue = qty * priceUsed;
-    const profit = qty * (priceUsed - buyPrice);
-    if (!Number.isFinite(revenue) || !Number.isFinite(profit)) {
+    const profit =
+      buyPrice == null ? null : qty * (priceUsed - buyPrice);
+    const cost = buyPrice == null ? null : qty * buyPrice;
+    if (
+      !Number.isFinite(revenue) ||
+      (cost != null && !Number.isFinite(cost)) ||
+      (profit != null && !Number.isFinite(profit))
+    ) {
       Validate.fail("Sale totals are too large to record", "sm-actual");
       _overlay.hide();
       return;
@@ -1008,11 +1113,12 @@ async function confirmSaleUnlocked() {
     if (buyPriceEntered) {
       if (_isShoeSale && _sellShoeSize) {
         _sellShoeSize.buyPrice = buyPrice;
-        _sellShoeSize.profit = sellPrice - buyPrice;
-      } else {
-        item.buyPrice = buyPrice;
-        item.profit = sellPrice - buyPrice;
-      }
+        _sellShoeSize.profit =
+          buyPrice == null ? null : sellPrice - buyPrice;
+        } else {
+          item.buyPrice = buyPrice;
+          item.profit = buyPrice == null ? null : sellPrice - buyPrice;
+        }
     }
 
     // ── Deduct stock (skip for record-only items) ─────────────────
@@ -1042,60 +1148,17 @@ async function confirmSaleUnlocked() {
     });
 
     // Sales are the source of truth for revenue - no duplicate finance row.
-
-    // ── Close all overlays ─────────────────────────────────────────
     closeSellModal(); // sell modal
     closeSheet(); // detail sheet (if open)
     closeShoeSizeActions(); // size action sheet (if open)
-
-    // ── Reset sell search if on sell page ─────────────────────────
     const sellSearch = document.getElementById("sell-search");
     const sellResults = document.getElementById("sell-results");
     if (sellSearch) sellSearch.value = "";
     if (sellResults) sellResults.innerHTML = "";
-
-    // ── Refresh UI ─────────────────────────────────────────────────
-    allItems = await dbAll("items");
-    await enrichShoeItems(allItems);
-    renderList();
-    renderDashboard();
-    updateHeader();
-    updateLowStockBadge();
-    scheduleSync();
-    try {
-      await refreshSalesViews();
-    } catch (_) {
-      /* intentionally ignored */
-    }
-    try {
-      if (activeDay) updateDayLiveStats();
-    } catch (_) {
-      /* intentionally ignored */
-    }
     showPage("history");
-    // Refresh finance page if it's currently visible
-    try {
-      const financeVisible =
-        document.getElementById("page-finance")?.classList.contains("active") ||
-        (document
-          .getElementById("page-operations")
-          ?.classList.contains("active") &&
-          _activeOperationsTab === "finance");
-      if (financeVisible) {
-        renderFinancePage();
-      }
-    } catch (_) {
-      /* intentionally ignored */
-    }
-
-    const syncStatus = await saleSaveStatus();
-    toast(
-      syncStatus.pending
-        ? fmt(revenue) + " - Sale saved locally, sync pending"
-        : fmt(revenue) + " - Profit: " + fmt(profit),
-      syncStatus.pending ? "" : "ok",
-    );
+    toast(fmt(revenue) + " - Sale saved", "ok");
     showSaleSuccess(profit);
+    refreshSalesAfterSave();
   } catch (err) {
     console.error("[confirmSale]", err);
     toast("Warning: Sale failed: " + (err.message || "Unknown error"), "err");
@@ -1127,31 +1190,7 @@ async function refreshSalesViews() {
 }
 
 async function deleteSale(saleId) {
-  try {
-    if (!confirm("Delete this sale record? Stock will NOT be restored."))
-      return;
-    const sale = await dbGet("sales", saleId);
-    if (sale) {
-      _rememberDeletedSale(sale);
-      await fbDeleteSale(sale);
-      await fbDeleteFinanceEntry({
-        type: "revenue",
-        saleId: sale.id,
-        amount: sale.revenue,
-        date: sale.businessDate || (sale.date || "").split("T")[0],
-        description: "Sale: " + (sale.itemName || sale.itemCode || "item"),
-      });
-      await _deleteLocalRevenueForSale(saleId);
-    }
-    await dbDelete("sales", saleId);
-    await refreshUI();
-    refreshSalesViews();
-    renderFinancePage();
-    toast("Sale record deleted", "");
-  } catch (e) {
-    console.error("[deleteSale]", e);
-    toast("Error: " + e.message, "err");
-  }
+  return voidSale(saleId);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1159,20 +1198,16 @@ async function deleteSale(saleId) {
 // ═══════════════════════════════════════════════════════════
 
 function filterSalesByPeriod(sales, period) {
-  const now = new Date();
+  const today = todayDateStr();
+  const weekStart = _weekStartDate(today);
+  const monthStart = today.slice(0, 8) + "01";
   return sales.filter((s) => {
-    const d = new Date(s.date);
-    if (period === "today") {
-      return d.toDateString() === now.toDateString();
-    } else if (period === "week") {
-      const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
-      return d >= weekAgo;
-    } else if (period === "month") {
-      return (
-        d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-      );
-    }
-    return true; // all
+    const date = _historySaleDate(s);
+    if (!date) return false;
+    if (period === "today") return date === today;
+    if (period === "week") return date >= weekStart && date <= today;
+    if (period === "month") return date >= monthStart && date <= today;
+    return true;
   });
 }
 
@@ -1222,16 +1257,16 @@ function _updateHistoryNavigation(filterVal, isDayFocused) {
 
 function _historyDateOffset(today, offsetDays) {
   const [year, month, day] = today.split("-").map(Number);
-  const date = new Date(year, month - 1, day + offsetDays);
+  const date = new Date(Date.UTC(year, month - 1, day + offsetDays));
   return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
   ].join("-");
 }
 
 function _weekStartDate(dateStr) {
-  const daysSinceSunday = new Date(dateStr + "T12:00:00").getDay();
+  const daysSinceSunday = new Date(dateStr + "T12:00:00Z").getUTCDay();
   return _historyDateOffset(dateStr, -daysSinceSunday);
 }
 
@@ -1240,7 +1275,8 @@ function _historyFilterRange(filterVal, today, customFrom, customTo) {
     return {
       from: today,
       to: today,
-      label: new Date(today + "T12:00:00").toLocaleDateString("en-GB", {
+      label: new Date(today + "T12:00:00Z").toLocaleDateString("en-GB", {
+        timeZone: "Africa/Nairobi",
         weekday: "long",
         day: "numeric",
         month: "long",
@@ -1252,7 +1288,8 @@ function _historyFilterRange(filterVal, today, customFrom, customTo) {
     return {
       from: yesterday,
       to: yesterday,
-      label: new Date(yesterday + "T12:00:00").toLocaleDateString("en-GB", {
+      label: new Date(yesterday + "T12:00:00Z").toLocaleDateString("en-GB", {
+        timeZone: "Africa/Nairobi",
         weekday: "long",
         day: "numeric",
         month: "long",
@@ -1301,17 +1338,29 @@ function _historyFilterRange(filterVal, today, customFrom, customTo) {
   return { from: null, to: today, label: "All records" };
 }
 
-function _historySaleDate(sale, today) {
+function _historySaleDate(sale) {
   const businessDate = sale.businessDate || sale.business_date;
-  if (businessDate) return businessDate;
-  if (!sale.date) return today;
+  if (businessDate && /^\d{4}-\d{2}-\d{2}$/.test(businessDate)) {
+    const [year, month, day] = businessDate.split("-").map(Number);
+    const check = new Date(Date.UTC(year, month - 1, day));
+    if (
+      check.getUTCFullYear() === year &&
+      check.getUTCMonth() === month - 1 &&
+      check.getUTCDate() === day
+    )
+      return businessDate;
+  }
+  if (!sale.date) return null;
   const date = new Date(sale.date);
-  if (Number.isNaN(date.getTime())) return today;
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Nairobi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function _histCountLabel(count, singular) {
@@ -1341,7 +1390,8 @@ async function _renderHistoryPage(generation) {
 
   const byDate = {};
   allSales.forEach((s) => {
-    const d = _historySaleDate(s, today);
+    const d = _historySaleDate(s);
+    if (!d) return;
     if (d > today) return; // never show future records
     if (historyRange.from && d < historyRange.from) return;
     if (historyRange.to && d > historyRange.to) return;
@@ -1354,11 +1404,11 @@ async function _renderHistoryPage(generation) {
         qty: 0,
       };
     byDate[d].sales.push(s);
-    const qty = s.qty || 1;
-    byDate[d].revenue +=
-      Number(s.actualPrice || s.sellPrice || s.priceUsed || 0) * qty;
+    const qty = _saleQuantity(s);
+    byDate[d].revenue += _saleUnitPrice(s) * qty;
     byDate[d].profit += Number(s.profit) || 0;
-    byDate[d].cost += (Number(s.buyPrice) || 0) * qty;
+    const buyPrice = _saleBuyPrice(s);
+    if (buyPrice != null) byDate[d].cost += buyPrice * qty;
     byDate[d].qty += qty;
   });
 
@@ -1374,7 +1424,8 @@ async function _renderHistoryPage(generation) {
   const rangeEl = document.getElementById("hist-range-label");
   if (rangeEl) {
     rangeEl.textContent = isDayFocused
-      ? new Date(_histFocusedDate + "T12:00:00").toLocaleDateString("en-GB", {
+      ? new Date(_histFocusedDate + "T12:00:00Z").toLocaleDateString("en-GB", {
+          timeZone: "Africa/Nairobi",
           weekday: "long",
           day: "numeric",
           month: "long",
@@ -1434,7 +1485,7 @@ async function _renderHistoryPage(generation) {
           qty: 0,
           profit: 0,
         };
-      itemTotals[key].qty += s.qty || 1;
+      itemTotals[key].qty += _saleQuantity(s);
       itemTotals[key].profit += s.profit || 0;
     }),
   );
@@ -1461,8 +1512,9 @@ async function _renderHistoryPage(generation) {
     .map((date) => {
       const day = byDate[date];
       const safeId = date.replace(/-/g, "");
-      const dt = new Date(date + "T12:00:00");
+      const dt = new Date(date + "T12:00:00Z");
       const label = dt.toLocaleDateString("en-GB", {
+        timeZone: "Africa/Nairobi",
         weekday: "short",
         day: "2-digit",
         month: "short",
@@ -1589,34 +1641,48 @@ window.sortHistTable = sortHistTable;
 function _histSalesTotals(sales) {
   return sales.reduce(
     (sum, sale) => {
-      const qty = sale.qty || 1;
+      const qty = _saleQuantity(sale);
       sum.transactions += 1;
       sum.qty += qty;
-      sum.buy += (Number(sale.buyPrice) || 0) * qty;
-      sum.sale += (Number(sale.actualPrice || sale.sellPrice) || 0) * qty;
+      const buyPrice = _saleBuyPrice(sale);
+      if (buyPrice != null) sum.buy += buyPrice * qty;
+      else sum.unknownCost += 1;
+      sum.sale += _saleUnitPrice(sale) * qty;
       if (sale.profit == null || !Number.isFinite(Number(sale.profit)))
         sum.unknownProfit += 1;
       else sum.profit += Number(sale.profit);
       return sum;
     },
-    { transactions: 0, qty: 0, buy: 0, sale: 0, profit: 0, unknownProfit: 0 },
+    {
+      transactions: 0,
+      qty: 0,
+      buy: 0,
+      unknownCost: 0,
+      sale: 0,
+      profit: 0,
+      unknownProfit: 0,
+    },
   );
 }
 
 function _histTotalsRow(totals) {
+  const costTotal =
+    totals.unknownCost > 0
+      ? `Unavailable for ${fmtN(totals.unknownCost)} sale${totals.unknownCost === 1 ? "" : "s"}`
+      : _fmtNum(totals.buy);
   const profitTotal =
     totals.unknownProfit > 0
       ? `Unavailable for ${fmtN(totals.unknownProfit)} sale${totals.unknownProfit === 1 ? "" : "s"}`
       : _fmtNum(totals.profit);
-  return `<tr class="hist-totals-top"><td></td><td><strong class="hist-total-label">Totals</strong><span class="hist-total-meta">${_histCountLabel(totals.transactions, "transaction")} · ${_histCountLabel(totals.qty, "item")}</span></td><td></td><td>${_fmtNum(totals.buy)}</td><td>${_fmtNum(totals.sale)}</td><td class="${totals.unknownProfit ? "" : totals.profit >= 0 ? "hp-pos" : "hp-neg"}">${profitTotal}</td><td></td></tr>`;
+  return `<tr class="hist-totals-top"><td></td><td><strong class="hist-total-label">Totals</strong><span class="hist-total-meta">${_histCountLabel(totals.transactions, "transaction")} · ${_histCountLabel(totals.qty, "item")}</span></td><td></td><td>${costTotal}</td><td>${_fmtNum(totals.sale)}</td><td class="${totals.unknownProfit ? "" : totals.profit >= 0 ? "hp-pos" : "hp-neg"}">${profitTotal}</td><td></td></tr>`;
 }
 
 // ── Tabular sale record renderer ────────────────────────────────────
 function _histTable(sales) {
   const totals = _histSalesTotals(sales);
   const sorted = [...sales].sort((a, b) => {
-    const qtyA = a.qty || 1,
-      qtyB = b.qty || 1;
+    const qtyA = _saleQuantity(a),
+      qtyB = _saleQuantity(b);
     const values =
       {
         date: [
@@ -1627,12 +1693,12 @@ function _histTable(sales) {
           (a.itemName || a.itemCode || "Item").toLowerCase(),
           (b.itemName || b.itemCode || "Item").toLowerCase(),
         ],
-        unitCost: [Number(a.buyPrice) || 0, Number(b.buyPrice) || 0],
-        cost: [(a.buyPrice || 0) * qtyA, (b.buyPrice || 0) * qtyB],
-        revenue: [
-          (a.actualPrice || a.sellPrice || 0) * qtyA,
-          (b.actualPrice || b.sellPrice || 0) * qtyB,
+        unitCost: [_saleBuyPrice(a) ?? -1, _saleBuyPrice(b) ?? -1],
+        cost: [
+          (_saleBuyPrice(a) ?? 0) * qtyA,
+          (_saleBuyPrice(b) ?? 0) * qtyB,
         ],
+        revenue: [_saleUnitPrice(a) * qtyA, _saleUnitPrice(b) * qtyB],
         earning: [a.profit || 0, b.profit || 0],
       }[_histSort.key] || [];
     const result = values[0] < values[1] ? -1 : values[0] > values[1] ? 1 : 0;
@@ -1641,11 +1707,11 @@ function _histTable(sales) {
 
   const detailRows = sorted
     .map((s, i) => {
-      const qty = s.qty || 1;
-      const hasCost = s.buyPrice != null && Number.isFinite(Number(s.buyPrice));
-      const unitCost = hasCost ? Number(s.buyPrice) : 0;
+      const qty = _saleQuantity(s);
+      const unitCost = _saleBuyPrice(s);
+      const hasCost = unitCost != null;
       const buy = unitCost * qty;
-      const sell = (s.actualPrice || s.sellPrice || 0) * qty;
+      const sell = _saleUnitPrice(s) * qty;
       const hasProfit = s.profit != null && Number.isFinite(Number(s.profit));
       const profit = hasProfit ? Number(s.profit) : 0;
       const rawName =
@@ -1796,7 +1862,8 @@ async function exportSalesReport() {
 
   const filtered = [...allSales]
     .filter((s) => {
-      const d = _historySaleDate(s, today);
+      const d = _historySaleDate(s);
+      if (!d) return false;
       if (
         d > today ||
         (historyRange.from && d < historyRange.from) ||
@@ -1817,7 +1884,7 @@ async function exportSalesReport() {
       return true;
     })
     .sort((a, b) =>
-      _historySaleDate(b, today).localeCompare(_historySaleDate(a, today)),
+      _historySaleDate(b).localeCompare(_historySaleDate(a)),
     );
 
   const periodLabel = filterVal.replace("_", " ");
@@ -1835,19 +1902,28 @@ async function exportSalesReport() {
   ];
   filtered.forEach((s) =>
     rows.push([
-      _historySaleDate(s, today),
+      _historySaleDate(s),
       s.itemName || "",
       s.itemCode || "",
-      s.qty || 1,
-      s.buyPrice ?? "",
-      s.revenue || 0,
+      _saleQuantity(s),
+      _saleBuyPrice(s) ?? "",
+      _saleUnitPrice(s) * _saleQuantity(s),
       s.profit ?? "",
       s.paymentMethod || "cash",
     ]),
   );
   const csv = rows
     .map((r) =>
-      r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(","),
+      r
+        .map((value) => {
+          const text = String(value ?? "");
+          const safeText =
+            typeof value === "string" && /^[\t\r\n ]*[=+\-@]/.test(text)
+              ? "'" + text
+              : text;
+          return '"' + safeText.replace(/"/g, '""') + '"';
+        })
+        .join(","),
     )
     .join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
@@ -1900,13 +1976,15 @@ async function openSaleDetail(saleId) {
   document.getElementById("sds-id").value = saleId;
 
   // Populate view
-  const qty = sale.qty || 1;
-  const price = sale.actualPrice || sale.sellPrice || 0;
-  const hasProfit = sale.buyPrice != null && sale.profit != null;
-  const buy = sale.buyPrice == null ? 0 : Number(sale.buyPrice);
+  const qty = _saleQuantity(sale);
+  const price = _saleUnitPrice(sale);
+  const buy = _saleBuyPrice(sale);
+  const hasProfit =
+    buy != null && sale.profit != null && Number.isFinite(Number(sale.profit));
   const profit = hasProfit ? Number(sale.profit) : null;
   const dateStr = sale.date
     ? new Date(sale.date).toLocaleString("en-GB", {
+        timeZone: "Africa/Nairobi",
         day: "numeric",
         month: "short",
         year: "numeric",
@@ -2027,6 +2105,26 @@ function adjEditedSaleQty(delta) {
 window.adjEditedSaleQty = adjEditedSaleQty;
 
 async function saveSaleEdit() {
+  const id = Number(document.getElementById("sds-id")?.value);
+  if (!Number.isInteger(id) || id <= 0) {
+    toast("Sale record not found", "err");
+    return;
+  }
+  try {
+    const sale = await dbGet("sales", id);
+    if (!sale) {
+      toast("Sale not found", "err");
+      return;
+    }
+    const lockId = sale.itemId == null ? "unlinked:" + id : sale.itemId;
+    await withSaleLock(lockId, () => _saveSaleEditUnlocked(id));
+  } catch (error) {
+    console.error("[saveSaleEdit]", error);
+    toast("Sale update failed: " + (error.message || "Unknown error"), "err");
+  }
+}
+
+async function _saveSaleEditUnlocked(id) {
   try {
     if (!currentUser || !["super", "user"].includes(currentUser.role)) {
       toast("You do not have permission to edit sales", "err");
@@ -2037,7 +2135,6 @@ async function saveSaleEdit() {
       return;
     }
 
-    const id = Number(document.getElementById("sds-id").value);
     const qtyInput = document.getElementById("sds-edit-qty").value;
     const priceInput = document.getElementById("sds-edit-price").value;
     const qty = Number(qtyInput);
@@ -2080,51 +2177,42 @@ async function saveSaleEdit() {
             (record) => String(record.size) === String(saleSize),
           )
         : null;
-    const buy = [
-      sale.buyPrice,
-      size?.buyPrice,
-      item?.buyPrice,
-      item?.buy,
-      sale.buy,
-    ]
-      .filter((value) => value !== null && value !== undefined && value !== "")
-      .map(Number)
-      .find((value) => Number.isFinite(value) && value >= 0);
-    if (buy == null) {
-      toast("The sale and linked item have no valid buy price", "err");
-      return;
-    }
-    const minimumPrice = Number(size?.sellPriceMin || item?.sellPriceMin || 0);
+    const buy =
+      _saleBuyPrice(sale) ??
+      _firstSalePrice(size?.buyPrice, item?.buyPrice, item?.buy);
+    const minimumPrice =
+      _firstSalePrice(size?.sellPriceMin, item?.sellPriceMin) || 0;
     if (minimumPrice > 0 && price < minimumPrice) {
       toast("Price cannot be below the minimum sale price", "err");
       return;
     }
-    if (price <= buy) {
+    if (buy != null && price <= buy) {
       toast("Price must be greater than the buy price", "err");
       return;
     }
     const revenue = qty * price;
-    const profit = qty * (price - buy);
-    if (!Number.isFinite(revenue) || !Number.isFinite(profit)) {
+    const profit = buy == null ? null : qty * (price - buy);
+    const cost = buy == null ? null : qty * buy;
+    if (
+      !Number.isFinite(revenue) ||
+      (cost != null && !Number.isFinite(cost)) ||
+      (profit != null && !Number.isFinite(profit))
+    ) {
       toast("Sale totals are too large to record", "err");
       return;
     }
 
-    const oldQty = Number(sale.qty);
+    const oldQty = _saleQuantity(sale);
     if (!Number.isInteger(oldQty) || oldQty < 1 || oldQty > 999999) {
       toast("The original sale quantity is invalid; it cannot be edited", "err");
       return;
     }
     const stockDelta = oldQty - qty;
-    if (stockDelta !== 0 && !item) {
-      toast("The original inventory item could not be found", "err");
-      return;
-    }
     if (stockDelta !== 0 && item?.isShoe && !size) {
       toast("The original shoe size could not be found", "err");
       return;
     }
-    if (stockDelta < 0 && !item.isRecord) {
+    if (stockDelta < 0 && item && !item.isRecord) {
       const available = size
         ? await readableStockQty(size, size.id)
         : await readableStockQty(item);
@@ -2133,7 +2221,7 @@ async function saveSaleEdit() {
         return;
       }
     }
-    if (stockDelta !== 0 && !item.isRecord) {
+    if (stockDelta !== 0 && item && !item.isRecord) {
       if (size) {
         size.qty = Math.max(0, Number(size.qty || 0) + stockDelta);
         size.qtyCache = Number(size.qty);
@@ -2150,34 +2238,51 @@ async function saveSaleEdit() {
       item.updatedAt = new Date().toISOString();
     }
 
+    const monitorRows = sale.offStock && db.objectStoreNames.contains("wishlist")
+      ? (await dbAll("wishlist"))
+          .filter(
+            (wish) =>
+              wish.source === "sale-monitor" &&
+              String(wish.saleId) === String(sale.id),
+          )
+          .map((wish) => ({
+            ...wish,
+            qty,
+            estimatedCost: buy == null ? null : buy * qty,
+            updatedAt: new Date().toISOString(),
+          }))
+      : [];
+
     sale.qty = qty;
     sale.buyPrice = buy;
     sale.actualPrice = price;
-    sale.sellPrice = price;
+    sale.sellPrice =
+      _firstSalePrice(
+        sale.sellPrice,
+        size?.sellPrice,
+        item?.sellPrice,
+        item?.sell,
+        sale.priceUsed,
+      ) ?? price;
+    sale.overridden = price !== sale.sellPrice;
     sale.paymentMethod = pm;
+    sale.priceUsed = price;
     sale.revenue = revenue;
     sale.profit = profit;
     sale.updatedAt = new Date().toISOString();
-    if (item) {
-      await persistSaleEditAtomically({
-        item,
-        shoeSize: size && !item.isRecord ? size : null,
-        sale,
-        delta: item.isRecord ? 0 : stockDelta,
-        actor: currentUser.username,
-      });
-    } else {
-      await dbPut("sales", sale);
-    }
+    await persistSaleEditAtomically({
+      item,
+      shoeSize: size && item && !item.isRecord ? size : null,
+      sale,
+      delta: item?.isRecord ? 0 : stockDelta,
+      actor: currentUser.username,
+      monitorRows,
+    });
     closeSaleDetailSheet();
-    await refreshUI();
-    await renderHistoryPage();
-    try {
-      await renderSellPage();
-    } catch (_) {}
     toast("Sale updated", "ok");
+    refreshSalesAfterSave();
   } catch (error) {
-    console.error("[saveSaleEdit]", error);
+    console.error("[_saveSaleEditUnlocked]", error);
     toast("Sale update failed: " + (error.message || "Unknown error"), "err");
   }
 }
@@ -2199,39 +2304,59 @@ async function saleAddToInventoryFromDetail() {
     toast("Sale record not found", "err");
     return;
   }
-  const sale = await dbGet("sales", id);
-  if (!sale) {
-    toast("Sale not found", "err");
-    return;
+  const button = document.getElementById("sds-add-btn");
+  if (button) button.disabled = true;
+  try {
+    const sale = await dbGet("sales", id);
+    if (!sale) {
+      toast("Sale not found", "err");
+      return;
+    }
+    if (sale.itemId != null && (await dbGet("items", sale.itemId))) {
+      toast("This sale is already linked to inventory", "");
+      return;
+    }
+    const buy = _saleBuyPrice(sale);
+    const matchType = types.find(
+      (type) => type.name === sale.itemType && isCategoryActive(type),
+    );
+    const useType = matchType
+      ? sale.itemType
+      : types.find(
+          (type) => type.name === "General" && isCategoryActive(type),
+        )
+        ? "General"
+        : "";
+
+    closeSaleDetailSheet();
+    showPage("add");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    setAddFormType(useType, { skipTypeChange: false });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const el = (fieldId) => document.getElementById(fieldId);
+    if (el("f-code")) el("f-code").value = sale.itemCode || "";
+    if (el("f-name")) el("f-name").value = sale.itemName || "";
+    if (el("f-qty")) el("f-qty").value = _saleQuantity(sale);
+    if (el("f-buy")) el("f-buy").value = buy == null ? "" : buy;
+    if (el("f-sell")) el("f-sell").value = _saleUnitPrice(sale) || "";
+    updateProfitPreview();
+    setItemMode(false);
+    toast("Pre-filled from sale — save to link across system", "");
+  } catch (error) {
+    console.error("[saleAddToInventoryFromDetail]", error);
+    try {
+      showPage("history");
+      await openSaleDetail(id);
+    } catch (restoreError) {
+      console.error("[saleAddToInventoryFromDetail] could not restore detail", restoreError);
+    }
+    toast(
+      "Could not open the inventory form. Sale details are preserved; retry the action.",
+      "err",
+    );
+  } finally {
+    if (button?.isConnected) button.disabled = false;
   }
-  if (sale.itemId != null && (await dbGet("items", sale.itemId))) {
-    toast("This sale is already linked to inventory", "");
-    return;
-  }
-  closeSaleDetailSheet();
-  showPage("add");
-  await new Promise((r) => setTimeout(r, 100));
-  // Match type or default to General
-  const matchType = types.find(
-    (t) => t.name === sale.itemType && isCategoryActive(t),
-  );
-  const useType = matchType
-    ? sale.itemType
-    : types.find((t) => t.name === "General" && isCategoryActive(t))
-      ? "General"
-      : "";
-  setAddFormType(useType, { skipTypeChange: false });
-  await new Promise((r) => setTimeout(r, 80));
-  const el = (id) => document.getElementById(id);
-  if (el("f-code")) el("f-code").value = sale.itemCode || "";
-  if (el("f-name")) el("f-name").value = sale.itemName || "";
-  if (el("f-qty")) el("f-qty").value = sale.qty || 1;
-  if (el("f-buy")) el("f-buy").value = sale.buyPrice > 0 ? sale.buyPrice : "";
-  if (el("f-sell"))
-    el("f-sell").value = sale.sellPrice > 0 ? sale.sellPrice : "";
-  updateProfitPreview();
-  setItemMode(false);
-  toast("Pre-filled from sale — save to link across system", "");
 }
 window.saleAddToInventoryFromDetail = saleAddToInventoryFromDetail;
 
