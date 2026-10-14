@@ -1760,6 +1760,15 @@
           objective: "Prevent user-controlled text cells from executing spreadsheet formulas when opened.",
           steps: ["In Development, create an item name and code starting with =, +, -, or @.", "Export sales to CSV and inspect the affected cells in a text editor and spreadsheet."],
           expected: "Formula-leading text is prefixed safely while CSV quoting and embedded quote handling remain valid."
+        },
+        {
+          id: "MGS-129",
+          title: "Filter sales history and read full record values",
+          module: "Sales / History",
+          priority: "major",
+          objective: "Verify date filters return the matching sales and table content is not clipped on narrow screens.",
+          steps: ["In Development, prepare sales across today, yesterday, this week, last week, this month, and last month.", "Try each period filter and a valid custom range; also test an incomplete and reversed custom range.", "Open daily and individual-record views at a narrow viewport, then horizontally scroll the record tables."],
+          expected: "Each period shows only sales within its Nairobi business-date range; invalid custom ranges explain what needs correction; long item names and numeric values remain readable without changing font sizes."
         }
       ];
 

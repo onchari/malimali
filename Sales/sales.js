@@ -1199,16 +1199,8 @@ async function deleteSale(saleId) {
 
 function filterSalesByPeriod(sales, period) {
   const today = todayDateStr();
-  const weekStart = _weekStartDate(today);
-  const monthStart = today.slice(0, 8) + "01";
-  return sales.filter((s) => {
-    const date = _historySaleDate(s);
-    if (!date) return false;
-    if (period === "today") return date === today;
-    if (period === "week") return date >= weekStart && date <= today;
-    if (period === "month") return date >= monthStart && date <= today;
-    return true;
-  });
+  const range = _historyFilterRange(period, today, "", "");
+  return sales.filter((sale) => _saleMatchesHistoryRange(sale, range, today));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1322,12 +1314,14 @@ function _historyFilterRange(filterVal, today, customFrom, customTo) {
         from: "9999-12-31",
         to: today,
         label: "Choose a date range",
+        message: "Choose both a start date and an end date.",
       };
     if (customFrom > customTo)
       return {
         from: "9999-12-31",
         to: today,
         label: "Invalid date range",
+        message: "Start date must be on or before the end date.",
       };
     return {
       from: customFrom,
@@ -1336,6 +1330,14 @@ function _historyFilterRange(filterVal, today, customFrom, customTo) {
     };
   }
   return { from: null, to: today, label: "All records" };
+}
+
+function _saleMatchesHistoryRange(sale, range, today) {
+  const date = _historySaleDate(sale);
+  if (!date || date > today) return false;
+  if (range.from && date < range.from) return false;
+  if (range.to && date > range.to) return false;
+  return true;
 }
 
 function _historySaleDate(sale) {
@@ -1391,10 +1393,7 @@ async function _renderHistoryPage(generation) {
   const byDate = {};
   allSales.forEach((s) => {
     const d = _historySaleDate(s);
-    if (!d) return;
-    if (d > today) return; // never show future records
-    if (historyRange.from && d < historyRange.from) return;
-    if (historyRange.to && d > historyRange.to) return;
+    if (!_saleMatchesHistoryRange(s, historyRange, today)) return;
     if (!byDate[d])
       byDate[d] = {
         sales: [],
@@ -1455,7 +1454,7 @@ async function _renderHistoryPage(generation) {
 
   if (!datesSorted.length) {
     recList.innerHTML = `
-      <div class="hist-empty-state">No sales recorded for this period.</div>
+      <div class="hist-empty-state">${escapeHtml(historyRange.message || "No sales recorded for this period.")}</div>
       ${_histTable([])}`;
     _rememberRenderedHistoryState();
     _restoreHistoryScroll();
@@ -1548,7 +1547,7 @@ async function _renderHistoryPage(generation) {
       <td class="${periodTotals.profit >= 0 ? "hp-pos" : "hp-neg"}">${_fmtNum(periodTotals.profit)}</td>
       <td></td>
     </tr>`;
-  const dayCards = `<table class="hist-days-table">
+  const dayCards = `<div class="hist-days-table-wrap"><table class="hist-days-table">
     <thead><tr>
       <th class="hdt-date">Date</th>
       <th class="hdt-num">Transactions</th>
@@ -1559,7 +1558,7 @@ async function _renderHistoryPage(generation) {
       <th class="hdt-chev"></th>
     </tr></thead>
     <tbody>${periodTotalsRow}${dayRows}</tbody>
-  </table>`;
+  </table></div>`;
   recList.innerHTML = `
   <!-- Day list rows -->
   <div class="pr-days-list">${dayCards}</div>
@@ -1862,17 +1861,10 @@ async function exportSalesReport() {
 
   const filtered = [...allSales]
     .filter((s) => {
-      const d = _historySaleDate(s);
-      if (!d) return false;
-      if (
-        d > today ||
-        (historyRange.from && d < historyRange.from) ||
-        (historyRange.to && d > historyRange.to)
-      )
-        return false;
+      if (!_saleMatchesHistoryRange(s, historyRange, today)) return false;
       if (
         _histPay !== "all" &&
-        (s.paymentMethod || "cash").toLowerCase() !== _histPay
+        String(s.paymentMethod || "cash").toLowerCase() !== _histPay
       )
         return false;
       if (

@@ -542,7 +542,8 @@
 
 .hist-table-wrap {
   width: 100%;
-  overflow-x: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .hist-period-totals {
@@ -551,7 +552,7 @@
 
 .hist-table {
   width: 100%;
-  min-width: 0;
+  min-width: 660px;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 11px;
@@ -570,12 +571,10 @@
 
 .hist-table th,
 .hist-table td {
-  padding: 4px 2px;
+  padding: 6px 7px;
   text-align: left;
   border-bottom: 1px solid var(--border);
-  white-space: nowrap; /* never wrap — prevents vertical text */
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Keep the item/title text flush left while lining up the numeric values */
@@ -598,7 +597,7 @@
 .hist-table th:nth-child(6),
 .hist-table td:nth-child(6) {
   text-align: right;
-  padding-right: 2px;
+  padding-right: 7px;
 }
 
 .hist-table th:nth-child(7),
@@ -635,17 +634,17 @@
 /* Column widths — sized to content, not pixels that cause wrapping */
 .hist-table th:nth-child(1),
 .hist-table td:nth-child(1) {
-  width: 6%;
+  width: 5%;
 }
 
 .hist-table th:nth-child(2),
 .hist-table td:nth-child(2) {
-  width: 25%;
+  width: 29%;
 }
 
 .hist-table th:nth-child(3),
 .hist-table td:nth-child(3) {
-  width: 10%;
+  width: 11%;
 }
 
 .hist-table th:nth-child(4),
@@ -660,12 +659,12 @@
 
 .hist-table th:nth-child(6),
 .hist-table td:nth-child(6) {
-  width: 19%;
+  width: 17%;
 }
 
 .hist-table th:nth-child(7),
 .hist-table td:nth-child(7) {
-  width: 8%;
+  width: 6%;
 }
 
 .hist-num {
@@ -726,20 +725,21 @@
 }
 
 .hist-table .hist-totals-top td {
-  padding: 2px 1px !important;
+  padding: 5px 6px !important;
   font-size: 11px;
   font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: -0.2px;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .hist-table .hist-total-label,
 .hist-table .hist-total-meta {
-  display: inline;
+  display: block;
 }
 
 .hist-table .hist-total-meta {
-  margin-left: 3px;
+  margin-top: 2px;
   font-size: 9px;
 }
 
@@ -751,6 +751,7 @@
 
 .hist-totals-top .hist-total-meta {
   font-size: 11px;
+  font-weight: 700;
 }
 
 .hist-total-label,
@@ -1014,11 +1015,17 @@
 
 .hist-days-table {
   width: 100%;
-  min-width: 0;
+  min-width: 700px;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 12px;
   border: 1px solid var(--border);
+}
+
+.hist-days-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .hist-days-table thead th {
@@ -1043,8 +1050,6 @@
 .hist-days-table td {
   box-sizing: border-box;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .hist-days-table .hdt-num {
@@ -1088,8 +1093,6 @@
   border-bottom: 1px solid var(--border);
   border-right: 1px solid var(--border);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   vertical-align: middle;
 }
 
@@ -1097,7 +1100,8 @@
   padding: 2px 4px !important;
   border-right: 1px solid var(--border);
   border-bottom: 2px solid var(--accent);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-size: 11px;
   font-weight: 600;
   line-height: 1.1;
@@ -1106,11 +1110,11 @@
 
 .hist-days-total-row .hist-total-label,
 .hist-days-total-row .hist-total-meta {
-  display: inline;
+  display: block;
 }
 
 .hist-days-total-row .hist-total-meta {
-  margin-left: 3px;
+  margin-top: 2px;
   font-size: 9px;
 }
 
