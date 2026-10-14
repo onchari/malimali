@@ -697,23 +697,18 @@ async function preloadShoeSizesForAdd(code) {
   if (_preloadShoeCode === code) return;
   _preloadShoeCode = code;
   _shoeState.sizes.clear();
-  _shoeState.shownGroups.clear();
   const grid = UI.el("sz-grid");
   if (grid) grid.innerHTML = "";
   const records = await getShoeSizes(code);
   if (!records.length) return;
 
-  const groupsNeeded = new Set();
-  records.forEach((sz) =>
-    groupsNeeded.add(sz.sizeGroup || _shoeState.groupFor(sz.size)),
-  );
   records.forEach((sz) => _shoeState.sizes.add(sz.size));
-  renderAllShoeGroupCards();
+  renderShoeSizeButtons();
 
   const szWrap = UI.el("shoe-rows-wrap");
   if (szWrap)
     szWrap.style.display = _shoeState.sizes.size > 0 ? "block" : "none";
-  renderShoeGroupButtons();
+  renderShoeSizeButtons();
   renderShoeSummary();
   if (_shoeState.perSizeMode) renderShoeRows();
   updateShoeCollectiveSummary();
@@ -729,7 +724,7 @@ async function preloadShoeSizesForRestock(code) {
     .forEach((r) => _shoeState.lockedSizes.add(Number(r.size)));
   const grid = UI.el("sz-grid");
   if (grid) grid.innerHTML = "";
-  renderAllShoeGroupCards();
+  renderShoeSizeButtons();
   showShoePricingPanel();
   renderShoeSummary();
   updateShoeCollectiveSummary();
@@ -901,7 +896,6 @@ async function renderList() {
   allItems = await dbAll("items");
   const search = (UI.el("search")?.value || "").toLowerCase();
   renderTypeChips();
-  _renderSizeGroupFilter();
 
   // Filter — if there's a query, rank by match score; otherwise sort by recency
   const filtered = allItems
@@ -1084,12 +1078,7 @@ async function renderList() {
       if (!isExpanded) {
         cards.push('<div style="height:4px;"></div>');
       } else {
-        const activeSgf = window._activeSizeGroupFilter || "all";
-        const filteredSizes =
-          activeSgf === "all"
-            ? sizes
-            : sizes.filter((sz) => sz.sizeGroup === activeSgf);
-        filteredSizes.forEach((sz) => {
+        sizes.forEach((sz) => {
           const price = sz.sellPrice || item.sellPrice || 0;
           const buy = sz.buyPrice || item.buyPrice || 0;
           const availableQty = ledgerSizeQty.get(sz.id) || 0;
@@ -1110,7 +1099,6 @@ async function renderList() {
                 <div class="item-body">
                   <div class="item-code">${escapeHtml(item.name || item.code)}</div>
                   <div class="item-tags">
-                    ${sz.sizeGroup ? `<span class="tag tag-gray">${escapeHtml(getShoeGroups()[sz.sizeGroup]?.label || sz.sizeGroup)}</span>` : ""}
                     <span class="tag ${stockColor}">${stockLabel}</span>
                     <span class="tag tag-gray">${soldQty} sold</span>
                   </div>
@@ -1368,13 +1356,20 @@ async function renderInventoryStockTable() {
     document.querySelector("[data-stocklist-search]")?.value || ""
   ).toLowerCase();
   const allSizes = await dbAll("shoe_sizes");
+  const shoeCodes = new Set(
+    allItems.filter((item) => item.isShoe).map((item) => item.code),
+  );
   const searchSizesByItemCode = new Map();
   allSizes.forEach((size) => {
     if (!searchSizesByItemCode.has(size.itemCode))
       searchSizesByItemCode.set(size.itemCode, []);
     searchSizesByItemCode
       .get(size.itemCode)
-      .push([size.size, size.sizeGroup].filter(Boolean).join(" "));
+      .push(
+        [size.size, shoeCodes.has(size.itemCode) ? "" : size.sizeGroup]
+          .filter(Boolean)
+          .join(" "),
+      );
   });
   const scoreItem = (item) =>
     _gscScore(
@@ -1391,7 +1386,6 @@ async function renderInventoryStockTable() {
       search,
     );
   renderTypeChips();
-  _renderSizeGroupFilter();
 
   const filtered = allItems
     .filter(
@@ -1532,12 +1526,7 @@ async function renderInventoryStockTable() {
       addRow({
         item,
         size: size.size,
-        variant:
-          "Size " +
-          size.size +
-          (size.sizeGroup
-            ? " · " + (getShoeGroups()[size.sizeGroup]?.label || size.sizeGroup)
-            : ""),
+        variant: "Size " + size.size,
         quantity: sizeQuantities.get(size.id) || 0,
         buyPrice: size.buyPrice || item.buyPrice || item.buy || 0,
         sellPrice: size.sellPrice || item.sellPrice || item.sell || 0,
@@ -1571,15 +1560,8 @@ async function renderInventoryStockTable() {
       const allItemSizes = allSizes
         .filter((size) => size.itemCode === item.code)
         .sort((a, b) => a.size - b.size);
-      const activeSizeGroup = window._activeSizeGroupFilter || "all";
-      const sizes =
-        activeSizeGroup === "all"
-          ? allItemSizes
-          : allItemSizes.filter(
-              (size) => size.sizeGroup === activeSizeGroup,
-            );
+      const sizes = allItemSizes;
       if (!sizes.length) {
-        if (allItemSizes.length && activeSizeGroup !== "all") continue;
         addRow({
           item,
           variant: "No sizes",
@@ -1595,13 +1577,7 @@ async function renderInventoryStockTable() {
         addRow({
           item,
           size: size.size,
-          variant:
-            "Size " +
-            size.size +
-            (size.sizeGroup
-              ? " · " +
-                (getShoeGroups()[size.sizeGroup]?.label || size.sizeGroup)
-              : ""),
+          variant: "Size " + size.size,
           quantity: sizeQuantities.get(size.id) || 0,
           buyPrice: size.buyPrice || item.buyPrice || item.buy || 0,
           sellPrice: size.sellPrice || item.sellPrice || item.sell || 0,
@@ -1924,10 +1900,6 @@ async function openShoeSizeCard(itemCode, size) {
   const isLow = !isOut && availableQty <= LOW_STOCK_LEVEL;
   const stockCol = isOut ? "var(--red)" : isLow ? "#d97706" : "var(--green)";
   const stockLbl = isOut ? "Out of stock" : availableQty + " pcs in stock";
-  const groupLbl =
-    getShoeGroups()[sizeRec.sizeGroup]?.label ||
-    sizeRec.sizeGroup ||
-    "Size group";
 
   let sheet = document.getElementById("shoe-size-action-sheet");
   if (!sheet) {
@@ -1950,7 +1922,7 @@ async function openShoeSizeCard(itemCode, size) {
       <div class="shoe-size-badge ${isOut ? "out" : isLow ? "low" : ""}" style="width:56px;height:56px;font-size:24px;">${size}</div>
       <div class="detail-sheet-hero-text">
         <div class="detail-sheet-title">${escapeHtml(item.name || item.code)}</div>
-        <div class="detail-sheet-sub">${escapeHtml(item.code)} - Size ${size} - ${groupLbl}</div>
+        <div class="detail-sheet-sub">${escapeHtml(item.code)} - Size ${size}</div>
         <div class="detail-sheet-stock" style="color:${stockCol};">${stockLbl}</div>
       </div>
     </div>
@@ -2665,35 +2637,30 @@ async function confirmRestock() {
 // ═══════════════════════════════════════════════════════════
 
 /* ===== shoe-management.js ===== */
-function renderAllShoeGroupCards() {
-  const wrap = document.getElementById("shoe-size-groups");
+function renderShoeSizeButtons() {
+  const wrap = document.getElementById("shoe-size-picker");
   if (!wrap) return;
-  const groups = getShoeGroups();
-  const entries = Object.entries(groups).sort((a, b) => a[1].min - b[1].min);
-  const signature = JSON.stringify(entries);
-  if (wrap.dataset.groupsSignature !== signature) {
-    wrap.innerHTML =
-      '<div class="sg-card" id="sg-card-all"><div class="sg-card-head">' +
-      '<span class="sg-card-title">Select sizes</span>' +
-      '<span class="sg-range">Configured in Settings</span></div>' +
-      '<div class="sg-card-sizes" id="sg-card-sizes-all"></div></div>';
-    wrap.dataset.groupsSignature = signature;
-  }
-
-  const container = document.getElementById("sg-card-sizes-all");
+  const { min, max } = getShoeSizeRange();
+  const signature = min + "-" + max;
+  const container = document.getElementById("shoe-size-picker-buttons");
+  const rangeLabel = document.getElementById("shoe-size-picker-range");
   if (!container) return;
-  const sizes = [
-    ...new Set(
-      entries.flatMap(([, config]) =>
-        Array.from(
-          { length: config.max - config.min + 1 },
-          (_, index) => config.min + index,
-        ),
-      ),
-    ),
-  ].sort((a, b) => a - b);
+  if (rangeLabel) rangeLabel.textContent = min + "–" + max;
+  const isAddForm =
+    _isFootwearAddFormActive() &&
+    !document.getElementById("page-add")?.classList.contains("restock-mode");
+  if (isAddForm && wrap.dataset.generatedRange !== signature) {
+    wrap.hidden = true;
+    container.replaceChildren();
+    container.hidden = true;
+    const card = document.getElementById("shoe-size-picker-card");
+    if (card) card.classList.remove("shoe-size-picker-active");
+    return;
+  }
+  wrap.hidden = false;
+  const sizes = Array.from({ length: max - min + 1 }, (_, index) => min + index);
   container.replaceChildren();
-  _shoeState.shownGroups.clear();
+  container.hidden = false;
   sizes.forEach((size) => {
     const btn = document.createElement("button");
     const isLocked = _shoeState.lockedSizes.has(size);
@@ -2713,29 +2680,11 @@ function renderAllShoeGroupCards() {
       btn.onclick = () => toggleShoeSize(size);
     }
     container.appendChild(btn);
-
-    const group = _shoeState.groupFor(size);
-    if (isSelected && group) _shoeState.shownGroups.add(group);
   });
-  const card = document.getElementById("sg-card-all");
+  const card = document.getElementById("shoe-size-picker-card");
   if (card)
-    card.classList.toggle("sg-card-active", _shoeState.sizes.size > 0);
+    card.classList.toggle("shoe-size-picker-active", _shoeState.sizes.size > 0);
 }
-
-function selectSizeGroup(g) {
-  const sizes = _getGroupSizes(g);
-  if (!sizes.length) return;
-  const allOn = sizes.every((s) => _shoeState.sizes.has(s));
-  sizes.forEach((s) => {
-    if (allOn) _shoeState.sizes.delete(s);
-    else _shoeState.sizes.add(s);
-  });
-  renderAllShoeGroupCards();
-  showShoePricingPanel();
-  if (_shoeState.perSizeMode) renderShoeRows();
-  updateShoeCollectiveSummary();
-}
-window.selectSizeGroup = selectSizeGroup;
 
 function setShoeMode(mode) {
   _shoeState.perSizeMode = mode === "persize";
@@ -2785,62 +2734,6 @@ function initShoeCollectiveSummaryListeners() {
 
 function updateShoeCollectiveSummary() {
   renderShoeSummary();
-  const qtyEl = document.getElementById("shoe-metric-qty");
-  const bpEl = document.getElementById("shoe-metric-bp");
-  const spEl = document.getElementById("shoe-metric-sp");
-  if (!qtyEl || !bpEl || !spEl) return;
-
-  const sorted = _shoeState.sortedSizes;
-  const n = sorted.length;
-  if (!n) {
-    qtyEl.textContent = "0";
-    bpEl.textContent = "-";
-    spEl.textContent = "-";
-    bpEl.classList.remove("accent");
-    spEl.classList.remove("accent");
-    return;
-  }
-
-  if (!_shoeState.perSizeMode) {
-    const qPer = parseInt(UI.el("shoe-shared-qty")?.value || "0", 10) || 0;
-    const bp = parseFloat(UI.el("shoe-shared-buy")?.value || "0") || 0;
-    const sp = parseFloat(UI.el("shoe-shared-sell")?.value || "0") || 0;
-    const totalQty = qPer * n;
-    qtyEl.textContent = String(totalQty);
-    bpEl.textContent = bp > 0 ? fmt(bp) : "-";
-    spEl.textContent = sp > 0 ? fmt(sp) : "-";
-    bpEl.classList.toggle("accent", bp > 0);
-    spEl.classList.toggle("accent", sp > 0);
-    return;
-  }
-
-  let totalQty = 0;
-  let buySum = 0;
-  let sellSum = 0;
-  let priced = 0;
-  sorted.forEach((s) => {
-    const q = parseInt(UI.el("shr-qty-" + s)?.value || "0", 10) || 0;
-    const b = parseFloat(UI.el("shr-buy-" + s)?.value || "0") || 0;
-    const p = parseFloat(UI.el("shr-sell-" + s)?.value || "0") || 0;
-    totalQty += q;
-    if (b > 0 || p > 0) {
-      buySum += b;
-      sellSum += p;
-      priced += 1;
-    }
-  });
-  qtyEl.textContent = String(totalQty);
-  if (priced) {
-    bpEl.textContent = fmt(Math.round(buySum / priced));
-    spEl.textContent = fmt(Math.round(sellSum / priced));
-    bpEl.classList.add("accent");
-    spEl.classList.add("accent");
-  } else {
-    bpEl.textContent = "-";
-    spEl.textContent = "-";
-    bpEl.classList.remove("accent");
-    spEl.classList.remove("accent");
-  }
 }
 window.updateShoeCollectiveSummary = updateShoeCollectiveSummary;
 
@@ -2885,26 +2778,28 @@ async function upsertShoeSize(record, opts) {
 }
 
 async function saveShoeItems(baseCode, baseName, type) {
+  const picker = document.getElementById("shoe-size-picker");
+  if (
+    _isFootwearAddFormActive() &&
+    !document.getElementById("page-add")?.classList.contains("restock-mode")
+  ) {
+    const { min, max } = getShoeSizeRange();
+    if (picker?.dataset.generatedRange !== min + "-" + max) {
+      toast("Generate the shoe size range before saving", "err");
+      return false;
+    }
+  }
   if (_shoeState.sizes.size === 0) {
     toast("Warning: Select at least one size", "err");
     return false;
   }
-
-  const ungroupedSize = _shoeState.sortedSizes.find(
-    (size) => !_shoeState.groupFor(size),
+  const { min, max } = getShoeSizeRange();
+  const invalidSize = _shoeState.sortedSizes.find(
+    (size) => size < min || size > max,
   );
-  if (ungroupedSize != null) {
-    toast("Size " + ungroupedSize + " is outside the configured groups", "err");
+  if (invalidSize != null) {
+    toast("Size " + invalidSize + " is outside the generated range", "err");
     return false;
-  }
-
-  if (!_shoeState.group) {
-    const firstSize = [..._shoeState.sizes][0];
-    _shoeState.group = _shoeState.groupFor(firstSize);
-    if (!_shoeState.group) {
-      toast("Selected size is outside the configured groups", "err");
-      return false;
-    }
   }
 
   let sharedQty = 0,
@@ -2996,7 +2891,6 @@ async function saveShoeItems(baseCode, baseName, type) {
         itemCode: baseCode,
         itemId: product.id,
         size,
-        sizeGroup: _shoeState.groupFor(size),
         qty,
         buyPrice: buy,
         sellPrice: sell,
@@ -3035,24 +2929,12 @@ async function saveShoeItems(baseCode, baseName, type) {
 }
 window.saveShoeItems = saveShoeItems;
 
-function deselectSizeGroup(g) {
-  _getGroupSizes(g).forEach((s) => _shoeState.sizes.delete(s));
-  if (_shoeState.group === g) _shoeState.group = null;
-  _shoeState.shownGroups.delete(g);
-  renderAllShoeGroupCards();
-  showShoePricingPanel();
-  renderShoeSummary();
-  renderShoeRows();
-  updateShoeCollectiveSummary();
-}
-window.deselectSizeGroup = deselectSizeGroup;
-
 function toggleShoeSize(s) {
   if (_shoeState.lockedSizes.has(s)) return; // already in stock - restock-mode disables these
   if (_shoeState.sizes.has(s)) _shoeState.sizes.delete(s);
   else _shoeState.sizes.add(s);
 
-  renderAllShoeGroupCards();
+  renderShoeSizeButtons();
   showShoePricingPanel();
 
   // If switching to persize and rows already rendered, rebuild them
@@ -3153,53 +3035,6 @@ async function closeShoeSizeActions() {
 }
 window.closeShoeSizeActions = closeShoeSizeActions;
 
-// ── Restored missing shoe functions ─────────────────────────────
-
-function getShoeGroups() {
-  const defaults = JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS));
-  try {
-    const saved = localStorage.getItem(KEY_SHOE_GROUPS);
-    if (!saved) return defaults;
-    const parsed = JSON.parse(saved);
-    const isVersioned =
-      parsed?.version === 2 &&
-      parsed.groups &&
-      typeof parsed.groups === "object" &&
-      !Array.isArray(parsed.groups);
-    const source = isVersioned ? parsed.groups : parsed;
-    const out = isVersioned ? {} : Object.assign({}, defaults);
-    for (const [g, cfg] of Object.entries(source || {})) {
-      if (!/^[A-Za-z0-9_-]{1,12}$/.test(g)) continue;
-      const min = parseInt(cfg?.min, 10);
-      const max = parseInt(cfg?.max, 10);
-      if (
-        Number.isFinite(min) &&
-        Number.isFinite(max) &&
-        min >= 1 &&
-        max <= 60 &&
-        min <= max
-      ) {
-        out[g] = {
-          min,
-          max,
-          label: String(cfg.label || defaults[g]?.label || g),
-        };
-      }
-    }
-    return out;
-  } catch (e) {
-    return defaults;
-  }
-}
-function _getGroupSizes(g) {
-  const groups = getShoeGroups();
-  if (!groups[g]) return [];
-  const { min, max } = groups[g];
-  return Array.from({ length: max - min + 1 }, (_, i) => min + i);
-}
-function renderShoeGroupButtons() {
-  renderAllShoeGroupCards();
-}
 function renderShoeRows() {
   const rows = document.getElementById("shoe-rows");
   if (!rows) return;
@@ -3239,16 +3074,7 @@ function renderShoeSummary() {
     el.innerHTML = '<span class="shoe-selected-chips-empty">-</span>';
   } else {
     el.innerHTML = sorted
-      .map((s) => {
-        const g = (_shoeState.groupFor(s) || "other").toLowerCase();
-        return (
-          '<span class="shoe-selected-chip shoe-chip-' +
-          g +
-          '">' +
-          s +
-          "</span>"
-        );
-      })
+      .map((s) => '<span class="shoe-selected-chip">' + s + "</span>")
       .join("");
   }
   const saveBtn = UI.el("save-btn");

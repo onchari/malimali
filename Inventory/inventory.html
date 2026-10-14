@@ -572,10 +572,59 @@
             <h2 class="add-card-title">
               <span class="add-step-badge">3</span> Sizes
             </h2>
-            <div class="sg-row sg-row-full" id="shoe-size-groups"></div>
-            <p class="shoe-size-settings-hint">
-              Available sizes follow the ranges configured in Settings.
-            </p>
+            <div class="shoe-size-range-settings shoe-size-range-form">
+              <label class="shoe-size-range-field" for="shoe-add-size-range-min">
+                <span>Minimum size</span>
+                <input
+                  id="shoe-add-size-range-min"
+                  type="number"
+                  min="0"
+                  max="60"
+                  step="1"
+                  value="0"
+                  class="add-input add-center"
+                  oninput="invalidateShoeSizeRange()"
+                />
+              </label>
+              <span aria-hidden="true">to</span>
+              <label class="shoe-size-range-field" for="shoe-add-size-range-max">
+                <span>Maximum size</span>
+                <input
+                  id="shoe-add-size-range-max"
+                  type="number"
+                  min="0"
+                  max="60"
+                  step="1"
+                  value="0"
+                  class="add-input add-center"
+                  oninput="invalidateShoeSizeRange()"
+                />
+              </label>
+              <button
+                type="button"
+                class="btn-primary shoe-size-generate-btn"
+                onclick="generateShoeSizesFromForm()"
+              >
+                Generate sizes
+              </button>
+            </div>
+            <div
+              class="shoe-size-picker-row shoe-size-picker-row-full"
+              id="shoe-size-picker"
+              hidden
+            >
+              <div class="shoe-size-picker-card" id="shoe-size-picker-card">
+                <div class="shoe-size-picker-head">
+                  <span class="shoe-size-picker-title">Select sizes</span>
+                  <span class="shoe-size-picker-range" id="shoe-size-picker-range"></span>
+                </div>
+                <div
+                  class="shoe-size-picker-buttons"
+                  id="shoe-size-picker-buttons"
+                  hidden
+                ></div>
+              </div>
+            </div>
 
             <div id="shoe-sizes-grid" hidden aria-hidden="true">
               <div id="sz-grid"></div>
@@ -596,27 +645,7 @@
                     <div
                       id="shoe-selected-summary"
                       class="shoe-selected-chips"
-                    ></div>
-                  </div>
-                  <div class="shoe-stock-metrics">
-                    <div class="shoe-metric">
-                      <span class="shoe-metric-lbl">Qty</span>
-                      <strong id="shoe-metric-qty" class="shoe-metric-val"
-                        >0</strong
-                      >
-                    </div>
-                    <div class="shoe-metric">
-                      <span class="shoe-metric-lbl">BP</span>
-                      <strong id="shoe-metric-bp" class="shoe-metric-val"
-                        >-</strong
-                      >
-                    </div>
-                    <div class="shoe-metric">
-                      <span class="shoe-metric-lbl">SP</span>
-                      <strong id="shoe-metric-sp" class="shoe-metric-val"
-                        >-</strong
-                      >
-                    </div>
+                    >                    </div>
                   </div>
                 </div>
 

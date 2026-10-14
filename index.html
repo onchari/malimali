@@ -48,7 +48,7 @@
     <!-- App styles -->
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="Inventory/inventory.css" />
-    <link rel="stylesheet" href="Sales/sales.css?v=20261014.09" />
+    <link rel="stylesheet" href="Sales/sales.css?v=20261014.11" />
 
     <!-- ── Firebase SDK (ES module - must stay inline in <head>) ── -->
     <!-- Loaded as a module so Firebase ESM imports work correctly.
@@ -2066,7 +2066,7 @@
       </div>
 
       <div class="sec-label" style="margin-top: 14px">
-        Size groups (for size-grid categories)
+        Shoe size range
       </div>
       <div class="card" style="margin-bottom: 4px">
         <div
@@ -2077,20 +2077,37 @@
             line-height: 1.4;
           "
         >
-          Create and manage size groups, names, and non-overlapping ranges used
-          on the Add Item shoe panel.
+          Enter the minimum and maximum shoe sizes, then generate the
+          selectable size buttons.
         </div>
-        <div id="shoe-groups-settings"></div>
+        <div class="shoe-size-range-settings">
+          <label class="shoe-size-range-field" for="shoe-size-range-min">
+            <span>Minimum size</span>
+            <input
+              id="shoe-size-range-min"
+              type="number"
+              min="1"
+              max="60"
+              step="1"
+              class="type-input"
+            />
+          </label>
+          <span aria-hidden="true">to</span>
+          <label class="shoe-size-range-field" for="shoe-size-range-max">
+            <span>Maximum size</span>
+            <input
+              id="shoe-size-range-max"
+              type="number"
+              min="1"
+              max="60"
+              step="1"
+              class="type-input"
+            />
+          </label>
+        </div>
         <button
           type="button"
-          class="sg-add-btn"
-          onclick="addShoeGroupSetting()"
-        >
-          <i class="fa-solid fa-plus" aria-hidden="true"></i> Add group
-        </button>
-        <button
-          type="button"
-          onclick="saveShoeGroupSettings()"
+          onclick="generateShoeSizeRange()"
           style="
             width: 100%;
             margin-top: 10px;
@@ -2105,7 +2122,7 @@
             font-family: var(--sans);
           "
         >
-          Save size groups
+          Generate sizes
         </button>
       </div>
 
@@ -4012,7 +4029,7 @@
           mount.replaceWith(document.importNode(template.content, true));
         });
 
-        const stocklistResponse = await fetch("Inventory/stocklist.html?v=20261014.08");
+        const stocklistResponse = await fetch("Inventory/stocklist.html?v=20261014.11");
         if (!stocklistResponse.ok) {
           throw new Error("Stock list markup request failed: " + stocklistResponse.status);
         }
@@ -4023,7 +4040,7 @@
           throw new Error("Unable to load shared stock list markup");
         }
 
-        const salesResponse = await fetch("Sales/sales.html?v=20261014.08");
+        const salesResponse = await fetch("Sales/sales.html?v=20261014.11");
         if (!salesResponse.ok) {
           throw new Error("Sales markup request failed: " + salesResponse.status);
         }
@@ -4082,7 +4099,7 @@
         for (const path of scripts) {
           await new Promise((resolve, reject) => {
             const script = document.createElement("script");
-            script.src = path + "?v=20261014.08";
+            script.src = path + "?v=20261014.11";
             script.onload = resolve;
             script.onerror = () => reject(new Error("Unable to load " + path));
             document.body.appendChild(script);

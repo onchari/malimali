@@ -708,14 +708,6 @@
 #shoe-rows-wrap {
   display: none;
 }
-#page-add.footwear-add-mode:not(.restock-mode):not(.record-only-mode)
-  #shoe-rows-wrap {
-  display: block !important;
-}
-#page-add.footwear-add-mode:not(.restock-mode):not(.record-only-mode)
-  #shoe-shared-wrap {
-  display: block !important;
-}
 #page-add.restock-mode .add-flow #std-pricing-section {
   display: none !important;
 }
@@ -8984,7 +8976,45 @@ body.photo-lightbox-open {
 /* ================================================================
    SHOE SYSTEM CSS
    ================================================================ */
-.add-card-shoe .sg-row-full {
+.shoe-size-range-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 8px;
+}
+.shoe-size-range-form {
+  margin: 10px 0 12px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+}
+.shoe-size-generate-btn {
+  grid-column: auto;
+  width: auto;
+  min-width: 0;
+  padding: 12px 10px;
+  white-space: nowrap;
+}
+.shoe-size-range-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.shoe-size-range-field input {
+  width: 100%;
+  min-width: 0;
+}
+.shoe-size-range-field input:focus {
+  outline-color: var(--accent);
+}
+.shoe-size-range-settings > span {
+  padding-bottom: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.add-card-shoe .shoe-size-picker-row-full {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -8994,13 +9024,16 @@ body.photo-lightbox-open {
   margin-right: -14px;
   box-sizing: border-box;
 }
-.sg-row {
+.shoe-size-picker-row {
   display: flex;
   flex-direction: column;
   gap: 10px;
   width: 100%;
 }
-.sg-card {
+.shoe-size-picker-row[hidden] {
+  display: none;
+}
+.shoe-size-picker-card {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -9014,31 +9047,34 @@ body.photo-lightbox-open {
   background: var(--surface2);
   box-sizing: border-box;
 }
-.sg-card.sg-card-active {
+.shoe-size-picker-card.shoe-size-picker-active {
   background: var(--accent-light);
   border-color: var(--accent);
 }
-.sg-card-head {
+.shoe-size-picker-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
-.sg-card-title {
+.shoe-size-picker-title {
   font-size: 13px;
   font-weight: 800;
 }
-.sg-range {
+.shoe-size-picker-range {
   color: var(--muted);
   font-size: 10px;
   font-weight: 700;
 }
-.sg-card-sizes {
+.shoe-size-picker-buttons {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
   gap: 7px;
 }
-.sg-card-sizes .sz-btn {
+.shoe-size-picker-buttons[hidden] {
+  display: none;
+}
+.shoe-size-picker-buttons .sz-btn {
   min-width: 0;
   width: auto;
   min-height: 40px;
@@ -9051,41 +9087,6 @@ body.photo-lightbox-open {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   align-items: stretch;
-}
-.sz-group-block {
-  display: contents;
-}
-.sz-group-divider {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 4px 0 2px;
-}
-.sz-group-tag {
-  max-width: 100%;
-  font-size: 9px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 20px;
-  cursor: pointer;
-  text-align: center;
-  white-space: nowrap;
-}
-.sz-group-S {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
-.sz-group-M {
-  background: #dcfce7;
-  color: #16a34a;
-}
-.sz-group-L {
-  background: #fef3c7;
-  color: #92400e;
-}
-.sz-group-sizes {
-  display: contents;
 }
 .sz-btn {
   width: 100%;
@@ -9108,10 +9109,7 @@ body.photo-lightbox-open {
   border-color: var(--green);
   color: var(--green);
 }
-.sz-btn.sz-locked,
-#sg-card-S .sz-btn.sz-locked,
-#sg-card-M .sz-btn.sz-locked,
-#sg-card-L .sz-btn.sz-locked {
+.sz-btn.sz-locked {
   background: var(--surface2);
   border-color: var(--border);
   color: var(--muted);
@@ -9206,51 +9204,6 @@ body.photo-lightbox-open {
   border: 1px solid var(--border);
   background: var(--surface2);
   color: var(--text2);
-}
-.shoe-selected-chip.shoe-chip-s {
-  background: #dbeafe;
-  border-color: #93c5fd;
-  color: #1d4ed8;
-}
-.shoe-selected-chip.shoe-chip-m {
-  background: #dcfce7;
-  border-color: #86efac;
-  color: #16a34a;
-}
-.shoe-selected-chip.shoe-chip-l {
-  background: #fef3c7;
-  border-color: #fcd34d;
-  color: #b45309;
-}
-.shoe-stock-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-.shoe-metric {
-  text-align: center;
-}
-.shoe-metric-lbl {
-  display: block;
-  font-size: 9px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.35px;
-  color: var(--muted);
-  margin-bottom: 2px;
-}
-.shoe-metric-val {
-  display: block;
-  font-size: 15px;
-  font-weight: 900;
-  font-family: var(--mono);
-  color: var(--text);
-  line-height: 1.2;
-}
-.shoe-metric-val.accent {
-  color: var(--accent);
 }
 .shoe-price-labels {
   margin-bottom: 4px;

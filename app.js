@@ -1,7 +1,7 @@
 // ===================================================================
 // DATABASE SCHEMA  v17 -  Mandela General Stores
 // ===================================================================
-const APP_VERSION = "2026.10.14.09";
+const APP_VERSION = "2026.10.14.10";
 
 // ===================================================================
 // APPLICATION RELEASE
@@ -24,11 +24,7 @@ const KEY_DELETED_SALE = "mgs_deleted_sales";
 const CODE_MAX_QTY = 9999;
 const LOW_STOCK_LEVEL = 1;
 const OUT_STOCK_LEVEL = 0;
-const SHOE_GROUP_DEFAULTS = Object.freeze({
-  S: Object.freeze({ min: 19, max: 28, label: "Children" }),
-  M: Object.freeze({ min: 29, max: 39, label: "Teens" }),
-  L: Object.freeze({ min: 40, max: 50, label: "Adults" }),
-});
+const SHOE_SIZE_RANGE_DEFAULTS = Object.freeze({ min: 19, max: 50 });
 
 function initDB() {
   // Development runs on a completely separate local database from production.
@@ -2258,26 +2254,38 @@ function _isFootwearAddFormActive() {
     ?.classList.contains("footwear-add-mode");
 }
 
-/** Show shared qty/price row for footwear (visible before sizes are picked). */
+/** Show footwear quantity and pricing only after a generated size is selected. */
 function showShoePricingPanel() {
   if (!_isFootwearAddFormActive()) return;
   const rowsWrap = document.getElementById("shoe-rows-wrap");
   const sharedWrap = document.getElementById("shoe-shared-wrap");
-  if (rowsWrap) rowsWrap.style.display = "block";
-  if (sharedWrap && !_shoeState.perSizeMode) sharedWrap.style.display = "block";
+  const picker = document.getElementById("shoe-size-picker");
+  const { min, max } = getShoeSizeRange();
+  const isRestock = document
+    .getElementById("page-add")
+    ?.classList.contains("restock-mode");
+  const rangeIsGenerated =
+    isRestock || picker?.dataset.generatedRange === min + "-" + max;
+  const hasSelection = _shoeState.sizes.size > 0 && rangeIsGenerated;
+  if (rowsWrap) rowsWrap.style.display = hasSelection ? "block" : "none";
+  if (sharedWrap && !_shoeState.perSizeMode)
+    sharedWrap.style.display = hasSelection ? "block" : "none";
 }
 
-/** Footwear add: horizontal sizes on S/M/L cards; qty/prices form always visible. */
+/** Render the configured footwear size buttons before the stock-entry form. */
 function prepareShoeSizePickerUI() {
   const grid = document.getElementById("sz-grid");
   if (grid) grid.innerHTML = "";
-  _shoeState.shownGroups.clear();
   const szGrid = document.getElementById("shoe-sizes-grid");
   if (szGrid) {
     szGrid.hidden = true;
     szGrid.style.display = "none";
   }
-  renderAllShoeGroupCards();
+  const minInput = document.getElementById("shoe-add-size-range-min");
+  const maxInput = document.getElementById("shoe-add-size-range-max");
+  if (minInput && !minInput.value) minInput.value = "0";
+  if (maxInput && !maxInput.value) maxInput.value = "0";
+  renderShoeSizeButtons();
   showShoePricingPanel();
 }
 
@@ -2655,9 +2663,7 @@ class ShoeState {
   }
 
   reset() {
-    this.group = null; // active group: 'S'|'M'|'L'
     this.sizes = new Set(); // selected size numbers
-    this.shownGroups = new Set(); // groups whose buttons are rendered
     this.perSizeMode = false; // true = per-size pricing
     this.lockedSizes = new Set(); // sizes already in stock - not selectable (restock-mode)
   }
@@ -2676,25 +2682,6 @@ class ShoeState {
   // True if at least one size selected
   get hasSelection() {
     return this.sizes.size > 0;
-  }
-
-  // Derive group from a size number
-  groupFor(size) {
-    const groups = getShoeGroups();
-    for (const [g, cfg] of Object.entries(groups)) {
-      if (size >= cfg.min && size <= cfg.max) return g;
-    }
-    return null;
-  }
-
-  // Remove all sizes belonging to a group
-  clearGroup(g) {
-    const groups = getShoeGroups();
-    const cfg = groups[g];
-    if (!cfg) return;
-    for (let s = cfg.min; s <= cfg.max; s++) this.sizes.delete(s);
-    this.shownGroups.delete(g);
-    if (this.group === g) this.group = null;
   }
 }
 
@@ -4202,6 +4189,15 @@ function hideRestockView() {
 function resetShoeUiPanels() {
   _shoeState.perSizeMode = false;
   if (typeof setShoeMode === "function") setShoeMode("shared");
+  const picker = document.getElementById("shoe-size-picker");
+  if (picker) {
+    delete picker.dataset.generatedRange;
+    picker.hidden = true;
+  }
+  const minInput = document.getElementById("shoe-add-size-range-min");
+  const maxInput = document.getElementById("shoe-add-size-range-max");
+  if (minInput) minInput.value = "0";
+  if (maxInput) maxInput.value = "0";
   const modeShared = document.getElementById("mode-tab-shared");
   const modePerSize = document.getElementById("mode-tab-persize");
   if (modeShared) modeShared.classList.add("active");
@@ -4216,10 +4212,10 @@ function resetShoeUiPanels() {
   if (szGrid) szGrid.style.display = "none";
   if (!_isFootwearAddFormActive() && szWrap) szWrap.style.display = "none";
   if (szInner) szInner.innerHTML = "";
-  _shoeState.shownGroups.clear();
   const sum = UI.el("shoe-selected-summary");
   if (sum) sum.innerHTML = "";
-  renderShoeGroupButtons();
+  renderShoeSizeButtons();
+  showShoePricingPanel();
 }
 
 function setAddFormType(typeName, opts) {
@@ -4288,17 +4284,10 @@ function renderTypeChips() {
 
 function setTypeFilter(name, el) {
   activeTypeFilter = name;
-  if (name === "all" || !isFootwearType(name)) {
-    window._activeSizeGroupFilter = "all";
-    document
-      .querySelectorAll("[data-size-group-filter]")
-      .forEach((b) => b.classList.remove("active"));
-  }
   document
     .querySelectorAll("[data-stocklist-chips] .chip")
     .forEach((c) => c.classList.remove("active"));
   if (el) el.classList.add("active");
-  _renderSizeGroupFilter();
   renderList();
 }
 
@@ -4307,7 +4296,7 @@ async function renderCategorySettings() {
     types = await dbAll("types");
     await normalizeTypeRecords();
     renderAllTypeDropdowns();
-    renderShoeGroupSettings();
+    renderShoeSizeRangeSettings();
     // Populate saved Gemini key status
     const saved = getGeminiKey();
     const keyInp = document.getElementById("gemini-api-key-input");
@@ -4393,185 +4382,88 @@ async function renderCategorySettings() {
 window.renderCategorySettings = renderCategorySettings;
 window.renderTypes = renderCategorySettings;
 
-function renderShoeGroupSettings() {
-  const wrap = document.getElementById("shoe-groups-settings");
-  if (!wrap) return;
-  const groups = getShoeGroups();
-  wrap.innerHTML = Object.entries(groups)
-    .map(([id, config]) => _shoeGroupSettingRowHtml(id, config))
-    .join("");
+function renderShoeSizeRangeSettings() {
+  const range = getShoeSizeRange();
+  const minInput = document.getElementById("shoe-size-range-min");
+  const maxInput = document.getElementById("shoe-size-range-max");
+  if (minInput) minInput.value = String(range.min);
+  if (maxInput) maxInput.value = String(range.max);
 }
 
-function _shoeGroupSettingRowHtml(id, config) {
-  const safeId = escapeHtml(id);
-  return (
-    '<div class="sg-setting-row" data-group="' +
-    safeId +
-    '">' +
-    '<div class="sg-setting-fields">' +
-    '<span class="sg-setting-code">' +
-    safeId +
-    "</span>" +
-    '<input id="sg-label-' +
-    safeId +
-    '" type="text" class="type-input sg-label-input" placeholder="Group name" value="' +
-    escapeHtml(config.label || "") +
-    '" aria-label="' +
-    safeId +
-    ' group name">' +
-    '<input id="sg-min-' +
-    safeId +
-    '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Min" value="' +
-    config.min +
-    '" aria-label="' +
-    safeId +
-    ' minimum size">' +
-    '<span class="sg-setting-range-separator" aria-hidden="true">-</span>' +
-    '<input id="sg-max-' +
-    safeId +
-    '" type="number" min="1" max="60" class="type-input sg-num" placeholder="Max" value="' +
-    config.max +
-    '" aria-label="' +
-    safeId +
-    ' maximum size">' +
-    '<button type="button" class="sg-delete-btn" onclick="removeShoeGroupSetting(\'' +
-    safeId +
-    '\')" aria-label="Delete ' +
-    safeId +
-    ' group" title="Delete group"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>' +
-    "</div></div>"
+function generateShoeSizeRange(minValue, maxValue, generatedFromForm = false) {
+  const min = Number(
+    minValue ?? document.getElementById("shoe-size-range-min")?.value,
   );
-}
-
-async function addShoeGroupSetting() {
-  const wrap = document.getElementById("shoe-groups-settings");
-  if (!wrap) return;
-  const rows = [...wrap.querySelectorAll(".sg-setting-row")];
-  const savedSizes = await dbAll("shoe_sizes");
-  const usedIds = new Set([
-    ...rows.map((row) => row.dataset.group),
-    ...savedSizes.map((size) => size.sizeGroup).filter(Boolean),
-  ]);
-  let nextNumber = 1;
-  while (usedIds.has("G" + nextNumber)) nextNumber += 1;
-
-  const occupied = new Set();
-  rows.forEach((row) => {
-    const min = parseInt(
-      document.getElementById("sg-min-" + row.dataset.group)?.value,
-      10,
-    );
-    const max = parseInt(
-      document.getElementById("sg-max-" + row.dataset.group)?.value,
-      10,
-    );
-    if (
-      Number.isFinite(min) &&
-      Number.isFinite(max) &&
-      min >= 1 &&
-      max <= 60 &&
-      min <= max
-    ) {
-      for (let size = min; size <= max; size++) occupied.add(size);
-    }
-  });
-  let firstFreeSize = null;
-  for (let size = 1; size <= 60; size++) {
-    if (!occupied.has(size)) {
-      firstFreeSize = size;
-      break;
-    }
-  }
-  if (firstFreeSize == null) {
-    toast("No unused sizes remain in the 1-60 range", "err");
-    return;
-  }
-
-  const id = "G" + nextNumber;
-  wrap.insertAdjacentHTML(
-    "beforeend",
-    _shoeGroupSettingRowHtml(id, {
-      label: "Group " + nextNumber,
-      min: firstFreeSize,
-      max: firstFreeSize,
-    }),
-  );
-  document.getElementById("sg-label-" + id)?.focus();
-}
-window.addShoeGroupSetting = addShoeGroupSetting;
-
-async function removeShoeGroupSetting(id) {
-  const wrap = document.getElementById("shoe-groups-settings");
-  const row = [...(wrap?.querySelectorAll(".sg-setting-row") || [])].find(
-    (entry) => entry.dataset.group === id,
-  );
-  if (!row) return;
-  const hasSavedSizes = (await dbAll("shoe_sizes")).some(
-    (size) => size.sizeGroup === id,
+  const max = Number(
+    maxValue ?? document.getElementById("shoe-size-range-max")?.value,
   );
   if (
-    hasSavedSizes &&
-    !confirm(
-      "Existing sizes use this group. Remove the group settings? Stock records will remain.",
-    )
-  )
-    return;
-  row.remove();
+    !Number.isInteger(min) ||
+    !Number.isInteger(max) ||
+    min < 1 ||
+    max > 60 ||
+    min > max
+  ) {
+    toast(
+      min > max
+        ? "Maximum size must be greater than or equal to minimum size"
+        : "Enter a valid shoe size range from 1 to 60",
+      "err",
+    );
+    return false;
+  }
+  try {
+    localStorage.setItem(
+      KEY_SHOE_GROUPS,
+      JSON.stringify({ version: 3, min, max }),
+    );
+  } catch (e) {
+    console.error("[generateShoeSizeRange] Could not save shoe size range", e);
+    toast("Could not save shoe size range", "err");
+    return false;
+  }
+  const settingsMinInput = document.getElementById("shoe-size-range-min");
+  const settingsMaxInput = document.getElementById("shoe-size-range-max");
+  if (settingsMinInput) settingsMinInput.value = String(min);
+  if (settingsMaxInput) settingsMaxInput.value = String(max);
+  const picker = document.getElementById("shoe-size-picker");
+  if (generatedFromForm && picker) {
+    picker.dataset.generatedRange = min + "-" + max;
+    picker.hidden = false;
+  }
+  for (const size of _shoeState.sizes) {
+    if (size < min || size > max) _shoeState.sizes.delete(size);
+  }
+  renderShoeSizeButtons();
+  renderShoeRows();
+  renderShoeSummary();
+  updateShoeCollectiveSummary();
+  showShoePricingPanel();
+  toast("Generated shoe sizes " + min + " to " + max, "ok");
+  return true;
 }
-window.removeShoeGroupSetting = removeShoeGroupSetting;
+window.generateShoeSizeRange = generateShoeSizeRange;
 
-async function saveShoeGroupSettings() {
-  const groups = {};
-  const rows = [
-    ...(document
-      .getElementById("shoe-groups-settings")
-      ?.querySelectorAll(".sg-setting-row") || []),
-  ];
-  if (!rows.length) {
-    toast("Add at least one size group", "err");
-    return;
+function invalidateShoeSizeRange() {
+  const picker = document.getElementById("shoe-size-picker");
+  if (picker) {
+    delete picker.dataset.generatedRange;
+    picker.hidden = true;
   }
-  for (const row of rows) {
-    const g = row.dataset.group;
-    const min = parseInt(document.getElementById("sg-min-" + g)?.value, 10);
-    const max = parseInt(document.getElementById("sg-max-" + g)?.value, 10);
-    const label = (
-      document.getElementById("sg-label-" + g)?.value || ""
-    ).trim();
-    if (
-      !Number.isFinite(min) ||
-      !Number.isFinite(max) ||
-      min > max ||
-      min < 1 ||
-      max > 60 ||
-      !label
-    ) {
-      toast("Enter a name and valid 1-60 range for group " + g, "err");
-      return;
-    }
-    groups[g] = { min, max };
-    groups[g].label = label;
-  }
-  const sortedGroups = Object.entries(groups).sort(
-    (a, b) => a[1].min - b[1].min,
-  );
-  for (let index = 1; index < sortedGroups.length; index++) {
-    const previous = sortedGroups[index - 1];
-    const current = sortedGroups[index];
-    if (current[1].min <= previous[1].max) {
-      toast(
-        "Size ranges for " + previous[0] + " and " + current[0] + " overlap",
-        "err",
-      );
-      return;
-    }
-  }
-  localStorage.setItem(KEY_SHOE_GROUPS, JSON.stringify({ version: 2, groups }));
-  renderShoeGroupButtons();
-  renderShoeGroupSettings();
-  toast("Shoe size groups saved", "ok");
+  _shoeState.sizes.clear();
+  renderShoeRows();
+  renderShoeSizeButtons();
+  renderShoeSummary();
+  showShoePricingPanel();
 }
-window.saveShoeGroupSettings = saveShoeGroupSettings;
+window.invalidateShoeSizeRange = invalidateShoeSizeRange;
+
+function generateShoeSizesFromForm() {
+  const min = document.getElementById("shoe-add-size-range-min")?.value;
+  const max = document.getElementById("shoe-add-size-range-max")?.value;
+  generateShoeSizeRange(min, max, true);
+}
+window.generateShoeSizesFromForm = generateShoeSizesFromForm;
 
 async function toggleCategoryActive(id) {
   const t = types.find((x) => x.id === id);
@@ -7999,6 +7891,7 @@ async function saveItem() {
 }
 
 function clearForm() {
+  const pageAdd = document.getElementById("page-add");
   UI.el("edit-id").value = "";
   _editingItemId = null; // clear JS-side edit tracker
   _lastAddFormType = "";
@@ -8174,23 +8067,18 @@ async function preloadShoeSizesForAdd(code) {
   if (_preloadShoeCode === code) return;
   _preloadShoeCode = code;
   _shoeState.sizes.clear();
-  _shoeState.shownGroups.clear();
   const grid = UI.el("sz-grid");
   if (grid) grid.innerHTML = "";
   const records = await getShoeSizes(code);
   if (!records.length) return;
 
-  const groupsNeeded = new Set();
-  records.forEach((sz) =>
-    groupsNeeded.add(sz.sizeGroup || _shoeState.groupFor(sz.size)),
-  );
   records.forEach((sz) => _shoeState.sizes.add(sz.size));
-  renderAllShoeGroupCards();
+  renderShoeSizeButtons();
 
   const szWrap = UI.el("shoe-rows-wrap");
   if (szWrap)
     szWrap.style.display = _shoeState.sizes.size > 0 ? "block" : "none";
-  renderShoeGroupButtons();
+  renderShoeSizeButtons();
   renderShoeSummary();
   if (_shoeState.perSizeMode) renderShoeRows();
   updateShoeCollectiveSummary();
@@ -8206,7 +8094,7 @@ async function preloadShoeSizesForRestock(code) {
     .forEach((r) => _shoeState.lockedSizes.add(Number(r.size)));
   const grid = UI.el("sz-grid");
   if (grid) grid.innerHTML = "";
-  renderAllShoeGroupCards();
+  renderShoeSizeButtons();
   showShoePricingPanel();
   renderShoeSummary();
   updateShoeCollectiveSummary();
@@ -8379,7 +8267,6 @@ async function renderList() {
     document.querySelector("[data-stocklist-search]")?.value || ""
   ).toLowerCase();
   renderTypeChips();
-  _renderSizeGroupFilter();
 
   // Filter — if there's a query, rank by match score; otherwise sort by recency
   const filtered = allItems
@@ -8565,12 +8452,7 @@ async function renderList() {
       if (!isExpanded) {
         cards.push('<div style="height:4px;"></div>');
       } else {
-        const activeSgf = window._activeSizeGroupFilter || "all";
-        const filteredSizes =
-          activeSgf === "all"
-            ? sizes
-            : sizes.filter((sz) => sz.sizeGroup === activeSgf);
-        filteredSizes.forEach((sz) => {
+        sizes.forEach((sz) => {
           const price = sz.sellPrice || item.sellPrice || 0;
           const buy = sz.buyPrice || item.buyPrice || 0;
           const availableQty = ledgerSizeQty.get(sz.id) || 0;
@@ -8591,7 +8473,6 @@ async function renderList() {
                 <div class="item-body">
                   <div class="item-code">${escapeHtml(item.name || item.code)}</div>
                   <div class="item-tags">
-                    ${sz.sizeGroup ? `<span class="tag tag-gray">${escapeHtml(getShoeGroups()[sz.sizeGroup]?.label || sz.sizeGroup)}</span>` : ""}
                     <span class="tag ${stockColor}">${stockLabel}</span>
                     <span class="tag tag-gray">${soldQty} sold</span>
                   </div>
@@ -9671,10 +9552,6 @@ async function openShoeSizeCard(itemCode, size) {
   const isLow = !isOut && availableQty <= LOW_STOCK_LEVEL;
   const stockCol = isOut ? "var(--red)" : isLow ? "#d97706" : "var(--green)";
   const stockLbl = isOut ? "Out of stock" : availableQty + " pcs in stock";
-  const groupLbl =
-    getShoeGroups()[sizeRec.sizeGroup]?.label ||
-    sizeRec.sizeGroup ||
-    "Size group";
 
   let sheet = document.getElementById("shoe-size-action-sheet");
   if (!sheet) {
@@ -9697,7 +9574,7 @@ async function openShoeSizeCard(itemCode, size) {
       <div class="shoe-size-badge ${isOut ? "out" : isLow ? "low" : ""}" style="width:56px;height:56px;font-size:24px;">${size}</div>
       <div class="detail-sheet-hero-text">
         <div class="detail-sheet-title">${escapeHtml(item.name || item.code)}</div>
-        <div class="detail-sheet-sub">${escapeHtml(item.code)} - Size ${size} - ${groupLbl}</div>
+        <div class="detail-sheet-sub">${escapeHtml(item.code)} - Size ${size}</div>
         <div class="detail-sheet-stock" style="color:${stockCol};">${stockLbl}</div>
       </div>
     </div>
@@ -11351,9 +11228,9 @@ const DEV_SEED_SHOE_ITEMS = [
     buy: 800,
     sell: 1400,
     sizes: [
-      { size: "32", group: "M", qty: 6 },
-      { size: "34", group: "M", qty: 4 },
-      { size: "36", group: "M", qty: 0 },
+      { size: "32", qty: 6 },
+      { size: "34", qty: 4 },
+      { size: "36", qty: 0 },
     ],
   },
   {
@@ -11362,9 +11239,9 @@ const DEV_SEED_SHOE_ITEMS = [
     buy: 2500,
     sell: 4200,
     sizes: [
-      { size: "40", group: "L", qty: 3 },
-      { size: "42", group: "L", qty: 5 },
-      { size: "44", group: "L", qty: 2 },
+      { size: "40", qty: 3 },
+      { size: "42", qty: 5 },
+      { size: "44", qty: 2 },
     ],
   },
   {
@@ -11373,9 +11250,9 @@ const DEV_SEED_SHOE_ITEMS = [
     buy: 600,
     sell: 1100,
     sizes: [
-      { size: "37", group: "L", qty: 7 },
-      { size: "38", group: "L", qty: 1 },
-      { size: "39", group: "L", qty: 0 },
+      { size: "37", qty: 7 },
+      { size: "38", qty: 1 },
+      { size: "39", qty: 0 },
     ],
   },
   {
@@ -11384,9 +11261,9 @@ const DEV_SEED_SHOE_ITEMS = [
     buy: 1800,
     sell: 3200,
     sizes: [
-      { size: "41", group: "L", qty: 4 },
-      { size: "42", group: "L", qty: 6 },
-      { size: "43", group: "L", qty: 3 },
+      { size: "41", qty: 4 },
+      { size: "42", qty: 6 },
+      { size: "43", qty: 3 },
     ],
   },
 ];
@@ -11517,7 +11394,6 @@ async function seedDevDatabase() {
         itemCode: s.code,
         itemId: pid,
         size: sz.size,
-        sizeGroup: sz.group,
         qty: sz.qty,
         buyPrice: s.buy,
         sellPrice: s.sell,
@@ -18189,7 +18065,6 @@ window._showFinReconcile = _showFinReconcile;
 
 let _expandedShoeGroups = new Set();
 let _expandedTypeGroups = new Set();
-window._activeSizeGroupFilter = "all";
 
 function toggleShoeGroup(code) {
   if (_expandedShoeGroups.has(code)) {
@@ -19180,62 +19055,6 @@ function setItemMode(isRecord) {
 }
 window.setItemMode = setItemMode;
 
-function setSizeGroupFilter(group) {
-  window._activeSizeGroupFilter = group;
-  document
-    .querySelectorAll("[data-size-group-filter]")
-    .forEach((b) => b.classList.remove("active"));
-  document
-    .querySelectorAll("[data-size-group-filter]")
-    .forEach((button) => {
-      button.classList.toggle(
-        "active",
-        button.dataset.sizeGroupFilter === group,
-      );
-    });
-  renderList();
-}
-window.setSizeGroupFilter = setSizeGroupFilter;
-
-function _renderSizeGroupFilter() {
-  const wraps = document.querySelectorAll("[data-stocklist-size-filter]");
-  if (!wraps.length) return;
-  const groups = getShoeGroups();
-  if (
-    window._activeSizeGroupFilter !== "all" &&
-    !groups[window._activeSizeGroupFilter]
-  ) {
-    window._activeSizeGroupFilter = "all";
-  }
-  const footwearSelected =
-    activeTypeFilter !== "all" && isFootwearType(activeTypeFilter);
-  const filters = [
-    ["all", "All"],
-    ...Object.entries(groups).map(([group, config]) => [
-      group,
-      group + " - " + config.label,
-    ]),
-  ];
-  if (!footwearSelected) {
-    window._activeSizeGroupFilter = "all";
-  }
-  wraps.forEach((wrap) => {
-    wrap.style.display = footwearSelected ? "flex" : "none";
-    wrap.replaceChildren();
-    filters.forEach(([group, label]) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.sizeGroupFilter = group;
-      button.className =
-        "fin-filter-btn" +
-        (window._activeSizeGroupFilter === group ? " active" : "");
-      button.textContent = label;
-      button.addEventListener("click", () => setSizeGroupFilter(group));
-      wrap.appendChild(button);
-    });
-  });
-}
-
 // ═══════════════════════════════════════════════════════════
 // DAY RECONCILIATION - FLOW CONTROLLER
 // Steps keyed by date in localStorage:
@@ -20092,35 +19911,30 @@ async function _backfillSalesForItem(item) {
 }
 
 // ── History day drill-down: hide grid, show full day detail ────────
-function renderAllShoeGroupCards() {
-  const wrap = document.getElementById("shoe-size-groups");
+function renderShoeSizeButtons() {
+  const wrap = document.getElementById("shoe-size-picker");
   if (!wrap) return;
-  const groups = getShoeGroups();
-  const entries = Object.entries(groups).sort((a, b) => a[1].min - b[1].min);
-  const signature = JSON.stringify(entries);
-  if (wrap.dataset.groupsSignature !== signature) {
-    wrap.innerHTML =
-      '<div class="sg-card" id="sg-card-all"><div class="sg-card-head">' +
-      '<span class="sg-card-title">Select sizes</span>' +
-      '<span class="sg-range">Configured in Settings</span></div>' +
-      '<div class="sg-card-sizes" id="sg-card-sizes-all"></div></div>';
-    wrap.dataset.groupsSignature = signature;
-  }
-
-  const container = document.getElementById("sg-card-sizes-all");
+  const { min, max } = getShoeSizeRange();
+  const signature = min + "-" + max;
+  const container = document.getElementById("shoe-size-picker-buttons");
+  const rangeLabel = document.getElementById("shoe-size-picker-range");
   if (!container) return;
-  const sizes = [
-    ...new Set(
-      entries.flatMap(([, config]) =>
-        Array.from(
-          { length: config.max - config.min + 1 },
-          (_, index) => config.min + index,
-        ),
-      ),
-    ),
-  ].sort((a, b) => a - b);
+  if (rangeLabel) rangeLabel.textContent = min + "–" + max;
+  const isAddForm =
+    _isFootwearAddFormActive() &&
+    !document.getElementById("page-add")?.classList.contains("restock-mode");
+  if (isAddForm && wrap.dataset.generatedRange !== signature) {
+    wrap.hidden = true;
+    container.replaceChildren();
+    container.hidden = true;
+    const card = document.getElementById("shoe-size-picker-card");
+    if (card) card.classList.remove("shoe-size-picker-active");
+    return;
+  }
+  wrap.hidden = false;
+  const sizes = Array.from({ length: max - min + 1 }, (_, index) => min + index);
   container.replaceChildren();
-  _shoeState.shownGroups.clear();
+  container.hidden = false;
   sizes.forEach((size) => {
     const btn = document.createElement("button");
     const isLocked = _shoeState.lockedSizes.has(size);
@@ -20140,29 +19954,11 @@ function renderAllShoeGroupCards() {
       btn.onclick = () => toggleShoeSize(size);
     }
     container.appendChild(btn);
-
-    const group = _shoeState.groupFor(size);
-    if (isSelected && group) _shoeState.shownGroups.add(group);
   });
-  const card = document.getElementById("sg-card-all");
+  const card = document.getElementById("shoe-size-picker-card");
   if (card)
-    card.classList.toggle("sg-card-active", _shoeState.sizes.size > 0);
+    card.classList.toggle("shoe-size-picker-active", _shoeState.sizes.size > 0);
 }
-
-function selectSizeGroup(g) {
-  const sizes = _getGroupSizes(g);
-  if (!sizes.length) return;
-  const allOn = sizes.every((s) => _shoeState.sizes.has(s));
-  sizes.forEach((s) => {
-    if (allOn) _shoeState.sizes.delete(s);
-    else _shoeState.sizes.add(s);
-  });
-  renderAllShoeGroupCards();
-  showShoePricingPanel();
-  if (_shoeState.perSizeMode) renderShoeRows();
-  updateShoeCollectiveSummary();
-}
-window.selectSizeGroup = selectSizeGroup;
 
 function setShoeMode(mode) {
   _shoeState.perSizeMode = mode === "persize";
@@ -20214,62 +20010,6 @@ function initShoeCollectiveSummaryListeners() {
 
 function updateShoeCollectiveSummary() {
   renderShoeSummary();
-  const qtyEl = document.getElementById("shoe-metric-qty");
-  const bpEl = document.getElementById("shoe-metric-bp");
-  const spEl = document.getElementById("shoe-metric-sp");
-  if (!qtyEl || !bpEl || !spEl) return;
-
-  const sorted = _shoeState.sortedSizes;
-  const n = sorted.length;
-  if (!n) {
-    qtyEl.textContent = "0";
-    bpEl.textContent = "-";
-    spEl.textContent = "-";
-    bpEl.classList.remove("accent");
-    spEl.classList.remove("accent");
-    return;
-  }
-
-  if (!_shoeState.perSizeMode) {
-    const qPer = parseInt(UI.el("shoe-shared-qty")?.value || "0", 10) || 0;
-    const bp = parseFloat(UI.el("shoe-shared-buy")?.value || "0") || 0;
-    const sp = parseFloat(UI.el("shoe-shared-sell")?.value || "0") || 0;
-    const totalQty = qPer * n;
-    qtyEl.textContent = String(totalQty);
-    bpEl.textContent = bp > 0 ? fmt(bp) : "-";
-    spEl.textContent = sp > 0 ? fmt(sp) : "-";
-    bpEl.classList.toggle("accent", bp > 0);
-    spEl.classList.toggle("accent", sp > 0);
-    return;
-  }
-
-  let totalQty = 0;
-  let buySum = 0;
-  let sellSum = 0;
-  let priced = 0;
-  sorted.forEach((s) => {
-    const q = parseInt(UI.el("shr-qty-" + s)?.value || "0", 10) || 0;
-    const b = parseFloat(UI.el("shr-buy-" + s)?.value || "0") || 0;
-    const p = parseFloat(UI.el("shr-sell-" + s)?.value || "0") || 0;
-    totalQty += q;
-    if (b > 0 || p > 0) {
-      buySum += b;
-      sellSum += p;
-      priced += 1;
-    }
-  });
-  qtyEl.textContent = String(totalQty);
-  if (priced) {
-    bpEl.textContent = fmt(Math.round(buySum / priced));
-    spEl.textContent = fmt(Math.round(sellSum / priced));
-    bpEl.classList.add("accent");
-    spEl.classList.add("accent");
-  } else {
-    bpEl.textContent = "-";
-    spEl.textContent = "-";
-    bpEl.classList.remove("accent");
-    spEl.classList.remove("accent");
-  }
 }
 window.updateShoeCollectiveSummary = updateShoeCollectiveSummary;
 
@@ -20314,26 +20054,28 @@ async function upsertShoeSize(record, opts) {
 }
 
 async function saveShoeItems(baseCode, baseName, type) {
+  const picker = document.getElementById("shoe-size-picker");
+  if (
+    _isFootwearAddFormActive() &&
+    !document.getElementById("page-add")?.classList.contains("restock-mode")
+  ) {
+    const { min, max } = getShoeSizeRange();
+    if (picker?.dataset.generatedRange !== min + "-" + max) {
+      toast("Generate the shoe size range before saving", "err");
+      return false;
+    }
+  }
   if (_shoeState.sizes.size === 0) {
     toast("Warning: Select at least one size", "err");
     return false;
   }
-
-  const ungroupedSize = _shoeState.sortedSizes.find(
-    (size) => !_shoeState.groupFor(size),
+  const { min, max } = getShoeSizeRange();
+  const invalidSize = _shoeState.sortedSizes.find(
+    (size) => size < min || size > max,
   );
-  if (ungroupedSize != null) {
-    toast("Size " + ungroupedSize + " is outside the configured groups", "err");
+  if (invalidSize != null) {
+    toast("Size " + invalidSize + " is outside the generated range", "err");
     return false;
-  }
-
-  if (!_shoeState.group) {
-    const firstSize = [..._shoeState.sizes][0];
-    _shoeState.group = _shoeState.groupFor(firstSize);
-    if (!_shoeState.group) {
-      toast("Selected size is outside the configured groups", "err");
-      return false;
-    }
   }
 
   let sharedQty = 0,
@@ -20425,7 +20167,6 @@ async function saveShoeItems(baseCode, baseName, type) {
         itemCode: baseCode,
         itemId: product.id,
         size,
-        sizeGroup: _shoeState.groupFor(size),
         qty,
         buyPrice: buy,
         sellPrice: sell,
@@ -20464,24 +20205,12 @@ async function saveShoeItems(baseCode, baseName, type) {
 }
 window.saveShoeItems = saveShoeItems;
 
-function deselectSizeGroup(g) {
-  _getGroupSizes(g).forEach((s) => _shoeState.sizes.delete(s));
-  if (_shoeState.group === g) _shoeState.group = null;
-  _shoeState.shownGroups.delete(g);
-  renderAllShoeGroupCards();
-  showShoePricingPanel();
-  renderShoeSummary();
-  renderShoeRows();
-  updateShoeCollectiveSummary();
-}
-window.deselectSizeGroup = deselectSizeGroup;
-
 function toggleShoeSize(s) {
   if (_shoeState.lockedSizes.has(s)) return; // already in stock - restock-mode disables these
   if (_shoeState.sizes.has(s)) _shoeState.sizes.delete(s);
   else _shoeState.sizes.add(s);
 
-  renderAllShoeGroupCards();
+  renderShoeSizeButtons();
   showShoePricingPanel();
 
   // If switching to persize and rows already rendered, rebuild them
@@ -20584,50 +20313,56 @@ window.closeShoeSizeActions = closeShoeSizeActions;
 
 // ── Restored missing shoe functions ─────────────────────────────
 
-function getShoeGroups() {
-  const defaults = JSON.parse(JSON.stringify(SHOE_GROUP_DEFAULTS));
+function getShoeSizeRange() {
+  const defaults = SHOE_SIZE_RANGE_DEFAULTS;
   try {
     const saved = localStorage.getItem(KEY_SHOE_GROUPS);
     if (!saved) return defaults;
     const parsed = JSON.parse(saved);
-    const isVersioned =
-      parsed?.version === 2 &&
-      parsed.groups &&
-      typeof parsed.groups === "object" &&
-      !Array.isArray(parsed.groups);
-    const source = isVersioned ? parsed.groups : parsed;
-    const out = isVersioned ? {} : Object.assign({}, defaults);
-    for (const [g, cfg] of Object.entries(source || {})) {
-      if (!/^[A-Za-z0-9_-]{1,12}$/.test(g)) continue;
-      const min = parseInt(cfg?.min, 10);
-      const max = parseInt(cfg?.max, 10);
-      if (
-        Number.isFinite(min) &&
-        Number.isFinite(max) &&
-        min >= 1 &&
-        max <= 60 &&
-        min <= max
-      ) {
-        out[g] = {
-          min,
-          max,
-          label: String(cfg.label || defaults[g]?.label || g),
+    let range;
+    if (
+      parsed?.version === 3 &&
+      Number.isInteger(parsed.min) &&
+      Number.isInteger(parsed.max)
+    ) {
+      range = { min: parsed.min, max: parsed.max };
+    } else {
+      const groupValues =
+        parsed?.groups && typeof parsed.groups === "object"
+          ? Object.values(parsed.groups)
+          : parsed && typeof parsed === "object"
+            ? Object.values(parsed)
+            : [];
+      const validRanges = groupValues
+        .map((group) => ({
+          min: Number(group?.min),
+          max: Number(group?.max),
+        }))
+        .filter(
+          ({ min, max }) =>
+            Number.isInteger(min) &&
+            Number.isInteger(max) &&
+            min >= 1 &&
+            max <= 60 &&
+            min <= max,
+        );
+      if (validRanges.length) {
+        range = {
+          min: Math.min(...validRanges.map((group) => group.min)),
+          max: Math.max(...validRanges.map((group) => group.max)),
         };
       }
     }
-    return out;
+    return range &&
+      range.min >= 1 &&
+      range.max <= 60 &&
+      range.min <= range.max
+      ? range
+      : defaults;
   } catch (e) {
+    console.warn("[getShoeSizeRange] Invalid saved shoe range; using defaults", e);
     return defaults;
   }
-}
-function _getGroupSizes(g) {
-  const groups = getShoeGroups();
-  if (!groups[g]) return [];
-  const { min, max } = groups[g];
-  return Array.from({ length: max - min + 1 }, (_, i) => min + i);
-}
-function renderShoeGroupButtons() {
-  renderAllShoeGroupCards();
 }
 function renderShoeRows() {
   const rows = document.getElementById("shoe-rows");
@@ -20667,14 +20402,7 @@ function renderShoeSummary() {
   } else {
     el.innerHTML = sorted
       .map((s) => {
-        const g = (_shoeState.groupFor(s) || "other").toLowerCase();
-        return (
-          '<span class="shoe-selected-chip shoe-chip-' +
-          g +
-          '">' +
-          s +
-          "</span>"
-        );
+        return '<span class="shoe-selected-chip">' + s + "</span>";
       })
       .join("");
   }

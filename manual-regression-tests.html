@@ -1127,8 +1127,8 @@
           title: "Search stock and clear all filters",
           module: "Inventory",
           priority: "medium",
-          objective: "Check combined text search, category and shoe-size filters, and clear behavior.",
-          steps: ["Search by partial name and code.", "Apply a category and, for footwear, a size-group filter.", "Clear the search and filters."],
+          objective: "Check combined text search, category filters, and clear behavior.",
+          steps: ["Search by partial name and code.", "Apply a category filter.", "Clear the search and filters."],
           expected: "Results match all active filters; clearing them restores the full list without stale chips or hidden items."
         },
         {
@@ -1145,9 +1145,9 @@
           title: "Select footwear sizes and enter stock details",
           module: "Inventory",
           priority: "major",
-          objective: "Verify configured shoe sizes appear in one selection card, followed by quantity and pricing entry.",
-          steps: ["Open the footwear form and confirm its size buttons cover the configured ranges (19-50 by default).", "Change the size ranges in Settings and confirm only those sizes appear, once each.", "Select multiple sizes, enter shared quantity and buy/sell prices in the following card, then save."],
-          expected: "All configured sizes are selectable in one card; each selected size saves with the intended quantity, prices, and size-group assignment."
+          objective: "Verify the footwear form generates sizes after category selection and reveals stock entry after size selection.",
+          steps: ["Open the add-item form and select a footwear category; verify minimum and maximum both default to 0 and the size picker is hidden.", "Enter a minimum greater than the maximum and generate; verify no picker appears. Then enter a valid range and click Generate sizes.", "Select multiple size buttons and confirm quantity and pricing fields appear; enter stock and prices, then save."],
+          expected: "Invalid ranges are rejected; maximum size may equal or exceed minimum size. Only sizes in the generated range appear, the picker stays hidden until generation, stock entry follows size selection, and each selected size saves with the intended quantity and prices."
         },
         {
           id: "MGS-061",
@@ -1160,12 +1160,12 @@
         },
         {
           id: "MGS-062",
-          title: "Footwear size totals and size-group filters",
+          title: "Footwear size totals and generated ranges",
           module: "Inventory",
           priority: "major",
-          objective: "Validate shoe stock totals and child, teen, and adult size-group filtering.",
-          steps: ["Create or use footwear with quantities in sizes spanning multiple groups.", "Check the parent total.", "Apply each size-group filter and compare the sizes shown."],
-          expected: "Totals equal the sum of size quantities, and each size appears only in the correct group."
+          objective: "Validate generated shoe-size ranges and footwear stock totals.",
+          steps: ["Select a footwear category and generate a range with distinct minimum and maximum values.", "Check that every integer in the generated range appears, with no sizes outside it.", "Create or use footwear with quantities in multiple sizes and check the parent total."],
+          expected: "The picker contains each generated size exactly once and footwear totals equal the sum of size quantities."
         },
         {
           id: "MGS-063",
