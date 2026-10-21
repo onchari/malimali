@@ -1778,6 +1778,15 @@
           objective: "Ensure linking an earlier off-stock sale to a newly created inventory item does not rewrite its historical description.",
           steps: ["In Development, record an off-stock sale with a distinct item name and code.", "Later, add an inventory item with the same code but a different name or category.", "Open the earlier sale in history and inspect its displayed name and category."],
           expected: "The earlier sale keeps the item name and category recorded at sale time; only its inventory link is backfilled."
+        },
+        {
+          id: "MGS-131",
+          title: "Preserve every sale when Firestore IDs collide",
+          module: "Sales / Sync",
+          priority: "critical",
+          objective: "Ensure sales with different timestamps remain distinct and no automatic cleanup deletes a transaction.",
+          steps: ["In Development, record two otherwise identical sales a short time apart.", "In the browser console, duplicate one sale record with the same fbId but a different timestamp, then run deduplicateSales().", "Sync and check all three transaction timestamps in sales history and the Firestore sales collection.", "Run deduplicateSales() again and confirm the repaired IDs remain stable."],
+          expected: "No sales record is removed. Each distinct timestamp has a distinct Firestore document ID, all transactions remain in history and cloud storage, and repeated cleanup does not create new IDs."
         }
       ];
 

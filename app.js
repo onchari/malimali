@@ -12779,13 +12779,16 @@ async function runForceSync(silent = false) {
     toast("Syncing…", "");
   }
   try {
+    // Repair sale IDs and cancel stale local sale tombstones before draining
+    // the outbox, so an old delete cannot remove a sale that still exists.
+    const salesRepaired = await deduplicateSales();
+    if (salesRepaired > 0)
+      console.log(
+        "[SYNC] Repaired " + salesRepaired + " sale identity collision(s)",
+      );
     // Push offline work first so the user's local changes reach the cloud
     // before remote data is merged into this device.
     await forcePushToFirebase(true);
-    // Remove any duplicates caused by previous sync races
-    const dupsRemoved = await deduplicateSales();
-    if (dupsRemoved > 0)
-      console.log("[SYNC] Removed " + dupsRemoved + " duplicate sale(s)");
     await pullFromFirebase(true);
     _pushFailCount = 0;
     _lastSyncError = null;
@@ -13192,6 +13195,10 @@ async function initFirebase() {
     window._fbUnsubCustTxn = null;
     window._fbUnsubBudget = null;
 
+    // Repair local sale identities and clear stale tombstones before listeners
+    // or queue drains can remove a sale that is still present locally.
+    await deduplicateSales();
+
     // ── Single, conflict-aware realtime listener layer ─────────────
     // Every collection uses the same remote-merge rules. A remote snapshot
     // can never overwrite a newer local change that is waiting in the queue.
@@ -13310,9 +13317,9 @@ async function initFirebase() {
 
     setFbStatus("on");
     toast("Firebase connected (" + getFirebaseEnvConfig().label + ")", "ok");
+    await deduplicateSales(); // repair/cancel stale sale deletes before push
     await forcePushToFirebase(true);
     await pullFromFirebase(true);
-    await deduplicateSales(); // remove any duplicates from previous sync bugs
     await normalizeSyncIds();
     await forcePushToFirebase(true);
     await updateSyncDot();
@@ -13860,7 +13867,7 @@ function _saleSignature(sale) {
     Number(sale.profit || 0).toFixed(2),
     sale.paymentMethod || "",
     sale.businessDate || "",
-    sale.date || "",
+    sale.date || sale.createdAt || "",
   ].join("|");
 }
 
@@ -13876,7 +13883,7 @@ function _rememberDeletedSale(sale) {
   if (
     !markers.some(
       (m) =>
-        (marker.fbId && m.fbId === marker.fbId) ||
+        (marker.fbId && m.fbId === marker.fbId && m.sig === marker.sig) ||
         (marker.sig && m.sig === marker.sig),
     )
   ) {
@@ -13889,63 +13896,142 @@ function _isDeletedSaleRemote(fbId, sale) {
   const sig = _saleSignature(sale);
   return _saleDeleteMarkers().some(
     (m) =>
-      (fbId && m.fbId && m.fbId === fbId) || (sig && m.sig && m.sig === sig),
+      (fbId && m.fbId && m.fbId === fbId && m.sig === sig) ||
+      (sig && m.sig && m.sig === sig),
   );
 }
 
+function _forgetDeletedSale(sale) {
+  const fbId = sale && sale.fbId;
+  const sig = _saleSignature(sale);
+  const markers = _saleDeleteMarkers().filter(
+    (m) =>
+      !(
+        (fbId && m.fbId === fbId && m.sig === sig) ||
+        (sig && m.sig === sig)
+      ),
+  );
+  localStorage.setItem(KEY_DELETED_SALE, JSON.stringify(markers));
+}
+
+function _sameSaleTimestamp(left, right) {
+  const leftDate = left && (left.date || left.createdAt);
+  const rightDate = right && (right.date || right.createdAt);
+  if (!leftDate || !rightDate) return !leftDate && !rightDate;
+  const leftTime = Date.parse(leftDate);
+  const rightTime = Date.parse(rightDate);
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime))
+    return leftTime === rightTime;
+  return leftDate === rightDate;
+}
+
+function _saleTimestampKey(sale) {
+  const value = sale && (sale.date || sale.createdAt);
+  if (!value) return "";
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? String(timestamp) : String(value);
+}
+
 /**
- * Remove duplicate sales from LOCAL IndexedDB AND Firestore cloud.
- * Keeps the record with an fbId (or lowest id). Deletes the rest everywhere.
+ * Repair colliding sale IDs without deleting any sales. Different timestamps
+ * always represent separate transactions and need separate Firestore documents.
  */
 async function deduplicateSales() {
-  const all = await dbAll("sales");
-  // Only deduplicate on EXACT fbId match — never on signature
-  // (signature collisions would delete valid distinct sales)
-  const seenFbId = new Map(); // fbId → winning record
-  const losers = [];
-
-  for (const sale of all) {
-    if (!sale.fbId) continue; // no fbId = can't be a duplicate
-    if (seenFbId.has(sale.fbId)) {
-      const winner = seenFbId.get(sale.fbId);
-      // Keep the one with lowest local id (recorded first)
-      if (sale.id < winner.id) {
-        losers.push(winner);
-        seenFbId.set(sale.fbId, sale);
-      } else {
-        losers.push(sale);
-      }
-    } else {
-      seenFbId.set(sale.fbId, sale);
-    }
-  }
-
-  if (!losers.length) return 0;
-
-  for (const loser of losers) {
-    // 1. Delete from local IndexedDB
-    await dbDelete("sales", loser.id);
-
-    // 2. Delete from Firestore cloud (if it has an fbId)
-    if (loser.fbId && fbReady && fbDb) {
-      try {
-        const { doc, deleteDoc } = await waitForFbImports();
-        await deleteDoc(doc(fbDb, fbColName("sales"), loser.fbId));
-      } catch (e) {
-        console.warn("[DEDUP] cloud delete failed for", loser.fbId, e.message);
-      }
+  return _withSyncLock(async () => {
+    const all = await dbAll("sales");
+    const groups = new Map();
+    for (const sale of all) {
+      if (!sale.fbId) continue;
+      if (!groups.has(sale.fbId)) groups.set(sale.fbId, []);
+      groups.get(sale.fbId).push(sale);
     }
 
-    // 3. Mark as deleted so pull doesn't re-create it
-    if (loser.fbId) _rememberDeletedSale(loser);
-  }
+    const repairs = new Map();
+    const protectedIds = new Set();
+    const knownIds = new Set(all.map((sale) => sale.fbId).filter(Boolean));
+    for (const sale of all) {
+      if (!sale.fbId || !_isDeletedSaleRemote(sale.fbId, sale)) continue;
+      _forgetDeletedSale(sale);
+      protectedIds.add(sale.fbId);
+      repairs.set(String(sale.fbId), sale);
+    }
 
-  console.log(
-    "[DEDUP] Removed " +
-      losers.length +
-      " duplicate sale(s) from local + cloud",
-  );
-  return losers.length;
+    for (const [fbId, sales] of groups) {
+      if (sales.length < 2) continue;
+      const orderedSales = [...sales].sort((left, right) => {
+        const byTimestamp = _saleTimestampKey(left).localeCompare(
+          _saleTimestampKey(right),
+        );
+        return byTimestamp || (left.id > right.id ? 1 : left.id < right.id ? -1 : 0);
+      });
+      protectedIds.add(fbId);
+      console.warn(
+        "[SYNC] Repairing colliding Firestore ID without deleting sales",
+        fbId,
+      );
+      for (const [index, sale] of orderedSales.entries()) {
+        _forgetDeletedSale(sale);
+        if (index > 0) {
+          const timestamp = _fbSlug(_saleTimestampKey(sale), "unknown");
+          const itemCode = _fbSlug(sale.itemCode, "x").slice(0, 50);
+          const revenue = String(
+            Math.round(Number(sale.revenue || 0) * 100),
+          );
+          const newIdBase =
+            "sale_" +
+            _fbSlug(fbId, "legacy").slice(0, 40) +
+            "_" +
+            timestamp +
+            "_" +
+            itemCode +
+            "_" +
+            revenue +
+            "_" +
+            _fbSlug(sale.id, "local");
+          let newFbId = newIdBase;
+          let suffix = 1;
+          while (knownIds.has(newFbId)) {
+            newFbId = newIdBase + "_" + suffix++;
+          }
+          sale.fbId = newFbId;
+          knownIds.add(newFbId);
+          await dbPut("sales", sale);
+        }
+        repairs.set(String(sale.fbId), sale);
+      }
+    }
+
+    if (db.objectStoreNames.contains("sync_queue")) {
+      const salesByFbId = new Map();
+      for (const sale of await dbAll("sales")) {
+        if (!sale.fbId) continue;
+        if (!salesByFbId.has(String(sale.fbId)))
+          salesByFbId.set(String(sale.fbId), sale);
+      }
+      for (const entry of await dbAll("sync_queue")) {
+        if (
+          entry.collection === "sales" &&
+          entry.operation === "delete" &&
+          (protectedIds.has(entry.recordKey) ||
+            repairs.has(entry.recordKey) ||
+            salesByFbId.has(String(entry.recordKey)))
+        ) {
+          const sale = salesByFbId.get(String(entry.recordKey));
+          if (sale) repairs.set(String(sale.fbId), sale);
+          await dbDelete("sync_queue", entry.id);
+        }
+      }
+    }
+
+    for (const sale of repairs.values()) {
+      await _queueSyncUnlocked("sales", {
+        ...sale,
+        _syncMutationId: _syncUuid(),
+      });
+    }
+    if (repairs.size) scheduleSync(50);
+    return repairs.size;
+  });
 }
 window.deduplicateSales = deduplicateSales;
 
@@ -14031,7 +14117,9 @@ async function _findLocalForRemote(store, data, fbId) {
   const rows = await dbAll(store);
   if (data.fbId || fbId) {
     const byFb = rows.find(
-      (r) => String(r.fbId || "") === String(fbId || data.fbId || ""),
+      (r) =>
+        String(r.fbId || "") === String(fbId || data.fbId || "") &&
+        (store !== "sales" || _sameSaleTimestamp(r, data)),
     );
     if (byFb) return byFb;
   }
@@ -14411,6 +14499,7 @@ async function forcePushToFirebase(silent = false) {
     if (!silent) toast("Warning: Connect Firebase first", "err");
     return;
   }
+  await deduplicateSales();
   if (!silent) setFbStatus("syncing");
   // Local writes are queued at the point of change. Do not scan and requeue
   // every local record here, otherwise each manual push creates a full upload.
