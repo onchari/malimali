@@ -48,7 +48,7 @@
     <!-- App styles -->
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="Inventory/inventory.css" />
-    <link rel="stylesheet" href="Sales/sales.css?v=20261014.11" />
+    <link rel="stylesheet" href="Sales/sales.css?v=20261021.12" />
 
     <!-- ── Firebase SDK (ES module - must stay inline in <head>) ── -->
     <!-- Loaded as a module so Firebase ESM imports work correctly.
@@ -4029,7 +4029,7 @@
           mount.replaceWith(document.importNode(template.content, true));
         });
 
-        const stocklistResponse = await fetch("Inventory/stocklist.html?v=20261014.11");
+        const stocklistResponse = await fetch("Inventory/stocklist.html?v=20261021.12");
         if (!stocklistResponse.ok) {
           throw new Error("Stock list markup request failed: " + stocklistResponse.status);
         }
@@ -4040,7 +4040,7 @@
           throw new Error("Unable to load shared stock list markup");
         }
 
-        const salesResponse = await fetch("Sales/sales.html?v=20261014.11");
+        const salesResponse = await fetch("Sales/sales.html?v=20261021.12");
         if (!salesResponse.ok) {
           throw new Error("Sales markup request failed: " + salesResponse.status);
         }
@@ -4099,7 +4099,7 @@
         for (const path of scripts) {
           await new Promise((resolve, reject) => {
             const script = document.createElement("script");
-            script.src = path + "?v=20261014.11";
+            script.src = path + "?v=20261021.12";
             script.onload = resolve;
             script.onerror = () => reject(new Error("Unable to load " + path));
             document.body.appendChild(script);
