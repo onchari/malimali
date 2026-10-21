@@ -1727,21 +1727,21 @@
         },
         {
           id: "MGS-125",
-          title: "Display legacy prices and quantities consistently",
+          title: "Display the actual sale price and legacy quantities",
           module: "Sales / History",
           priority: "major",
-          objective: "Verify aliases and absent legacy fields use the same normalized values across history, details, and exports.",
-          steps: ["In a disposable Development database, prepare sales using legacy priceUsed/buy aliases, absent quantity, explicit zero quantity, and unknown cost.", "Compare period totals, table rows, sale details, and CSV export."],
-          expected: "Legacy price aliases are included, missing quantity uses the documented legacy default of one, explicit zero remains zero, and unknown cost/profit display as unavailable."
+          objective: "Verify history uses the transaction price rather than the catalogue price and legacy fields remain consistent.",
+          steps: ["In a disposable Development database, prepare a sale with different priceUsed and sellPrice values, plus sales using legacy price aliases, absent quantity, explicit zero quantity, and unknown cost.", "Compare period totals, table rows, sale details, and CSV export."],
+          expected: "The transaction-specific actualPrice or priceUsed is shown ahead of the catalogue sellPrice; missing quantity uses the documented legacy default of one, explicit zero remains zero, and unknown cost/profit display as unavailable."
         },
         {
           id: "MGS-126",
           title: "Use Nairobi business dates consistently",
           module: "Sales / Dashboard",
           priority: "major",
-          objective: "Check timestamp-only sales and dashboard date labels at UTC/Nairobi day boundaries.",
-          steps: ["In Development, prepare timestamp-only sales on either side of Nairobi midnight and near UTC midnight.", "Review sales history filters and the dashboard's seven-day sparkline."],
-          expected: "Timestamp-only records, today highlighting, weekday labels, and history filters all use Africa/Nairobi calendar dates."
+          objective: "Check timestamp-only sales and dashboard date ranges at Nairobi day and month boundaries.",
+          steps: ["In Development, prepare sales on either side of Nairobi midnight and around the first and last day of a month, including records without businessDate.", "Review the dashboard's today, week, and month filters and compare them with sales history."],
+          expected: "Dashboard and history use the same Africa/Nairobi business date; the current month starts on day one, the previous month ends on its actual last day, and no neighboring-month sales are included."
         },
         {
           id: "MGS-127",
@@ -1769,6 +1769,15 @@
           objective: "Verify date filters return the matching sales and table content is not clipped on narrow screens.",
           steps: ["In Development, prepare sales across today, yesterday, this week, last week, this month, and last month.", "Try each period filter and a valid custom range; also test an incomplete and reversed custom range.", "Open daily and individual-record views at a narrow viewport, then horizontally scroll the record tables."],
           expected: "Each period shows only sales within its Nairobi business-date range; invalid custom ranges explain what needs correction; long item names and numeric values remain readable without changing font sizes."
+        },
+        {
+          id: "MGS-130",
+          title: "Preserve sale description when stock is added later",
+          module: "Sales / History",
+          priority: "major",
+          objective: "Ensure linking an earlier off-stock sale to a newly created inventory item does not rewrite its historical description.",
+          steps: ["In Development, record an off-stock sale with a distinct item name and code.", "Later, add an inventory item with the same code but a different name or category.", "Open the earlier sale in history and inspect its displayed name and category."],
+          expected: "The earlier sale keeps the item name and category recorded at sale time; only its inventory link is backfilled."
         }
       ];
 

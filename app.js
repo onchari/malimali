@@ -10205,14 +10205,10 @@ function dashSetPeriod(p) {
 function _dashDateRange() {
   const today = todayDateStr();
   if (_dashPeriod === "today") return { from: today, to: today };
-  if (_dashPeriod === "week") {
-    return { from: _weekStartDate(today), to: today };
-  }
-  if (_dashPeriod === "month") {
-    const d = new Date();
-    d.setDate(1);
-    return { from: d.toISOString().split("T")[0], to: today };
-  }
+  if (_dashPeriod === "week")
+    return _historyFilterRange("week", today, "", "");
+  if (_dashPeriod === "month")
+    return _historyFilterRange("month", today, "", "");
   return { from: null, to: null };
 }
 
@@ -10227,37 +10223,21 @@ function _dashPeriodLabel() {
 function _dashPrevDateRange() {
   const today = todayDateStr();
   if (_dashPeriod === "today") {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    const y = d.toISOString().split("T")[0];
-    return { from: y, to: y };
+    const yesterday = _historyDateOffset(today, -1);
+    return { from: yesterday, to: yesterday };
   }
-  if (_dashPeriod === "week") {
-    const previousSaturday = _historyDateOffset(_weekStartDate(today), -1);
-    return {
-      from: _historyDateOffset(previousSaturday, -6),
-      to: previousSaturday,
-    };
-  }
-  if (_dashPeriod === "month") {
-    const d = new Date();
-    d.setDate(0);
-    const lastDay = d.getDate();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    return {
-      from: `${y}-${m}-01`,
-      to: `${y}-${m}-${String(lastDay).padStart(2, "0")}`,
-    };
-  }
+  if (_dashPeriod === "week")
+    return _historyFilterRange("prev_week", today, "", "");
+  if (_dashPeriod === "month")
+    return _historyFilterRange("prev_month", today, "", "");
   return { from: null, to: null };
 }
 
 function _filterSalesByRange(allSales, range) {
   if (!range || !range.from) return allSales;
   return allSales.filter((s) => {
-    const d = s.businessDate || s.business_date || (s.date || "").split("T")[0];
-    return d >= range.from && d <= range.to;
+    const date = _historySaleDate(s);
+    return date && date >= range.from && date <= range.to;
   });
 }
 
@@ -19897,9 +19877,9 @@ async function _backfillSalesForItem(item) {
   if (!toFix.length) return 0;
   for (const sale of toFix) {
     sale.itemId = item.id;
-    // Also ensure itemName and itemType are current
-    if (item.name) sale.itemName = item.name;
-    if (item.type) sale.itemType = item.type;
+    // Sale descriptions are snapshots; only fill fields missing from legacy records.
+    if (!sale.itemName && item.name) sale.itemName = item.name;
+    if (!sale.itemType && item.type) sale.itemType = item.type;
     sale.updatedAt = new Date().toISOString();
     await dbPut("sales", sale);
     fbSyncSale(sale);

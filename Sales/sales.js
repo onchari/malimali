@@ -310,7 +310,7 @@ function _saleQuantity(sale) {
 }
 
 function _saleUnitPrice(sale) {
-  for (const value of [sale.actualPrice, sale.sellPrice, sale.priceUsed]) {
+  for (const value of [sale.actualPrice, sale.priceUsed, sale.sellPrice]) {
     if (value == null || value === "") continue;
     const price = Number(value);
     if (Number.isFinite(price) && price >= 0) return price;
